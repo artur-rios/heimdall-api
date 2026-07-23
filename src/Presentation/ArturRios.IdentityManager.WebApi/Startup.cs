@@ -8,6 +8,7 @@ using ArturRios.IdentityManager.Data.Configuration;
 using ArturRios.IdentityManager.Query.Handlers;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
+using ArturRios.Jwt;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Mediator.Query;
@@ -15,6 +16,8 @@ using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using FluentValidation;
 using ArturRios.Util.WebApi.Middleware;
+using ArturRios.Util.WebApi.Security.Enums;
+using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Middleware;
 using Serilog;
 using Serilog.Formatting.Json;
@@ -25,6 +28,12 @@ public class Startup(string[] args) : WebApiStartup(args)
 {
     private const string LogDirectoryEnvironmentVariable = "IDENTITY_MANAGER_LOG_DIRECTORY";
     private const string DefaultLogDirectory = "logs";
+
+    private const string TokenAudienceEnvironmentVariable = "IDENTITY_MANAGER_AUTH_TOKEN_AUDIENCE";
+    private const string TokenExpirationEnvironmentVariable = "IDENTITY_MANAGER_AUTH_TOKEN_EXPIRATION_IN_SECONDS";
+    private const string TokenIssuerEnvironmentVariable = "IDENTITY_MANAGER_AUTH_TOKEN_ISSUER";
+    private const string TokenSecretEnvironmentVariable = "IDENTITY_MANAGER_AUTH_TOKEN_SECRET";
+    private const double DefaultTokenExpirationInSeconds = 3600;
 
     public override void Build()
     {
@@ -116,6 +125,50 @@ public class Startup(string[] args) : WebApiStartup(args)
     {
         Builder.Services.AddAuthentication("Jwt").AddJwtBearer("Jwt");
         Builder.Services.AddAuthorization();
+
+        // AuthenticationMiddleware resolves AuthenticationOptions and the token validators from the
+        // container, and JwtTokenValidator additionally needs JwtConfiguration and JwtHandler.
+        // Defaults are kept: app JWT only, read from the Authorization header, user rebuilt from
+        // claims, so no IAuthenticationProvider is required.
+        Builder.Services.AddSingleton(BuildJwtConfiguration());
+        Builder.Services.AddSingleton<JwtHandler>();
+        Builder.Services.AddTokenAuthentication(options =>
+        {
+            options.Source = TokenSource.Header;
+            options.EnableJwt = true;
+            options.EnableGoogle = false;
+            options.JwtMode = JwtValidationMode.ClaimsOnly;
+        });
+    }
+
+    /// <summary>
+    ///     Reads the token settings from the environment. The signing secret is required: with an
+    ///     empty one every authenticated request dies inside the token validator with an opaque
+    ///     <c>IDX10703</c>, so a missing secret fails startup instead.
+    /// </summary>
+    private static JwtConfiguration BuildJwtConfiguration()
+    {
+        var secret = Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable);
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException(
+                $"Environment variable '{TokenSecretEnvironmentVariable}' is unset. The API cannot " +
+                "validate tokens without a signing secret.");
+        }
+
+        var expiration = double.TryParse(
+            Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
+            out var configuredExpiration)
+            ? configuredExpiration
+            : DefaultTokenExpirationInSeconds;
+
+        return new JwtConfiguration(
+            expiration,
+            Environment.GetEnvironmentVariable(TokenIssuerEnvironmentVariable) ?? string.Empty,
+            Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
+            secret,
+            []);
     }
 
     public override void ConfigureWebApi()

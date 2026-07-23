@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ArturRios.IdentityManager.WebApi.Controllers;
 
+[Route("[controller]")]
 public class HealthCheckController : Controller
 {
     [HttpGet]

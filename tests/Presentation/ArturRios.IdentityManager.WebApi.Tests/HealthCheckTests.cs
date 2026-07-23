@@ -1,12 +1,17 @@
 ﻿using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.Output;
+using ArturRios.IdentityManager.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
+using ArturRios.Output;
 using ArturRios.Util.Test.Functional;
 
 namespace ArturRios.IdentityManager.WebApi.Tests;
 
-public class HealthCheckTests(EnvironmentType environment = EnvironmentType.Local) : WebApiTest<Program>(environment)
+// Joining the collection is what matters here: xUnit initialises the collection fixture before
+// constructing any test class in it, so the container is running and migrated by the time the base
+// constructor boots the API and reads the connection details the fixture publishes.
+[Collection(nameof(FunctionalCollection))]
+public class HealthCheckTests() : WebApiTest<Program>(EnvironmentType.Local)
 {
     private const string HealthCheckRoute = "/HealthCheck";
 
