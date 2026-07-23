@@ -21,4 +21,12 @@
     <ProjectReference Include="..\..\Infrastructure\ArturRios.IdentityManager.Data\ArturRios.IdentityManager.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- ConfigurationLoader resolves Environments/.env.<environment> relative to the application
+         base path, so the folder must sit next to the built assembly. The Web SDK already copies
+         Settings/appsettings*.json via its default **/*.json content glob; .env has no extension
+         to match, so it needs an explicit item. -->
+    <Content Include="Environments\.env*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
