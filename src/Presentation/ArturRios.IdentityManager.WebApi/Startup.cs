@@ -1,7 +1,14 @@
 using ArturRios.Data.PostgreSql;
 using ArturRios.Data.Relational.Core.DependencyInjection;
+using ArturRios.IdentityManager.Command.Handlers;
+using ArturRios.IdentityManager.Command.Input;
+using ArturRios.IdentityManager.Command.Input.Validation;
+using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Data.Configuration;
+using ArturRios.Mediator.Command;
+using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
+using FluentValidation;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Middleware;
 using Serilog;
@@ -62,6 +69,11 @@ public class Startup(string[] args) : WebApiStartup(args)
     {
         Builder.Services.AddPostgreSqlProvider();
         Builder.Services.AddDataConfigFromEnvironment<AppDbContext>("IDENTITY_MANAGER_DATA");
+
+        Builder.Services.AddScoped<CommandMediator>();
+        Builder.Services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>, CreateScopeCommandHandler>();
     }
 
     public override void ConfigureApp()
