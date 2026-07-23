@@ -1,4 +1,5 @@
 using ArturRios.IdentityManager.Data.Configuration;
+using ArturRios.IdentityManager.Data.Seeding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.PostgreSql;
@@ -20,6 +21,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string TokenIssuerVariable = "IDENTITY_MANAGER_AUTH_TOKEN_ISSUER";
     private const string TokenAudienceVariable = "IDENTITY_MANAGER_AUTH_TOKEN_AUDIENCE";
 
+    /// <summary>E-mail of the master system administrator the API seeds into the container.</summary>
+    public const string MasterUserEmail = "master@identity-manager.test";
+
+    /// <summary>Password the master system administrator is seeded with.</summary>
+    public const string MasterUserPassword = "Str0ng-Master-Pass!";
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine")
         .Build();
 
@@ -39,6 +46,11 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(TokenSecretVariable, "functional-tests-signing-secret-key");
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "identity-manager-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "identity-manager-tests");
+
+        // The seeder refuses to start without a configured master user.
+        Environment.SetEnvironmentVariable(MasterUserOptions.NameVariable, "Master User");
+        Environment.SetEnvironmentVariable(MasterUserOptions.EmailVariable, MasterUserEmail);
+        Environment.SetEnvironmentVariable(MasterUserOptions.PasswordVariable, MasterUserPassword);
 
         // The API refuses to start against a schema with pending migrations, so apply them here.
         await using var context = CreateContext();

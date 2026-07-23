@@ -5,6 +5,7 @@ using ArturRios.IdentityManager.Command.Input;
 using ArturRios.IdentityManager.Command.Input.Validation;
 using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Data.Configuration;
+using ArturRios.IdentityManager.Data.Seeding;
 using ArturRios.IdentityManager.Query.Handlers;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
@@ -104,6 +105,9 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<IQueryHandlerAsync<GetScopeByIdQuery, ScopeOutput>, GetScopeByIdQueryHandler>();
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>, ListScopesQueryHandler>();
+
+        Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
+        Builder.Services.AddScoped<DatabaseSeeder>();
     }
 
     public override void ConfigureApp()
@@ -169,6 +173,20 @@ public class Startup(string[] args) : WebApiStartup(args)
             Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
             secret,
             []);
+    }
+
+    /// <summary>
+    ///     Runs the database seeder before the host starts serving, so the reference data the
+    ///     application depends on is guaranteed to exist. Migrations are not applied here — the
+    ///     seeder throws if any are pending.
+    /// </summary>
+    public override void StartServices()
+    {
+        using var scope = App.Services.CreateScope();
+
+        var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+
+        seeder.SeedAsync().GetAwaiter().GetResult();
     }
 
     public override void ConfigureWebApi()

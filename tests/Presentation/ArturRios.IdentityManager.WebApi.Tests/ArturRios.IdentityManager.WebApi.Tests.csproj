@@ -30,4 +30,18 @@
       <ProjectReference Include="..\..\..\src\Presentation\ArturRios.IdentityManager.WebApi\ArturRios.IdentityManager.WebApi.csproj" />
     </ItemGroup>
 
+    <!--
+      The Web API copies Environments\.env* to its output, and content items with
+      CopyToOutputDirectory flow transitively into ours. ConfigurationLoader would then load a
+      developer's .env.local and overwrite the container connection string PostgresFixture
+      publishes, silently pointing the whole functional suite at a real local database. Functional
+      tests are configured only by the fixture, so drop the inherited files.
+    -->
+    <Target Name="RemoveInheritedEnvironmentFiles" AfterTargets="Build">
+        <ItemGroup>
+            <InheritedEnvironmentFiles Include="$(OutDir)Environments\.env*"/>
+        </ItemGroup>
+        <Delete Files="@(InheritedEnvironmentFiles)"/>
+    </Target>
+
 </Project>
