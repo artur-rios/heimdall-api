@@ -1,4 +1,4 @@
-using ArturRios.IdentityManager.Command.Messages;
+using ArturRios.IdentityManager.Shared.Messages;
 using FluentValidation;
 
 namespace ArturRios.IdentityManager.Command.Input.Validation;

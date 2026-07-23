@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Command\ArturRios.IdentityManager.Command.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Query\ArturRios.IdentityManager.Query.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Shared\ArturRios.IdentityManager.Shared.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ArturRios.IdentityManager.Data\ArturRios.IdentityManager.Data.csproj" />
   </ItemGroup>
 

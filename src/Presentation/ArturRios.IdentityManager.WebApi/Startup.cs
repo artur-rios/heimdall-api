@@ -5,8 +5,13 @@ using ArturRios.IdentityManager.Command.Input;
 using ArturRios.IdentityManager.Command.Input.Validation;
 using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Data.Configuration;
+using ArturRios.IdentityManager.Query.Handlers;
+using ArturRios.IdentityManager.Query.Input;
+using ArturRios.IdentityManager.Query.Output;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
+using ArturRios.Mediator.Query;
+using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using FluentValidation;
 using ArturRios.Util.WebApi.Middleware;
@@ -74,6 +79,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>, CreateScopeCommandHandler>();
+
+        Builder.Services.AddScoped<QueryMediator>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<GetScopeByIdQuery, ScopeOutput>, GetScopeByIdQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>, ListScopesQueryHandler>();
     }
 
     public override void ConfigureApp()

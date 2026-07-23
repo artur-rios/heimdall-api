@@ -1,9 +1,9 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Messages;
 using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Domain.Entities;
 using ArturRios.IdentityManager.Domain.Enums;
+using ArturRios.IdentityManager.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using FluentValidation;
