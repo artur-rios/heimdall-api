@@ -8,6 +8,8 @@ internal static class PersonDbMap
 {
     public static void Configure(this EntityTypeBuilder<Person> person)
     {
+        person.ToTable("person");
+
         person.HasKey(x => x.Id);
 
         person.Property(x => x.PublicId).IsRequired();

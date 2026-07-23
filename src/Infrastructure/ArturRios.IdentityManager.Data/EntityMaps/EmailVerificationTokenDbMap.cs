@@ -8,6 +8,8 @@ internal static class EmailVerificationTokenDbMap
 {
     public static void Configure(this EntityTypeBuilder<EmailVerificationToken> token)
     {
+        token.ToTable("email_verification_token");
+
         // Internal bigint Id only; no PublicId — the caller-facing reference is the Token string (§4.0).
         token.HasKey(x => x.Id);
 

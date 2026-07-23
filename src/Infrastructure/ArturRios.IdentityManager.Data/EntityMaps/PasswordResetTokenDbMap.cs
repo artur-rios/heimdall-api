@@ -8,6 +8,8 @@ internal static class PasswordResetTokenDbMap
 {
     public static void Configure(this EntityTypeBuilder<PasswordResetToken> token)
     {
+        token.ToTable("password_reset_token");
+
         // Internal bigint Id only; no PublicId — the caller-facing reference is the Token string (§4.0).
         token.HasKey(x => x.Id);
 

@@ -8,6 +8,8 @@ internal static class ScopeUserDbMap
 {
     public static void Configure(this EntityTypeBuilder<ScopeUser> scopeUser)
     {
+        scopeUser.ToTable("scope_user");
+
         // Composite key (ScopeId, PersonId); no surrogate Id and no PublicId (§4.6).
         scopeUser.HasKey(x => new { x.ScopeId, x.PersonId });
 

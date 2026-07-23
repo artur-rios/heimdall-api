@@ -72,6 +72,16 @@ public class Startup(string[] args) : WebApiStartup(args)
 
     public override void AddDependencies()
     {
+        // EF diagnostics expose parameter and column values — password hashes, salts, e-mails — so
+        // they stay off in production.
+        var diagnosticsEnabled = !Builder.Environment.IsProduction();
+
+        Builder.Services.AddSingleton(new DbContextDiagnosticsOptions
+        {
+            SensitiveDataLogging = diagnosticsEnabled,
+            DetailedErrors = diagnosticsEnabled
+        });
+
         Builder.Services.AddPostgreSqlProvider();
         Builder.Services.AddDataConfigFromEnvironment<AppDbContext>("IDENTITY_MANAGER_DATA");
 
