@@ -80,10 +80,16 @@ record carrying the three `IDENTITY_MANAGER_MASTER_USER_*` values.
    the pending migration names at fatal level and throw, so the API refuses to start against a stale
    schema. Migrations are applied deliberately through `scripts/migrations.py`, never implicitly by
    the application.
-2. **Roles.** For every member of the `Roles` enum, insert a `Role` when no row carries that `Name`.
-   `Description` comes from the member's `[Description]` attribute. Rows are matched by `Name`, which
-   is what `CreateScopeCommandHandler` queries — the enum's numeric values are not forced onto the
-   identity column.
+2. **Roles.** `role.id` equals the `Roles` enum value: `SystemAdmin = 1`, `ScopeAdmin = 2`,
+   `User = 3`. For every member of the enum, insert a `Role` with `Id = (long)member` when that ID is
+   absent, and correct `Name`/`Description` on an existing row if they have drifted. `Name` is the
+   enum member name; `Description` comes from its `[Description]` attribute.
+
+   To make this deterministic, `RoleDbMap` configures the key as `ValueGeneratedNever()`. Roles are
+   fixed reference data (FR-RO-01 admits exactly three), so the column is a plain `bigint` primary
+   key rather than an identity column — IDs are assigned by the enum, not the database, and there is
+   no sequence left trailing behind the explicitly inserted rows. `CreateScopeCommandHandler`
+   continues to look roles up by `Name`; the seeder keeps both keys consistent.
 3. **System administrator.** If no non-deleted `Person` holds the `SystemAdmin` role, create one from
    `MasterUserOptions` with `Hash.EncodeWithRandomSalt` (Argon2id, from `ArturRios.Util`) and
    `EmailVerified = true`. When no admin exists *and* the master-user variables are missing or blank,
