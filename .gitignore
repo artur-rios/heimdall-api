@@ -3,9 +3,6 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
-.env*
-
 # User-specific files
 *.rsuser
 *.suo
@@ -479,3 +476,16 @@ Doxygen/
 /docs/public/
 /docs/resources/_gen/
 *.DS_Store
+
+# App settings
+appsettings.api.Local.json
+appsettings.api.Development.json
+appsettings.api.Staging.json
+appsettings.api.Production.json
+
+# Env files
+.env.local
+.env.development
+.env.docker
+.env.staging
+.env.production

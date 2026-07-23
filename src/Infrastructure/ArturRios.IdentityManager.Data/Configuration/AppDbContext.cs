@@ -1,0 +1,45 @@
+﻿using ArturRios.Data.Relational.Core.Configuration;
+using ArturRios.IdentityManager.Data.EntityMaps;
+using ArturRios.IdentityManager.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace ArturRios.IdentityManager.Data.Configuration;
+
+public class AppDbContext(DbContextOptions options, ILoggerFactory loggerFactory) : BaseDbContext(options)
+{
+    private const string Schema = "identity_manager";
+
+    public DbSet<Person> Persons { get; init; }
+    public DbSet<Scope> Scopes { get; init; }
+    public DbSet<Role> Roles { get; init; }
+    public DbSet<Application> Applications { get; init; }
+    public DbSet<GoogleUser> GoogleUsers { get; init; }
+    public DbSet<ScopeOwner> ScopeOwners { get; init; }
+    public DbSet<ScopeUser> ScopeUsers { get; init; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; init; }
+    public DbSet<EmailVerificationToken> EmailVerificationTokens { get; init; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder
+            .UseLoggerFactory(loggerFactory)
+            .EnableDetailedErrors()
+            .EnableSensitiveDataLogging();
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema(Schema);
+
+        modelBuilder.Entity<Person>().Configure();
+        modelBuilder.Entity<Scope>().Configure();
+        modelBuilder.Entity<Role>().Configure();
+        modelBuilder.Entity<Application>().Configure();
+        modelBuilder.Entity<GoogleUser>().Configure();
+        modelBuilder.Entity<ScopeOwner>().Configure();
+        modelBuilder.Entity<ScopeUser>().Configure();
+        modelBuilder.Entity<PasswordResetToken>().Configure();
+        modelBuilder.Entity<EmailVerificationToken>().Configure();
+    }
+}

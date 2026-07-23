@@ -7,10 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-    <!-- Pinned to the latest 2.x stable to clear NU1903 (GHSA-v5pm-xwqc-g5wc) in the
-         transitive Microsoft.OpenApi 2.0.0 while staying compatible with AspNetCore.OpenApi 10.x. -->
-    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
+    <PackageReference Include="ArturRios.Util.WebApi" Version="2.0.0" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Map" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Command\ArturRios.IdentityManager.Command.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\ArturRios.IdentityManager.Data\ArturRios.IdentityManager.Data.csproj" />
   </ItemGroup>
 
 </Project>
