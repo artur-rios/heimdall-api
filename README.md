@@ -54,6 +54,8 @@ Detailed documentation lives under [`docs/requirements`](docs/requirements):
   libraries, and versions the project is built on.
 - [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) — how each
   use case is tested (unit + functional standards).
+- [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) — how a use
+  case goes from backlog to merged (branch, issue status, testing gate, PR).
 
 ## Prerequisites
 
