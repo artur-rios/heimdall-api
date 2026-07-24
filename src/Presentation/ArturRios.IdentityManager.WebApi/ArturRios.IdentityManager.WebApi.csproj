@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArturRios.Mediator" Version="1.0.2" />
+    <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
     <PackageReference Include="ArturRios.Util.WebApi" Version="2.1.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
