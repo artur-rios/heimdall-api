@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArturRios.Util.WebApi" Version="2.0.0" />
+    <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
+    <PackageReference Include="ArturRios.Util.WebApi" Version="2.1.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Map" Version="2.0.0" />
@@ -15,7 +16,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Command\ArturRios.IdentityManager.Command.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Query\ArturRios.IdentityManager.Query.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.IdentityManager.Shared\ArturRios.IdentityManager.Shared.csproj" />
     <ProjectReference Include="..\..\Infrastructure\ArturRios.IdentityManager.Data\ArturRios.IdentityManager.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ConfigurationLoader resolves Environments/.env.<environment> relative to the application
+         base path, so the folder must sit next to the built assembly. The Web SDK already copies
+         Settings/appsettings*.json via its default **/*.json content glob; .env has no extension
+         to match, so it needs an explicit item. -->
+    <Content Include="Environments\.env*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

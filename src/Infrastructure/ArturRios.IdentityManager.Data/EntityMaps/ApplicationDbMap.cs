@@ -8,6 +8,8 @@ internal static class ApplicationDbMap
 {
     public static void Configure(this EntityTypeBuilder<Application> application)
     {
+        application.ToTable("application");
+
         application.HasKey(x => x.Id);
 
         application.Property(x => x.PublicId).IsRequired();

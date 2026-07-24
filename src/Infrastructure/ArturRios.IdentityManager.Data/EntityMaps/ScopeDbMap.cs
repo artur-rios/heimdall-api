@@ -8,6 +8,8 @@ internal static class ScopeDbMap
 {
     public static void Configure(this EntityTypeBuilder<Scope> scope)
     {
+        scope.ToTable("scope");
+
         scope.HasKey(x => x.Id);
 
         scope.Property(x => x.PublicId).IsRequired();

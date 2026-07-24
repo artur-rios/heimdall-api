@@ -6,7 +6,10 @@ using Microsoft.Extensions.Logging;
 
 namespace ArturRios.IdentityManager.Data.Configuration;
 
-public class AppDbContext(DbContextOptions options, ILoggerFactory loggerFactory) : BaseDbContext(options)
+public class AppDbContext(
+    DbContextOptions options,
+    ILoggerFactory loggerFactory,
+    DbContextDiagnosticsOptions diagnostics) : BaseDbContext(options)
 {
     private const string Schema = "identity_manager";
 
@@ -24,8 +27,9 @@ public class AppDbContext(DbContextOptions options, ILoggerFactory loggerFactory
     {
         optionsBuilder
             .UseLoggerFactory(loggerFactory)
-            .EnableDetailedErrors()
-            .EnableSensitiveDataLogging();
+            .UseSnakeCaseNamingConvention()
+            .EnableDetailedErrors(diagnostics.DetailedErrors)
+            .EnableSensitiveDataLogging(diagnostics.SensitiveDataLogging);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

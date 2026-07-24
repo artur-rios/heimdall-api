@@ -8,6 +8,8 @@ internal static class GoogleUserDbMap
 {
     public static void Configure(this EntityTypeBuilder<GoogleUser> googleUser)
     {
+        googleUser.ToTable("google_user");
+
         googleUser.HasKey(x => x.Id);
 
         googleUser.Property(x => x.PublicId).IsRequired();
