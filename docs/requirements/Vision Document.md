@@ -197,7 +197,7 @@ graph TD
 
 ## 9. Constraints
 
-- The API must be built with **.NET** (ASP.NET Core Web API).
+- The API must be built with **.NET** (ASP.NET Core Web API). The full technology stack and versions are defined in the [Technology Stack Document](Technology%20Stack%20Document.md).
 - A person has no direct scope attribute; its scope relationship is determined by its role.
 - A `User` person must belong to exactly one scope.
 - A `ScopeAdmin` person must own at least one scope, and does not belong to any scope as a user.

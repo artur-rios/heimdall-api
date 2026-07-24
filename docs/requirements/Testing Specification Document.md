@@ -4,7 +4,7 @@
 
 This document defines **how a use case is tested once it has been implemented**. It is a standard
 to be followed by any human or agent that builds tests for this project. Following it guarantees
-that every use case (UC-01 … UC-29 in the [Use Case Specification Document](requirements/Use%20Case%20Specification%20Document.md))
+that every use case (UC-01 … UC-29 in the [Use Case Specification Document](Use%20Case%20Specification%20Document.md))
 receives the same shape of testing, with the same tools, naming, and structure.
 
 The rule is simple:
@@ -90,16 +90,9 @@ Rules:
 
 ## 5. Tooling & packages
 
-Every test project uses the same stack:
+Every test project uses the same stack: **xUnit** as the test framework, `coverlet.collector` for coverage, **`ArturRios.Util.Test`** for shared helpers & test doubles, **Moq** for mocking, **Bogus** for test-data generation, and **Testcontainers** (`Testcontainers.PostgreSql`) for the functional database.
 
-| Concern | Choice |
-| --- | --- |
-| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`) |
-| Coverage | `coverlet.collector` |
-| Shared helpers & test doubles | **`ArturRios.Util.Test`** |
-| Mocking | **Moq** (`Moq`) |
-| Test data generation | **Bogus** (`Bogus`) |
-| Functional DB | **Testcontainers** (`Testcontainers.PostgreSql`) |
+> The canonical list of these testing technologies **and their pinned versions** lives in the [Technology Stack Document](Technology%20Stack%20Document.md) §7. This section covers *how* to use them; see that document for *what* (packages and versions).
 
 From `ArturRios.Util.Test`, always prefer the provided building blocks instead of rolling your own:
 

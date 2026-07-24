@@ -6,6 +6,8 @@
 
 This document specifies the functional and non-functional requirements for the **Identity Manager API**, a .NET Web API that provides centralized person management, application management, authentication, and authorization for multiple client systems through scope-based tenancy.
 
+The concrete technology stack — framework and language versions, first-party libraries, database, data-access, and tooling — is defined in the [Technology Stack Document](Technology%20Stack%20Document.md). This document states requirements and refers to that one for specific technologies and versions rather than restating them.
+
 ### 1.2 Scope
 
 The system encompasses person CRUD, application CRUD, scope CRUD, role-based access control, authentication (including Google Sign-In), password recovery, email verification, and both logical and hard deletion strategies.
@@ -457,7 +459,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 
 | ID | Category | Requirement |
 | ---- | ---------- | ------------- |
-| NFR-01 | Technology | The API shall be built using ASP.NET Core (.NET) |
+| NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
 | NFR-04 | Security | All endpoints (except auth) shall require a valid authentication token |
