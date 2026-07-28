@@ -30,6 +30,22 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Updates an existing scope's name and description (UC-03). Restricted to System Admins.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<UpdateScopeCommandOutput?>>> Update(
+        Guid id, [FromBody] UpdateScopeCommand command)
+    {
+        command.Id = id;
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<UpdateScopeCommand, UpdateScopeCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
     /// </summary>
     [HttpGet]
