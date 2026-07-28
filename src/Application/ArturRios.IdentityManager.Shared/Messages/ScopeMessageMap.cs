@@ -13,6 +13,8 @@ public static class ScopeMessageMap
     {
         // UC-01 main flow — scope created.
         [ScopeMessages.ScopeCreatedSuccessfully] = HttpStatusCodes.Created,
+        // UC-03 main flow — scope updated.
+        [ScopeMessages.ScopeUpdatedSuccessfully] = HttpStatusCodes.Ok,
         // UC-02 main flow — scope(s) retrieved.
         [ScopeMessages.ScopeRetrievedSuccessfully] = HttpStatusCodes.Ok,
         [ScopeMessages.ScopesRetrievedSuccessfully] = HttpStatusCodes.Ok,

@@ -38,7 +38,7 @@ The project is built on a set of the author's own reusable libraries, all publis
 | **ArturRios.Mediator** | `1.0.3` | Command, Query, WebApi | Lightweight **CQRS mediator**. Provides `CommandMediator` / `QueryMediator` and the handler contracts (`ICommandHandlerAsync`, `IQueryHandlerAsync`, `IPaginatedQueryHandlerAsync`) that dispatch a command/query to its single handler. |
 | **ArturRios.Data.Relational.Core** | `3.0.2` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T>`, `IAsyncReadOnlyRepository<T>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. |
 | **ArturRios.Data.PostgreSql** | `3.0.0` | Data | **PostgreSQL binding** for the relational core. Provides `AddPostgreSqlProvider()`, which wires EF Core to Npgsql so the relational layer runs against PostgreSQL. |
-| **ArturRios.Util.Test** | `2.0.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T>`, `FakeScheduler`, and `CustomAssert`. |
+| **ArturRios.Util.Test** | `2.2.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T>`, `AsyncFakeRepository<T>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
 
 > `ArturRios.Output` and `ArturRios.Jwt` are **namespaces** surfaced by the packages above (the `ArturRios.Util` family and `ArturRios.Util.WebApi` respectively), not separately referenced packages.
 
@@ -93,12 +93,12 @@ These are the technologies mandated for tests. **How** they are applied to each 
 | Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `3.1.5` | The test framework for every test project. |
 | Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.8.1` | Test host/runner integration for `dotnet test` and IDEs. |
 | Coverage | `coverlet.collector` | `10.0.1` | Collects code coverage during test runs. |
-| Test helpers & doubles | **`ArturRios.Util.Test`** | `2.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T>`, `FakeScheduler`, and `CustomAssert`. |
-| Mocking | **Moq** | (standard; add latest) | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
-| Test data generation | **Bogus** | (standard; add latest) | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
+| Test helpers & doubles | **`ArturRios.Util.Test`** | `2.2.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T>`, `AsyncFakeRepository<T>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T>`/`IAsyncRepository<T>`), `FakeScheduler`, and `CustomAssert`. |
+| Mocking | **Moq** | `4.20.72` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
+| Test data generation | **Bogus** | `35.6.3` | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
 | Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.13.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
 
-> **Note:** Moq and Bogus are mandated by the Testing Specification but are not yet pinned in the test `.csproj` files (the test suite is still at its scaffolding baseline). Add them at their current stable versions when the first tests that need them are written.
+> **Note:** Moq and Bogus were pinned to the versions above when the first tests needing them were written (UC-03's handler unit tests). Keep every test project on the same versions.
 
 Tests are split by **category** — unit tests exercise Command/Query handlers and Domain behavior in isolation; functional tests exercise the Web API end-to-end against Testcontainers PostgreSQL. Run one kind at a time with `dotnet test --filter "Category=Unit"` or `"Category=Functional"`.
 
@@ -112,7 +112,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Language | C# | `14` (framework default) |
 | First-party | ArturRios.Util | `1.4.2` |
 | First-party | ArturRios.Util.WebApi | `2.1.0` |
-| First-party | ArturRios.Util.Test | `2.0.0` |
+| First-party | ArturRios.Util.Test | `2.2.0` |
 | First-party | ArturRios.Mediator | `1.0.3` |
 | First-party | ArturRios.Data.Relational.Core | `3.0.2` |
 | First-party | ArturRios.Data.PostgreSql | `3.0.0` |
@@ -127,5 +127,5 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Testing | Microsoft.NET.Test.Sdk | `18.8.1` |
 | Testing | coverlet.collector | `10.0.1` |
 | Testing | Testcontainers.PostgreSql | `4.13.0` |
-| Testing | Moq | to be pinned |
-| Testing | Bogus | to be pinned |
+| Testing | Moq | `4.20.72` |
+| Testing | Bogus | `35.6.3` |
