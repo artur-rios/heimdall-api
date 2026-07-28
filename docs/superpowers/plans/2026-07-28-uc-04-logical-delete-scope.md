@@ -298,6 +298,7 @@ Expected: FAIL — build error, `DeleteScopeCommandHandler` does not exist.
 Create `src/Application/ArturRios.IdentityManager.Command/Handlers/DeleteScopeCommandHandler.cs`:
 
 ```csharp
+using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.IdentityManager.Command.Input;
 using ArturRios.IdentityManager.Command.Output;
@@ -404,7 +405,7 @@ public class DeleteScopeCommandHandler(
         IEnumerable<T> members,
         Func<T, bool> isDeleted,
         Action<T> markDeleted,
-        IAsyncRepository<T> writer) where T : class
+        IAsyncRepository<T> writer) where T : Entity
     {
         var pending = members.Where(member => !isDeleted(member)).ToList();
 
