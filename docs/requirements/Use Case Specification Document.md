@@ -223,7 +223,7 @@ sequenceDiagram
 | **Actors** | System Admin |
 | **Description** | Soft-delete a scope by setting `IsDeleted = true` |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role; scope exists |
-| **Postconditions** | Scope `IsDeleted` is set to `true`; all Users belonging to the scope (via `SCOPE_USER`) and all applications in the scope are also logically deleted. Scope Admins who own the scope are unaffected, since they may own other active scopes |
+| **Postconditions** | Scope `IsDeleted` is set to `true`; all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope are also logically deleted. Scope Admins who own the scope are unaffected, since they may own other active scopes. The response reports the scope's identifier and the total number of Users, Google Users, and applications belonging to the scope |
 
 **Main Flow:**
 
@@ -238,6 +238,7 @@ sequenceDiagram
     DB-->>API: Scope found
     API->>DB: Set scope.IsDeleted = true
     API->>DB: Set IsDeleted = true for all SCOPE_USER persons in scope
+    API->>DB: Set IsDeleted = true for all Google Users in scope
     API->>DB: Set IsDeleted = true for all applications in scope
     DB-->>API: Updated
     API-->>SA: 200 OK
@@ -246,15 +247,15 @@ sequenceDiagram
 1. System Admin sends a delete request for a scope.
 2. The system locates the scope.
 3. The system sets `IsDeleted = true` on the scope.
-4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`) and all applications in the scope. Scope Admins who own the scope are not modified.
-5. The system returns success.
+4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope. Scope Admins who own the scope are not modified.
+5. The system returns success, including the scope's identifier and the total number of Users, Google Users, and applications belonging to the scope (counted regardless of their individual deletion state).
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-04a | Scope not found | Return `404 Not Found` |
-| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent) |
+| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent); the scope and its Users/Google Users/applications are left unchanged, and the response still reports the scope's identifier and its User/Google User/application totals |
 
 ---
 
