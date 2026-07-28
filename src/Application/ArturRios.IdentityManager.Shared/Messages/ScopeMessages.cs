@@ -10,6 +10,9 @@ public static class ScopeMessages
     /// <summary>UC-01 success: the scope was created.</summary>
     public const string ScopeCreatedSuccessfully = "Scope created successfully.";
 
+    /// <summary>UC-03 success: the scope was updated.</summary>
+    public const string ScopeUpdatedSuccessfully = "Scope updated successfully.";
+
     /// <summary>UC-02 success: a single scope was retrieved.</summary>
     public const string ScopeRetrievedSuccessfully = "Scope retrieved successfully.";
 
