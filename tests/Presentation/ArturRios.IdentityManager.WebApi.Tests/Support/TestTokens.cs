@@ -17,9 +17,12 @@ public static class TestTokens
     private const string AudienceVariable = "IDENTITY_MANAGER_AUTH_TOKEN_AUDIENCE";
 
     /// <summary>Builds a bearer token for a user with the given role value (see <c>Roles</c>).</summary>
-    public static string ForRole(int role)
+    public static string ForRole(int role) => For(1, role);
+
+    /// <summary>Builds a bearer token for a specific person id and role value (see <c>Roles</c>).</summary>
+    public static string For(int id, int role)
     {
-        var claims = new AuthenticatedUser(1, role).ToTokenClaims();
+        var claims = new AuthenticatedUser(id, role).ToTokenClaims();
 
         var configuration = new JwtConfiguration(
             3600,

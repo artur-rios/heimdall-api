@@ -159,6 +159,26 @@ public class UpdateScopeCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenNameUsedByAnotherScopeDifferentCase_WhenHandlingUpdateScope_ThenReturnsNameAlreadyExists()
+    {
+        // Given two scopes; the target tries to take the other's name differing only by case
+        // (name uniqueness is case-insensitive)
+        var id = Guid.NewGuid();
+        var repository = await RepositoryWith(
+            ExistingScope(id, "Target", Guid.NewGuid()),
+            ExistingScope(Guid.NewGuid(), "Taken", Guid.NewGuid()));
+        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var command = new UpdateScopeCommand { Id = id, Name = "TAKEN" };
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(ScopeMessages.NameAlreadyExists, output.Errors);
+    }
+
+    [UnitFact]
     public async Task GivenInvalidInput_WhenHandlingUpdateScope_ThenReturnsValidationError()
     {
         // Given a validator that reports a failure

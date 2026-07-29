@@ -4,11 +4,13 @@ using ArturRios.IdentityManager.Command.Handlers;
 using ArturRios.IdentityManager.Command.Input;
 using ArturRios.IdentityManager.Command.Input.Validation;
 using ArturRios.IdentityManager.Command.Output;
+using ArturRios.IdentityManager.Command.Services;
 using ArturRios.IdentityManager.Data.Configuration;
 using ArturRios.IdentityManager.Data.Seeding;
 using ArturRios.IdentityManager.Query.Handlers;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
+using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Jwt;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
@@ -106,6 +108,15 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>, DeleteScopeCommandHandler>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>, HardDeleteScopeCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateAdminCommand, CreatePersonCommandOutput>, CreateAdminCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateUserCommand, CreatePersonCommandOutput>, CreateUserCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateScopeOwnerCommand>, CreateScopeOwnerCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>, CreateScopeOwnerCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -113,6 +124,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>, ListScopesQueryHandler>();
 
+        Builder.Services.AddSingleton(EmailVerificationOptions.FromEnvironment());
+        Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
+        Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
+        Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
         Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
         Builder.Services.AddScoped<DatabaseSeeder>();
     }
