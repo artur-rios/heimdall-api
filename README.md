@@ -57,6 +57,85 @@ Detailed documentation lives under [`docs/requirements`](docs/requirements):
 - [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) — how a use
   case goes from backlog to merged (branch, issue status, testing gate, PR).
 
+## Use case status
+
+Delivery tracker for the 29 use cases in the
+[Use Case Specification Document](docs/requirements/Use%20Case%20Specification%20Document.md), plus
+the platform work that is not itself a use case. Each one ships on its own branch, issue, and pull
+request — see the
+[Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md).
+
+**Legend:** ✅ done and merged &nbsp;·&nbsp; 🚧 in progress &nbsp;·&nbsp; ⬜ not started
+
+### Scope Management
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-01: Create Scope | ✅ | [#2](https://github.com/artur-rios/identity-manager-api/issues/2) |
+| UC-02: View Scope | 🚧 | [#3](https://github.com/artur-rios/identity-manager-api/issues/3) |
+| UC-03: Update Scope | ✅ | [#4](https://github.com/artur-rios/identity-manager-api/issues/4) |
+| UC-04: Logical Delete Scope | ✅ | [#5](https://github.com/artur-rios/identity-manager-api/issues/5) |
+| UC-05: Hard Delete Scope | ✅ | [#6](https://github.com/artur-rios/identity-manager-api/issues/6) |
+| UC-21: Add Scope Owner | ⬜ | [#22](https://github.com/artur-rios/identity-manager-api/issues/22) |
+| UC-22: Remove Scope Owner | ⬜ | [#23](https://github.com/artur-rios/identity-manager-api/issues/23) |
+| UC-23: Promote User to Scope Owner | ⬜ | [#24](https://github.com/artur-rios/identity-manager-api/issues/24) |
+
+### Person Management
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-06: Create Person | ✅ | [#7](https://github.com/artur-rios/identity-manager-api/issues/7) |
+| UC-07: View Person | ✅ | [#8](https://github.com/artur-rios/identity-manager-api/issues/8) |
+| UC-08: Update Person | ⬜ | [#9](https://github.com/artur-rios/identity-manager-api/issues/9) |
+| UC-09: Logical Delete Person | ⬜ | [#10](https://github.com/artur-rios/identity-manager-api/issues/10) |
+| UC-10: Hard Delete Person | ⬜ | [#11](https://github.com/artur-rios/identity-manager-api/issues/11) |
+
+### Authentication & Security
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-11: Login (Authenticate) | ⬜ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
+| UC-12: Request Password Recovery | ⬜ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
+| UC-13: Reset Password | ⬜ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
+| UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
+| UC-15: Resend Verification Email | ⬜ | [#16](https://github.com/artur-rios/identity-manager-api/issues/16) |
+
+### Application Management
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-16: Create Application | ⬜ | [#17](https://github.com/artur-rios/identity-manager-api/issues/17) |
+| UC-17: View Application | ⬜ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
+| UC-18: Update Application | ⬜ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
+| UC-19: Logical Delete Application | ⬜ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
+| UC-20: Hard Delete Application | ⬜ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
+
+### Google Sign-In
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-24: Enable/Disable Google Sign-In | ⬜ | [#25](https://github.com/artur-rios/identity-manager-api/issues/25) |
+| UC-25: Sign Up / Sign In via Google | ⬜ | [#26](https://github.com/artur-rios/identity-manager-api/issues/26) |
+| UC-26: Sign Out via Google | ⬜ | [#27](https://github.com/artur-rios/identity-manager-api/issues/27) |
+| UC-27: View Google User | ⬜ | [#28](https://github.com/artur-rios/identity-manager-api/issues/28) |
+| UC-28: Logical Delete Google User | ⬜ | [#29](https://github.com/artur-rios/identity-manager-api/issues/29) |
+| UC-29: Hard Delete Google User | ⬜ | [#30](https://github.com/artur-rios/identity-manager-api/issues/30) |
+
+### Platform
+
+Not use cases, tracked separately.
+
+| Item | Status | Issue |
+| --- | --- | --- |
+| Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
+| Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
+
+> **UC-02 is not finished.** Its read endpoints (`GET /api/scopes`, `GET /api/scopes/{id}`) and their
+> tests are merged, but the per-actor rule in the use case's main flow — a Scope Admin sees only the
+> scopes they own, a User only the scope they belong to — is not implemented: `GET /api/scopes/{id}`
+> currently returns any scope to any authenticated caller, so **AF-02b (`403 Forbidden`) never
+> occurs**. The use case stays in progress until that gap is closed.
+
 ## Prerequisites
 
 - **.NET 10 SDK**
