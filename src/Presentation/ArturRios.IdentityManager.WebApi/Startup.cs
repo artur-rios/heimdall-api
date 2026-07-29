@@ -102,6 +102,8 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IValidator<UpdateScopeCommand>, UpdateScopeCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<UpdateScopeCommand, UpdateScopeCommandOutput>, UpdateScopeCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>, DeleteScopeCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services

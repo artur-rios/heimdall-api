@@ -13,6 +13,9 @@ public static class ScopeMessages
     /// <summary>UC-03 success: the scope was updated.</summary>
     public const string ScopeUpdatedSuccessfully = "Scope updated successfully.";
 
+    /// <summary>UC-04 success: the scope was logically deleted (also used for the AF-04b idempotent no-op).</summary>
+    public const string ScopeDeletedSuccessfully = "Scope deleted successfully.";
+
     /// <summary>UC-02 success: a single scope was retrieved.</summary>
     public const string ScopeRetrievedSuccessfully = "Scope retrieved successfully.";
 

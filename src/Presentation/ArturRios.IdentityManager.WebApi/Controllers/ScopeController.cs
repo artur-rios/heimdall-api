@@ -46,6 +46,20 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Logically deletes a scope, cascading to its Users, Google Users, and applications (UC-04).
+    ///     Restricted to System Admins.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<DeleteScopeCommandOutput?>>> Delete(Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<DeleteScopeCommand, DeleteScopeCommandOutput>(new DeleteScopeCommand { Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
     /// </summary>
     [HttpGet]
