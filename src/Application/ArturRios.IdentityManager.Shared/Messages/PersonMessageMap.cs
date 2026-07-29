@@ -3,8 +3,8 @@ using ArturRios.Util.Http;
 namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
-///     Maps each <see cref="PersonMessages" /> value to its HTTP status code, following the UC-06
-///     flows. Passed to the response resolver.
+///     Maps each <see cref="PersonMessages" /> value to its HTTP status code, following the UC-06 and
+///     UC-07 flows. Passed to the response resolver.
 /// </summary>
 public static class PersonMessageMap
 {
@@ -25,6 +25,13 @@ public static class PersonMessageMap
         [PersonMessages.EmailInvalid] = HttpStatusCodes.BadRequest,
         [PersonMessages.PasswordRequired] = HttpStatusCodes.BadRequest,
         [PersonMessages.PasswordTooShort] = HttpStatusCodes.BadRequest,
-        [PersonMessages.InvalidRole] = HttpStatusCodes.BadRequest
+        [PersonMessages.InvalidRole] = HttpStatusCodes.BadRequest,
+        // UC-07 main flow — person(s) retrieved.
+        [PersonMessages.PersonRetrievedSuccessfully] = HttpStatusCodes.Ok,
+        [PersonMessages.PersonsRetrievedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-07a — person not found.
+        [PersonMessages.PersonNotFound] = HttpStatusCodes.NotFound,
+        // AF-07b — caller may not view the person.
+        [PersonMessages.NotAuthorizedToViewPerson] = HttpStatusCodes.Forbidden
     };
 }
