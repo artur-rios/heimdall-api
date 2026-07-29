@@ -86,7 +86,7 @@ request — see the
 | --- | --- | --- |
 | UC-06: Create Person | ✅ | [#7](https://github.com/artur-rios/identity-manager-api/issues/7) |
 | UC-07: View Person | ✅ | [#8](https://github.com/artur-rios/identity-manager-api/issues/8) |
-| UC-08: Update Person | ⬜ | [#9](https://github.com/artur-rios/identity-manager-api/issues/9) |
+| UC-08: Update Person | ✅ | [#9](https://github.com/artur-rios/identity-manager-api/issues/9) |
 | UC-09: Logical Delete Person | ⬜ | [#10](https://github.com/artur-rios/identity-manager-api/issues/10) |
 | UC-10: Hard Delete Person | ⬜ | [#11](https://github.com/artur-rios/identity-manager-api/issues/11) |
 
@@ -134,7 +134,8 @@ Not use cases, tracked separately.
 > tests are merged, but the per-actor rule in the use case's main flow — a Scope Admin sees only the
 > scopes they own, a User only the scope they belong to — is not implemented: `GET /api/scopes/{id}`
 > currently returns any scope to any authenticated caller, so **AF-02b (`403 Forbidden`) never
-> occurs**. The use case stays in progress until that gap is closed.
+> occurs**. Closing that gap is scheduled after UC-11 (Login), which is where the owned-scope claims
+> the rule needs are issued; UC-02 stays in progress until then.
 
 ## Prerequisites
 
