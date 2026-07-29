@@ -1,3 +1,4 @@
+using ArturRios.IdentityManager.Shared.Security;
 using ArturRios.Mediator.Command;
 
 namespace ArturRios.IdentityManager.Command.Input;
@@ -7,7 +8,7 @@ namespace ArturRios.IdentityManager.Command.Input;
 ///     the route; <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller
 ///     from the authenticated caller (for the AF-06e ownership check) and are never bound from the body.
 /// </summary>
-public class CreateUserCommand : BaseCommand, IActorScopedCommand
+public class CreateUserCommand : BaseCommand, IActorScoped
 {
     public Guid ScopeId { get; set; }
 

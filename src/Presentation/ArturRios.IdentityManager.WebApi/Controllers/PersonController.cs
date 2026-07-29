@@ -2,6 +2,7 @@ using ArturRios.IdentityManager.Command.Input;
 using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.IdentityManager.Shared.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
@@ -68,13 +69,14 @@ public class PersonController(CommandMediator commandMediator) : Controller
 
     /// <summary>
     ///     Copies the authenticated caller (attached to the request by the auth middleware) onto an
-    ///     actor-scoped command, so the handler can enforce scope-scoped authorization (AF-06e). The
-    ///     acting fields are always taken from the token, never from the request body.
+    ///     actor-scoped command or query, so the handler can enforce scope-scoped authorization
+    ///     (UC-06 AF-06e, UC-07 AF-07b). The acting fields are always taken from the token, never
+    ///     from the request.
     /// </summary>
-    private void ApplyActor(IActorScopedCommand command)
+    private void ApplyActor(IActorScoped actorScoped)
     {
         var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
-        command.ActingPersonId = actor.Id;
-        command.ActingRole = actor.Role;
+        actorScoped.ActingPersonId = actor.Id;
+        actorScoped.ActingRole = actor.Role;
     }
 }
