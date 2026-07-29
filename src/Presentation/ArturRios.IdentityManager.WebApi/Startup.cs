@@ -127,6 +127,7 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddSingleton(EmailVerificationOptions.FromEnvironment());
         Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
+        Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
         Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
         Builder.Services.AddScoped<DatabaseSeeder>();
     }

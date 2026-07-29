@@ -13,7 +13,8 @@ using Moq;
 namespace ArturRios.IdentityManager.Command.Tests;
 
 // Unit tests for CreateUserCommandHandler (UC-06 path a): main flow + AF-06b (scope missing/deleted),
-// AF-06e (actor not owner / owner / SystemAdmin bypass), AF-06a (duplicate email in scope).
+// AF-06e delegation (checker allows / rejects the actor), AF-06a (duplicate email in scope,
+// case-insensitive). The AF-06e ownership rule itself is covered by ScopeOwnershipCheckerTests.
 public class CreateUserCommandHandlerTests
 {
     private static Mock<IValidator<CreateUserCommand>> ValidValidator()
@@ -23,6 +24,15 @@ public class CreateUserCommandHandlerTests
             .Setup(v => v.ValidateAsync(It.IsAny<CreateUserCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult());
         return validator;
+    }
+
+    private static IScopeOwnershipChecker OwnershipChecker(bool allowed = true)
+    {
+        var checker = new Mock<IScopeOwnershipChecker>();
+        checker
+            .Setup(c => c.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<long>()))
+            .ReturnsAsync(allowed);
+        return checker.Object;
     }
 
     private static async Task<(AsyncFakeRepository<Scope> scopes, Scope scope)> ScopeStoreAsync()
@@ -46,11 +56,12 @@ public class CreateUserCommandHandlerTests
     [UnitFact]
     public async Task GivenSystemAdminAndUniqueEmail_WhenHandlingCreateUser_ThenUserWithMembershipIsCreated()
     {
-        // Given a SystemAdmin actor (bypasses ownership) and an empty scope
+        // Given a SystemAdmin actor (ownership allowed) and an empty scope
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: 1);
 
         // When
@@ -71,22 +82,17 @@ public class CreateUserCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenOwnerScopeAdmin_WhenHandlingCreateUser_ThenUserIsCreated()
+    public async Task GivenActorAllowedForScope_WhenHandlingCreateUser_ThenUserIsCreated()
     {
-        // Given a ScopeAdmin actor who owns the scope
+        // Given the ownership checker allows the actor (e.g. a ScopeAdmin who owns the scope)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
-        var actor = new Person
-        {
-            RoleId = (long)Roles.ScopeAdmin,
-            ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]
-        };
-        await persons.CreateAsync(actor);
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(allowed: true), email.Object);
 
         // When
-        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actor.Id));
+        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: 5));
 
         // Then
         Assert.True(output.Success);
@@ -94,18 +100,17 @@ public class CreateUserCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenScopeAdminNotOwner_WhenHandlingCreateUser_ThenReturnsNotScopeOwner()
+    public async Task GivenActorNotAllowedForScope_WhenHandlingCreateUser_ThenReturnsNotScopeOwner()
     {
-        // Given a ScopeAdmin actor with no ownership of the scope (AF-06e)
+        // Given the ownership checker rejects the actor (AF-06e)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
-        var actor = new Person { RoleId = (long)Roles.ScopeAdmin };
-        await persons.CreateAsync(actor);
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(allowed: false), email.Object);
 
         // When
-        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actor.Id));
+        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: 5));
 
         // Then
         Assert.False(output.Success);
@@ -120,7 +125,8 @@ public class CreateUserCommandHandlerTests
         var scopes = new AsyncFakeRepository<Scope>();
         var persons = new AsyncFakeRepository<Person>();
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
 
         // When
         var output = await handler.HandleAsync(Command(Guid.NewGuid(), (int)Roles.SystemAdmin, 1));
@@ -145,7 +151,8 @@ public class CreateUserCommandHandlerTests
             ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
 
         // When
         var output = await handler.HandleAsync(command);
@@ -171,7 +178,8 @@ public class CreateUserCommandHandlerTests
             ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
-        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
 
         // When
         var output = await handler.HandleAsync(command);

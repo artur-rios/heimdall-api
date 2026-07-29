@@ -39,10 +39,7 @@ public class PersonController(CommandMediator commandMediator) : Controller
         Guid scopeId, [FromBody] CreateUserCommand command)
     {
         command.ScopeId = scopeId;
-
-        var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
-        command.ActingPersonId = actor.Id;
-        command.ActingRole = actor.Role;
+        ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<CreateUserCommand, CreatePersonCommandOutput>(command);
@@ -61,14 +58,23 @@ public class PersonController(CommandMediator commandMediator) : Controller
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
     {
         command.ScopeId = scopeId;
-
-        var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
-        command.ActingPersonId = actor.Id;
-        command.ActingRole = actor.Role;
+        ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>(command);
 
         return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Copies the authenticated caller (attached to the request by the auth middleware) onto an
+    ///     actor-scoped command, so the handler can enforce scope-scoped authorization (AF-06e). The
+    ///     acting fields are always taken from the token, never from the request body.
+    /// </summary>
+    private void ApplyActor(IActorScopedCommand command)
+    {
+        var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
+        command.ActingPersonId = actor.Id;
+        command.ActingRole = actor.Role;
     }
 }

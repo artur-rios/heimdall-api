@@ -25,6 +25,7 @@ public class CreateUserCommandHandler(
     IAsyncReadOnlyRepository<Scope> scopeReader,
     IAsyncReadOnlyRepository<Person> personReader,
     IAsyncRepository<Person> personWriter,
+    IScopeOwnershipChecker scopeOwnership,
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateUserCommand, CreatePersonCommandOutput>
 {
@@ -50,16 +51,9 @@ public class CreateUserCommandHandler(
         }
 
         // AF-06e: a Scope Admin actor may only act on a scope they own; a System Admin bypasses.
-        if (command.ActingRole != (int)Roles.SystemAdmin)
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
         {
-            var actorOwnsScope = await personReader.Query().AnyAsync(person =>
-                person.Id == command.ActingPersonId &&
-                person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
-
-            if (!actorOwnsScope)
-            {
-                return output.WithError(PersonMessages.NotScopeOwner);
-            }
+            return output.WithError(PersonMessages.NotScopeOwner);
         }
 
         // AF-06a: a User's email must be unique among the scope's Users, compared case-insensitively

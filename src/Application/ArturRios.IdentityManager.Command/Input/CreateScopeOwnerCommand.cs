@@ -8,7 +8,7 @@ namespace ArturRios.IdentityManager.Command.Input;
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
 ///     authenticated caller (for the AF-06e ownership check) and are never bound from the body.
 /// </summary>
-public class CreateScopeOwnerCommand : BaseCommand
+public class CreateScopeOwnerCommand : BaseCommand, IActorScopedCommand
 {
     public Guid ScopeId { get; set; }
 
