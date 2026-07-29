@@ -446,16 +446,29 @@ sequenceDiagram
 
 **Main Flow:**
 
-1. Actor sends an update request with the person ID and new values.
+1. Actor sends an update request to `PUT /api/persons/{id}` with the person ID and new values. `Name`
+   and `Email` are replaced; `RoleId` is optional and, when omitted, leaves the role unchanged.
 2. The system validates the input.
-3. The system checks authorization:
-   - System Admin: can update any person, including `RoleId`.
-   - Scope Admin: can update Users within the scopes they own (name, email only — cannot change `RoleId`).
-   - User: can update only their own name and email.
-4. If email changes, the system checks uniqueness (within the scope for a `User`, system-wide for a `ScopeAdmin`/`SystemAdmin`) and resets `EmailVerified = false`.
-5. If `RoleId` changes (System Admin only), the system verifies the referenced role exists and adjusts scope associations accordingly (e.g. changing a `User` to `ScopeAdmin` removes their `SCOPE_USER` row).
+3. The system checks authorization, allowing the update when any of the following holds:
+   - The actor is a System Admin — they may update any person, including `RoleId`.
+   - The actor **is** the person being updated — every actor may update their own name and email.
+   - The actor is a Scope Admin and the person is a `User` of a scope the actor owns — name and email
+     only; a Scope Admin may never change `RoleId`.
+4. If email changes, the system checks uniqueness (within the scope for a `User`, system-wide for a
+   `ScopeAdmin`/`SystemAdmin`) and resets `EmailVerified = false`. No verification email is sent —
+   issuing a fresh token is UC-14 / UC-15's responsibility.
+5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
+   and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
+   association (FR-PE-10). Any other target role is refused: making someone a `ScopeAdmin` requires
+   naming the scope they will own (FR-PE-11) and making someone a `User` requires naming the scope
+   they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
+   UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
 6. The system applies updates and sets `UpdatedAt`.
-7. The system returns the updated person.
+7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
+
+> **On FR-RO-05.** FR-RO-05 states that Scope Admins may assign the `User` role to persons within
+> their scope. That is satisfied by UC-06 path (a), where a Scope Admin creates a person in a scope
+> they own with `RoleId = User`. UC-08 keeps role changes System-Admin-only, per step 3 and AF-08c.
 
 **Alternative Flows:**
 
@@ -464,6 +477,10 @@ sequenceDiagram
 | AF-08a | Person not found or logically deleted | Return `404 Not Found` |
 | AF-08b | New email conflicts within scope or system-wide | Return `409 Conflict` |
 | AF-08c | Unauthorized role change (only System Admin may change `RoleId`) | Return `403 Forbidden` |
+| AF-08d | Actor not authorized to update the person at all | Return `403 Forbidden` |
+| AF-08e | Invalid input | Return `400 Bad Request` |
+| AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
+| AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
 
 ---
 
