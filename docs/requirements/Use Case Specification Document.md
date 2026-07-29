@@ -396,26 +396,40 @@ sequenceDiagram
 | **ID** | UC-07 |
 | **Name** | View Person |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve a person's details or list persons within a scope |
-| **Preconditions** | Actor is authenticated |
-| **Postconditions** | Person information is returned |
+| **Description** | Retrieve a person's details or list the persons associated with a scope. There are three distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; or (c) the `ScopeAdmin` owners of a scope, via `GET /api/scopes/{scopeId}/owners` |
+| **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted |
+| **Postconditions** | Person information is returned, never including `PasswordHash` or `Salt` |
 
-**Main Flow:**
+**Main Flow (read a — person by ID):**
 
-1. Actor requests a person by ID or a list of Users within a scope.
-2. The system checks authorization:
-   - System Admin: can view any person.
-   - Scope Admin: can view the Users of the scopes they own, and other Scope Admins co-owning those scopes.
-   - User: can view only their own record.
-3. Logically deleted persons are excluded unless explicitly requested.
-4. The system returns person data (excluding `PasswordHash` and `Salt`).
+1. Actor requests a person by ID.
+2. The system loads the person, excluding logically deleted persons unless `includeDeleted` is explicitly requested (FR-PE-08).
+3. The system checks authorization, allowing the read when any of the following holds:
+   - The actor is a System Admin — they may view any person.
+   - The actor is the requested person — every actor may view their own record.
+   - The actor is a Scope Admin and the requested person is a `User` of a scope the actor owns.
+   - The actor is a Scope Admin and the requested person is another Scope Admin co-owning one of the actor's scopes.
+4. The system returns the person data (excluding `PasswordHash` and `Salt`).
+
+**Main Flow (read b — list the Users of a scope):**
+
+1. A System Admin or a Scope Admin requests the Users of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
+2. The system verifies the scope exists and is not logically deleted.
+3. The system verifies the actor may read the scope: a System Admin always may; a Scope Admin must own it.
+4. The system returns the scope's `User` persons, excluding logically deleted persons unless explicitly requested. The scope's owners are not part of this listing.
+
+**Main Flow (read c — list the owners of a scope):**
+
+1. A System Admin or a Scope Admin requests the owners of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
+2. The system applies the same scope and authorization checks as read (b).
+3. The system returns the scope's `ScopeAdmin` owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-07a | Person not found | Return `404 Not Found` |
-| AF-07b | Actor not authorized | Return `403 Forbidden` |
+| AF-07a | Person not found, or logically deleted and not explicitly requested (read a); target scope not found or logically deleted (reads b, c) | Return `404 Not Found` |
+| AF-07b | Actor not authorized to view the requested person (read a); actor is not an owner of the target scope (reads b, c) | Return `403 Forbidden` |
 
 ---
 
