@@ -16,6 +16,9 @@ public static class ScopeMessages
     /// <summary>UC-04 success: the scope was logically deleted (also used for the AF-04b idempotent no-op).</summary>
     public const string ScopeDeletedSuccessfully = "Scope deleted successfully.";
 
+    /// <summary>UC-05 success: the scope was permanently (hard) deleted.</summary>
+    public const string ScopeHardDeletedSuccessfully = "Scope hard deleted successfully.";
+
     /// <summary>UC-02 success: a single scope was retrieved.</summary>
     public const string ScopeRetrievedSuccessfully = "Scope retrieved successfully.";
 

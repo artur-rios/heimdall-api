@@ -17,6 +17,8 @@ public static class ScopeMessageMap
         [ScopeMessages.ScopeUpdatedSuccessfully] = HttpStatusCodes.Ok,
         // UC-04 main flow (and AF-04b idempotent) — scope deleted.
         [ScopeMessages.ScopeDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-05 main flow — scope hard deleted.
+        [ScopeMessages.ScopeHardDeletedSuccessfully] = HttpStatusCodes.Ok,
         // UC-02 main flow — scope(s) retrieved.
         [ScopeMessages.ScopeRetrievedSuccessfully] = HttpStatusCodes.Ok,
         [ScopeMessages.ScopesRetrievedSuccessfully] = HttpStatusCodes.Ok,
