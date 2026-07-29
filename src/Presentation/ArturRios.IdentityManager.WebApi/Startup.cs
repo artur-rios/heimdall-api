@@ -114,6 +114,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateUserCommand, CreatePersonCommandOutput>, CreateUserCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateScopeOwnerCommand>, CreateScopeOwnerCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>, CreateScopeOwnerCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services

@@ -50,4 +50,26 @@ public class PersonController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Creates a brand-new <c>ScopeAdmin</c> person directly as a co-owner of a scope (UC-06 path
+    ///     c, FR-SC-12). A System Admin or an owner of the scope may call it; the ownership check
+    ///     (AF-06e) is enforced by the handler from the acting user.
+    /// </summary>
+    [HttpPost("scopes/{scopeId:guid}/owners")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
+        Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
+    {
+        command.ScopeId = scopeId;
+
+        var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
+        command.ActingPersonId = actor.Id;
+        command.ActingRole = actor.Role;
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
 }
