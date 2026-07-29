@@ -104,7 +104,7 @@ graph LR
 | FR-PE-01 | The system shall allow creation of a person with: `Id`, `Name`, `Email`, `PasswordHash`, `Salt`, `RoleId`, `IsDeleted`. A person has no direct `ScopeId` attribute | High |
 | FR-PE-02 | A person with the `User` role must be associated with exactly **one** scope, via scope membership, at creation time | High |
 | FR-PE-03 | The system shall allow reading a person's details by ID | High |
-| FR-PE-04 | The system shall allow listing persons (Users) within a scope, and listing owners (Scope Admins) of a scope, with pagination and filtering | High |
+| FR-PE-04 | The system shall allow listing persons (Users) within a scope, and listing owners (Scope Admins) of a scope, with pagination and optional case-insensitive name and email filters | High |
 | FR-PE-05 | The system shall allow updating person information (name, email, role) | High |
 | FR-PE-06 | The system shall allow **logical deletion** of a person by setting `IsDeleted = true` | High |
 | FR-PE-07 | The system shall allow **hard deletion** of a person, permanently removing the record | High |

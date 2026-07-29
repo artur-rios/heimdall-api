@@ -38,4 +38,16 @@ public static class PersonMessages
 
     /// <summary>AF-06d: the requested role is not ScopeAdmin or SystemAdmin (path b).</summary>
     public const string InvalidRole = "Role must be ScopeAdmin or SystemAdmin.";
+
+    /// <summary>UC-07 success: a single person was retrieved.</summary>
+    public const string PersonRetrievedSuccessfully = "Person retrieved successfully.";
+
+    /// <summary>UC-07 success: a list of persons was retrieved.</summary>
+    public const string PersonsRetrievedSuccessfully = "Persons retrieved successfully.";
+
+    /// <summary>AF-07a: the requested person does not exist (or is logically deleted and not requested).</summary>
+    public const string PersonNotFound = "Person not found.";
+
+    /// <summary>AF-07b: the caller is not allowed to view the requested person.</summary>
+    public const string NotAuthorizedToViewPerson = "You are not allowed to view this person.";
 }

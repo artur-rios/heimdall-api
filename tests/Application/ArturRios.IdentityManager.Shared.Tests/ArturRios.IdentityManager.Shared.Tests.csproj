@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\src\Application\ArturRios.IdentityManager.Query\ArturRios.IdentityManager.Query.csproj" />
+        <ProjectReference Include="..\..\..\src\Application\ArturRios.IdentityManager.Shared\ArturRios.IdentityManager.Shared.csproj" />
     </ItemGroup>
 
 </Project>

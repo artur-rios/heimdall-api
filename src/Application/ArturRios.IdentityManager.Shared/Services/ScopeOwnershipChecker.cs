@@ -3,7 +3,7 @@ using ArturRios.IdentityManager.Domain.Entities;
 using ArturRios.IdentityManager.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.IdentityManager.Shared.Services;
 
 /// <summary>
 ///     Default <see cref="IScopeOwnershipChecker" />: a System Admin bypasses ownership; any other
