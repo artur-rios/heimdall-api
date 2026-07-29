@@ -108,6 +108,25 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
+    ///     Permanently (hard) deletes a person, removing the applications they own, their password
+    ///     reset and email verification tokens, and their scope membership/ownership rows (UC-10,
+    ///     FR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the
+    ///     last-owner guard (AF-10b) are enforced by the handler.
+    /// </summary>
+    [HttpDelete("persons/{id:guid}/hard")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<HardDeletePersonCommandOutput?>>> HardDelete(Guid id)
+    {
+        var command = new HardDeletePersonCommand { Id = id };
+        ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
     ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
     ///     therefore enforced by the handler.

@@ -124,6 +124,8 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>, UpdatePersonCommandHandler>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>, DeletePersonCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>, HardDeletePersonCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services

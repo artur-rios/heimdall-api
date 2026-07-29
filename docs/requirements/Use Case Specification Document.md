@@ -538,18 +538,20 @@ sequenceDiagram
 | **Name** | Hard Delete Person |
 | **Actors** | System Admin |
 | **Description** | Permanently remove a person record from the database |
-| **Preconditions** | Actor is authenticated with `SystemAdmin` role; person exists; if the person is a `ScopeAdmin`, removing them must not leave any owned scope without an owner |
+| **Preconditions** | Actor is authenticated with `SystemAdmin` role; person exists; the actor is not the person being deleted; if the person is a `ScopeAdmin`, removing them must not leave any owned scope without an owner |
 | **Postconditions** | Person record, all associated tokens, their `SCOPE_USER`/`SCOPE_OWNER` rows, and any applications they own are permanently removed |
 
 **Main Flow:**
 
-1. System Admin sends a hard delete request.
-2. If the person is a `ScopeAdmin`, the system verifies that every scope they own has at least one other owner.
-3. The system permanently deletes all tokens (password reset, email verification) associated with the person.
-4. The system permanently deletes any applications owned by the person.
-5. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if a `ScopeAdmin`).
-6. The system permanently deletes the person record.
-7. The system returns success.
+1. System Admin sends a hard delete request to `DELETE /api/persons/{id}/hard`.
+2. The system loads the person **in any deletion state** — a logically deleted person is exactly what a
+   cleanup pass starts from, so soft deletion must not block a hard one.
+3. If the person is a `ScopeAdmin`, the system verifies that every scope they own has at least one other owner.
+4. The system permanently deletes all tokens (password reset, email verification) associated with the person.
+5. The system permanently deletes any applications owned by the person.
+6. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if a `ScopeAdmin`).
+7. The system permanently deletes the person record.
+8. The system returns success, reporting how many applications and tokens went with the person.
 
 **Alternative Flows:**
 
@@ -557,6 +559,23 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-10a | Person not found | Return `404 Not Found` |
 | AF-10b | Person is the sole owner of one or more scopes | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-10c | Actor is the person being deleted | Return `403 Forbidden` |
+
+> **On AF-10c.** UC-10 grants a System Admin the right to remove a person, which would literally include
+> themselves. Self-deletion is refused so a single, irreversible call cannot destroy the caller's own
+> account. UC-09 refuses the same thing for the same reason (AF-09d).
+>
+> **On AF-10b and an already-deleted target.** The last-owner check runs even when the person is
+> *already* logically deleted — deliberately the opposite of UC-09, where the idempotent AF-09b is
+> answered before the guard. NFR-12 names hard-deleting the last owning person outright, and applying
+> the guard unconditionally keeps every scope backed by at least one `SCOPE_OWNER` row. Removing a
+> soft-deleted sole owner therefore takes two steps: add another owner (UC-21) or hard-delete the scope
+> (UC-05) first.
+>
+> **On the cascade.** Hard deletion is the mirror image of UC-09: where a logical deletion touches
+> nothing but the flag, this removes the person's tokens, the applications they own (NFR-11), and their
+> join rows (System Requirements Document §8). Google Users are unaffected — they belong to a scope
+> rather than to a person, and cannot own an application.
 
 ---
 

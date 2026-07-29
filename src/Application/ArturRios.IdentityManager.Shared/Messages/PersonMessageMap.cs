@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="PersonMessages" /> value to its HTTP status code, following the UC-06,
-///     UC-07, UC-08 and UC-09 flows. Passed to the response resolver.
+///     UC-07, UC-08, UC-09 and UC-10 flows. Passed to the response resolver.
 /// </summary>
 public static class PersonMessageMap
 {
@@ -45,8 +45,11 @@ public static class PersonMessageMap
         [PersonMessages.ScopeWouldLoseLastOwner] = HttpStatusCodes.Conflict,
         // UC-09 main flow and AF-09b — person deleted, or already was.
         [PersonMessages.PersonDeletedSuccessfully] = HttpStatusCodes.Ok,
-        // AF-09c — caller may not delete the person; AF-09d — caller targeted themselves.
+        // AF-09c — caller may not delete the person; AF-09d / AF-10c — caller targeted themselves.
         [PersonMessages.NotAuthorizedToDeletePerson] = HttpStatusCodes.Forbidden,
-        [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden
+        [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden,
+        // UC-10 main flow — person hard deleted. AF-10a reuses PersonNotFound (404), AF-10b reuses
+        // ScopeWouldLoseLastOwner (409), and AF-10c reuses CannotDeleteSelf (403).
+        [PersonMessages.PersonHardDeletedSuccessfully] = HttpStatusCodes.Ok
     };
 }
