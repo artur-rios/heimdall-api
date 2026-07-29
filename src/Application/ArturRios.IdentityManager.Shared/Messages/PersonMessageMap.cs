@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="PersonMessages" /> value to its HTTP status code, following the UC-06,
-///     UC-07 and UC-08 flows. Passed to the response resolver.
+///     UC-07, UC-08 and UC-09 flows. Passed to the response resolver.
 /// </summary>
 public static class PersonMessageMap
 {
@@ -41,7 +41,12 @@ public static class PersonMessageMap
         // UC-08 — the transition needs a scope the request does not carry, or the role is unknown.
         [PersonMessages.UnsupportedRoleTransition] = HttpStatusCodes.BadRequest,
         [PersonMessages.UnknownRole] = HttpStatusCodes.BadRequest,
-        // NFR-12 — the change would strip a scope of its last owner.
-        [PersonMessages.ScopeWouldLoseLastOwner] = HttpStatusCodes.Conflict
+        // NFR-12 — the change would strip a scope of its last owner (UC-08 role change, UC-09 AF-09e).
+        [PersonMessages.ScopeWouldLoseLastOwner] = HttpStatusCodes.Conflict,
+        // UC-09 main flow and AF-09b — person deleted, or already was.
+        [PersonMessages.PersonDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-09c — caller may not delete the person; AF-09d — caller targeted themselves.
+        [PersonMessages.NotAuthorizedToDeletePerson] = HttpStatusCodes.Forbidden,
+        [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden
     };
 }
