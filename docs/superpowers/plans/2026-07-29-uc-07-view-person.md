@@ -61,6 +61,10 @@
 - `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopePersonsTests.cs`
 - `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`
 
+**Modified — tests:**
+- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`, `CreateScopeOwnerCommandHandlerTests.cs` — `using` for the relocated checker.
+- `tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj` — add Moq and Bogus.
+
 **Deleted — tests:**
 - `tests/Application/ArturRios.IdentityManager.Command.Tests/ScopeOwnershipCheckerTests.cs`
 
@@ -82,6 +86,8 @@ Pure relocation. Behaviour must not change; the existing suite is the proof.
 - Modify: `src/ArturRios.IdentityManager.sln`
 - Create: `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.IdentityManager.Shared.Tests.csproj`
 - Create: `tests/Application/ArturRios.IdentityManager.Shared.Tests/ScopeOwnershipCheckerTests.cs`
+- Modify: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
+- Modify: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
 - Delete: `tests/Application/ArturRios.IdentityManager.Command.Tests/ScopeOwnershipCheckerTests.cs`
 
 **Interfaces:**
@@ -169,20 +175,25 @@ public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader
 git rm src/Application/ArturRios.IdentityManager.Command/Services/IScopeOwnershipChecker.cs src/Application/ArturRios.IdentityManager.Command/Services/ScopeOwnershipChecker.cs
 ```
 
-- [ ] **Step 5: Point the two consumers and the DI registration at the new namespace**
+- [ ] **Step 5: Point every consumer and the DI registration at the new namespace**
 
-In `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs` and
-`src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`,
-delete the line `using ArturRios.IdentityManager.Command.Services;` **only if** no other member of
-that namespace is still used in the file (`IEmailVerificationService` lives there, so in both of
-these files the `using` stays) and add:
+Four production files and two test files reference the checker. In each, add:
 
 ```csharp
 using ArturRios.IdentityManager.Shared.Services;
 ```
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, add the same `using` to the
-using block. The registration line itself is unchanged:
+- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`
+- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
+- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
+- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
+- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+
+Keep the existing `using ArturRios.IdentityManager.Command.Services;` in the two handlers and the
+two handler test classes — `IEmailVerificationService` still lives in that namespace, so removing it
+breaks the build.
+
+In `Startup.cs` the registration line itself is unchanged:
 
 ```csharp
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
@@ -990,6 +1001,7 @@ git commit -m "feat: add get person by id query (UC-07)"
 **Files:**
 - Create: `src/Application/ArturRios.IdentityManager.Query/Input/ListScopePersonsQuery.cs`
 - Create: `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopePersonsQueryHandler.cs`
+- Modify: `tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj`
 - Test: `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopePersonsQueryHandlerTests.cs`
 
 **Interfaces:**
@@ -999,6 +1011,18 @@ git commit -m "feat: add get person by id query (UC-07)"
   `string? Email`, `bool IncludeDeleted`; and
   `ListScopePersonsQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReader, IAsyncReadOnlyRepository<Person> personReader, IScopeOwnershipChecker scopeOwnership)`
   implementing `IPaginatedQueryHandlerAsync<ListScopePersonsQuery, PersonOutput>`.
+
+- [ ] **Step 0: Complete the `Query.Tests` package set**
+
+This task's tests are the first in `Query.Tests` to mock a collaborator, and the project was
+scaffolded without Moq or Bogus. Add both — Testing Specification §5 requires the same stack in
+every test project — inside the existing `ItemGroup`, after the `ArturRios.Util.Test` reference in
+`tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj`:
+
+```xml
+        <PackageReference Include="Bogus" Version="35.6.3" />
+        <PackageReference Include="Moq" Version="4.20.72" />
+```
 
 - [ ] **Step 1: Create the query**
 
@@ -1822,7 +1846,106 @@ coverage against routes that already exist.
 - Produces: `GET /api/persons/{id}`, `GET /api/scopes/{scopeId}/persons`,
   `GET /api/scopes/{scopeId}/owners`.
 
-- [ ] **Step 1: Write the failing functional tests**
+> **Ordering note.** Unlike Tasks 3–5 and 7–8, this task is not test-first: the routes and their DI
+> registrations go in before the functional tests are written. A functional test cannot fail for the
+> right reason against a route that does not exist yet — it reports `404` for every case, including
+> the cases that expect `404` — so the failing run would prove nothing. The tests are still written
+> and run before the task is committed.
+
+- [ ] **Step 1: Add the three controller actions**
+
+In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`, extend the
+using block with:
+
+```csharp
+using ArturRios.IdentityManager.Query.Input;
+using ArturRios.IdentityManager.Query.Output;
+using ArturRios.Mediator.Query;
+```
+
+Change the constructor to take the query mediator too:
+
+```csharp
+public class PersonController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
+```
+
+Then add the three actions above the private `ApplyActor` helper:
+
+```csharp
+    /// <summary>
+    ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
+    ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
+    ///     therefore enforced by the handler.
+    /// </summary>
+    [HttpGet("persons/{id:guid}")]
+    public async Task<ActionResult<DataOutput<PersonOutput?>>> GetById(
+        Guid id, [FromQuery] bool includeDeleted = false)
+    {
+        var query = new GetPersonByIdQuery { Id = id, IncludeDeleted = includeDeleted };
+        ApplyActor(query);
+
+        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists the <c>User</c> persons of a scope (UC-07, FR-PE-04). A System Admin or an owner of
+    ///     the scope may call it; the ownership check (AF-07b) is enforced by the handler from the
+    ///     acting user.
+    /// </summary>
+    [HttpGet("scopes/{scopeId:guid}/persons")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PersonOutput>>> ListScopePersons(
+        Guid scopeId, [FromQuery] ListScopePersonsQuery query)
+    {
+        query.ScopeId = scopeId;
+        ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists the <c>ScopeAdmin</c> owners of a scope (UC-07, FR-PE-04). A System Admin or an
+    ///     owner of the scope may call it; the ownership check (AF-07b) is enforced by the handler
+    ///     from the acting user.
+    /// </summary>
+    [HttpGet("scopes/{scopeId:guid}/owners")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PersonOutput>>> ListScopeOwners(
+        Guid scopeId, [FromQuery] ListScopeOwnersQuery query)
+    {
+        query.ScopeId = scopeId;
+        ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+```
+
+`ApplyActor` runs after model binding, so any `actingPersonId` / `actingRole` a caller puts in the
+query string is overwritten by the token's values.
+
+- [ ] **Step 2: Register the three handlers**
+
+In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, immediately after the existing
+`ListScopesQuery` registration, add:
+
+```csharp
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<GetPersonByIdQuery, PersonOutput>, GetPersonByIdQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopePersonsQuery, PersonOutput>, ListScopePersonsQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnersQuery, PersonOutput>, ListScopeOwnersQueryHandler>();
+```
+
+- [ ] **Step 3: Write the functional tests**
 
 Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerGetByIdTests.cs`:
 
@@ -2047,115 +2170,14 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
-
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
-Expected: FAIL — the route does not exist yet, so every `PersonControllerGetByIdTests` case that
-expects `OK` or `Forbidden` reports `NotFound` instead. (`GivenUnknownPersonId_…ThenNotFound` will
-pass for the wrong reason; that is expected at this step and is pinned properly once the route
-exists.)
-
-- [ ] **Step 3: Add the three controller actions**
-
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`, extend the
-using block with:
-
-```csharp
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.Mediator.Query;
-```
-
-Change the constructor to take the query mediator too:
-
-```csharp
-public class PersonController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
-```
-
-Then add the three actions above the private `ApplyActor` helper:
-
-```csharp
-    /// <summary>
-    ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
-    ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
-    ///     therefore enforced by the handler.
-    /// </summary>
-    [HttpGet("persons/{id:guid}")]
-    public async Task<ActionResult<DataOutput<PersonOutput?>>> GetById(
-        Guid id, [FromQuery] bool includeDeleted = false)
-    {
-        var query = new GetPersonByIdQuery { Id = id, IncludeDeleted = includeDeleted };
-        ApplyActor(query);
-
-        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
-
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
-    }
-
-    /// <summary>
-    ///     Lists the <c>User</c> persons of a scope (UC-07, FR-PE-04). A System Admin or an owner of
-    ///     the scope may call it; the ownership check (AF-07b) is enforced by the handler from the
-    ///     acting user.
-    /// </summary>
-    [HttpGet("scopes/{scopeId:guid}/persons")]
-    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
-    public async Task<ActionResult<PaginatedOutput<PersonOutput>>> ListScopePersons(
-        Guid scopeId, [FromQuery] ListScopePersonsQuery query)
-    {
-        query.ScopeId = scopeId;
-        ApplyActor(query);
-
-        var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
-
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
-    }
-
-    /// <summary>
-    ///     Lists the <c>ScopeAdmin</c> owners of a scope (UC-07, FR-PE-04). A System Admin or an
-    ///     owner of the scope may call it; the ownership check (AF-07b) is enforced by the handler
-    ///     from the acting user.
-    /// </summary>
-    [HttpGet("scopes/{scopeId:guid}/owners")]
-    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
-    public async Task<ActionResult<PaginatedOutput<PersonOutput>>> ListScopeOwners(
-        Guid scopeId, [FromQuery] ListScopeOwnersQuery query)
-    {
-        query.ScopeId = scopeId;
-        ApplyActor(query);
-
-        var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
-
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
-    }
-```
-
-`ApplyActor` runs after model binding, so any `actingPersonId` / `actingRole` a caller puts in the
-query string is overwritten by the token's values.
-
-- [ ] **Step 4: Register the three handlers**
-
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, immediately after the existing
-`ListScopesQuery` registration, add:
-
-```csharp
-        Builder.Services
-            .AddScoped<IQueryHandlerAsync<GetPersonByIdQuery, PersonOutput>, GetPersonByIdQueryHandler>();
-        Builder.Services
-            .AddScoped<IPaginatedQueryHandlerAsync<ListScopePersonsQuery, PersonOutput>, ListScopePersonsQueryHandler>();
-        Builder.Services
-            .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnersQuery, PersonOutput>, ListScopeOwnersQueryHandler>();
-```
-
-- [ ] **Step 5: Run the functional tests to verify they pass**
+- [ ] **Step 4: Run the functional tests to verify they pass**
 
 Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
 Expected: PASS — all nine `PersonControllerGetByIdTests` green, and the existing functional suites
 (`ScopeController*`, `PersonControllerCreate*`, `HealthCheckTests`, `SchemaTests`, `SeedingTests`)
 still green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
