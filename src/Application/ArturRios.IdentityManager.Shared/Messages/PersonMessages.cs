@@ -81,6 +81,9 @@ public static class PersonMessages
     /// <summary>AF-09c: the caller is not allowed to delete the requested person.</summary>
     public const string NotAuthorizedToDeletePerson = "You are not allowed to delete this person.";
 
-    /// <summary>AF-09d: an actor may not delete their own person record.</summary>
+    /// <summary>AF-09d / AF-10c: an actor may not delete their own person record.</summary>
     public const string CannotDeleteSelf = "You cannot delete your own person record.";
+
+    /// <summary>UC-10 success: the person was permanently (hard) deleted.</summary>
+    public const string PersonHardDeletedSuccessfully = "Person hard deleted successfully.";
 }
