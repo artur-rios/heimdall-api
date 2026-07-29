@@ -18,7 +18,7 @@ These are functional/operational capabilities of the *platform* rather than the 
 | Item | GitHub Issue | Status |
 | ------ | -------------- | -------- |
 | Project scaffolding & initial infrastructure | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) | ✅ Implemented |
-| Health Check feature | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) | 🚧 In Progress |
+| Health Check feature | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) | ✅ Implemented |
 
 ---
 
@@ -84,7 +84,7 @@ The concrete technologies, libraries, and versions behind this foundation (.NET 
 
 ## 3. Health & Monitoring
 
-> Corresponds to issue [#32](https://github.com/artur-rios/identity-manager-api/issues/32). **Status: In Progress** (the liveness endpoint is implemented; the detailed endpoint is pending).
+> Corresponds to issue [#32](https://github.com/artur-rios/identity-manager-api/issues/32). **Status: Implemented** (delivered via PR #39 — `feature/uc-30-check-api-health`). Both the public liveness endpoint and the System Admin-only detailed health check are in place.
 
 ### 3.1 Overview
 
