@@ -50,4 +50,28 @@ public static class PersonMessages
 
     /// <summary>AF-07b: the caller is not allowed to view the requested person.</summary>
     public const string NotAuthorizedToViewPerson = "You are not allowed to view this person.";
+
+    /// <summary>UC-08 success: the person was updated.</summary>
+    public const string PersonUpdatedSuccessfully = "Person updated successfully.";
+
+    /// <summary>UC-08: the caller is not allowed to update the requested person.</summary>
+    public const string NotAuthorizedToUpdatePerson = "You are not allowed to update this person.";
+
+    /// <summary>AF-08c: only a System Admin may change a person's role.</summary>
+    public const string RoleChangeRequiresSystemAdmin = "Only a System Admin may change a person's role.";
+
+    /// <summary>
+    ///     UC-08: the requested role change would need a target scope the request does not carry.
+    ///     Only a change to SystemAdmin is supported here.
+    /// </summary>
+    public const string UnsupportedRoleTransition =
+        "Only a change to SystemAdmin is supported here. To make a person a scope owner, use the " +
+        "scope owner endpoints.";
+
+    /// <summary>NFR-12: the change would leave a scope without any owner.</summary>
+    public const string ScopeWouldLoseLastOwner =
+        "This change would leave a scope without an owner. Add another owner first.";
+
+    /// <summary>UC-08: the supplied role is not one of the three defined roles.</summary>
+    public const string UnknownRole = "Role must be SystemAdmin, ScopeAdmin, or User.";
 }
