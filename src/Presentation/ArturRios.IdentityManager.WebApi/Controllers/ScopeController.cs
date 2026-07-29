@@ -60,6 +60,21 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Permanently (hard) deletes a scope, removing its Users, Google Users, applications, and
+    ///     ownership/membership join rows (UC-05). Restricted to System Admins.
+    /// </summary>
+    [HttpDelete("{id:guid}/hard")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<HardDeleteScopeCommandOutput?>>> HardDelete(Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>(
+                new HardDeleteScopeCommand { Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
     /// </summary>
     [HttpGet]
