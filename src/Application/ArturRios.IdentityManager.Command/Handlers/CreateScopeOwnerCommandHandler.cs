@@ -5,6 +5,7 @@ using ArturRios.IdentityManager.Command.Services;
 using ArturRios.IdentityManager.Domain.Entities;
 using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.IdentityManager.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;

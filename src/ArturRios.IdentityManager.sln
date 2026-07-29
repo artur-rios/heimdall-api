@@ -43,6 +43,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Infrastructure", "Infrastru
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArturRios.IdentityManager.Data.Tests", "..\tests\Infrastructure\ArturRios.IdentityManager.Data.Tests\ArturRios.IdentityManager.Data.Tests.csproj", "{43D458A5-8068-47EB-B0A8-24B0712158CE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArturRios.IdentityManager.Shared.Tests", "..\tests\Application\ArturRios.IdentityManager.Shared.Tests\ArturRios.IdentityManager.Shared.Tests.csproj", "{2E3A5626-495F-4701-BE41-D15BF8168588}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -185,6 +187,18 @@ Global
 		{43D458A5-8068-47EB-B0A8-24B0712158CE}.Release|x64.Build.0 = Release|Any CPU
 		{43D458A5-8068-47EB-B0A8-24B0712158CE}.Release|x86.ActiveCfg = Release|Any CPU
 		{43D458A5-8068-47EB-B0A8-24B0712158CE}.Release|x86.Build.0 = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|x64.Build.0 = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Debug|x86.Build.0 = Debug|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|x64.ActiveCfg = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|x64.Build.0 = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|x86.ActiveCfg = Release|Any CPU
+		{2E3A5626-495F-4701-BE41-D15BF8168588}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -205,5 +219,6 @@ Global
 		{3EAA0F90-2F5A-4CA1-9C90-55CADB8E3820} = {F06374B2-2C74-48B5-8CF4-F2F88BEBC848}
 		{36CD55E9-C2E2-C34E-D54E-F022183D1D71} = {A91E0CD0-EF88-47DA-A361-807A15D29F28}
 		{43D458A5-8068-47EB-B0A8-24B0712158CE} = {36CD55E9-C2E2-C34E-D54E-F022183D1D71}
+		{2E3A5626-495F-4701-BE41-D15BF8168588} = {3E95EF1D-2CBA-4011-845D-67ACAB414FFF}
 	EndGlobalSection
 EndGlobal

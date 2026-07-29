@@ -4,6 +4,7 @@ using ArturRios.IdentityManager.Command.Services;
 using ArturRios.IdentityManager.Domain.Entities;
 using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.IdentityManager.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;

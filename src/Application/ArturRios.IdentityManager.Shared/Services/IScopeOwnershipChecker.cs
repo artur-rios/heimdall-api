@@ -1,9 +1,9 @@
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.IdentityManager.Shared.Services;
 
 /// <summary>
-///     Decides whether an acting caller is authorized to manage a given scope (UC-06 AF-06e, and any
-///     other scope-scoped authorization): a System Admin always may; any other actor must own the
-///     scope (a <c>SCOPE_OWNER</c> row links their person id to it).
+///     Decides whether an acting caller is authorized to manage or read a given scope (UC-06 AF-06e,
+///     UC-07 AF-07b, and any other scope-scoped authorization): a System Admin always may; any other
+///     actor must own the scope (a <c>SCOPE_OWNER</c> row links their person id to it).
 /// </summary>
 public interface IScopeOwnershipChecker
 {

@@ -11,6 +11,7 @@ using ArturRios.IdentityManager.Query.Handlers;
 using ArturRios.IdentityManager.Query.HealthChecks;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
+using ArturRios.IdentityManager.Shared.Services;
 using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Jwt;
 using ArturRios.Mediator.Command;

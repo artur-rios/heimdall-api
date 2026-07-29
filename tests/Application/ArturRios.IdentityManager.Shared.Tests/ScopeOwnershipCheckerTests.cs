@@ -1,13 +1,14 @@
-using ArturRios.IdentityManager.Command.Services;
 using ArturRios.IdentityManager.Domain.Entities;
 using ArturRios.IdentityManager.Domain.Enums;
+using ArturRios.IdentityManager.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.IdentityManager.Shared.Tests;
 
-// Unit tests for ScopeOwnershipChecker (UC-06 AF-06e authorization): a System Admin always may act;
-// any other actor must own the target scope (a SCOPE_OWNER row links their person id to it).
+// Unit tests for ScopeOwnershipChecker (UC-06 AF-06e / UC-07 AF-07b authorization): a System Admin
+// always may act; any other actor must own the target scope (a SCOPE_OWNER row links their person
+// id to it).
 public class ScopeOwnershipCheckerTests
 {
     [UnitFact]
