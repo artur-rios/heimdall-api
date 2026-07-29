@@ -8,6 +8,7 @@ using ArturRios.IdentityManager.Command.Services;
 using ArturRios.IdentityManager.Data.Configuration;
 using ArturRios.IdentityManager.Data.Seeding;
 using ArturRios.IdentityManager.Query.Handlers;
+using ArturRios.IdentityManager.Query.HealthChecks;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
 using ArturRios.IdentityManager.WebApi.Security;
@@ -123,6 +124,12 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<IQueryHandlerAsync<GetScopeByIdQuery, ScopeOutput>, GetScopeByIdQueryHandler>();
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>, ListScopesQueryHandler>();
+
+        // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
+        // handler resolves them all as IEnumerable, so new checks are added by registering another.
+        Builder.Services.AddScoped<IServiceHealthCheck, DatabaseHealthCheck>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<DetailedHealthQuery, HealthCheckOutput>, GetDetailedHealthQueryHandler>();
 
         Builder.Services.AddSingleton(EmailVerificationOptions.FromEnvironment());
         Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
