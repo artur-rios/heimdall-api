@@ -71,6 +71,24 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
+    ///     Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to
+    ///     any authenticated actor because a User may update their own record; the per-actor rule and
+    ///     the role-change restriction (AF-08c) are enforced by the handler.
+    /// </summary>
+    [HttpPut("persons/{id:guid}")]
+    public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(
+        Guid id, [FromBody] UpdatePersonCommand command)
+    {
+        command.Id = id;
+        ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<UpdatePersonCommand, UpdatePersonCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
     ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
     ///     therefore enforced by the handler.
