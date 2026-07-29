@@ -137,6 +137,29 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     [FunctionalFact]
+    public async Task GivenDuplicateEmailInScopeDifferentCase_WhenPostScopePersons_ThenConflict()
+    {
+        // Given a scope where the email is already taken by a User (AF-06a is case-insensitive)
+        var scope = await SeedScopeAsync();
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        var command = Command();
+        var first = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
+            $"/api/scopes/{scope.PublicId}/persons", command);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+
+        // When posting the same email in a different case
+        var duplicate = new CreateUserCommand
+        {
+            Name = "User", Email = command.Email.ToUpperInvariant(), Password = "Str0ngPass!"
+        };
+        var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
+            $"/api/scopes/{scope.PublicId}/persons", duplicate);
+
+        // Then
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [FunctionalFact]
     public async Task GivenPlainUserCaller_WhenPostScopePersons_ThenForbidden()
     {
         var scope = await SeedScopeAsync();

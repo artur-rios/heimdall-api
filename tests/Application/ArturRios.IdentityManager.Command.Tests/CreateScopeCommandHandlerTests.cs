@@ -145,4 +145,25 @@ public class CreateScopeCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(ScopeMessages.ScopeAdminRoleNotConfigured, output.Errors);
     }
+
+    [UnitFact]
+    public async Task GivenNameExistsDifferentCase_WhenHandlingCreateScope_ThenReturnsNameAlreadyExistsError()
+    {
+        // Given a store already containing a scope named "Acme"; the request differs only by case
+        // (name uniqueness is case-insensitive)
+        var roles = await RolesWithScopeAdmin();
+        var scopeAdminRoleId = (await roles.GetAllAsync()).Data!.Single().Id;
+        var (persons, ownerId) = await PersonsWithScopeAdminOwner(scopeAdminRoleId);
+        var scopes = new AsyncFakeRepository<Scope>();
+        await scopes.CreateAsync(new Scope { Name = "Acme" });
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
+        var command = new CreateScopeCommand { Name = "ACME", OwnerIds = [ownerId] };
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(ScopeMessages.NameAlreadyExists, output.Errors);
+    }
 }

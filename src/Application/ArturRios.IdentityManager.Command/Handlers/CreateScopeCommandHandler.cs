@@ -40,8 +40,9 @@ public class CreateScopeCommandHandler(
 
         var ownerIds = command.OwnerIds.Distinct().ToList();
 
-        // Step 3 (AF-01a): the scope name must be unique.
-        var nameAlreadyExists = await scopeReader.Query().AnyAsync(x => x.Name == command.Name);
+        // Step 3 (AF-01a): the scope name must be unique, compared case-insensitively (LOWER() in SQL).
+        var nameAlreadyExists = await scopeReader.Query()
+            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower());
 
         if (nameAlreadyExists)
         {

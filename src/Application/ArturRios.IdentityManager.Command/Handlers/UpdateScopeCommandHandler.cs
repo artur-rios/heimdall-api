@@ -44,11 +44,12 @@ public class UpdateScopeCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 4 (AF-03b): the new name must not collide with another scope. Checked against all
-        // scopes (deleted included) to match the unique index on Name, excluding this scope so an
-        // unchanged name is not a false conflict.
+        // Step 4 (AF-03b): the new name must not collide with another scope, compared
+        // case-insensitively (LOWER() in SQL) so the app layer authoritatively rejects case variants
+        // that the case-sensitive DB unique index on Name would not catch. Checked against all scopes
+        // (deleted included), excluding this scope so an unchanged name is not a false conflict.
         var nameTaken = await scopeReader.Query()
-            .AnyAsync(x => x.Name == command.Name && x.PublicId != command.Id);
+            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower() && x.PublicId != command.Id);
 
         if (nameTaken)
         {

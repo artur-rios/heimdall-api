@@ -154,4 +154,30 @@ public class CreateUserCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
     }
+
+    [UnitFact]
+    public async Task GivenDuplicateEmailInScopeDifferentCase_WhenHandlingCreateUser_ThenReturnsEmailAlreadyExists()
+    {
+        // Given a scope User whose email differs from the request only by case (AF-06a is
+        // case-insensitive)
+        var (scopes, scope) = await ScopeStoreAsync();
+        var persons = new AsyncFakeRepository<Person>();
+        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, 1);
+        await persons.CreateAsync(new Person
+        {
+            Email = command.Email.ToUpperInvariant(),
+            RoleId = (long)Roles.User,
+            IsDeleted = false,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+        });
+        var email = new Mock<IEmailVerificationService>();
+        var handler = new CreateUserCommandHandler(ValidValidator().Object, scopes, persons, persons, email.Object);
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
+    }
 }

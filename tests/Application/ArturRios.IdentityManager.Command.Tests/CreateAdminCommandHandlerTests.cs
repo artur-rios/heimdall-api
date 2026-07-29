@@ -100,4 +100,27 @@ public class CreateAdminCommandHandlerTests
         Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
         email.Verify(e => e.IssueAndSendAsync(It.IsAny<Person>()), Times.Never);
     }
+
+    [UnitFact]
+    public async Task GivenExistingAdminEmailDifferentCase_WhenHandlingCreateAdmin_ThenReturnsEmailAlreadyExists()
+    {
+        // Given an existing ScopeAdmin whose email differs from the request only by case (AF-06a is
+        // case-insensitive)
+        var persons = new AsyncFakeRepository<Person>();
+        var command = Command((int)Roles.ScopeAdmin);
+        await persons.CreateAsync(new Person
+        {
+            Email = command.Email.ToUpperInvariant(), RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+        });
+        var email = new Mock<IEmailVerificationService>();
+        var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
+        email.Verify(e => e.IssueAndSendAsync(It.IsAny<Person>()), Times.Never);
+    }
 }

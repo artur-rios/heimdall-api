@@ -62,9 +62,10 @@ public class CreateUserCommandHandler(
             }
         }
 
-        // AF-06a: a User's email must be unique among the scope's Users.
+        // AF-06a: a User's email must be unique among the scope's Users, compared case-insensitively
+        // (LOWER() in SQL).
         var emailTaken = await personReader.Query().AnyAsync(person =>
-            !person.IsDeleted && person.Email == command.Email &&
+            !person.IsDeleted && person.Email.ToLower() == command.Email.ToLower() &&
             person.ScopeMembership != null && person.ScopeMembership.ScopeId == scope.Id);
 
         if (emailTaken)

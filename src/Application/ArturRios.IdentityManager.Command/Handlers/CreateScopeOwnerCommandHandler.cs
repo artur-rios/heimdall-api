@@ -62,9 +62,9 @@ public class CreateScopeOwnerCommandHandler(
             }
         }
 
-        // AF-06a: admin emails are unique system-wide.
+        // AF-06a: admin emails are unique system-wide, compared case-insensitively (LOWER() in SQL).
         var emailTaken = await personReader.Query().AnyAsync(person =>
-            !person.IsDeleted && person.Email == command.Email &&
+            !person.IsDeleted && person.Email.ToLower() == command.Email.ToLower() &&
             (person.RoleId == (long)Roles.SystemAdmin || person.RoleId == (long)Roles.ScopeAdmin));
 
         if (emailTaken)

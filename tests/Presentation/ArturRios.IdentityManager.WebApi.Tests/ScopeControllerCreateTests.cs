@@ -91,6 +91,24 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     }
 
     [FunctionalFact]
+    public async Task GivenDuplicateNameDifferentCase_WhenPostScope_ThenConflict()
+    {
+        // Given an existing scope and a valid owner; the new name differs only by case (name
+        // uniqueness is case-insensitive)
+        var existing = await SeedScopeAsync(UniqueName());
+        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<CreateScopeCommandOutput?>>(
+            "/api/scopes",
+            new CreateScopeCommand { Name = existing.Name.ToUpperInvariant(), OwnerIds = [owner.PublicId] });
+
+        // Then
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [FunctionalFact]
     public async Task GivenNoOwner_WhenPostScope_ThenBadRequest()
     {
         // Given
