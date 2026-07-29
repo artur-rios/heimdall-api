@@ -492,15 +492,18 @@ sequenceDiagram
 | **Name** | Logical Delete Person |
 | **Actors** | System Admin, Scope Admin |
 | **Description** | Soft-delete a person by setting `IsDeleted = true` |
-| **Preconditions** | Actor is authenticated; person exists |
-| **Postconditions** | Person's `IsDeleted` is `true` |
+| **Preconditions** | Actor is authenticated; person exists; the actor is not the person being deleted |
+| **Postconditions** | Person's `IsDeleted` is `true`. Nothing else changes: their `SCOPE_USER`/`SCOPE_OWNER` rows, tokens, and owned applications are left untouched (see §8 of the System Requirements Document) |
 
 **Main Flow:**
 
-1. Actor sends a delete request for a person.
-2. The system checks authorization: System Admin may delete any person; a Scope Admin may only delete a `User` within a scope they own.
-3. The system sets `IsDeleted = true` on the person record.
-4. The system returns success.
+1. Actor sends `DELETE /api/persons/{id}` for a person.
+2. The system loads the person **in any deletion state** — an already-deleted person must be found so
+   AF-09b can answer idempotently rather than as a `404`.
+3. The system checks authorization: System Admin may delete any person; a Scope Admin may only delete
+   a `User` within a scope they own.
+4. The system sets `IsDeleted = true` on the person record and stamps `UpdatedAt`.
+5. The system returns success, reporting whether the person was already deleted.
 
 **Alternative Flows:**
 
@@ -508,6 +511,22 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-09a | Person not found | Return `404 Not Found` |
 | AF-09b | Already logically deleted | Return `200 OK` (idempotent) |
+| AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
+| AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
+| AF-09e | Person is a `ScopeAdmin` and is the sole owner of one or more scopes (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+
+> **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
+> person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
+> longer authenticate, so a scope whose only owner is soft-deleted is effectively ownerless — the
+> state NFR-12 exists to prevent. UC-08 resolves the same tension the same way for its role change.
+>
+> **On the order of AF-09b and AF-09e.** An already-deleted person is answered before the last-owner
+> check runs. Such an owner is already out of the scope, so re-checking would turn the idempotent
+> success AF-09b requires into a conflict.
+>
+> **On AF-09d.** UC-09 grants a System Admin the right to delete "any person", which would literally
+> include themselves. Self-deletion is refused so a single call cannot lock an administrator out of
+> the system.
 
 ---
 

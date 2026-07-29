@@ -74,4 +74,13 @@ public static class PersonMessages
 
     /// <summary>UC-08: the supplied role is not one of the three defined roles.</summary>
     public const string UnknownRole = "Role must be SystemAdmin, ScopeAdmin, or User.";
+
+    /// <summary>UC-09 success: the person was logically deleted, or already was (AF-09b).</summary>
+    public const string PersonDeletedSuccessfully = "Person deleted successfully.";
+
+    /// <summary>AF-09c: the caller is not allowed to delete the requested person.</summary>
+    public const string NotAuthorizedToDeletePerson = "You are not allowed to delete this person.";
+
+    /// <summary>AF-09d: an actor may not delete their own person record.</summary>
+    public const string CannotDeleteSelf = "You cannot delete your own person record.";
 }

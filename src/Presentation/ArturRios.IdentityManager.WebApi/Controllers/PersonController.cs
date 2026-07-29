@@ -89,6 +89,25 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
+    ///     Logically deletes a person by setting <c>IsDeleted = true</c> (UC-09, FR-PE-06). The
+    ///     attribute keeps a plain <c>User</c> out; the owner rule (AF-09c) is data-dependent and is
+    ///     therefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner
+    ///     (AF-09e) refusals.
+    /// </summary>
+    [HttpDelete("persons/{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<DeletePersonCommandOutput?>>> Delete(Guid id)
+    {
+        var command = new DeletePersonCommand { Id = id };
+        ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<DeletePersonCommand, DeletePersonCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
     ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
     ///     therefore enforced by the handler.
