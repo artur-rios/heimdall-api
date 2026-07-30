@@ -10,9 +10,18 @@ namespace ArturRios.IdentityManager.Command.Services;
 ///     to the configured <see cref="IPasswordResetSender" />.
 /// </summary>
 /// <remarks>
-///     The token is drawn from letters and digits only. Its secrecy comes from its length, not its
-///     alphabet, and it has to survive a round trip through a URL in an email — special characters
-///     buy nothing and risk being mangled on the way.
+///     <para>
+///         The options ask for letters and digits only, matching <see cref="EmailVerificationService" />.
+///         Note that <c>CustomRandom.Text</c> honours those flags only for the first character of
+///         each requested class and pads the rest from its full alphabet, so the token does contain
+///         special characters in practice. That is harmless here — it raises entropy, not lowers it,
+///         and the sender escapes the token before putting it in a link — but it means nothing may
+///         assume the token is URL-safe on its own.
+///     </para>
+///     <para>
+///         Secrecy comes from the length: 48 characters is far past guessing range within the
+///         token's one-hour life.
+///     </para>
 /// </remarks>
 public class PasswordResetService(
     IAsyncRepository<PasswordResetToken> tokenWriter,
