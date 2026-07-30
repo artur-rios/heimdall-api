@@ -143,6 +143,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>,
                 VerifyEmailCommandHandler>();
+        // No validator: UC-15's request carries no caller-supplied input at all — the person comes
+        // from the bearer token — so there is nothing for NFR-10 to validate.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>,
+                ResendVerificationEmailCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
