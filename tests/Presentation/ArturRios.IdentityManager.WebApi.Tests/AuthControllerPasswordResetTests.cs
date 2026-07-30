@@ -198,7 +198,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Then — and the first link cannot change the password a second time (AF-13b)
         var replay = await ResetAsync(first.Token, "An0ther-Pass!");
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenAlreadyUsed, replay.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, replay.Body!.Errors);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
     }
 
@@ -231,7 +231,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // Then — response
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenExpired, response.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenExpired, response.Body!.Errors);
 
         // Then — nothing changed: the old password still works and the token is still unused
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, OldPassword)).StatusCode);
@@ -251,7 +251,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenAlreadyUsed, response.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, response.Body!.Errors);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, OldPassword)).StatusCode);
     }
 
@@ -264,7 +264,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors);
     }
 
     [FunctionalFact]
@@ -281,7 +281,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, OldPassword)).StatusCode);
     }
 
@@ -330,7 +330,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(AuthMessages.ResetTokenInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors);
     }
 
     [FunctionalFact]

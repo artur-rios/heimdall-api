@@ -224,7 +224,7 @@ public class ResetPasswordCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(AuthMessages.ResetTokenExpired, output.Errors);
+        Assert.Contains(AuthMessages.TokenExpired, output.Errors);
         Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
     }
 
@@ -240,7 +240,7 @@ public class ResetPasswordCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(AuthMessages.ResetTokenAlreadyUsed, output.Errors);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, output.Errors);
         Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
     }
 
@@ -256,8 +256,8 @@ public class ResetPasswordCommandHandlerTests
         var output = await fixture.Handler().HandleAsync(Command("dead-token"));
 
         // Then
-        Assert.Contains(AuthMessages.ResetTokenExpired, output.Errors);
-        Assert.DoesNotContain(AuthMessages.ResetTokenAlreadyUsed, output.Errors);
+        Assert.Contains(AuthMessages.TokenExpired, output.Errors);
+        Assert.DoesNotContain(AuthMessages.TokenAlreadyUsed, output.Errors);
     }
 
     [UnitFact]
@@ -272,7 +272,7 @@ public class ResetPasswordCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(AuthMessages.ResetTokenInvalid, output.Errors);
+        Assert.Contains(AuthMessages.TokenInvalid, output.Errors);
         Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
     }
 
@@ -288,7 +288,7 @@ public class ResetPasswordCommandHandlerTests
         var output = await fixture.Handler().HandleAsync(Command("livetoken"));
 
         // Then
-        Assert.Contains(AuthMessages.ResetTokenInvalid, output.Errors);
+        Assert.Contains(AuthMessages.TokenInvalid, output.Errors);
     }
 
     [UnitFact]
