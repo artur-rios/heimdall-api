@@ -215,6 +215,12 @@ Spending a token of either kind retires every other live token the person holds 
 second "forgot password" click cannot be replayed after the first has already changed the password,
 and a verification link left in an inbox stops working once the address is verified.
 
+A verification link that expired, was lost, or never arrived is replaced through
+`POST /api/auth/resend-verification` (UC-15). That one is authenticated and takes no body — the
+person is read from the bearer token, so a caller can only ever ask for their own link — and it
+retires the outstanding ones before mailing a new one, so only the newest link works. An address that
+is already verified is refused: a link mailed to it could do nothing when clicked.
+
 > A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
 > identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
 > into a 500 that tells an anonymous caller their guess was a real account.
