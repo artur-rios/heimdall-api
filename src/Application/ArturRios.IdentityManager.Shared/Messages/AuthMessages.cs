@@ -26,4 +26,11 @@ public static class AuthMessages
 
     /// <summary>AF-11f: password was not supplied.</summary>
     public const string PasswordRequired = "Password is required.";
+
+    /// <summary>
+    ///     UC-12 main flow and AF-12a: the recovery request was accepted. Deliberately the same
+    ///     message whether or not the email belongs to anyone — a caller who cannot already log in
+    ///     learns nothing about which addresses are registered.
+    /// </summary>
+    public const string PasswordRecoveryRequested = "If the email exists, a reset link has been sent.";
 }

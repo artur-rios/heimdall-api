@@ -31,6 +31,12 @@ public class EmailVerificationServiceTests
         Assert.False(string.IsNullOrWhiteSpace(stored.Token));
         Assert.True(stored.ExpiresAt > DateTime.UtcNow);
 
+        // Then — alphanumeric, so it survives the link it is delivered in. Same request and same
+        // guarantee as PasswordResetService, and only honoured from ArturRios.Util 1.5.0 onwards.
+        Assert.All(stored.Token, character => Assert.True(
+            char.IsAsciiLetterOrDigit(character),
+            $"token contains the non-alphanumeric character '{character}'"));
+
         // Then — the sender received the person's email and the same token
         sender.Verify(s => s.SendAsync(person.Email, stored.Token), Times.Once);
     }

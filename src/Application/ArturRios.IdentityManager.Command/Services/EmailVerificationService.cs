@@ -10,6 +10,12 @@ namespace ArturRios.IdentityManager.Command.Services;
 ///     <see cref="IEmailVerificationSender" />. A send failure does not undo the created person — the
 ///     persisted token can be re-sent later (UC-15).
 /// </summary>
+/// <remarks>
+///     The token matches <see cref="PasswordResetService" />: 48 letters and digits drawn from
+///     <c>RandomNumberGenerator</c> by <c>CustomRandom.Text</c>. As of ArturRios.Util 1.5.0 the
+///     character-set flags are honoured for every character, so the token is alphanumeric — and
+///     therefore URL-safe — throughout.
+/// </remarks>
 public class EmailVerificationService(
     IAsyncRepository<EmailVerificationToken> tokenWriter,
     IEmailVerificationSender sender,

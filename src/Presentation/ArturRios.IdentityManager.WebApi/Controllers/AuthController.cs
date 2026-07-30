@@ -29,4 +29,26 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Requests a password reset link (UC-12, FR-PR-01/02). A <c>User</c> also sends the
+    ///     <c>PublicId</c> of their scope; a <c>ScopeAdmin</c> or <c>SystemAdmin</c> sends the email
+    ///     alone. Open to anonymous callers — someone who has lost their password cannot hold a
+    ///     token.
+    /// </summary>
+    /// <remarks>
+    ///     Answers 200 with the same message whether or not the address belongs to anyone (AF-12a),
+    ///     so the endpoint cannot be used to enumerate accounts. The only rejection is a malformed
+    ///     request (400, NFR-10), which says nothing about who is registered.
+    /// </remarks>
+    [HttpPost("password-recovery")]
+    [AllowAnonymous]
+    public async Task<ActionResult<DataOutput<PasswordRecoveryCommandOutput?>>> PasswordRecovery(
+        [FromBody] PasswordRecoveryCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
 }

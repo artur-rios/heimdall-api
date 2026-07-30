@@ -415,15 +415,33 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login` — plus the validators that guard them and `EmailVerificationServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
 | `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
-| `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
+| `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-11: **179 unit** and **136 functional** tests, all passing. Run them
+Suite totals as of UC-12: **210 unit** and **150 functional** tests, all passing. Run them
 separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+
+### 10.2 Testing an endpoint that answers the same way twice
+
+UC-12 is the first use case whose alternative flow is *indistinguishable from its main flow* by
+design — AF-12a returns the same 200 and the same message as a successful request, so response
+assertions alone cannot tell them apart. Its tests handle that in two ways, and later
+anti-enumeration work should follow the same shape:
+
+- **Assert the side effect, not the response.** Every functional test opens the database and asserts
+  whether a `password_reset_token` row exists for the person. That row is the only difference
+  between the two paths, so it is the only thing worth asserting.
+- **Compare the two responses directly.** One test issues both requests and asserts the status,
+  messages, and errors are equal. Each other test pins its own path; this one pins the property
+  AF-12a actually states.
+
+The senders are unit-tested with a stub `IEmailService` rather than reached over the network. The
+functional suite leaves the Mailgun variables unset, so the API registers its logging senders and
+never makes an outbound call.
 
 ### 10.1 Functional database
 
