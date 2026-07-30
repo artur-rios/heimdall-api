@@ -33,4 +33,31 @@ public static class AuthMessages
     ///     learns nothing about which addresses are registered.
     /// </summary>
     public const string PasswordRecoveryRequested = "If the email exists, a reset link has been sent.";
+
+    /// <summary>UC-13 success: the password was changed and the token consumed.</summary>
+    public const string PasswordResetSuccessful = "Password reset successfully.";
+
+    /// <summary>
+    ///     AF-13c: no token matches the one supplied. Unlike UC-11 and UC-12, UC-13 names each
+    ///     rejection separately, and there is nothing to hide by doing so: the value is a 48-character
+    ///     random string, so a caller holding one already knows it was issued to them, and a caller
+    ///     guessing learns only that their guess was wrong.
+    /// </summary>
+    public const string ResetTokenInvalid = "Invalid token.";
+
+    /// <summary>AF-13a: the token was issued but its lifetime has run out (FR-PR-04).</summary>
+    public const string ResetTokenExpired = "Token expired.";
+
+    /// <summary>AF-13b: the token has already reset a password and cannot do so twice (FR-PR-04).</summary>
+    public const string ResetTokenAlreadyUsed = "Token already used.";
+
+    /// <summary>AF-13d: the token was not supplied.</summary>
+    public const string TokenRequired = "Token is required.";
+
+    /// <summary>
+    ///     AF-13d: the new password is shorter than the minimum. UC-11 deliberately has no such rule —
+    ///     a short password there is a wrong password — but UC-13 sets one, so the same floor that
+    ///     applies when a person is created (UC-06) applies when their password is replaced.
+    /// </summary>
+    public const string PasswordTooShort = "Password must be at least 8 characters.";
 }

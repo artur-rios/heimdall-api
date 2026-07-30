@@ -51,4 +51,26 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Sets a new password from the reset token mailed by UC-12 (UC-13, FR-PR-03/04). Open to
+    ///     anonymous callers for the same reason: the token is the only credential someone who has
+    ///     lost their password can present.
+    /// </summary>
+    /// <remarks>
+    ///     Unlike the two endpoints above, each rejection is named — unknown (AF-13c), expired
+    ///     (AF-13a), and spent (AF-13b) tokens all answer 400 with their own message, as does a
+    ///     malformed request (AF-13d). Nothing is disclosed by the distinction: the token identifies
+    ///     no account to a caller who does not already hold it.
+    /// </remarks>
+    [HttpPost("password-reset")]
+    [AllowAnonymous]
+    public async Task<ActionResult<DataOutput<ResetPasswordCommandOutput?>>> ResetPassword(
+        [FromBody] ResetPasswordCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<ResetPasswordCommand, ResetPasswordCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
 }
