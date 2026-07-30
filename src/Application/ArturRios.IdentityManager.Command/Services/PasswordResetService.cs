@@ -12,15 +12,14 @@ namespace ArturRios.IdentityManager.Command.Services;
 /// <remarks>
 ///     <para>
 ///         The options ask for letters and digits only, matching <see cref="EmailVerificationService" />.
-///         Note that <c>CustomRandom.Text</c> honours those flags only for the first character of
-///         each requested class and pads the rest from its full alphabet, so the token does contain
-///         special characters in practice. That is harmless here — it raises entropy, not lowers it,
-///         and the sender escapes the token before putting it in a link — but it means nothing may
-///         assume the token is URL-safe on its own.
+///         As of ArturRios.Util 1.5.0 <c>CustomRandom.Text</c> honours those flags for every character,
+///         so the token is alphanumeric — and therefore URL-safe — throughout. The sender still escapes
+///         the token before putting it in a link; nothing depends on that escaping being a no-op.
 ///     </para>
 ///     <para>
-///         Secrecy comes from the length: 48 characters is far past guessing range within the
-///         token's one-hour life.
+///         Secrecy comes from the source and the length: <c>CustomRandom.Text</c> draws from
+///         <c>RandomNumberGenerator</c>, and 48 alphanumeric characters are far past guessing range
+///         within the token's one-hour life.
 ///     </para>
 /// </remarks>
 public class PasswordResetService(

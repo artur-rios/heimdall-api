@@ -33,7 +33,7 @@ The project is built on a set of the author's own reusable libraries, all publis
 
 | Package | Version | Referenced by | Role |
 | --- | --- | --- | --- |
-| **ArturRios.Util** | `1.4.2` | Domain, Shared, Data | Core cross-cutting utilities. Provides the standard `DataOutput<T>` result type (namespace `ArturRios.Output`) that handlers return, password **hashing** helpers (`ArturRios.Util.Hashing`), **HTTP** helpers (`ArturRios.Util.Http`), and general-purpose helpers used throughout the codebase. |
+| **ArturRios.Util** | `1.5.0` | Command, Domain, Shared, Data | Core cross-cutting utilities. Provides the standard `DataOutput<T>` result type (namespace `ArturRios.Output`) that handlers return, password **hashing** helpers (`ArturRios.Util.Hashing`), **HTTP** helpers (`ArturRios.Util.Http`), cryptographically strong random text (`ArturRios.Util.Random.CustomRandom`, used to mint the verification and password reset tokens), and general-purpose helpers used throughout the codebase. **1.5.0 is a floor, not a preference:** earlier versions ignored `CustomRandom.Text`'s character-set flags for all but the first character of each set and drew from `System.Random` rather than `RandomNumberGenerator`, which made the security tokens neither URL-safe nor cryptographically sourced. |
 | **ArturRios.Util.WebApi** | `3.0.0` | WebApi | Web API foundation. Supplies the `WebApiStartup` base class, environment/configuration loading (`ArturRios.Util.WebApi.Configuration`), the security stack (role attributes/enums/extensions/middleware — e.g. `[AllowAnonymous]`, role requirements), **JWT** issuance & validation (namespace `ArturRios.Jwt`), exception & authentication middleware, Swagger-with-JWT wiring, and the `ResponseResolver` that maps a `DataOutput<T>` to an HTTP response. |
 | **ArturRios.Mediator** | `1.0.3` | Command, Query, WebApi | Lightweight **CQRS mediator**. Provides `CommandMediator` / `QueryMediator` and the handler contracts (`ICommandHandlerAsync`, `IQueryHandlerAsync`, `IPaginatedQueryHandlerAsync`) that dispatch a command/query to its single handler. |
 | **ArturRios.Data.Relational.Core** | `3.0.2` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T>`, `IAsyncReadOnlyRepository<T>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. |
@@ -112,7 +112,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | --- | --- | --- |
 | Platform | .NET | `10` (`net10.0`) |
 | Language | C# | `14` (framework default) |
-| First-party | ArturRios.Util | `1.4.2` |
+| First-party | ArturRios.Util | `1.5.0` |
 | First-party | ArturRios.Util.WebApi | `3.0.0` |
 | First-party | ArturRios.Messaging | `1.1.0` |
 | First-party | ArturRios.Util.Test | `2.2.0` |

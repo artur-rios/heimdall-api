@@ -84,10 +84,10 @@ public class PasswordResetServiceTests
     }
 
     [UnitFact]
-    public async Task GivenAPerson_WhenIssuingAndSending_ThenTokenIsLongAndSurvivesAUrl()
+    public async Task GivenAPerson_WhenIssuingAndSending_ThenTokenIsLongAndUrlSafe()
     {
-        // Given / When — the token's secrecy rests on its length, and it travels inside a link, so
-        // it must come back from a URL round trip byte for byte
+        // Given / When — the token's secrecy rests on its length, and it travels inside a link in
+        // an email, so it must survive a URL
         var tokens = new AsyncFakeRepository<PasswordResetToken>();
         var service = new PasswordResetService(
             tokens, new Mock<IPasswordResetSender>().Object, new PasswordResetOptions());
@@ -98,10 +98,13 @@ public class PasswordResetServiceTests
         var token = (await tokens.GetAllAsync()).Data!.Single().Token;
         Assert.Equal(48, token.Length);
 
-        // Not asserted: that the token is alphanumeric. The service asks CustomRandom for letters
-        // and digits, but that helper applies the flags only to its first few characters and pads
-        // the rest from its full alphabet — so specials do appear. Escaping is what makes the link
-        // correct, and this pins that rather than an alphabet the library does not honour.
-        Assert.Equal(token, Uri.UnescapeDataString(Uri.EscapeDataString(token)));
+        // The service asks CustomRandom for letters and digits. Before ArturRios.Util 1.5.0 that
+        // request was only half honoured — the helper padded from its full alphabet — so this
+        // assertion is what proves the fixed version is the one being resolved. Escaping in the
+        // sender means nothing breaks if it ever regresses, but a regression should be caught here
+        // rather than tolerated.
+        Assert.All(token, character => Assert.True(
+            char.IsAsciiLetterOrDigit(character),
+            $"token contains the non-alphanumeric character '{character}'"));
     }
 }
