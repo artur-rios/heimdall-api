@@ -72,7 +72,7 @@ request — see the
 | Use case | Status | Issue |
 | --- | --- | --- |
 | UC-01: Create Scope | ✅ | [#2](https://github.com/artur-rios/identity-manager-api/issues/2) |
-| UC-02: View Scope | 🚧 | [#3](https://github.com/artur-rios/identity-manager-api/issues/3) |
+| UC-02: View Scope | ✅ | [#3](https://github.com/artur-rios/identity-manager-api/issues/3) |
 | UC-03: Update Scope | ✅ | [#4](https://github.com/artur-rios/identity-manager-api/issues/4) |
 | UC-04: Logical Delete Scope | ✅ | [#5](https://github.com/artur-rios/identity-manager-api/issues/5) |
 | UC-05: Hard Delete Scope | ✅ | [#6](https://github.com/artur-rios/identity-manager-api/issues/6) |
@@ -129,14 +129,6 @@ Not use cases, tracked separately.
 | --- | --- | --- |
 | Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
 | Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
-
-> **UC-02 is not finished.** Its read endpoints (`GET /api/scopes`, `GET /api/scopes/{id}`) and their
-> tests are merged, but the per-actor rule in the use case's main flow — a Scope Admin sees only the
-> scopes they own, a User only the scope they belong to — is not implemented: `GET /api/scopes/{id}`
-> currently returns any scope to any authenticated caller, so **AF-02b (`403 Forbidden`) never
-> occurs**. That gap is no longer blocked: UC-11 (Login) now issues the `scopeId`/`ownedScopeIds`
-> claims the rule needs, so the work can be picked up whenever UC-02 is resumed. UC-02 stays in
-> progress until it is.
 
 ## Prerequisites
 
