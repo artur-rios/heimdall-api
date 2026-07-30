@@ -126,6 +126,9 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>, DeletePersonCommandHandler>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>, HardDeletePersonCommandHandler>();
+        Builder.Services.AddScoped<IValidator<LoginCommand>, LoginCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<LoginCommand, LoginCommandOutput>, LoginCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -149,6 +152,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
+
+        // UC-11 issues tokens through the same claims mapper the middleware validates them with,
+        // registered by AddTokenAuthentication in ConfigureSecurity.
+        Builder.Services.AddScoped<IAuthTokenIssuer, JwtAuthTokenIssuer>();
         Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
         Builder.Services.AddScoped<DatabaseSeeder>();
     }
