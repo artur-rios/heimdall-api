@@ -38,20 +38,30 @@ public static class AuthMessages
     public const string PasswordResetSuccessful = "Password reset successfully.";
 
     /// <summary>
-    ///     AF-13c: no token matches the one supplied. Unlike UC-11 and UC-12, UC-13 names each
-    ///     rejection separately, and there is nothing to hide by doing so: the value is a 48-character
-    ///     random string, so a caller holding one already knows it was issued to them, and a caller
-    ///     guessing learns only that their guess was wrong.
+    ///     AF-13c and AF-14c: no token matches the one supplied. Unlike UC-11 and UC-12, the two
+    ///     token-spending use cases name each rejection separately, and there is nothing to hide by
+    ///     doing so: the value is a 48-character random string, so a caller holding one already knows
+    ///     it was issued to them, and a caller guessing learns only that their guess was wrong.
     /// </summary>
-    public const string ResetTokenInvalid = "Invalid token.";
+    /// <remarks>
+    ///     Shared by UC-13 and UC-14 because both specify the same wording. <see cref="AuthMessageMap" />
+    ///     is keyed by the message string, so a second constant holding the same value could not be
+    ///     mapped to a status code at all.
+    /// </remarks>
+    public const string TokenInvalid = "Invalid token.";
 
-    /// <summary>AF-13a: the token was issued but its lifetime has run out (FR-PR-04).</summary>
-    public const string ResetTokenExpired = "Token expired.";
+    /// <summary>
+    ///     AF-13a and AF-14a: the token was issued but its lifetime has run out (FR-PR-04, FR-EV-02).
+    /// </summary>
+    public const string TokenExpired = "Token expired.";
 
-    /// <summary>AF-13b: the token has already reset a password and cannot do so twice (FR-PR-04).</summary>
-    public const string ResetTokenAlreadyUsed = "Token already used.";
+    /// <summary>
+    ///     AF-13b and AF-14b: the token has already been spent — on a password reset (FR-PR-04) or an
+    ///     email verification (FR-EV-03) — and cannot be spent twice.
+    /// </summary>
+    public const string TokenAlreadyUsed = "Token already used.";
 
-    /// <summary>AF-13d: the token was not supplied.</summary>
+    /// <summary>AF-13d, and UC-14's input validation (NFR-10): the token was not supplied.</summary>
     public const string TokenRequired = "Token is required.";
 
     /// <summary>
@@ -60,4 +70,11 @@ public static class AuthMessages
     ///     applies when a person is created (UC-06) applies when their password is replaced.
     /// </summary>
     public const string PasswordTooShort = "Password must be at least 8 characters.";
+
+    /// <summary>
+    ///     UC-14 success: the address was confirmed and the token consumed (FR-EV-03). Also the answer
+    ///     when the address was already verified — UC-14 defines no alternative flow for that, and the
+    ///     caller's link did exactly what it promised.
+    /// </summary>
+    public const string EmailVerifiedSuccessfully = "Email verified.";
 }

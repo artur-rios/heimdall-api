@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="AuthMessages" /> value to its HTTP status code, following the UC-11,
-///     UC-12, and UC-13 flows. Passed to the response resolver.
+///     UC-12, UC-13, and UC-14 flows. Passed to the response resolver.
 /// </summary>
 public static class AuthMessageMap
 {
@@ -22,11 +22,15 @@ public static class AuthMessageMap
         [AuthMessages.PasswordRecoveryRequested] = HttpStatusCodes.Ok,
         // UC-13 main flow — the password was changed.
         [AuthMessages.PasswordResetSuccessful] = HttpStatusCodes.Ok,
-        // AF-13a…AF-13c — each token rejection is named, and all three are bad requests.
-        [AuthMessages.ResetTokenInvalid] = HttpStatusCodes.BadRequest,
-        [AuthMessages.ResetTokenExpired] = HttpStatusCodes.BadRequest,
-        [AuthMessages.ResetTokenAlreadyUsed] = HttpStatusCodes.BadRequest,
-        // AF-13d — malformed request. The password messages are shared with AF-11f.
+        // UC-14 main flow — the address was confirmed.
+        [AuthMessages.EmailVerifiedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-13a…AF-13c, and AF-14a…AF-14c — each token rejection is named, and all of them are bad
+        // requests. The two use cases specify the same three messages, so they share these entries.
+        [AuthMessages.TokenInvalid] = HttpStatusCodes.BadRequest,
+        [AuthMessages.TokenExpired] = HttpStatusCodes.BadRequest,
+        [AuthMessages.TokenAlreadyUsed] = HttpStatusCodes.BadRequest,
+        // AF-13d, and UC-14's input validation — malformed request. The password messages are shared
+        // with AF-11f.
         [AuthMessages.TokenRequired] = HttpStatusCodes.BadRequest,
         [AuthMessages.PasswordTooShort] = HttpStatusCodes.BadRequest
     };

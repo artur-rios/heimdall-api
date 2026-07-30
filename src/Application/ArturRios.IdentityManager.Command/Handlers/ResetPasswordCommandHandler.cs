@@ -62,19 +62,19 @@ public class ResetPasswordCommandHandler(
         // AF-13c.
         if (token is null)
         {
-            return output.WithError(AuthMessages.ResetTokenInvalid);
+            return output.WithError(AuthMessages.TokenInvalid);
         }
 
         // AF-13a.
         if (token.ExpiresAt <= now)
         {
-            return output.WithError(AuthMessages.ResetTokenExpired);
+            return output.WithError(AuthMessages.TokenExpired);
         }
 
         // AF-13b.
         if (token.Used)
         {
-            return output.WithError(AuthMessages.ResetTokenAlreadyUsed);
+            return output.WithError(AuthMessages.TokenAlreadyUsed);
         }
 
         // UC-13 step 3 (FR-PR-03, FR-RO-04, NFR-02): a new random salt, not the person's existing
