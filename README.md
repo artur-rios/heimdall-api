@@ -96,7 +96,7 @@ request — see the
 | --- | --- | --- |
 | UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
 | UC-12: Request Password Recovery | ✅ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
-| UC-13: Reset Password | ⬜ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
+| UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
 | UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
 | UC-15: Resend Verification Email | ⬜ | [#16](https://github.com/artur-rios/identity-manager-api/issues/16) |
 
@@ -205,6 +205,11 @@ only a convenience wrapper around it.
 | --- | --- |
 | `IDENTITY_MANAGER_EMAIL_VERIFICATION_URL` | Front-end page that verifies an email address |
 | `IDENTITY_MANAGER_PASSWORD_RESET_URL` | Front-end page that sets a new password |
+
+That page finishes the job by posting the token, and the new password, to
+`POST /api/auth/password-reset` (UC-13). Spending a token retires every other live reset token the
+person holds, so a second "forgot password" click cannot be replayed after the first has already
+changed the password.
 
 > A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
 > identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
