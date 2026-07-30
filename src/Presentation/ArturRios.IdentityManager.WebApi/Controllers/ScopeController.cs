@@ -4,6 +4,7 @@ using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
 using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
 using ArturRios.Output;
@@ -88,14 +89,18 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
-    ///     Retrieves a single scope by its public identifier (UC-02). Available to any authenticated actor.
+    ///     Retrieves a single scope by its public identifier (UC-02). Open to any authenticated actor
+    ///     because a Scope Admin reads the scopes they own and a User the scope they belong to; that
+    ///     per-actor visibility rule (AF-02b) is data-dependent and is therefore enforced by the
+    ///     handler.
     /// </summary>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<DataOutput<ScopeOutput?>>> GetById(Guid id, [FromQuery] bool includeDeleted = false)
     {
-        var result = await queryMediator
-            .ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(
-                new GetScopeByIdQuery { Id = id, IncludeDeleted = includeDeleted });
+        var query = new GetScopeByIdQuery { Id = id, IncludeDeleted = includeDeleted };
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query);
 
         return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
     }

@@ -4,14 +4,12 @@ using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
 using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Security;
 using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ArturRios.IdentityManager.WebApi.Controllers;
@@ -44,7 +42,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid scopeId, [FromBody] CreateUserCommand command)
     {
         command.ScopeId = scopeId;
-        ApplyActor(command);
+        HttpContext.ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<CreateUserCommand, CreatePersonCommandOutput>(command);
@@ -63,7 +61,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
     {
         command.ScopeId = scopeId;
-        ApplyActor(command);
+        HttpContext.ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>(command);
@@ -81,7 +79,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid id, [FromBody] UpdatePersonCommand command)
     {
         command.Id = id;
-        ApplyActor(command);
+        HttpContext.ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<UpdatePersonCommand, UpdatePersonCommandOutput>(command);
@@ -100,7 +98,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     public async Task<ActionResult<DataOutput<DeletePersonCommandOutput?>>> Delete(Guid id)
     {
         var command = new DeletePersonCommand { Id = id };
-        ApplyActor(command);
+        HttpContext.ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<DeletePersonCommand, DeletePersonCommandOutput>(command);
@@ -119,7 +117,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     public async Task<ActionResult<DataOutput<HardDeletePersonCommandOutput?>>> HardDelete(Guid id)
     {
         var command = new HardDeletePersonCommand { Id = id };
-        ApplyActor(command);
+        HttpContext.ApplyActor(command);
 
         var result = await commandMediator
             .ExecuteCommandAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>(command);
@@ -137,7 +135,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid id, [FromQuery] bool includeDeleted = false)
     {
         var query = new GetPersonByIdQuery { Id = id, IncludeDeleted = includeDeleted };
-        ApplyActor(query);
+        HttpContext.ApplyActor(query);
 
         var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
 
@@ -155,7 +153,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid scopeId, [FromQuery] ListScopePersonsQuery query)
     {
         query.ScopeId = scopeId;
-        ApplyActor(query);
+        HttpContext.ApplyActor(query);
 
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
@@ -174,24 +172,11 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         Guid scopeId, [FromQuery] ListScopeOwnersQuery query)
     {
         query.ScopeId = scopeId;
-        ApplyActor(query);
+        HttpContext.ApplyActor(query);
 
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
 
         return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
-    }
-
-    /// <summary>
-    ///     Copies the authenticated caller (attached to the request by the auth middleware) onto an
-    ///     actor-scoped command or query, so the handler can enforce scope-scoped authorization
-    ///     (UC-06 AF-06e, UC-07 AF-07b). The acting fields are always taken from the token, never
-    ///     from the request.
-    /// </summary>
-    private void ApplyActor(IActorScoped actorScoped)
-    {
-        var actor = HttpContext.GetUser<IdentityUser>()!;
-        actorScoped.ActingPersonId = actor.Id;
-        actorScoped.ActingRole = actor.RoleId;
     }
 }
