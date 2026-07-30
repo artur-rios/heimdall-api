@@ -77,4 +77,31 @@ public static class AuthMessages
     ///     caller's link did exactly what it promised.
     /// </summary>
     public const string EmailVerifiedSuccessfully = "Email verified.";
+
+    /// <summary>
+    ///     UC-15 success: the outstanding verification links were retired and a fresh one issued and
+    ///     mailed (FR-EV-04). Says nothing about delivery — <c>MailgunSender</c> logs a failed send
+    ///     rather than propagating it, and the token is persisted either way.
+    /// </summary>
+    public const string VerificationEmailSent = "Verification email sent.";
+
+    /// <summary>
+    ///     AF-15a: the address is already verified, so there is nothing a new link could do when
+    ///     clicked. UC-15's only alternative flow, and the counterpart of UC-14's decision to verify an
+    ///     already-verified address idempotently — that is about spending a token, this is about asking
+    ///     for one.
+    /// </summary>
+    public const string EmailAlreadyVerified = "Email already verified.";
+
+    /// <summary>
+    ///     UC-15: the bearer token names a person who no longer exists. Reachable because
+    ///     authentication runs in <c>ClaimsOnly</c> mode — no database read per request — so a valid
+    ///     token outlives a hard deletion (UC-10).
+    /// </summary>
+    /// <remarks>
+    ///     Holds the same value as <see cref="PersonMessages.PersonNotFound" />, which answers the same
+    ///     fact for the person use cases. The two message maps are separate dictionaries, so unlike the
+    ///     token messages shared by UC-13 and UC-14 this costs no key collision.
+    /// </remarks>
+    public const string PersonNotFound = "Person not found.";
 }

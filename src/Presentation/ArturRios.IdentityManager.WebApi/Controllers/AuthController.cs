@@ -3,6 +3,7 @@ using ArturRios.IdentityManager.Command.Output;
 using ArturRios.IdentityManager.Shared.Messages;
 using ArturRios.Mediator.Command;
 using ArturRios.Output;
+using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
@@ -93,6 +94,33 @@ public class AuthController(CommandMediator commandMediator) : Controller
     {
         var result = await commandMediator
             .ExecuteCommandAsync<VerifyEmailCommand, VerifyEmailCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Retires the caller's outstanding verification links and mails a fresh one (UC-15,
+    ///     FR-EV-04), for someone whose first link expired, was lost, or never arrived. The one
+    ///     authenticated endpoint on this controller — and the reason it takes no request body: the
+    ///     person is read from the bearer token, so a caller can only ever ask for their own link.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>: the authorization matrix grants email verification to all three
+    ///     roles and withholds it from anonymous callers, which is exactly what authentication alone
+    ///     enforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's
+    ///     idempotent success, since a link mailed to a verified address could do nothing when clicked.
+    ///     A token naming a person who no longer exists answers 404: it was validated, but there is no
+    ///     address left to send to.
+    /// </remarks>
+    [HttpPost("resend-verification")]
+    public async Task<ActionResult<DataOutput<ResendVerificationEmailCommandOutput?>>> ResendVerification()
+    {
+        var command = new ResendVerificationEmailCommand();
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>(
+                command);
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }

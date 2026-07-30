@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="AuthMessages" /> value to its HTTP status code, following the UC-11,
-///     UC-12, UC-13, and UC-14 flows. Passed to the response resolver.
+///     UC-12, UC-13, UC-14, and UC-15 flows. Passed to the response resolver.
 /// </summary>
 public static class AuthMessageMap
 {
@@ -24,6 +24,13 @@ public static class AuthMessageMap
         [AuthMessages.PasswordResetSuccessful] = HttpStatusCodes.Ok,
         // UC-14 main flow — the address was confirmed.
         [AuthMessages.EmailVerifiedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-15 main flow — a fresh verification link was issued and mailed.
+        [AuthMessages.VerificationEmailSent] = HttpStatusCodes.Ok,
+        // AF-15a — the address is already verified, so no link is worth sending.
+        [AuthMessages.EmailAlreadyVerified] = HttpStatusCodes.BadRequest,
+        // UC-15 — the caller's own token names a person who no longer exists (ClaimsOnly outlives a
+        // hard deletion). The same answer UC-07 AF-07a gives for the same fact.
+        [AuthMessages.PersonNotFound] = HttpStatusCodes.NotFound,
         // AF-13a…AF-13c, and AF-14a…AF-14c — each token rejection is named, and all of them are bad
         // requests. The two use cases specify the same three messages, so they share these entries.
         [AuthMessages.TokenInvalid] = HttpStatusCodes.BadRequest,
