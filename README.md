@@ -97,7 +97,7 @@ request — see the
 | UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
 | UC-12: Request Password Recovery | ✅ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
 | UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
-| UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
+| UC-14: Verify Email | ✅ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
 | UC-15: Resend Verification Email | ⬜ | [#16](https://github.com/artur-rios/identity-manager-api/issues/16) |
 
 ### Application Management
@@ -206,10 +206,14 @@ only a convenience wrapper around it.
 | `IDENTITY_MANAGER_EMAIL_VERIFICATION_URL` | Front-end page that verifies an email address |
 | `IDENTITY_MANAGER_PASSWORD_RESET_URL` | Front-end page that sets a new password |
 
-That page finishes the job by posting the token, and the new password, to
-`POST /api/auth/password-reset` (UC-13). Spending a token retires every other live reset token the
-person holds, so a second "forgot password" click cannot be replayed after the first has already
-changed the password.
+Each page finishes the job by posting its token back: the verification page to
+`POST /api/auth/verify-email` (UC-14), the reset page to `POST /api/auth/password-reset` (UC-13),
+along with the new password. Both endpoints are anonymous, since someone arriving from a link in
+their mail client holds no token of any other kind.
+
+Spending a token of either kind retires every other live token the person holds of that kind. A
+second "forgot password" click cannot be replayed after the first has already changed the password,
+and a verification link left in an inbox stops working once the address is verified.
 
 > A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
 > identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
