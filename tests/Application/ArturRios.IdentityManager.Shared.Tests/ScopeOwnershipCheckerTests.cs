@@ -19,7 +19,7 @@ public class ScopeOwnershipCheckerTests
         var checker = new ScopeOwnershipChecker(persons);
 
         // When a System Admin (any person id, any scope) is checked
-        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.SystemAdmin, actingPersonId: 999, scopeId: 1);
+        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid(), scopeId: 1);
 
         // Then
         Assert.True(allowed);
@@ -39,7 +39,7 @@ public class ScopeOwnershipCheckerTests
         var checker = new ScopeOwnershipChecker(persons);
 
         // When
-        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.ScopeAdmin, actor.Id, scopeId: 1);
+        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.ScopeAdmin, actor.PublicId, scopeId: 1);
 
         // Then
         Assert.True(allowed);
@@ -55,7 +55,7 @@ public class ScopeOwnershipCheckerTests
         var checker = new ScopeOwnershipChecker(persons);
 
         // When checked against scope 1 (which they do not own)
-        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.ScopeAdmin, actor.Id, scopeId: 1);
+        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.ScopeAdmin, actor.PublicId, scopeId: 1);
 
         // Then
         Assert.False(allowed);

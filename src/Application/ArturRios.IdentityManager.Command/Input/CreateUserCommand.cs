@@ -18,7 +18,7 @@ public class CreateUserCommand : BaseCommand, IActorScoped
 
     public string Password { get; set; } = string.Empty;
 
-    public long ActingPersonId { get; set; }
+    public Guid ActingPersonId { get; set; }
 
     public int ActingRole { get; set; }
 }

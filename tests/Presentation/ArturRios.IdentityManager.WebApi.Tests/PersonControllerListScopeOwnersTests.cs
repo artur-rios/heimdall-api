@@ -98,7 +98,7 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope, name: "Ana");
         await SeedScopeAdminAsync(ownedScope: scope, name: "Bruno");
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(
@@ -134,7 +134,7 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
         var scope = await SeedScopeAsync();
         await SeedScopeAdminAsync(ownedScope: scope);
         var outsider = await SeedScopeAdminAsync();
-        Authorize(TestTokens.For((int)outsider.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(outsider.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(

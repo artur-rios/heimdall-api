@@ -15,7 +15,7 @@ public class DeletePersonCommand : BaseCommand, IActorScoped
     /// <summary>Public identifier of the person to delete (bound from the route).</summary>
     public Guid Id { get; set; }
 
-    public long ActingPersonId { get; set; }
+    public Guid ActingPersonId { get; set; }
 
     public int ActingRole { get; set; }
 }

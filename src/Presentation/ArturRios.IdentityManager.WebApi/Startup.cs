@@ -174,12 +174,14 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddAuthorization();
 
         // AuthenticationMiddleware resolves AuthenticationOptions and the token validators from the
-        // container, and JwtTokenValidator additionally needs JwtConfiguration and JwtHandler.
-        // Defaults are kept: app JWT only, read from the Authorization header, user rebuilt from
-        // claims, so no IAuthenticationProvider is required.
+        // container, and JwtTokenValidator additionally needs JwtConfiguration, JwtHandler, and the
+        // claims mapper. IdentityUserMapper replaces the library default so tokens carry PublicIds
+        // and the scope claims of FR-AU-04. Defaults are kept otherwise: app JWT only, read from the
+        // Authorization header, user rebuilt from claims — so no IAuthenticationProvider is required
+        // and no database read happens per request.
         Builder.Services.AddSingleton(BuildJwtConfiguration());
         Builder.Services.AddSingleton<JwtHandler>();
-        Builder.Services.AddTokenAuthentication(options =>
+        Builder.Services.AddTokenAuthentication<IdentityUserMapper>(options =>
         {
             options.Source = TokenSource.Header;
             options.EnableJwt = true;

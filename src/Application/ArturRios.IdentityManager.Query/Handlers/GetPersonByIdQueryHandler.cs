@@ -26,7 +26,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
     /// </summary>
     private sealed class PersonProjection
     {
-        public long Id { get; init; }
+        public Guid PublicId { get; init; }
 
         public long RoleId { get; init; }
 
@@ -45,7 +45,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
             .Where(x => x.PublicId == query.Id && (query.IncludeDeleted || !x.IsDeleted))
             .Select(x => new PersonProjection
             {
-                Id = x.Id,
+                PublicId = x.PublicId,
                 RoleId = x.RoleId,
                 MembershipScopeId = x.ScopeMembership != null ? x.ScopeMembership.ScopeId : null,
                 OwnedScopeInternalIds = x.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList(),
@@ -90,7 +90,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
     /// </summary>
     private async Task<bool> MayViewAsync(GetPersonByIdQuery query, PersonProjection person)
     {
-        if (query.ActingRole == (int)Roles.SystemAdmin || query.ActingPersonId == person.Id)
+        if (query.ActingRole == (int)Roles.SystemAdmin || query.ActingPersonId == person.PublicId)
         {
             return true;
         }
@@ -101,7 +101,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
         }
 
         var ownedScopeIds = await personReader.Query()
-            .Where(x => x.Id == query.ActingPersonId)
+            .Where(x => x.PublicId == query.ActingPersonId)
             .SelectMany(x => x.ScopeOwnerships.Select(ownership => ownership.ScopeId))
             .ToListAsync();
 

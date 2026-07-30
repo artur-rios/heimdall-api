@@ -121,7 +121,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         var person = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeletePersonCommandOutput?>>(
@@ -175,7 +175,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
         var scope = await SeedScopeAsync();
         var outsider = await SeedScopeAdminAsync();
         var person = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)outsider.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(outsider.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeletePersonCommandOutput?>>(
@@ -193,7 +193,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
         var scope = await SeedScopeAsync();
         var actor = await SeedScopeAdminAsync(ownedScope: scope);
         var target = await SeedScopeAdminAsync(ownedScope: scope);
-        Authorize(TestTokens.For((int)actor.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeletePersonCommandOutput?>>(
@@ -210,7 +210,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
         // Given — AF-09d. The message is asserted because AF-09c returns the same status.
         var scope = await SeedScopeAsync();
         var actor = await SeedScopeAdminAsync(ownedScope: scope);
-        Authorize(TestTokens.For((int)actor.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeletePersonCommandOutput?>>(

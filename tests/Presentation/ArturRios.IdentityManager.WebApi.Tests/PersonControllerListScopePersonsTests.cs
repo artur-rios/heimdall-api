@@ -98,7 +98,7 @@ public class PersonControllerListScopePersonsTests(PostgresFixture db) : WebApiT
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         await SeedUserAsync(scope, "Ana");
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(
@@ -133,7 +133,7 @@ public class PersonControllerListScopePersonsTests(PostgresFixture db) : WebApiT
         // Given a non-owning ScopeAdmin trying to impersonate a System Admin through the query string
         var scope = await SeedScopeAsync();
         var admin = await SeedScopeAdminAsync();
-        Authorize(TestTokens.For((int)admin.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(
@@ -149,7 +149,7 @@ public class PersonControllerListScopePersonsTests(PostgresFixture db) : WebApiT
         // Given a ScopeAdmin who does not own the scope (AF-07b)
         var scope = await SeedScopeAsync();
         var admin = await SeedScopeAdminAsync();
-        Authorize(TestTokens.For((int)admin.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(

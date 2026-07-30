@@ -56,7 +56,7 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
         // Given a ScopeAdmin who owns the scope
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
         var command = Command();
 
         // When
@@ -94,7 +94,7 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
         // AF-06e
         var scope = await SeedScopeAsync();
         var admin = await SeedScopeAdminAsync();
-        Authorize(TestTokens.For((int)admin.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/owners", Command());

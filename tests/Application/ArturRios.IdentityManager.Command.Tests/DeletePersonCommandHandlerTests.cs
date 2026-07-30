@@ -51,7 +51,7 @@ public class DeletePersonCommandHandlerTests
     {
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
-            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<long>()))
+            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<long>()))
             .ReturnsAsync(allowed);
 
         return checker.Object;
@@ -73,7 +73,7 @@ public class DeletePersonCommandHandlerTests
         AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
         new(persons, persons, Ownership(ownershipAllowed));
 
-    private static DeletePersonCommand CommandFor(Person target, int actingRole, long actingPersonId) => new()
+    private static DeletePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
         Id = target.PublicId,
         ActingRole = actingRole,
@@ -87,7 +87,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = User(10, scope);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);
@@ -111,7 +111,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = User(10, scope);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: 20);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons, ownershipAllowed: true).HandleAsync(command);
@@ -130,7 +130,7 @@ public class DeletePersonCommandHandlerTests
         var target = ScopeAdmin(10, owned: scope);
         var coOwner = ScopeAdmin(11, owned: scope);
         var persons = await PersonsWith(target, coOwner);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);
@@ -148,7 +148,7 @@ public class DeletePersonCommandHandlerTests
         var persons = await PersonsWith();
         var command = new DeletePersonCommand
         {
-            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = 99
+            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
         };
 
         // When
@@ -166,7 +166,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = User(10, scope, isDeleted: true);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);
@@ -187,7 +187,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = ScopeAdmin(10, isDeleted: true, owned: scope);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);
@@ -205,7 +205,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = User(10, scope);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: 20);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons, ownershipAllowed: false).HandleAsync(command);
@@ -223,7 +223,7 @@ public class DeletePersonCommandHandlerTests
         var scope = Scope(1);
         var target = ScopeAdmin(10, owned: scope);
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: 20);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: Guid.NewGuid());
 
         // When — ownership would allow it; the role of the target is what refuses
         var output = await HandlerFor(persons, ownershipAllowed: true).HandleAsync(command);
@@ -241,7 +241,7 @@ public class DeletePersonCommandHandlerTests
         var target = ScopeAdmin(10);
         target.RoleId = (long)Roles.SystemAdmin;
         var persons = await PersonsWith(target);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: target.Id);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: target.PublicId);
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);
@@ -260,7 +260,7 @@ public class DeletePersonCommandHandlerTests
         var target = ScopeAdmin(10, owned: scope);
         var unrelated = ScopeAdmin(11, owned: Scope(2));
         var persons = await PersonsWith(target, unrelated);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await HandlerFor(persons).HandleAsync(command);

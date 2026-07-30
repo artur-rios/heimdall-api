@@ -99,7 +99,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
         // Given a User authenticated as themselves
         var scope = await SeedScopeAsync();
         var person = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)person.Id, (int)Roles.User));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
@@ -116,7 +116,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
         var scope = await SeedScopeAsync();
         var actor = await SeedUserAsync(scope);
         var target = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)actor.Id, (int)Roles.User));
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.User));
 
         // When
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{target.PublicId}");
@@ -132,7 +132,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         var target = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{target.PublicId}");
@@ -149,7 +149,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
         var scope = await SeedScopeAsync();
         var admin = await SeedScopeAdminAsync();
         var target = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)admin.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{target.PublicId}");

@@ -31,7 +31,7 @@ public class CreateUserCommandHandlerTests
     {
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
-            .Setup(c => c.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<long>()))
+            .Setup(c => c.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<long>()))
             .ReturnsAsync(allowed);
         return checker.Object;
     }
@@ -44,7 +44,7 @@ public class CreateUserCommandHandlerTests
         return (scopes, scope);
     }
 
-    private static CreateUserCommand Command(Guid scopeId, int actingRole, long actingPersonId) => new()
+    private static CreateUserCommand Command(Guid scopeId, int actingRole, Guid actingPersonId) => new()
     {
         ScopeId = scopeId,
         Name = "User",
@@ -63,7 +63,7 @@ public class CreateUserCommandHandlerTests
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
-        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: 1);
+        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         // When
         var output = await handler.HandleAsync(command);
@@ -93,7 +93,7 @@ public class CreateUserCommandHandlerTests
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(allowed: true), email.Object);
 
         // When
-        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: 5));
+        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: Guid.NewGuid()));
 
         // Then
         Assert.True(output.Success);
@@ -111,7 +111,7 @@ public class CreateUserCommandHandlerTests
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(allowed: false), email.Object);
 
         // When
-        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: 5));
+        var output = await handler.HandleAsync(Command(scope.PublicId, (int)Roles.ScopeAdmin, actingPersonId: Guid.NewGuid()));
 
         // Then
         Assert.False(output.Success);
@@ -130,7 +130,7 @@ public class CreateUserCommandHandlerTests
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
 
         // When
-        var output = await handler.HandleAsync(Command(Guid.NewGuid(), (int)Roles.SystemAdmin, 1));
+        var output = await handler.HandleAsync(Command(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid()));
 
         // Then
         Assert.False(output.Success);
@@ -143,7 +143,7 @@ public class CreateUserCommandHandlerTests
         // Given a scope that already has a User with the target email (AF-06a)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
-        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, 1);
+        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
             Email = command.Email,
@@ -170,7 +170,7 @@ public class CreateUserCommandHandlerTests
         // case-insensitive)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
-        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, 1);
+        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
             Email = command.Email.ToUpperInvariant(),

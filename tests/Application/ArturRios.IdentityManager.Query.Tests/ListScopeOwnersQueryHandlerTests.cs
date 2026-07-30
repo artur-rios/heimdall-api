@@ -43,7 +43,7 @@ public class ListScopeOwnersQueryHandlerTests
     {
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
-            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<long>()))
+            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<long>()))
             .ReturnsAsync(allowed);
 
         return checker.Object;
@@ -78,7 +78,7 @@ public class ListScopeOwnersQueryHandlerTests
         ScopeId = scope.PublicId,
         PageNumber = 1,
         PageSize = 10,
-        ActingPersonId = 1,
+        ActingPersonId = Guid.NewGuid(),
         ActingRole = (int)Roles.SystemAdmin
     };
 
@@ -118,7 +118,7 @@ public class ListScopeOwnersQueryHandlerTests
         var output = await handler.HandleAsync(new ListScopeOwnersQuery
         {
             ScopeId = Guid.NewGuid(), PageNumber = 1, PageSize = 10,
-            ActingPersonId = 1, ActingRole = (int)Roles.SystemAdmin
+            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then
