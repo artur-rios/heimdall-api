@@ -34,10 +34,11 @@ The project is built on a set of the author's own reusable libraries, all publis
 | Package | Version | Referenced by | Role |
 | --- | --- | --- | --- |
 | **ArturRios.Util** | `1.4.2` | Domain, Shared, Data | Core cross-cutting utilities. Provides the standard `DataOutput<T>` result type (namespace `ArturRios.Output`) that handlers return, password **hashing** helpers (`ArturRios.Util.Hashing`), **HTTP** helpers (`ArturRios.Util.Http`), and general-purpose helpers used throughout the codebase. |
-| **ArturRios.Util.WebApi** | `2.1.0` | WebApi | Web API foundation. Supplies the `WebApiStartup` base class, environment/configuration loading (`ArturRios.Util.WebApi.Configuration`), the security stack (role attributes/enums/extensions/middleware — e.g. `[AllowAnonymous]`, role requirements), **JWT** issuance & validation (namespace `ArturRios.Jwt`), exception & authentication middleware, Swagger-with-JWT wiring, and the `ResponseResolver` that maps a `DataOutput<T>` to an HTTP response. |
+| **ArturRios.Util.WebApi** | `3.0.0` | WebApi | Web API foundation. Supplies the `WebApiStartup` base class, environment/configuration loading (`ArturRios.Util.WebApi.Configuration`), the security stack (role attributes/enums/extensions/middleware — e.g. `[AllowAnonymous]`, role requirements), **JWT** issuance & validation (namespace `ArturRios.Jwt`), exception & authentication middleware, Swagger-with-JWT wiring, and the `ResponseResolver` that maps a `DataOutput<T>` to an HTTP response. |
 | **ArturRios.Mediator** | `1.0.3` | Command, Query, WebApi | Lightweight **CQRS mediator**. Provides `CommandMediator` / `QueryMediator` and the handler contracts (`ICommandHandlerAsync`, `IQueryHandlerAsync`, `IPaginatedQueryHandlerAsync`) that dispatch a command/query to its single handler. |
 | **ArturRios.Data.Relational.Core** | `3.0.2` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T>`, `IAsyncReadOnlyRepository<T>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. |
 | **ArturRios.Data.PostgreSql** | `3.0.0` | Data | **PostgreSQL binding** for the relational core. Provides `AddPostgreSqlProvider()`, which wires EF Core to Npgsql so the relational layer runs against PostgreSQL. |
+| **ArturRios.Messaging** | `1.1.0` | WebApi | **Outbound email.** Provides `IEmailService` and `MailgunEmailService` (namespace `ArturRios.Messaging.Email`), which sends plain-text transactional mail through the Mailgun HTTP API. Used by UC-06's verification email and UC-12's password reset email. Reads `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and the optional `MAILGUN_API_VERSION` from the environment at call time. |
 | **ArturRios.Util.Test** | `2.2.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T>`, `AsyncFakeRepository<T>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
 
 > `ArturRios.Output` and `ArturRios.Jwt` are **namespaces** surfaced by the packages above (the `ArturRios.Util` family and `ArturRios.Util.WebApi` respectively), not separately referenced packages.
@@ -80,6 +81,7 @@ The data access pattern is **repository-based**: application handlers depend on 
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `IDENTITY_MANAGER_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
 | Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ResponseResolver` maps it to an HTTP response. |
 | API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Enabled with JWT auth support (`UseSwaggerGen(jwtAuthentication: true)`). |
+| Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `Startup.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
 | Configuration | `.env.<environment>` files + environment variables | — | Loaded by the `ArturRios.Util.WebApi` configuration loader; `.env*` files are copied next to the built assembly. |
 
 ---
@@ -111,7 +113,8 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Platform | .NET | `10` (`net10.0`) |
 | Language | C# | `14` (framework default) |
 | First-party | ArturRios.Util | `1.4.2` |
-| First-party | ArturRios.Util.WebApi | `2.1.0` |
+| First-party | ArturRios.Util.WebApi | `3.0.0` |
+| First-party | ArturRios.Messaging | `1.1.0` |
 | First-party | ArturRios.Util.Test | `2.2.0` |
 | First-party | ArturRios.Mediator | `1.0.3` |
 | First-party | ArturRios.Data.Relational.Core | `3.0.2` |

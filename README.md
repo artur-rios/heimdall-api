@@ -95,7 +95,7 @@ request — see the
 | Use case | Status | Issue |
 | --- | --- | --- |
 | UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
-| UC-12: Request Password Recovery | ⬜ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
+| UC-12: Request Password Recovery | ✅ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
 | UC-13: Reset Password | ⬜ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
 | UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
 | UC-15: Resend Verification Email | ⬜ | [#16](https://github.com/artur-rios/identity-manager-api/issues/16) |
@@ -130,15 +130,17 @@ Not use cases, tracked separately.
 | Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
 | Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
 | Audit logging for write operations (NFR-09) | ⬜ | — |
-| Real email delivery (replaces the logging stub used by UC-06) | ⬜ | — |
+| Real email delivery (Mailgun, via `ArturRios.Messaging`) | ✅ | — |
 
-Two cross-cutting requirements are deliberately outstanding rather than forgotten:
+One cross-cutting requirement is deliberately outstanding rather than forgotten:
 
 - **NFR-09 (audit logging).** Write handlers currently produce no audit entries; the Serilog setup
   covers request/startup logging only. Every use case merged so far ships without it, so it is
   tracked here as one platform item rather than being retro-fitted per use case.
-- **Email delivery.** UC-06 issues real verification tokens but `LoggingEmailVerificationSender`
-  logs them instead of sending mail. UC-12 through UC-15 depend on real delivery.
+
+**Email delivery** closed with UC-12: both the verification and password reset emails now go through
+Mailgun (see [Email delivery](#email-delivery)). The logging senders survive as the fallback for
+environments without credentials, which is what keeps the functional suite off the network.
 
 ## Prerequisites
 
@@ -176,7 +178,37 @@ The rest are optional and fall back to a default:
 | `IDENTITY_MANAGER_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `IDENTITY_MANAGER_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `IDENTITY_MANAGER_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
+| `IDENTITY_MANAGER_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `IDENTITY_MANAGER_LOG_DIRECTORY` | `logs` |
+
+### Email delivery
+
+Verification (UC-06) and password reset (UC-12) emails go out through Mailgun, using
+[`ArturRios.Messaging`](https://github.com/artur-rios/dotnet-messaging). Delivery is enabled only
+when **both** credentials are present:
+
+| Variable | Value |
+| --- | --- |
+| `MAILGUN_API_KEY` | Your Mailgun private API key |
+| `MAILGUN_DOMAIN` | The Mailgun sending domain |
+| `MAILGUN_API_VERSION` | Optional; defaults to `v3` |
+
+Leave them unset — as local runs and the functional test suite do — and the API logs each token
+instead of emailing it, warning once at start-up. That is a supported mode, not a broken one: it
+keeps the API runnable without credentials and keeps the test suite off the network.
+
+Both emails carry a link built from these, with the token appended as a `token` query parameter. If
+a link is not configured the email carries the bare token instead, which still works — the link is
+only a convenience wrapper around it.
+
+| Variable | Value |
+| --- | --- |
+| `IDENTITY_MANAGER_EMAIL_VERIFICATION_URL` | Front-end page that verifies an email address |
+| `IDENTITY_MANAGER_PASSWORD_RESET_URL` | Front-end page that sets a new password |
+
+> A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
+> identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
+> into a 500 that tells an anonymous caller their guess was a real account.
 
 ## Build
 

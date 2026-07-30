@@ -12,8 +12,10 @@ using ArturRios.IdentityManager.Query.HealthChecks;
 using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
 using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.IdentityManager.WebApi.Email;
 using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Jwt;
+using ArturRios.Messaging.Email;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Mediator.Query;
@@ -129,6 +131,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IValidator<LoginCommand>, LoginCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<LoginCommand, LoginCommandOutput>, LoginCommandHandler>();
+        Builder.Services.AddScoped<IValidator<PasswordRecoveryCommand>, PasswordRecoveryCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>,
+                PasswordRecoveryCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -149,8 +155,11 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<IQueryHandlerAsync<DetailedHealthQuery, HealthCheckOutput>, GetDetailedHealthQueryHandler>();
 
         Builder.Services.AddSingleton(EmailVerificationOptions.FromEnvironment());
-        Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
+        Builder.Services.AddSingleton(PasswordResetOptions.FromEnvironment());
+        Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+        AddEmailSenders();
+
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
         // UC-11 issues tokens through the same claims mapper the middleware validates them with,
@@ -195,6 +204,43 @@ public class Startup(string[] args) : WebApiStartup(args)
             options.EnableGoogle = false;
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
+    }
+
+    /// <summary>
+    ///     Chooses how the two transactional emails — UC-06's verification token and UC-12's
+    ///     password reset token — are delivered. With Mailgun credentials present, both go out for
+    ///     real through <c>ArturRios.Messaging</c>; without them, both are logged.
+    /// </summary>
+    /// <remarks>
+    ///     The fallback is deliberate rather than a failure: a developer running the API locally,
+    ///     and the functional suite, both need person creation and password recovery to work without
+    ///     credentials and without reaching the network. Failing startup instead would make Mailgun
+    ///     a prerequisite for running the tests.
+    /// </remarks>
+    private void AddEmailSenders()
+    {
+        var options = EmailDeliveryOptions.FromEnvironment();
+
+        Builder.Services.AddSingleton(options);
+
+        if (!options.MailgunConfigured)
+        {
+            Log.Warning(
+                "Mailgun is not configured ({ApiKeyVariable} / {DomainVariable}); verification and " +
+                "password reset tokens will be logged instead of emailed",
+                MailgunEmailService.ApiKeyVariable, MailgunEmailService.DomainVariable);
+
+            Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
+            Builder.Services.AddScoped<IPasswordResetSender, LoggingPasswordResetSender>();
+
+            return;
+        }
+
+        // A typed client, so the Mailgun service reuses pooled connections instead of creating an
+        // HttpClient per send.
+        Builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
+        Builder.Services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
+        Builder.Services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
     }
 
     /// <summary>
