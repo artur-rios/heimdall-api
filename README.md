@@ -94,7 +94,7 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-11: Login (Authenticate) | 🚧 | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
+| UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
 | UC-12: Request Password Recovery | ⬜ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
 | UC-13: Reset Password | ⬜ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
 | UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
@@ -134,8 +134,9 @@ Not use cases, tracked separately.
 > tests are merged, but the per-actor rule in the use case's main flow — a Scope Admin sees only the
 > scopes they own, a User only the scope they belong to — is not implemented: `GET /api/scopes/{id}`
 > currently returns any scope to any authenticated caller, so **AF-02b (`403 Forbidden`) never
-> occurs**. Closing that gap is scheduled after UC-11 (Login), which is where the owned-scope claims
-> the rule needs are issued; UC-02 stays in progress until then.
+> occurs**. That gap is no longer blocked: UC-11 (Login) now issues the `scopeId`/`ownedScopeIds`
+> claims the rule needs, so the work can be picked up whenever UC-02 is resumed. UC-02 stays in
+> progress until it is.
 
 ## Prerequisites
 
