@@ -46,6 +46,29 @@ public class ScopeOwnershipCheckerTests
     }
 
     [UnitFact]
+    public async Task GivenLogicallyDeletedScopeAdmin_WhenCheckingScopeManagement_ThenNotAllowed()
+    {
+        // Given a logically deleted ScopeAdmin who still has a SCOPE_OWNER row for scope 1. They can
+        // no longer authenticate (UC-11 AF-11c), so a token issued before their deletion must not
+        // keep working.
+        var persons = new AsyncFakeRepository<Person>();
+        var actor = new Person
+        {
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = true,
+            ScopeOwnerships = [new ScopeOwner { ScopeId = 1 }]
+        };
+        await persons.CreateAsync(actor);
+        var checker = new ScopeOwnershipChecker(persons);
+
+        // When
+        var allowed = await checker.ActorMayManageScopeAsync((int)Roles.ScopeAdmin, actor.PublicId, scopeId: 1);
+
+        // Then
+        Assert.False(allowed);
+    }
+
+    [UnitFact]
     public async Task GivenScopeAdminNotOwningScope_WhenCheckingScopeManagement_ThenNotAllowed()
     {
         // Given a ScopeAdmin who owns no scope

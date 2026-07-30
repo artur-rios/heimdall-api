@@ -62,8 +62,11 @@ src/
   Application/
     ArturRios.IdentityManager.Command/           →  CreateScopeCommandHandler.cs
     ArturRios.IdentityManager.Query/             →  GetScopeByIdQueryHandler.cs
+    ArturRios.IdentityManager.Shared/            →  ScopeOwnershipChecker.cs
   Domain/
     ArturRios.IdentityManager.Domain/
+  Infrastructure/
+    ArturRios.IdentityManager.Data/              →  Seeding/MasterUserOptions.cs
   Presentation/
     ArturRios.IdentityManager.WebApi/            →  ScopeController.cs
 
@@ -71,10 +74,13 @@ tests/
   Application/
     ArturRios.IdentityManager.Command.Tests/     →  CreateScopeCommandHandlerTests.cs
     ArturRios.IdentityManager.Query.Tests/       →  GetScopeByIdQueryHandlerTests.cs
+    ArturRios.IdentityManager.Shared.Tests/      →  ScopeOwnershipCheckerTests.cs
   Domain/
     ArturRios.IdentityManager.Domain.Tests/
+  Infrastructure/
+    ArturRios.IdentityManager.Data.Tests/        →  Seeding/MasterUserOptionsTests.cs
   Presentation/
-    ArturRios.IdentityManager.WebApi.Tests/      →  ScopeControllerTests.cs (functional)
+    ArturRios.IdentityManager.WebApi.Tests/      →  ScopeControllerCreateTests.cs (functional)
 ```
 
 Rules:
@@ -317,7 +323,9 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _container.StartAsync();
         Environment.SetEnvironmentVariable("IDENTITY_MANAGER_DATA_CONNECTIONSTRING", ConnectionString);
         Environment.SetEnvironmentVariable("IDENTITY_MANAGER_DATA_DATABASETYPE", "PostgreSql");
-        // apply migrations / create schema here
+        // Create the schema by applying the real EF Core migrations — see §10.1.
+        await using var context = new AppDbContext(/* options bound to ConnectionString */);
+        await context.Database.MigrateAsync();
     }
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
@@ -400,25 +408,33 @@ After implementing a use case, do the following before considering it complete:
 7. **Run the suite** (`dotnet test`) and confirm both `Category=Unit` and `Category=Functional` pass.
 8. Only then is the use case done.
 
-## 10. Current test scaffolding baseline
-
-The `tests/` tree has been aligned with this specification and is the starting point for filling in
-tests. It currently contains:
-
-| Test project | References | Contents |
-| --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | `CreateScopeCommandHandlerTests` (empty, ready for UC-01 tests) |
-| `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests` (empty, ready for UC-02 tests) |
-| `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | empty — no domain behaviour to test yet |
-| `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | `HealthCheckTests` + `Support/PostgresFixture` and `Support/FunctionalCollection` |
+## 10. Current test inventory
 
 Every test project uses the standard package set from §5, references the project it tests, and is
-registered in the solution under the `Tests` folder. Two open items remain for whoever writes the
-first tests:
+registered in the solution under the `Tests` folder. Six projects mirror the `src/` tree:
 
-- **Functional DB schema.** `PostgresFixture` starts the PostgreSQL container and points the API at
-  it, but schema creation is a `TODO` — the repository has no EF migrations yet. Decide the strategy
-  (migrations vs. `EnsureCreated`) and complete the fixture, plus the mechanism that guarantees the
-  host under test uses the container's connection string rather than the local `.env.local` one.
-- **Filling in the tests.** The scaffolded test classes are empty by design; populate them per §9 as
-  each use case is implemented.
+| Test project | References | Test classes |
+| --- | --- | --- |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login` — plus the validators that guard them and `EmailVerificationServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
+| `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
+| `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
+| `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
+| `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
+
+Suite totals as of UC-11: **179 unit** and **136 functional** tests, all passing. Run them
+separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+
+### 10.1 Functional database
+
+`PostgresFixture` starts a `postgres:16-alpine` container, points
+`IDENTITY_MANAGER_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
+suite never touches a developer's local `.env.local` database — and creates the schema by applying
+**the real EF Core migrations** (`context.Database.MigrateAsync()`). Migrations were chosen over
+`EnsureCreated` deliberately: the API refuses to start with migrations pending (see
+`DatabaseSeeder`), and applying them here means the functional suite exercises the same schema
+production gets. `SchemaTests` asserts the result — every table under the `identity_manager` schema,
+named in singular snake_case.
+
+`SeedingTests` covers the other half of startup: `DatabaseSeeder` writes the three `Roles` rows and
+the master system administrator, so functional tests can authenticate as a System Admin.

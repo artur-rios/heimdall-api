@@ -100,8 +100,10 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
             return false;
         }
 
+        // A logically deleted actor owns nothing: they can no longer authenticate (UC-11 AF-11c), so
+        // a token issued before their deletion must not keep granting reads until it expires.
         var ownedScopeIds = await personReader.Query()
-            .Where(x => x.PublicId == query.ActingPersonId)
+            .Where(x => x.PublicId == query.ActingPersonId && !x.IsDeleted)
             .SelectMany(x => x.ScopeOwnerships.Select(ownership => ownership.ScopeId))
             .ToListAsync();
 

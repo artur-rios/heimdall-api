@@ -7,7 +7,6 @@ using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
-using Microsoft.EntityFrameworkCore;
 using Moq;
 
 namespace ArturRios.IdentityManager.Command.Tests;
@@ -26,18 +25,14 @@ public class CreateScopeCommandHandlerTests
         return validator;
     }
 
-    private static async Task<AsyncFakeRepository<Role>> RolesWithScopeAdmin()
-    {
-        var roles = new AsyncFakeRepository<Role>();
-        await roles.CreateAsync(new Role { Name = nameof(Roles.ScopeAdmin) });
-        return roles;
-    }
-
-    private static async Task<(AsyncFakeRepository<Person>, Guid)> PersonsWithScopeAdminOwner(long scopeAdminRoleId)
+    private static async Task<(AsyncFakeRepository<Person>, Guid)> PersonsWithScopeAdminOwner()
     {
         var persons = new AsyncFakeRepository<Person>();
         var ownerId = Guid.NewGuid();
-        await persons.CreateAsync(new Person { PublicId = ownerId, RoleId = scopeAdminRoleId, IsDeleted = false });
+        await persons.CreateAsync(new Person
+        {
+            PublicId = ownerId, RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+        });
         return (persons, ownerId);
     }
 
@@ -45,11 +40,9 @@ public class CreateScopeCommandHandlerTests
     public async Task GivenUniqueNameAndValidOwner_WhenHandlingCreateScope_ThenScopeIsCreated()
     {
         // Given
-        var roles = await RolesWithScopeAdmin();
-        var scopeAdminRoleId = (await roles.GetAllAsync()).Data!.Single().Id;
-        var (persons, ownerId) = await PersonsWithScopeAdminOwner(scopeAdminRoleId);
+        var (persons, ownerId) = await PersonsWithScopeAdminOwner();
         var scopes = new AsyncFakeRepository<Scope>();
-        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", Description = "Acme scope", OwnerIds = [ownerId] };
 
         // When
@@ -72,12 +65,10 @@ public class CreateScopeCommandHandlerTests
     public async Task GivenNameAlreadyExists_WhenHandlingCreateScope_ThenReturnsNameAlreadyExistsError()
     {
         // Given a store that already contains a scope named "Acme"
-        var roles = await RolesWithScopeAdmin();
-        var scopeAdminRoleId = (await roles.GetAllAsync()).Data!.Single().Id;
-        var (persons, ownerId) = await PersonsWithScopeAdminOwner(scopeAdminRoleId);
+        var (persons, ownerId) = await PersonsWithScopeAdminOwner();
         var scopes = new AsyncFakeRepository<Scope>();
         await scopes.CreateAsync(new Scope { Name = "Acme" });
-        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
 
         // When
@@ -96,10 +87,9 @@ public class CreateScopeCommandHandlerTests
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<CreateScopeCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult([new ValidationFailure("OwnerIds", ScopeMessages.AtLeastOneOwnerRequired)]));
-        var roles = await RolesWithScopeAdmin();
         var persons = new AsyncFakeRepository<Person>();
         var scopes = new AsyncFakeRepository<Scope>();
-        var handler = new CreateScopeCommandHandler(validator.Object, scopes, persons, roles, scopes);
+        var handler = new CreateScopeCommandHandler(validator.Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [] };
 
         // When
@@ -113,12 +103,13 @@ public class CreateScopeCommandHandlerTests
     [UnitFact]
     public async Task GivenOwnerIsNotScopeAdmin_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
     {
-        // Given a ScopeAdmin role but no matching owner person (AF-01d)
-        var roles = await RolesWithScopeAdmin();
+        // Given a person with the User role, not a ScopeAdmin (AF-01d)
         var persons = new AsyncFakeRepository<Person>();
+        var ownerId = Guid.NewGuid();
+        await persons.CreateAsync(new Person { PublicId = ownerId, RoleId = (long)Roles.User });
         var scopes = new AsyncFakeRepository<Scope>();
-        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
-        var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [Guid.NewGuid()] };
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
+        var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
 
         // When
         var output = await handler.HandleAsync(command);
@@ -129,21 +120,25 @@ public class CreateScopeCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenScopeAdminRoleNotConfigured_WhenHandlingCreateScope_ThenReturnsConfigurationError()
+    public async Task GivenDeletedScopeAdminOwner_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
     {
-        // Given no roles configured
-        var roles = new AsyncFakeRepository<Role>();
+        // Given a logically deleted ScopeAdmin named as the initial owner (AF-01d)
         var persons = new AsyncFakeRepository<Person>();
+        var ownerId = Guid.NewGuid();
+        await persons.CreateAsync(new Person
+        {
+            PublicId = ownerId, RoleId = (long)Roles.ScopeAdmin, IsDeleted = true
+        });
         var scopes = new AsyncFakeRepository<Scope>();
-        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
-        var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [Guid.NewGuid()] };
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
+        var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
 
         // When
         var output = await handler.HandleAsync(command);
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(ScopeMessages.ScopeAdminRoleNotConfigured, output.Errors);
+        Assert.Contains(ScopeMessages.OwnerNotValidScopeAdmin, output.Errors);
     }
 
     [UnitFact]
@@ -151,12 +146,10 @@ public class CreateScopeCommandHandlerTests
     {
         // Given a store already containing a scope named "Acme"; the request differs only by case
         // (name uniqueness is case-insensitive)
-        var roles = await RolesWithScopeAdmin();
-        var scopeAdminRoleId = (await roles.GetAllAsync()).Data!.Single().Id;
-        var (persons, ownerId) = await PersonsWithScopeAdminOwner(scopeAdminRoleId);
+        var (persons, ownerId) = await PersonsWithScopeAdminOwner();
         var scopes = new AsyncFakeRepository<Scope>();
         await scopes.CreateAsync(new Scope { Name = "Acme" });
-        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, roles, scopes);
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "ACME", OwnerIds = [ownerId] };
 
         // When

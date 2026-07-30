@@ -8,7 +8,7 @@ namespace ArturRios.IdentityManager.Query.Input;
 /// </summary>
 public class ListScopesQuery : BaseQuery
 {
-    /// <summary>Optional case-sensitive substring filter on the scope name.</summary>
+    /// <summary>Optional case-insensitive substring filter on the scope name.</summary>
     public string? Name { get; set; }
 
     /// <summary>When <c>true</c>, logically deleted scopes are included in the results (FR-SC-07).</summary>

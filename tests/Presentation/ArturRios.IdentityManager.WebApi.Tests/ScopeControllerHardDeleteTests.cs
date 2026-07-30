@@ -109,9 +109,9 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
         // Then — response
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(scope.PublicId, response.Body?.Data?.Id);
-        Assert.Equal(2, response.Body?.Data?.DeletedUserCount);
-        Assert.Equal(1, response.Body?.Data?.DeletedGoogleUserCount);
-        Assert.Equal(1, response.Body?.Data?.DeletedApplicationCount);
+        Assert.Equal(2, response.Body?.Data?.UserCount);
+        Assert.Equal(1, response.Body?.Data?.GoogleUserCount);
+        Assert.Equal(1, response.Body?.Data?.ApplicationCount);
 
         // Then — database state: the scope, its members, and its join rows are gone
         await using var context = db.CreateContext();
@@ -155,7 +155,7 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
 
         // Then — success; the scope and its application are gone, the owner person remains
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(1, response.Body?.Data?.DeletedApplicationCount);
+        Assert.Equal(1, response.Body?.Data?.ApplicationCount);
 
         await using var context = db.CreateContext();
         Assert.False(await context.Scopes.AsNoTracking().AnyAsync(x => x.Id == scope.Id));

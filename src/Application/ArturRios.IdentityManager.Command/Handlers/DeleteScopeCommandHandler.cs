@@ -89,9 +89,9 @@ public class DeleteScopeCommandHandler(
             .WithData(new DeleteScopeCommandOutput
             {
                 Id = scope.PublicId,
-                DeletedUserCount = users.Count,
-                DeletedGoogleUserCount = googleUsers.Count,
-                DeletedApplicationCount = applications.Count
+                UserCount = users.Count,
+                GoogleUserCount = googleUsers.Count,
+                ApplicationCount = applications.Count
             })
             .WithMessage(ScopeMessages.ScopeDeletedSuccessfully);
     }

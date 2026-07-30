@@ -146,6 +146,30 @@ public class GetPersonByIdQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenDeletedScopeAdminActor_WhenHandlingGetPersonById_ThenReturnsNotAuthorized()
+    {
+        // Given a logically deleted ScopeAdmin who still owns the target User's scope. They can no
+        // longer authenticate (UC-11 AF-11c), so a token issued before their deletion must not keep
+        // granting reads.
+        var scope = Scope(1);
+        var actor = ScopeAdmin(10, scope);
+        actor.IsDeleted = true;
+        var target = User(11, scope);
+        var repository = await RepositoryWith(actor, target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        });
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.NotAuthorizedToViewPerson, output.Errors);
+    }
+
+    [UnitFact]
     public async Task GivenScopeAdminNotOwningTargetScope_WhenHandlingGetPersonById_ThenReturnsNotAuthorized()
     {
         // Given a ScopeAdmin who owns a different scope than the target User's (AF-07b)
