@@ -64,6 +64,22 @@ public class ListScopesQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenNameFilterInDifferentCase_WhenHandlingList_ThenMatchingScopesAreStillReturned()
+    {
+        // Given scopes whose names differ from the filter only by case (the filter is
+        // case-insensitive, as the person listings are)
+        var repository = await RepositoryWith(NamedScope("Alpha"), NamedScope("Beta"), NamedScope("Alphabet"));
+        var handler = new ListScopesQueryHandler(repository);
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery { Name = "aLpHa", PageNumber = 1, PageSize = 10 });
+
+        // Then
+        Assert.Equal(2, output.TotalItems);
+        Assert.All(output.Data!, scope => Assert.Contains("Alpha", scope.Name));
+    }
+
+    [UnitFact]
     public async Task GivenDeletedScopeAndIncludeDeletedFalse_WhenHandlingList_ThenDeletedIsExcluded()
     {
         // Given one active and one deleted scope

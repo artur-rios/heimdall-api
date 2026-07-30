@@ -80,9 +80,9 @@ public class HardDeleteScopeCommandHandler(
             .WithData(new HardDeleteScopeCommandOutput
             {
                 Id = scope.PublicId,
-                DeletedUserCount = users.Count,
-                DeletedGoogleUserCount = googleUsers.Count,
-                DeletedApplicationCount = applications.Count
+                UserCount = users.Count,
+                GoogleUserCount = googleUsers.Count,
+                ApplicationCount = applications.Count
             })
             .WithMessage(ScopeMessages.ScopeHardDeletedSuccessfully);
     }

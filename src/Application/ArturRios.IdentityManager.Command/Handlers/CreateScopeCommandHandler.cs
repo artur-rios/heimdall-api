@@ -22,7 +22,6 @@ public class CreateScopeCommandHandler(
     IValidator<CreateScopeCommand> validator,
     IAsyncReadOnlyRepository<Scope> scopeReader,
     IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<Role> roleReader,
     IAsyncRepository<Scope> scopeWriter)
     : ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>
 {
@@ -49,19 +48,11 @@ public class CreateScopeCommandHandler(
             output.AddError(ScopeMessages.NameAlreadyExists);
         }
 
-        // Step 4 (AF-01d): every owner must be an existing, non-logically-deleted ScopeAdmin.
-        var scopeAdminRole = await roleReader.Query()
-            .FirstOrDefaultAsync(x => x.Name == nameof(Roles.ScopeAdmin));
-
-        if (scopeAdminRole is null)
-        {
-            output.AddError(ScopeMessages.ScopeAdminRoleNotConfigured);
-
-            return output;
-        }
-
+        // Step 4 (AF-01d): every owner must be an existing, non-logically-deleted ScopeAdmin. The
+        // role is identified by its Roles enum value, which DatabaseSeeder writes as the role row's
+        // id on every startup — the same way every other handler resolves a role.
         var owners = await personReader.Query()
-            .Where(x => ownerIds.Contains(x.PublicId) && !x.IsDeleted && x.RoleId == scopeAdminRole.Id)
+            .Where(x => ownerIds.Contains(x.PublicId) && !x.IsDeleted && x.RoleId == (long)Roles.ScopeAdmin)
             .ToListAsync();
 
         if (owners.Count != ownerIds.Count)

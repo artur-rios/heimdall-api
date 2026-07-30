@@ -43,7 +43,4 @@ public static class ScopeMessages
     /// <summary>AF-01d: an owner does not reference an existing, non-deleted ScopeAdmin.</summary>
     public const string OwnerNotValidScopeAdmin =
         "One or more owners do not reference an existing, non-deleted ScopeAdmin.";
-
-    /// <summary>The ScopeAdmin role reference data is missing — a server configuration problem.</summary>
-    public const string ScopeAdminRoleNotConfigured = "The ScopeAdmin role is not configured.";
 }

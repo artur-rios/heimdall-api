@@ -109,9 +109,9 @@ public class ScopeControllerDeleteTests(PostgresFixture db) : WebApiTest<Program
         // Then — response
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(scope.PublicId, response.Body?.Data?.Id);
-        Assert.Equal(2, response.Body?.Data?.DeletedUserCount);
-        Assert.Equal(1, response.Body?.Data?.DeletedGoogleUserCount);
-        Assert.Equal(1, response.Body?.Data?.DeletedApplicationCount);
+        Assert.Equal(2, response.Body?.Data?.UserCount);
+        Assert.Equal(1, response.Body?.Data?.GoogleUserCount);
+        Assert.Equal(1, response.Body?.Data?.ApplicationCount);
 
         // Then — database state
         await using var context = db.CreateContext();
@@ -159,7 +159,7 @@ public class ScopeControllerDeleteTests(PostgresFixture db) : WebApiTest<Program
 
         // Then — idempotent success, totals still reported
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(1, response.Body?.Data?.DeletedApplicationCount);
+        Assert.Equal(1, response.Body?.Data?.ApplicationCount);
     }
 
     [FunctionalFact]

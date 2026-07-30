@@ -129,6 +129,16 @@ Not use cases, tracked separately.
 | --- | --- | --- |
 | Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
 | Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
+| Audit logging for write operations (NFR-09) | ⬜ | — |
+| Real email delivery (replaces the logging stub used by UC-06) | ⬜ | — |
+
+Two cross-cutting requirements are deliberately outstanding rather than forgotten:
+
+- **NFR-09 (audit logging).** Write handlers currently produce no audit entries; the Serilog setup
+  covers request/startup logging only. Every use case merged so far ships without it, so it is
+  tracked here as one platform item rather than being retro-fitted per use case.
+- **Email delivery.** UC-06 issues real verification tokens but `LoggingEmailVerificationSender`
+  logs them instead of sending mail. UC-12 through UC-15 depend on real delivery.
 
 ## Prerequisites
 
@@ -150,9 +160,23 @@ per-environment files that are gitignored. Create your local one before the firs
 cp src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env.local
 ```
 
-Then fill in `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` (a PostgreSQL connection string),
-`IDENTITY_MANAGER_DATA_DATABASETYPE` (`PostgreSql`), and the `IDENTITY_MANAGER_MASTER_USER_*`
-values used to seed the first system administrator.
+Then fill it in. These are **required** — the API fails to start without them:
+
+| Variable | Value |
+| --- | --- |
+| `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
+| `IDENTITY_MANAGER_DATA_DATABASETYPE` | `PostgreSql` |
+| `IDENTITY_MANAGER_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if it is unset — without it every authenticated request would fail inside the token validator with an opaque `IDX10703` |
+| `IDENTITY_MANAGER_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
+
+The rest are optional and fall back to a default:
+
+| Variable | Default |
+| --- | --- |
+| `IDENTITY_MANAGER_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
+| `IDENTITY_MANAGER_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
+| `IDENTITY_MANAGER_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
+| `IDENTITY_MANAGER_LOG_DIRECTORY` | `logs` |
 
 ## Build
 

@@ -160,13 +160,15 @@ public class UpdatePersonCommandHandler(
         }
 
         // NFR-12: a scope must always retain at least one owner. Gather the scopes somebody *other*
-        // than this person owns; refuse if any scope this person owns is not among them.
+        // than this person owns; refuse if any scope this person owns is not among them. Persons
+        // already logically deleted are excluded, since they can no longer authenticate and so do
+        // not keep a scope owned — the same guard UC-09 and UC-10 apply.
         if (person.RoleId == (long)Roles.ScopeAdmin && person.ScopeOwnerships.Count > 0)
         {
             var ownedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList();
 
             var coOwnedScopeIds = await personReader.Query()
-                .Where(other => other.Id != person.Id)
+                .Where(other => other.Id != person.Id && !other.IsDeleted)
                 .SelectMany(other => other.ScopeOwnerships.Select(ownership => ownership.ScopeId))
                 .Distinct()
                 .ToListAsync();

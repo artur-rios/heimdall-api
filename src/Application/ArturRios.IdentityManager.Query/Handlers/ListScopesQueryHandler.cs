@@ -25,10 +25,12 @@ public class ListScopesQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReader)
             scopes = scopes.Where(x => !x.IsDeleted);
         }
 
+        // Compared case-insensitively (LOWER() in SQL), as the person listings do (FR-PE-04) and as
+        // every name/email comparison in this codebase does.
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var name = query.Name;
-            scopes = scopes.Where(x => x.Name.Contains(name));
+            var name = query.Name.ToLower();
+            scopes = scopes.Where(x => x.Name.ToLower().Contains(name));
         }
 
         var projected = scopes.Select(x => new ScopeOutput

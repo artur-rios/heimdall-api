@@ -13,11 +13,11 @@ public class HardDeleteScopeCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>Total number of Users (via SCOPE_USER) that belonged to the scope.</summary>
-    public int DeletedUserCount { get; set; }
+    public int UserCount { get; set; }
 
     /// <summary>Total number of Google Users that belonged to the scope.</summary>
-    public int DeletedGoogleUserCount { get; set; }
+    public int GoogleUserCount { get; set; }
 
     /// <summary>Total number of applications that belonged to the scope.</summary>
-    public int DeletedApplicationCount { get; set; }
+    public int ApplicationCount { get; set; }
 }

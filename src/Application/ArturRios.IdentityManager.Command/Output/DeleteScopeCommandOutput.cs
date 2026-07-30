@@ -12,12 +12,16 @@ public class DeleteScopeCommandOutput : CommandOutput
     /// <summary>Public identifier of the deleted scope.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Total number of Users (via SCOPE_USER) belonging to the scope.</summary>
-    public int DeletedUserCount { get; set; }
+    /// <summary>
+    ///     Total number of Users (via SCOPE_USER) belonging to the scope. A total, not a count of
+    ///     what this call deleted: on the AF-04b idempotent path nothing is written and this is
+    ///     still reported.
+    /// </summary>
+    public int UserCount { get; set; }
 
     /// <summary>Total number of Google Users belonging to the scope.</summary>
-    public int DeletedGoogleUserCount { get; set; }
+    public int GoogleUserCount { get; set; }
 
     /// <summary>Total number of applications belonging to the scope.</summary>
-    public int DeletedApplicationCount { get; set; }
+    public int ApplicationCount { get; set; }
 }

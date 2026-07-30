@@ -163,26 +163,40 @@ sequenceDiagram
 | **ID** | UC-02 |
 | **Name** | View Scope |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve scope details or list scopes |
+| **Description** | Retrieve scope details by ID, or list scopes. There are two distinct reads: (a) a single scope by ID, via `GET /api/scopes/{id}`, open to any authenticated actor; or (b) the list of scopes, via `GET /api/scopes`, restricted to System Admins |
 | **Preconditions** | Actor is authenticated |
 | **Postconditions** | Scope information is returned |
 
-**Main Flow:**
+**Main Flow (read a — scope by ID):**
 
-1. Actor requests scope details by ID or requests a list of scopes.
-2. The system checks authorization:
-   - System Admin: can view all scopes.
+1. Actor requests scope details by ID.
+2. The system loads the scope, filtering out logically deleted scopes unless explicitly requested.
+3. The system checks authorization:
+   - System Admin: can view any scope.
    - Scope Admin: can view only the scopes they own.
    - User: can view only the scope they belong to.
-3. The system filters out logically deleted scopes unless explicitly requested.
 4. The system returns the scope data.
+
+**Main Flow (read b — list scopes):**
+
+1. A System Admin requests a list of scopes, optionally filtering by name (case-insensitive) and
+   paging the result (FR-SC-03).
+2. The system filters out logically deleted scopes unless explicitly requested.
+3. The system returns the page of scopes.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-02a | Scope not found | Return `404 Not Found` |
-| AF-02b | Actor not authorized for requested scope | Return `403 Forbidden` |
+| AF-02a | Scope not found, or logically deleted and not explicitly requested (read a) | Return `404 Not Found` |
+| AF-02b | Actor not authorized for the requested scope (read a); actor is not a System Admin (read b) | Return `403 Forbidden` |
+
+> **On the list read being System-Admin-only.** The list endpoint is not opened to every actor with
+> the page filtered to what they may see. A Scope Admin reaches the scopes they own through the
+> `ownedScopeIds` their token carries plus read (a); a User has exactly one scope and likewise reads
+> it by ID. Restricting the collection endpoint keeps the total number of scopes — a fact about
+> other tenants — out of reach of any caller who is not a System Admin. This is what the System
+> Requirements Document §5.1 specifies and §7 records.
 
 ---
 
@@ -285,6 +299,18 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-05a | Scope not found | Return `404 Not Found` |
 
+> **On NFR-12 and this use case.** There is deliberately no last-owner guard here, unlike UC-10.
+> NFR-12 protects a scope from losing its owners; a scope being removed outright has nothing left to
+> protect. An already logically deleted scope can be hard-deleted too — soft deletion is a state a
+> cleanup pass starts from, not a block on it.
+>
+> **On an owner left with no scope.** A `ScopeAdmin` whose only scope this removes is left owning
+> none, which FR-PE-11 describes as a state that should not exist. Their person record is kept
+> anyway: they may be given another scope next (UC-21), and destroying a person as a side effect of
+> deleting a scope is not something this use case promises. They cannot authenticate meanwhile
+> (AF-11e), so the dangling state grants nothing; removing them is UC-10. See §8 of the System
+> Requirements Document.
+
 ---
 
 ### UC-06: Create Person
@@ -336,7 +362,8 @@ sequenceDiagram
 **Main Flow (path b — Create Scope Admin / System Admin, no scope):**
 
 1. System Admin sends a request to `POST /api/persons` with person data (name, email, password, roleId referencing `ScopeAdmin` or `SystemAdmin`).
-2. The system validates all fields and verifies the email is unique system-wide.
+2. The system validates all fields and verifies the email is not already held by another
+   `ScopeAdmin` or `SystemAdmin` anywhere in the system (FR-PE-09).
 3. The system generates a random `Salt` and hashes the password using it.
 4. The system creates the person record with the requested `RoleId`, `IsDeleted = false`, `EmailVerified = false`. No `SCOPE_OWNER` or `SCOPE_USER` row is created (a `ScopeAdmin` created this way becomes an owner separately, via UC-21).
 5. The system generates a verification token and sends a verification email.
@@ -355,7 +382,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>DB: Verify scope exists and is not logically deleted
     DB-->>API: Scope found
-    API->>DB: Check email uniqueness system-wide
+    API->>DB: Check email uniqueness among admins system-wide
     DB-->>API: Email is unique
     API->>API: Generate random Salt
     API->>API: Hash password using Salt
@@ -371,7 +398,8 @@ sequenceDiagram
 
 1. A Scope Admin who owns the scope, or a System Admin, sends a request with person data (name, email, password) targeting the scope.
 2. The system validates all fields and verifies the target scope exists and is not logically deleted.
-3. The system checks that the email is unique system-wide (since `ScopeAdmin` emails are not scoped).
+3. The system checks that the email is not already held by another `ScopeAdmin` or `SystemAdmin`
+   anywhere in the system (since `ScopeAdmin` emails are not scoped — FR-PE-09).
 4. The system generates a random `Salt` and hashes the password using it.
 5. The system creates the person record with `RoleId = ScopeAdmin`, `IsDeleted = false`, `EmailVerified = false`, and inserts a `SCOPE_OWNER` row linking the person to the scope as a co-owner.
 6. The system generates a verification token and sends a verification email.
@@ -381,7 +409,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-06a | Email already exists in scope (path a) or system-wide (paths b, c) | Return `409 Conflict` |
+| AF-06a | Email already belongs to a `User` of the target scope (path a), or to a `ScopeAdmin`/`SystemAdmin` anywhere in the system (paths b, c) — see FR-PE-09 | Return `409 Conflict` |
 | AF-06b | Scope not found or logically deleted (paths a, c) | Return `404 Not Found` |
 | AF-06c | Actor other than System Admin attempts path (b) | Return `403 Forbidden` |
 | AF-06d | Invalid input | Return `400 Bad Request` |
@@ -454,8 +482,9 @@ sequenceDiagram
    - The actor **is** the person being updated — every actor may update their own name and email.
    - The actor is a Scope Admin and the person is a `User` of a scope the actor owns — name and email
      only; a Scope Admin may never change `RoleId`.
-4. If email changes, the system checks uniqueness (within the scope for a `User`, system-wide for a
-   `ScopeAdmin`/`SystemAdmin`) and resets `EmailVerified = false`. No verification email is sent —
+4. If email changes, the system checks uniqueness per FR-PE-09 — among the scope's `User`s for a
+   `User`, among all `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the
+   person will hold after this update — and resets `EmailVerified = false`. No verification email is sent —
    issuing a fresh token is UC-14 / UC-15's responsibility.
 5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
    and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
@@ -475,7 +504,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-08a | Person not found or logically deleted | Return `404 Not Found` |
-| AF-08b | New email conflicts within scope or system-wide | Return `409 Conflict` |
+| AF-08b | New email conflicts within the person's scope, or among admins system-wide (FR-PE-09) | Return `409 Conflict` |
 | AF-08c | Unauthorized role change (only System Admin may change `RoleId`) | Return `403 Forbidden` |
 | AF-08d | Actor not authorized to update the person at all | Return `403 Forbidden` |
 | AF-08e | Invalid input | Return `400 Bad Request` |

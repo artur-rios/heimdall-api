@@ -386,6 +386,31 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenOnlyCoOwnerIsDeleted_WhenPromotingOwnerToSystemAdmin_ThenReturnsScopeWouldLoseLastOwner()
+    {
+        // Given a scope owned by the target and one logically deleted co-owner. A soft-deleted owner
+        // can no longer authenticate, so the scope would be left effectively ownerless — the same
+        // reading UC-09 AF-09e and UC-10 AF-10b apply (NFR-12).
+        var scope = Scope(1);
+        var target = ScopeAdmin(10, "first@test.local", scope);
+        var deletedCoOwner = ScopeAdmin(11, "second@test.local", scope);
+        deletedCoOwner.IsDeleted = true;
+        var persons = await PersonsWith(target, deletedCoOwner);
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
+        command.RoleId = (int)Roles.SystemAdmin;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.Equal((long)Roles.ScopeAdmin, target.RoleId);
+        Assert.Single(target.ScopeOwnerships);
+    }
+
+    [UnitFact]
     public async Task GivenNullRoleId_WhenUpdating_ThenRoleIsUnchanged()
     {
         // Given a User whose command carries no role

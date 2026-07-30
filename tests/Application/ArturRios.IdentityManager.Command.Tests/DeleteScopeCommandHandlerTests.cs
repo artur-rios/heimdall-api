@@ -78,9 +78,9 @@ public class DeleteScopeCommandHandlerTests
         Assert.True(output.Success);
         Assert.NotNull(output.Data);
         Assert.Equal(scope.PublicId, output.Data!.Id);
-        Assert.Equal(0, output.Data.DeletedUserCount);
-        Assert.Equal(0, output.Data.DeletedGoogleUserCount);
-        Assert.Equal(0, output.Data.DeletedApplicationCount);
+        Assert.Equal(0, output.Data.UserCount);
+        Assert.Equal(0, output.Data.GoogleUserCount);
+        Assert.Equal(0, output.Data.ApplicationCount);
         Assert.Contains(ScopeMessages.ScopeDeletedSuccessfully, output.Messages);
 
         // Then — the scope is flipped in the store
@@ -105,9 +105,9 @@ public class DeleteScopeCommandHandlerTests
 
         // Then — counts reflect the totals
         Assert.True(output.Success);
-        Assert.Equal(2, output.Data!.DeletedUserCount);
-        Assert.Equal(1, output.Data.DeletedGoogleUserCount);
-        Assert.Equal(1, output.Data.DeletedApplicationCount);
+        Assert.Equal(2, output.Data!.UserCount);
+        Assert.Equal(1, output.Data.GoogleUserCount);
+        Assert.Equal(1, output.Data.ApplicationCount);
 
         // Then — every member is flipped
         Assert.All((await fakes.Persons.GetAllAsync()).Data!, p => Assert.True(p.IsDeleted));
@@ -129,7 +129,7 @@ public class DeleteScopeCommandHandlerTests
 
         // Then — the already-deleted User is still part of the total
         Assert.True(output.Success);
-        Assert.Equal(1, output.Data!.DeletedUserCount);
+        Assert.Equal(1, output.Data!.UserCount);
     }
 
     [UnitFact]
@@ -162,7 +162,7 @@ public class DeleteScopeCommandHandlerTests
         // Then — idempotent success, totals still reported
         Assert.True(output.Success);
         Assert.Equal(scope.PublicId, output.Data!.Id);
-        Assert.Equal(1, output.Data.DeletedApplicationCount);
+        Assert.Equal(1, output.Data.ApplicationCount);
         Assert.Contains(ScopeMessages.ScopeDeletedSuccessfully, output.Messages);
     }
 }

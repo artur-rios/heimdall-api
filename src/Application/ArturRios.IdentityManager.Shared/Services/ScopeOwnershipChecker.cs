@@ -19,9 +19,11 @@ public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader
             return true;
         }
 
-        // Otherwise the actor must own the scope.
+        // Otherwise the actor must own the scope. A logically deleted person owns nothing: they can
+        // no longer authenticate (UC-11 AF-11c), so a token issued before their deletion must not
+        // keep working until it expires.
         return await personReader.Query().AnyAsync(person =>
-            person.PublicId == actingPersonId &&
+            person.PublicId == actingPersonId && !person.IsDeleted &&
             person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scopeId));
     }
 }

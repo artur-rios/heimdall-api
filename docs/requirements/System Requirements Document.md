@@ -84,8 +84,8 @@ graph LR
 | ID | Requirement | Priority |
 | ---- | ------------ | ---------- |
 | FR-SC-01 | The system shall allow System Admins to **create** a new scope with a unique name and at least one initial owner (a person with the `ScopeAdmin` role) | High |
-| FR-SC-02 | The system shall allow authorized users to **read** scope details by ID | High |
-| FR-SC-03 | The system shall allow authorized users to **list** all scopes (with pagination and filtering) | High |
+| FR-SC-02 | The system shall allow authorized users to **read** scope details by ID: a System Admin any scope, a Scope Admin the scopes they own, a User the scope they belong to | High |
+| FR-SC-03 | The system shall allow System Admins to **list** all scopes, with pagination and an optional case-insensitive name filter. The collection endpoint is not exposed to other roles, which reach their own scopes through FR-SC-02 | High |
 | FR-SC-04 | The system shall allow System Admins to **update** scope information | High |
 | FR-SC-05 | The system shall allow System Admins to **logically delete** a scope by setting `IsDeleted = true` | High |
 | FR-SC-06 | The system shall allow System Admins to **hard delete** a scope, permanently removing it and its associated users and applications | High |
@@ -109,9 +109,9 @@ graph LR
 | FR-PE-06 | The system shall allow **logical deletion** of a person by setting `IsDeleted = true` | High |
 | FR-PE-07 | The system shall allow **hard deletion** of a person, permanently removing the record | High |
 | FR-PE-08 | Logically deleted persons shall not appear in default query results unless explicitly requested | Medium |
-| FR-PE-09 | A `User` person's email must be unique within their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique system-wide | High |
+| FR-PE-09 | A `User` person's email must be unique among the `User`s of their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique among all `ScopeAdmin` and `SystemAdmin` persons system-wide. The two namespaces are independent: an admin address and a scoped `User` address never collide with each other, because login resolves them by different lookups (FR-AU-01/02). Comparison is case-insensitive | High |
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
-| FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User` | High |
+| FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 
 ### 3.3 Role Assignment
 
@@ -255,7 +255,7 @@ erDiagram
         bigint Id PK "Internal auto-increment identifier"
         guid PublicId "External identifier, used in API paths/responses and token claims"
         string Name "Full name"
-        string Email "Email address (unique per scope for Users, system-wide for Admins)"
+        string Email "Email address (unique among a scope's Users; unique among Admins system-wide)"
         bytes PasswordHash "Hashed password, stored as a byte array"
         bytes Salt "Random salt used to hash the password, stored as a byte array"
         bool IsDeleted "Logical deletion flag"
@@ -313,7 +313,7 @@ erDiagram
 | Id | BigInt | Primary key, auto-increment, internal only |
 | PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
 | Name | String | Required, max 200 characters |
-| Email | String | Required, valid email format. Unique within scope for `User`s (via `SCOPE_USER`); unique system-wide for `ScopeAdmin`s and `SystemAdmin`s |
+| Email | String | Required, valid email format. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
 | PasswordHash | Byte array | Required, stores the hash computed from the password and `Salt` |
 | Salt | Byte array | Required, randomly generated per person, used to hash the password |
 | IsDeleted | Boolean | Default: `false` |
@@ -535,7 +535,8 @@ block-beta
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
 | -------- | :-----------: | :----------: | :----: | :---------: |
 | Create Scope | ✅ | ❌ | ❌ | ❌ |
-| Read / List Scopes | ✅ | ✅ (owned) | ✅ (belongs to) | ❌ |
+| Read Scope by ID | ✅ | ✅ (owned) | ✅ (belongs to) | ❌ |
+| List Scopes | ✅ | ❌ | ❌ | ❌ |
 | Update Scope | ✅ | ❌ | ❌ | ❌ |
 | Delete Scope (logical) | ✅ | ❌ | ❌ | ❌ |
 | Delete Scope (hard) | ✅ | ❌ | ❌ | ❌ |
@@ -583,8 +584,7 @@ flowchart TD
     G --> K[Cascade: permanently remove applications owned by person, and their SCOPE_OWNER/SCOPE_USER rows]
     F -->|Google User| M[Permanently remove Google User record]
     F -->|Application| L[Permanently remove application record]
-    F -->|Scope| H{At least one other owner remains for each owning ScopeAdmin?}
-    H -->|N/A or yes| H2[Permanently remove scope]
+    F -->|Scope| H2[Permanently remove scope]
     H2 --> I[Cascade: remove SCOPE_OWNER/SCOPE_USER rows; permanently remove SCOPE_USER persons, Google Users, and applications in scope]
     G --> J[Record removed from database]
     K --> J
@@ -596,10 +596,12 @@ flowchart TD
 Notes on cascading behavior:
 
 - Logically deleting a scope logically deletes its `SCOPE_USER` persons (Users), its Google Users, and its applications, but does **not** affect Scope Admins who own it — they may own other, active scopes.
-- Hard deleting a scope permanently removes its `SCOPE_OWNER` and `SCOPE_USER` rows, its Users, its Google Users, and its applications. It does not remove Scope Admin person records themselves, since they may still own other scopes.
+- Hard deleting a scope permanently removes its `SCOPE_OWNER` and `SCOPE_USER` rows, its Users, its Google Users, and its applications. It does not remove Scope Admin person records themselves, since they may still own other scopes. NFR-12 does **not** guard this direction: it protects a scope from losing its owners, and a scope that no longer exists has nothing to protect. A `ScopeAdmin` whose only scope was hard-deleted is therefore left owning none — see the note below.
 - Hard deleting a `User` person removes their `SCOPE_USER` row and any applications they own.
 - Hard deleting a `ScopeAdmin` person removes all of their `SCOPE_OWNER` rows; per NFR-12, this is rejected if it would leave any owned scope with zero owners.
 - Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `User` or `ScopeAdmin` person), so no further cascade is needed.
+
+**On a `ScopeAdmin` left owning no scope.** Hard-deleting a scope (UC-05) — and removing an owner (UC-22) — can leave a `ScopeAdmin` person with zero `SCOPE_OWNER` rows, which FR-PE-11 says should not happen. The record is deliberately left in place rather than deleted along with the scope: the person may be about to be given another scope (UC-21), and destroying a person as a side effect of a scope operation is not something either use case promises. Until they own a scope again they cannot authenticate — FR-AU-07 rejects a `ScopeAdmin` with no live owned scope — so the dangling state grants no access. Cleaning it up is UC-10 (Hard Delete Person). Read FR-PE-11 as an invariant the *scope-assignment* operations maintain (UC-01, UC-06 path c, UC-21, UC-23), not one that survives the removal of the scope itself.
 
 ---
 

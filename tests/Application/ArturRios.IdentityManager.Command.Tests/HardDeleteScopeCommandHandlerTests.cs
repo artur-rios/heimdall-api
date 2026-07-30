@@ -78,9 +78,9 @@ public class HardDeleteScopeCommandHandlerTests
         Assert.True(output.Success);
         Assert.NotNull(output.Data);
         Assert.Equal(scope.PublicId, output.Data!.Id);
-        Assert.Equal(0, output.Data.DeletedUserCount);
-        Assert.Equal(0, output.Data.DeletedGoogleUserCount);
-        Assert.Equal(0, output.Data.DeletedApplicationCount);
+        Assert.Equal(0, output.Data.UserCount);
+        Assert.Equal(0, output.Data.GoogleUserCount);
+        Assert.Equal(0, output.Data.ApplicationCount);
         Assert.Contains(ScopeMessages.ScopeHardDeletedSuccessfully, output.Messages);
 
         // Then — the scope is gone from the store
@@ -104,9 +104,9 @@ public class HardDeleteScopeCommandHandlerTests
 
         // Then — counts reflect the totals
         Assert.True(output.Success);
-        Assert.Equal(2, output.Data!.DeletedUserCount);
-        Assert.Equal(1, output.Data.DeletedGoogleUserCount);
-        Assert.Equal(1, output.Data.DeletedApplicationCount);
+        Assert.Equal(2, output.Data!.UserCount);
+        Assert.Equal(1, output.Data.GoogleUserCount);
+        Assert.Equal(1, output.Data.ApplicationCount);
 
         // Then — the scope and every member are removed from their stores
         Assert.Empty((await fakes.Scopes.GetAllAsync()).Data!);
@@ -129,7 +129,7 @@ public class HardDeleteScopeCommandHandlerTests
 
         // Then — the already-deleted User is still counted and still removed
         Assert.True(output.Success);
-        Assert.Equal(1, output.Data!.DeletedUserCount);
+        Assert.Equal(1, output.Data!.UserCount);
         Assert.Empty((await fakes.Persons.GetAllAsync()).Data!);
     }
 
@@ -148,7 +148,7 @@ public class HardDeleteScopeCommandHandlerTests
         // Then — the scope is hard-deleted regardless of its logical-deletion state
         Assert.True(output.Success);
         Assert.Equal(scope.PublicId, output.Data!.Id);
-        Assert.Equal(1, output.Data.DeletedApplicationCount);
+        Assert.Equal(1, output.Data.ApplicationCount);
         Assert.Empty((await fakes.Scopes.GetAllAsync()).Data!);
         Assert.Empty((await fakes.Applications.GetAllAsync()).Data!);
         Assert.Contains(ScopeMessages.ScopeHardDeletedSuccessfully, output.Messages);

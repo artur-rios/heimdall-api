@@ -32,8 +32,6 @@ public static class ScopeMessageMap
         // AF-01a — scope name already exists.
         [ScopeMessages.NameAlreadyExists] = HttpStatusCodes.Conflict,
         // AF-01d — an owner is not an existing, non-deleted ScopeAdmin.
-        [ScopeMessages.OwnerNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
-        // Not covered by the documentation: missing reference data is a server-side fault.
-        [ScopeMessages.ScopeAdminRoleNotConfigured] = HttpStatusCodes.InternalServerError
+        [ScopeMessages.OwnerNotValidScopeAdmin] = HttpStatusCodes.BadRequest
     };
 }
