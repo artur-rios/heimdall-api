@@ -7,8 +7,11 @@ namespace ArturRios.IdentityManager.Shared.Security;
 /// </summary>
 public interface IActorScoped
 {
-    /// <summary>The acting caller's internal person id.</summary>
-    long ActingPersonId { get; set; }
+    /// <summary>
+    ///     The acting caller's person <c>PublicId</c>, taken from their token. Internal <c>bigint</c>
+    ///     Ids never leave the data layer (NFR-15), so authorization compares public identifiers.
+    /// </summary>
+    Guid ActingPersonId { get; set; }
 
     /// <summary>The acting caller's role value (see <c>Roles</c>).</summary>
     int ActingRole { get; set; }

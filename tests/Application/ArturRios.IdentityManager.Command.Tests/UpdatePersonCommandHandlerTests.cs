@@ -59,7 +59,7 @@ public class UpdatePersonCommandHandlerTests
     {
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
-            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<long>(), It.IsAny<long>()))
+            .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<long>()))
             .ReturnsAsync(allowed);
 
         return checker.Object;
@@ -81,7 +81,7 @@ public class UpdatePersonCommandHandlerTests
         AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
         new(PassingValidator(), persons, persons, Ownership(ownershipAllowed));
 
-    private static UpdatePersonCommand CommandFor(Person target, int actingRole, long actingPersonId) => new()
+    private static UpdatePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
         Id = target.PublicId,
         Name = target.Name,
@@ -98,7 +98,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Name = "Renamed";
         command.Email = "renamed@test.local";
 
@@ -121,7 +121,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.Id);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
         command.Name = "Renamed";
 
         // When
@@ -140,7 +140,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Name = "Renamed";
 
         // When
@@ -160,7 +160,7 @@ public class UpdatePersonCommandHandlerTests
         var actor = ScopeAdmin(11, "owner@test.local", scope);
         var persons = await PersonsWith(target, actor);
         var handler = HandlerFor(persons, ownershipAllowed: true);
-        var command = CommandFor(target, (int)Roles.ScopeAdmin, actor.Id);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actor.PublicId);
         command.Name = "Renamed";
 
         // When
@@ -182,7 +182,7 @@ public class UpdatePersonCommandHandlerTests
         var handler = HandlerFor(persons, ownershipAllowed: false);
 
         // When
-        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.ScopeAdmin, actor.Id));
+        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.ScopeAdmin, actor.PublicId));
 
         // Then
         Assert.False(output.Success);
@@ -200,7 +200,7 @@ public class UpdatePersonCommandHandlerTests
         var handler = HandlerFor(persons);
 
         // When
-        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.User, actor.Id));
+        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.User, actor.PublicId));
 
         // Then
         Assert.False(output.Success);
@@ -218,7 +218,7 @@ public class UpdatePersonCommandHandlerTests
         var output = await handler.HandleAsync(new UpdatePersonCommand
         {
             Id = Guid.NewGuid(), Name = "Ana", Email = "ana@test.local",
-            ActingRole = (int)Roles.SystemAdmin, ActingPersonId = 1
+            ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
         });
 
         // Then
@@ -237,7 +237,7 @@ public class UpdatePersonCommandHandlerTests
         var handler = HandlerFor(persons);
 
         // When
-        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.SystemAdmin, 99));
+        var output = await handler.HandleAsync(CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid()));
 
         // Then
         Assert.False(output.Success);
@@ -253,7 +253,7 @@ public class UpdatePersonCommandHandlerTests
         var other = User(11, scope, "taken@test.local");
         var persons = await PersonsWith(target, other);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.Email = "taken@test.local";
 
         // When
@@ -273,7 +273,7 @@ public class UpdatePersonCommandHandlerTests
         var other = ScopeAdmin(11, "taken@test.local", scope);
         var persons = await PersonsWith(target, other);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.Email = "taken@test.local";
 
         // When
@@ -293,7 +293,7 @@ public class UpdatePersonCommandHandlerTests
         var actor = ScopeAdmin(11, "owner@test.local", scope);
         var persons = await PersonsWith(target, actor);
         var handler = HandlerFor(persons, ownershipAllowed: true);
-        var command = CommandFor(target, (int)Roles.ScopeAdmin, actor.Id);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actor.PublicId);
         command.RoleId = (int)Roles.SystemAdmin;
 
         // When
@@ -312,7 +312,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.RoleId = (int)Roles.ScopeAdmin;
 
         // When
@@ -331,7 +331,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.RoleId = (int)Roles.SystemAdmin;
 
         // When
@@ -353,7 +353,7 @@ public class UpdatePersonCommandHandlerTests
         var coOwner = ScopeAdmin(11, "second@test.local", scope);
         var persons = await PersonsWith(target, coOwner);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.RoleId = (int)Roles.SystemAdmin;
 
         // When
@@ -374,7 +374,7 @@ public class UpdatePersonCommandHandlerTests
         var target = ScopeAdmin(10, "only@test.local", scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.RoleId = (int)Roles.SystemAdmin;
 
         // When
@@ -393,7 +393,7 @@ public class UpdatePersonCommandHandlerTests
         var target = User(10, scope);
         var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, 99);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
         command.Name = "Renamed";
 
         // When

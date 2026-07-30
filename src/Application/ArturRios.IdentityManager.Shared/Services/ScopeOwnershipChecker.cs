@@ -11,7 +11,7 @@ namespace ArturRios.IdentityManager.Shared.Services;
 /// </summary>
 public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader) : IScopeOwnershipChecker
 {
-    public async Task<bool> ActorMayManageScopeAsync(int actingRole, long actingPersonId, long scopeId)
+    public async Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId)
     {
         // A System Admin bypasses the ownership check entirely (no query needed).
         if (actingRole == (int)Roles.SystemAdmin)
@@ -21,7 +21,7 @@ public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader
 
         // Otherwise the actor must own the scope.
         return await personReader.Query().AnyAsync(person =>
-            person.Id == actingPersonId &&
+            person.PublicId == actingPersonId &&
             person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scopeId));
     }
 }

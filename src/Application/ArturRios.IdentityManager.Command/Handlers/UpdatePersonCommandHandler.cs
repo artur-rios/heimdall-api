@@ -117,7 +117,7 @@ public class UpdatePersonCommandHandler(
     /// </summary>
     private async Task<bool> MayUpdateAsync(UpdatePersonCommand command, Person person)
     {
-        if (command.ActingRole == (int)Roles.SystemAdmin || command.ActingPersonId == person.Id)
+        if (command.ActingRole == (int)Roles.SystemAdmin || command.ActingPersonId == person.PublicId)
         {
             return true;
         }

@@ -45,7 +45,7 @@ public class DeletePersonCommandHandler(
 
         // AF-09d: nobody deletes their own record, System Admin included, so one call cannot lock an
         // administrator out. Checked before authorization, which a System Admin would otherwise pass.
-        if (command.ActingPersonId == person.Id)
+        if (command.ActingPersonId == person.PublicId)
         {
             return output.WithError(PersonMessages.CannotDeleteSelf);
         }

@@ -8,8 +8,8 @@ namespace ArturRios.IdentityManager.Shared.Services;
 public interface IScopeOwnershipChecker
 {
     /// <param name="actingRole">The acting caller's role value (see <c>Roles</c>).</param>
-    /// <param name="actingPersonId">The acting caller's internal person id.</param>
+    /// <param name="actingPersonId">The acting caller's person <c>PublicId</c>.</param>
     /// <param name="scopeId">The target scope's internal id.</param>
     /// <returns><c>true</c> when the actor is a System Admin or owns the scope; otherwise <c>false</c>.</returns>
-    Task<bool> ActorMayManageScopeAsync(int actingRole, long actingPersonId, long scopeId);
+    Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId);
 }

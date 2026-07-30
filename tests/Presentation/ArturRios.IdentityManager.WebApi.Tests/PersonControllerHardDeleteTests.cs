@@ -222,7 +222,7 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
         // Given — AF-10c. The message is asserted because the role gate returns the same status.
         var scope = await SeedScopeAsync();
         var actor = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)actor.Id, (int)Roles.SystemAdmin));
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.SystemAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeletePersonCommandOutput?>>(
@@ -242,7 +242,7 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         var person = await SeedUserAsync(scope);
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeletePersonCommandOutput?>>(

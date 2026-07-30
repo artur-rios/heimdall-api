@@ -628,12 +628,12 @@ sequenceDiagram
     API-->>A: 200 OK { token, expiresAt }
 ```
 
-1. Caller sends email and password (a `User` also sends their scope ID).
-2. The system locates the person: a `User` is looked up by email within the given scope; a `ScopeAdmin`/`SystemAdmin` is looked up by email system-wide.
+1. Caller sends email and password to `POST /api/auth/login` (a `User` also sends their scope ID). The endpoint is open to anonymous callers — it is where every other endpoint's token comes from.
+2. The system locates the person: a `User` is looked up by email within the given scope; a `ScopeAdmin`/`SystemAdmin` is looked up by email system-wide. Emails are compared case-insensitively, and the lookup does not filter logically deleted persons — AF-11c rejects them at step 4.
 3. The system hashes the provided password using the person's stored `Salt` and compares it to the stored `PasswordHash`.
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
-6. The system generates and returns an authentication token containing the person's ID and role, plus: the scope ID for a `User`; the list of owned scope IDs for a `ScopeAdmin`; no scope claim for a `SystemAdmin`.
+6. The system generates and returns an authentication token containing the person's `PublicId` and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires.
 
 **Alternative Flows:**
 
@@ -644,6 +644,19 @@ sequenceDiagram
 | AF-11c | Person is logically deleted | Return `401 Unauthorized` |
 | AF-11d | User's scope is logically deleted | Return `401 Unauthorized` |
 | AF-11e | Scope Admin's owned scopes are all logically deleted | Return `401 Unauthorized` |
+| AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
+
+> **On the single rejection.** AF-11a through AF-11e are five different conditions with one
+> indistinguishable response: the same `401` and the same message. Telling them apart would turn the
+> login endpoint into a directory — confirming which emails are registered, which accounts have been
+> deleted, and which scopes still exist — to a caller who has proved nothing. UC-12 takes the same
+> position for password recovery.
+>
+> **On AF-11f.** NFR-10 requires every input to be validated, so a request missing an email or
+> password is refused as malformed before any lookup happens. The validation deliberately stops
+> short of a minimum password length, unlike person creation: at login a short password is a wrong
+> password (401), and answering `400` to it would tell the caller their guess was too short to be
+> anyone's password.
 
 ---
 

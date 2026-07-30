@@ -126,6 +126,9 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>, DeletePersonCommandHandler>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>, HardDeletePersonCommandHandler>();
+        Builder.Services.AddScoped<IValidator<LoginCommand>, LoginCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<LoginCommand, LoginCommandOutput>, LoginCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -149,6 +152,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
+
+        // UC-11 issues tokens through the same claims mapper the middleware validates them with,
+        // registered by AddTokenAuthentication in ConfigureSecurity.
+        Builder.Services.AddScoped<IAuthTokenIssuer, JwtAuthTokenIssuer>();
         Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
         Builder.Services.AddScoped<DatabaseSeeder>();
     }
@@ -174,12 +181,14 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddAuthorization();
 
         // AuthenticationMiddleware resolves AuthenticationOptions and the token validators from the
-        // container, and JwtTokenValidator additionally needs JwtConfiguration and JwtHandler.
-        // Defaults are kept: app JWT only, read from the Authorization header, user rebuilt from
-        // claims, so no IAuthenticationProvider is required.
+        // container, and JwtTokenValidator additionally needs JwtConfiguration, JwtHandler, and the
+        // claims mapper. IdentityUserMapper replaces the library default so tokens carry PublicIds
+        // and the scope claims of FR-AU-04. Defaults are kept otherwise: app JWT only, read from the
+        // Authorization header, user rebuilt from claims — so no IAuthenticationProvider is required
+        // and no database read happens per request.
         Builder.Services.AddSingleton(BuildJwtConfiguration());
         Builder.Services.AddSingleton<JwtHandler>();
-        Builder.Services.AddTokenAuthentication(options =>
+        Builder.Services.AddTokenAuthentication<IdentityUserMapper>(options =>
         {
             options.Source = TokenSource.Header;
             options.EnableJwt = true;

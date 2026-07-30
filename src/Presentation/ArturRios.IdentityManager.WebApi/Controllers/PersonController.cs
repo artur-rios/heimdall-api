@@ -5,12 +5,13 @@ using ArturRios.IdentityManager.Query.Input;
 using ArturRios.IdentityManager.Query.Output;
 using ArturRios.IdentityManager.Shared.Messages;
 using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.IdentityManager.WebApi.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
-using ArturRios.Util.WebApi.Security.Records;
+using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ArturRios.IdentityManager.WebApi.Controllers;
@@ -189,8 +190,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// </summary>
     private void ApplyActor(IActorScoped actorScoped)
     {
-        var actor = (AuthenticatedUser)HttpContext.Items["User"]!;
+        var actor = HttpContext.GetUser<IdentityUser>()!;
         actorScoped.ActingPersonId = actor.Id;
-        actorScoped.ActingRole = actor.Role;
+        actorScoped.ActingRole = actor.RoleId;
     }
 }

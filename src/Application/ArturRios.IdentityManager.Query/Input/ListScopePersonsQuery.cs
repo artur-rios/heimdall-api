@@ -23,7 +23,7 @@ public class ListScopePersonsQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, logically deleted persons are included in the results (FR-PE-08).</summary>
     public bool IncludeDeleted { get; set; }
 
-    public long ActingPersonId { get; set; }
+    public Guid ActingPersonId { get; set; }
 
     public int ActingRole { get; set; }
 }

@@ -25,7 +25,7 @@ public class UpdatePersonCommand : BaseCommand, IActorScoped
     /// <summary>New role value (see <c>Roles</c>), or <c>null</c> to leave the role unchanged.</summary>
     public int? RoleId { get; set; }
 
-    public long ActingPersonId { get; set; }
+    public Guid ActingPersonId { get; set; }
 
     public int ActingRole { get; set; }
 }

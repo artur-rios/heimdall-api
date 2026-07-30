@@ -94,7 +94,7 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-11: Login (Authenticate) | ⬜ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
+| UC-11: Login (Authenticate) | 🚧 | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
 | UC-12: Request Password Recovery | ⬜ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
 | UC-13: Reset Password | ⬜ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
 | UC-14: Verify Email | ⬜ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |

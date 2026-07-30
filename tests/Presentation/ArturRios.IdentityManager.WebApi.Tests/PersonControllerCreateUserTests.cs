@@ -80,7 +80,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         // Given a ScopeAdmin who owns the scope, authenticated with their own person id
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        Authorize(TestTokens.For((int)owner.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -96,7 +96,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         // Given a ScopeAdmin who does NOT own the scope (AF-06e)
         var scope = await SeedScopeAsync();
         var admin = await SeedScopeAdminAsync();
-        Authorize(TestTokens.For((int)admin.Id, (int)Roles.ScopeAdmin));
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(

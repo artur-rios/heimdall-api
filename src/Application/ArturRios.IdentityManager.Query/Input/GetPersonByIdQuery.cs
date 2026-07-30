@@ -17,7 +17,7 @@ public class GetPersonByIdQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, a logically deleted person is still returned (FR-PE-08).</summary>
     public bool IncludeDeleted { get; set; }
 
-    public long ActingPersonId { get; set; }
+    public Guid ActingPersonId { get; set; }
 
     public int ActingRole { get; set; }
 }

@@ -99,11 +99,11 @@ public class HardDeletePersonCommandHandlerTests
         });
     }
 
-    private static HardDeletePersonCommand CommandFor(Person target, long actingPersonId = 99) => new()
+    private static HardDeletePersonCommand CommandFor(Person target, Guid? actingPersonId = null) => new()
     {
         Id = target.PublicId,
         ActingRole = (int)Roles.SystemAdmin,
-        ActingPersonId = actingPersonId
+        ActingPersonId = actingPersonId ?? Guid.NewGuid()
     };
 
     [UnitFact]
@@ -228,7 +228,7 @@ public class HardDeletePersonCommandHandlerTests
         var fakes = EmptyFakes();
         var command = new HardDeletePersonCommand
         {
-            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = 99
+            Id = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
         };
 
         // When
@@ -284,7 +284,7 @@ public class HardDeletePersonCommandHandlerTests
         var fakes = EmptyFakes();
         var target = await SeedUserAsync(fakes, Scope(1));
         target.RoleId = (long)Roles.SystemAdmin;
-        var command = CommandFor(target, actingPersonId: target.Id);
+        var command = CommandFor(target, actingPersonId: target.PublicId);
 
         // When
         var output = await fakes.Handler().HandleAsync(command);

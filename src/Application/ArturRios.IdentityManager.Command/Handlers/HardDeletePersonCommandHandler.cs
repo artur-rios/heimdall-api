@@ -50,7 +50,7 @@ public class HardDeletePersonCommandHandler(
         // AF-10c: nobody hard-deletes their own record, System Admin included, so one call cannot
         // permanently destroy the caller's own account. Checked before the last-owner guard, so a
         // caller targeting themselves gets the reason that applies to them.
-        if (command.ActingPersonId == person.Id)
+        if (command.ActingPersonId == person.PublicId)
         {
             return output.WithError(PersonMessages.CannotDeleteSelf);
         }
