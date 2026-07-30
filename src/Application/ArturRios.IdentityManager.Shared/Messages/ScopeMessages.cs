@@ -28,6 +28,9 @@ public static class ScopeMessages
     /// <summary>AF-02a: the requested scope does not exist (or is logically deleted and not requested).</summary>
     public const string ScopeNotFound = "Scope not found.";
 
+    /// <summary>AF-02b: the caller is not allowed to view the requested scope.</summary>
+    public const string NotAuthorizedToViewScope = "You are not allowed to view this scope.";
+
     /// <summary>AF-01b: the scope name was not supplied.</summary>
     public const string NameRequired = "Scope name is required.";
 
