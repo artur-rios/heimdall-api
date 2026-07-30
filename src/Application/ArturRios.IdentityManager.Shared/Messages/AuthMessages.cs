@@ -70,4 +70,11 @@ public static class AuthMessages
     ///     applies when a person is created (UC-06) applies when their password is replaced.
     /// </summary>
     public const string PasswordTooShort = "Password must be at least 8 characters.";
+
+    /// <summary>
+    ///     UC-14 success: the address was confirmed and the token consumed (FR-EV-03). Also the answer
+    ///     when the address was already verified — UC-14 defines no alternative flow for that, and the
+    ///     caller's link did exactly what it promised.
+    /// </summary>
+    public const string EmailVerifiedSuccessfully = "Email verified.";
 }

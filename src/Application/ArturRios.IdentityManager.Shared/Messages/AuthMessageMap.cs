@@ -22,6 +22,8 @@ public static class AuthMessageMap
         [AuthMessages.PasswordRecoveryRequested] = HttpStatusCodes.Ok,
         // UC-13 main flow — the password was changed.
         [AuthMessages.PasswordResetSuccessful] = HttpStatusCodes.Ok,
+        // UC-14 main flow — the address was confirmed.
+        [AuthMessages.EmailVerifiedSuccessfully] = HttpStatusCodes.Ok,
         // AF-13a…AF-13c, and AF-14a…AF-14c — each token rejection is named, and all of them are bad
         // requests. The two use cases specify the same three messages, so they share these entries.
         [AuthMessages.TokenInvalid] = HttpStatusCodes.BadRequest,

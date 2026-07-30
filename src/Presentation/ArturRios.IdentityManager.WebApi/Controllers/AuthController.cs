@@ -73,4 +73,27 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Confirms an email address from the verification token mailed at person creation (UC-14,
+    ///     FR-EV-03). Open to anonymous callers: the person reaches this from a link in their mail
+    ///     client, where they hold no bearer token — and the point of the link is that they have not
+    ///     proved anything yet.
+    /// </summary>
+    /// <remarks>
+    ///     Each rejection is named, as UC-13's are — unknown (AF-14c), expired (AF-14a), and spent
+    ///     (AF-14b) tokens all answer 400 with their own message, as does a request carrying no token
+    ///     at all. An address that was already verified answers 200: UC-14 defines no alternative flow
+    ///     for it, and the link did what it promised.
+    /// </remarks>
+    [HttpPost("verify-email")]
+    [AllowAnonymous]
+    public async Task<ActionResult<DataOutput<VerifyEmailCommandOutput?>>> VerifyEmail(
+        [FromBody] VerifyEmailCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<VerifyEmailCommand, VerifyEmailCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
 }
