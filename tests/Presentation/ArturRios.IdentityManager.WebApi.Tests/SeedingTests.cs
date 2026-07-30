@@ -37,13 +37,15 @@ public class SeedingTests(PostgresFixture fixture) : WebApiTest<Program>(Environ
     {
         await using var context = fixture.CreateContext();
 
-        var admins = await context.Persons
-            .Where(x => x.RoleId == (long)Roles.SystemAdmin && !x.IsDeleted)
+        // Scoped to the master's e-mail rather than to every System Admin: the container is shared
+        // by the whole functional collection, and other classes seed System Admins of their own.
+        var masters = await context.Persons
+            .Where(x => x.Email == PostgresFixture.MasterUserEmail && !x.IsDeleted)
             .ToListAsync();
 
-        var master = Assert.Single(admins);
+        var master = Assert.Single(masters);
 
-        Assert.Equal(PostgresFixture.MasterUserEmail, master.Email);
+        Assert.Equal((long)Roles.SystemAdmin, master.RoleId);
         Assert.True(master.EmailVerified);
         Assert.NotEmpty(master.PasswordHash);
         Assert.NotEmpty(master.Salt);
@@ -64,7 +66,9 @@ public class SeedingTests(PostgresFixture fixture) : WebApiTest<Program>(Environ
 
         await seeder.SeedAsync();
 
+        // Roles are seeded by nothing but the seeder, so their total is a safe idempotency check.
+        // The master user is counted by e-mail, since other classes seed System Admins of their own.
         Assert.Equal(3, await context.Roles.CountAsync());
-        Assert.Equal(1, await context.Persons.CountAsync(x => x.RoleId == (long)Roles.SystemAdmin));
+        Assert.Equal(1, await context.Persons.CountAsync(x => x.Email == PostgresFixture.MasterUserEmail));
     }
 }
