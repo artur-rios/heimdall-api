@@ -105,7 +105,7 @@ request — see the
 | Use case | Status | Issue |
 | --- | --- | --- |
 | UC-16: Create Application | ✅ | [#17](https://github.com/artur-rios/identity-manager-api/issues/17) |
-| UC-17: View Application | ⬜ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
+| UC-17: View Application | ✅ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
 | UC-18: Update Application | ⬜ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
 | UC-19: Logical Delete Application | ⬜ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
 | UC-20: Hard Delete Application | ⬜ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
