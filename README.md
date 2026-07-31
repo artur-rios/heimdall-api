@@ -108,7 +108,7 @@ request — see the
 | UC-17: View Application | ✅ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
 | UC-18: Update Application | ✅ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
 | UC-19: Logical Delete Application | ✅ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
-| UC-20: Hard Delete Application | ⬜ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
+| UC-20: Hard Delete Application | ✅ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
 
 ### Google Sign-In
 
