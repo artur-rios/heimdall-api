@@ -76,4 +76,27 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
 
         return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Updates an application's name and owner (UC-18, FR-AP-06). A <c>User</c> can own no
+    ///     application (FR-AP-03) and so is refused by the attribute; among the remaining actors the
+    ///     rule is data-dependent and lives in the handler — a System Admin updates any application, a
+    ///     Scope Admin only the ones they own (AF-18c). The handler also resolves the application
+    ///     inside the addressed scope (AF-18a) and, when the owner changes, checks the new owner
+    ///     against FR-AP-03 (AF-18b).
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<UpdateApplicationCommandOutput?>>> Update(
+        Guid scopeId, Guid id, [FromBody] UpdateApplicationCommand command)
+    {
+        command.ScopeId = scopeId;
+        command.Id = id;
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+    }
 }

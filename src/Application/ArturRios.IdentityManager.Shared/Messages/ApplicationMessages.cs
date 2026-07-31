@@ -47,4 +47,10 @@ public static class ApplicationMessages
 
     /// <summary>AF-17b: the caller is not allowed to view the requested application.</summary>
     public const string NotAuthorizedToViewApplication = "You are not allowed to view this application.";
+
+    /// <summary>UC-18 success: the application was updated.</summary>
+    public const string ApplicationUpdatedSuccessfully = "Application updated successfully.";
+
+    /// <summary>AF-18c: the caller is not allowed to update the requested application.</summary>
+    public const string NotAuthorizedToUpdateApplication = "You are not allowed to update this application.";
 }
