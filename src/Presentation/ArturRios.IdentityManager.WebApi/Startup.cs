@@ -148,6 +148,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>,
                 ResendVerificationEmailCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,
+                CreateApplicationCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
