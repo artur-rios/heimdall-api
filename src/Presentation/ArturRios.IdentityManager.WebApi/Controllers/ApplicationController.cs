@@ -99,4 +99,25 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
 
         return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Logically deletes an application by setting <c>IsDeleted = true</c> (UC-19, FR-AP-07). A
+    ///     <c>User</c> can own no application (FR-AP-03) and so is refused by the attribute; among the
+    ///     remaining actors the rule is data-dependent and lives in the handler — a System Admin
+    ///     deletes any application, a Scope Admin only the ones they own (AF-19c). The handler also
+    ///     resolves the application inside the addressed scope (AF-19a) and answers an already-deleted
+    ///     application idempotently (AF-19b).
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<DeleteApplicationCommandOutput?>>> Delete(Guid scopeId, Guid id)
+    {
+        var command = new DeleteApplicationCommand { ScopeId = scopeId, Id = id };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+    }
 }

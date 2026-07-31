@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="ApplicationMessages" /> value to its HTTP status code, following the
-///     UC-16 – UC-18 flows. Passed to the response resolver.
+///     UC-16 – UC-19 flows. Passed to the response resolver.
 /// </summary>
 public static class ApplicationMessageMap
 {
@@ -35,6 +35,11 @@ public static class ApplicationMessageMap
         [ApplicationMessages.ApplicationUpdatedSuccessfully] = HttpStatusCodes.Ok,
         // AF-18c — caller may not update the application. AF-18a reuses ApplicationNotFound above,
         // AF-18b reuses OwnerNotValidForScope, and UC-18's input validation reuses the UC-16 messages.
-        [ApplicationMessages.NotAuthorizedToUpdateApplication] = HttpStatusCodes.Forbidden
+        [ApplicationMessages.NotAuthorizedToUpdateApplication] = HttpStatusCodes.Forbidden,
+        // UC-19 main flow — application logically deleted. AF-19b answers with the same 200, so the
+        // response's AlreadyDeleted flag is what tells the two paths apart.
+        [ApplicationMessages.ApplicationDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-19c — caller may not delete the application. AF-19a reuses ApplicationNotFound above.
+        [ApplicationMessages.NotAuthorizedToDeleteApplication] = HttpStatusCodes.Forbidden
     };
 }
