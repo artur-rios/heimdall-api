@@ -415,7 +415,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
@@ -423,7 +423,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-19: **334 unit** and **251 functional** tests, all passing. Run them
+Suite totals as of UC-20: **342 unit** and **260 functional** tests, all passing. Run them
 separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -433,6 +433,14 @@ UC-19 added `DeleteApplicationCommandHandlerTests` to the Command.Tests project 
 `ApplicationControllerDeleteTests` to the functional suite. It has no validator test class: the
 command carries no body, so there is no validator to guard — the same shape `DeleteScopeCommand` and
 `DeletePersonCommand` already have.
+
+UC-20 added `HardDeleteApplicationCommandHandlerTests` to the Command.Tests project and
+`ApplicationControllerHardDeleteTests` to the functional suite, and likewise has no validator test
+class. Its unit tests cover only the main flow and AF-20a: UC-20's single actor means authorization is
+settled by `[RoleRequirement]` alone and the command carries no acting person, so every refusal —
+including the Scope Admin who owns the application — is a functional test. The pair also pins the two
+deletions apart: `ApplicationControllerDeleteTests` asserts a repeated call is an idempotent `200`,
+while `ApplicationControllerHardDeleteTests` asserts it is a `404`.
 
 UC-17 also carried a specification correction — application ownership was restricted to a
 `ScopeAdmin` who owns the application's scope — so the UC-16 tests were rewritten rather than merely

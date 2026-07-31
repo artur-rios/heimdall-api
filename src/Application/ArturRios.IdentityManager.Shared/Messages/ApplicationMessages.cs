@@ -62,4 +62,7 @@ public static class ApplicationMessages
 
     /// <summary>AF-19c: the caller is not allowed to delete the requested application.</summary>
     public const string NotAuthorizedToDeleteApplication = "You are not allowed to delete this application.";
+
+    /// <summary>UC-20 success: the application was permanently (hard) deleted.</summary>
+    public const string ApplicationHardDeletedSuccessfully = "Application hard deleted successfully.";
 }

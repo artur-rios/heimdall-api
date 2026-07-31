@@ -120,4 +120,25 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
 
         return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Permanently (hard) deletes an application, removing the record from the database (UC-20,
+    ///     FR-AP-08). Restricted to System Admins: a Scope Admin may logically delete an application
+    ///     they own (UC-19), but never purge it, so the attribute settles authorization on its own and
+    ///     the handler applies no further rule. The handler resolves the application inside the
+    ///     addressed scope in any deletion state and reports AF-20a when it does not exist — which
+    ///     includes a repeated call, as the removal leaves nothing to find. Nothing cascades: the
+    ///     application's scope and owner are untouched.
+    /// </summary>
+    [HttpDelete("{id:guid}/hard")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<HardDeleteApplicationCommandOutput?>>> HardDelete(
+        Guid scopeId, Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>(
+                new HardDeleteApplicationCommand { ScopeId = scopeId, Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+    }
 }
