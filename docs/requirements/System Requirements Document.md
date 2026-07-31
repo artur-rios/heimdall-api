@@ -425,7 +425,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 
 | Method | Endpoint | Description | Auth Required |
 | -------- | ---------- | ------------- | --------------- |
-| POST | `/api/scopes/{scopeId}/applications` | Create an application in a scope | ScopeAdmin+ |
+| POST | `/api/scopes/{scopeId}/applications` | Create an application in a scope | ScopeAdmin (owner)+ / User (self as owner) |
 | GET | `/api/scopes/{scopeId}/applications` | List applications in a scope | ScopeAdmin+ |
 | GET | `/api/scopes/{scopeId}/applications/{id}` | Get application by ID | Authenticated |
 | PUT | `/api/scopes/{scopeId}/applications/{id}` | Update an application | ScopeAdmin+ / Owner |
