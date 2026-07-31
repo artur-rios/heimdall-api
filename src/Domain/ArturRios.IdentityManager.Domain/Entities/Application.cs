@@ -5,8 +5,9 @@ namespace ArturRios.IdentityManager.Domain.Entities;
 
 /// <summary>
 ///     A registered non-human identity representing another system. Belongs to exactly one
-///     <see cref="Scope" /> and is owned by exactly one <see cref="Person" /> who is either a
-///     <c>User</c> belonging to that scope or a <c>ScopeAdmin</c> who owns it.
+///     <see cref="Scope" /> and is owned by exactly one <see cref="Person" /> — an existing,
+///     non-logically-deleted <c>ScopeAdmin</c> who owns that scope. A <c>User</c> may never own an
+///     application (FR-AP-03).
 /// </summary>
 public class Application : Entity
 {
