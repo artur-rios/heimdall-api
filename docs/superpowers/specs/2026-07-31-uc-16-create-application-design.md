@@ -1,5 +1,21 @@
 # UC-16: Create Application — Design
 
+> **⚠ Superseded in part (UC-17).** Application ownership was afterwards restricted to `ScopeAdmin`
+> persons who own the application's scope: a `User` may neither own nor create an application. The
+> requirement documents and the UC-16 implementation were corrected under
+> [UC-17's design](2026-07-31-uc-17-view-application-design.md#ownership-correction).
+>
+> Reversed by that correction: **Decision 1** (the endpoint now carries
+> `[RoleRequirement(SystemAdmin, ScopeAdmin)]`, and SRD §5.3 — not §7 — turned out to be the document
+> that needed changing), **Decision 3** (the self-owner rule now binds a `ScopeAdmin`, not a `User`),
+> **Decision 4** (a `User` acting outside their scope is now refused by the role attribute, not by
+> AF-16b), and **Decision 6** (the owner-eligibility query is now a single `SCOPE_OWNER` leg, so the
+> two-leg FR-AP-03 reasoning no longer applies). **Decision 2** was promoted into the specification
+> as AF-16e. Decisions 5, 7, 8 and 9 still hold.
+>
+> The rest of this document is kept as the record of what was decided at the time, not as a
+> description of current behaviour.
+
 ## Summary
 
 Implement UC-16 (Create Application, FR-AP-01/02/03): register a non-person identity — an

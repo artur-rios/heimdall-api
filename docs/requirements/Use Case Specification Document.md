@@ -14,7 +14,7 @@ Note on identifiers: every `{id}` / `{scopeId}` / `{personId}` referenced in the
 | ------- | ------------- |
 | **System Admin** | Has full access to all scopes, persons, and applications across the entire system; belongs to no scope |
 | **Scope Admin** | Owns one or more scopes and manages the users and applications within those scopes; can add co-owners to a scope they own by creating a new Scope Admin or promoting an existing User |
-| **User** | An authenticated person belonging to exactly one scope, with basic access to their own profile and applications they own |
+| **User** | An authenticated person belonging to exactly one scope, with basic access to their own profile |
 | **Anonymous** | An unauthenticated caller (can only access public endpoints) |
 | **Email Service** | External system that delivers emails for verification and password recovery |
 | **Google User** | A person authenticated via Google Sign-In rather than a password; always equivalent to the `User` role, stored in a separate table from Person |
@@ -92,7 +92,6 @@ graph LR
     UC15 --> ES
     SA --> UC16 & UC17 & UC18 & UC19 & UC20
     SCA --> UC16 & UC17 & UC18 & UC19
-    U --> UC16 & UC17 & UC18 & UC19
     SA --> UC24 & UC27 & UC28 & UC29
     SCA --> UC24 & UC27 & UC28
     AN --> UC25
@@ -842,10 +841,10 @@ sequenceDiagram
 | ------- | ------- |
 | **ID** | UC-16 |
 | **Name** | Create Application |
-| **Actors** | System Admin, Scope Admin, User |
+| **Actors** | System Admin, Scope Admin |
 | **Description** | Register a new application (a non-person identity representing another system) within a scope |
-| **Preconditions** | Actor is authenticated; target scope exists and is not logically deleted; the owner is an existing, non-logically-deleted person who is either a `User` belonging to the scope (via `SCOPE_USER`) or a `ScopeAdmin` who owns the scope (via `SCOPE_OWNER`) |
-| **Postconditions** | A new application record exists, associated with the scope and owned by the specified person |
+| **Preconditions** | Actor is authenticated; target scope exists and is not logically deleted; the owner is an existing, non-logically-deleted `ScopeAdmin` who owns the scope (via `SCOPE_OWNER`) |
+| **Postconditions** | A new application record exists, associated with the scope and owned by the specified `ScopeAdmin` |
 
 **Main Flow:**
 
@@ -859,7 +858,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>DB: Verify scope exists and is not logically deleted
     DB-->>API: Scope found
-    API->>DB: Verify owner is a SCOPE_USER of the scope or a SCOPE_OWNER of the scope, and not logically deleted
+    API->>DB: Verify owner is a ScopeAdmin with a SCOPE_OWNER row for the scope, and not logically deleted
     DB-->>API: Owner found
     API->>DB: Insert application record
     DB-->>API: Application created
@@ -869,7 +868,7 @@ sequenceDiagram
 1. Caller sends a request with application data (name, ownerId) targeting a scope.
 2. The system validates all fields.
 3. The system verifies the target scope exists and is not logically deleted.
-4. The system verifies the owner is an existing, non-logically-deleted person who is either a `User` belonging to the scope or a `ScopeAdmin` who owns the scope.
+4. The system verifies the owner is an existing, non-logically-deleted `ScopeAdmin` who owns the scope.
 5. The system creates the application record with `IsDeleted = false`.
 6. The system returns the created application.
 
@@ -878,9 +877,10 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-16a | Scope not found or logically deleted | Return `404 Not Found` |
-| AF-16b | Owner not found, logically deleted, or not associated with the scope (neither a `SCOPE_USER` nor a `SCOPE_OWNER` of it) | Return `400 Bad Request` |
-| AF-16c | User attempts to set an owner other than themself | Return `403 Forbidden` |
+| AF-16b | Owner not found, logically deleted, not a `ScopeAdmin`, or not an owner of the scope (no `SCOPE_OWNER` row) | Return `400 Bad Request` |
+| AF-16c | Scope Admin attempts to set an owner other than themself | Return `403 Forbidden` |
 | AF-16d | Invalid input | Return `400 Bad Request` |
+| AF-16e | Scope Admin does not own the target scope | Return `403 Forbidden` |
 
 ---
 
@@ -890,18 +890,17 @@ sequenceDiagram
 | ------- | ------- |
 | **ID** | UC-17 |
 | **Name** | View Application |
-| **Actors** | System Admin, Scope Admin, User |
+| **Actors** | System Admin, Scope Admin |
 | **Description** | Retrieve an application's details or list applications within a scope |
 | **Preconditions** | Actor is authenticated |
 | **Postconditions** | Application information is returned |
 
 **Main Flow:**
 
-1. Actor requests an application by ID or a list of applications within a scope.
+1. Actor requests an application by ID, or a list of the applications within a scope.
 2. The system checks authorization:
-   - System Admin: can view applications in any scope.
-   - Scope Admin: can view applications in the scopes they own.
-   - User: can view only applications they own.
+   - System Admin: can view every application, in any scope.
+   - Scope Admin: can view only the applications they own. To list a scope's applications they must also own that scope.
 3. Logically deleted applications are excluded unless explicitly requested.
 4. The system returns application data.
 
@@ -909,8 +908,8 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-17a | Application not found | Return `404 Not Found` |
-| AF-17b | Actor not authorized | Return `403 Forbidden` |
+| AF-17a | Application not found, or — when listing — the scope is not found or is logically deleted | Return `404 Not Found` |
+| AF-17b | Actor not authorized: a Scope Admin who does not own the requested application, a Scope Admin who does not own the scope being listed, or a `User` | Return `403 Forbidden` |
 
 ---
 
@@ -920,7 +919,7 @@ sequenceDiagram
 | ------- | ------- |
 | **ID** | UC-18 |
 | **Name** | Update Application |
-| **Actors** | System Admin, Scope Admin, User |
+| **Actors** | System Admin, Scope Admin |
 | **Description** | Modify an application's name or owner |
 | **Preconditions** | Actor is authenticated; application exists and is not logically deleted |
 | **Postconditions** | Application record is updated |
@@ -931,9 +930,8 @@ sequenceDiagram
 2. The system validates the input.
 3. The system checks authorization:
    - System Admin: can update any application.
-   - Scope Admin: can update applications in the scopes they own.
-   - User: can update only applications they own.
-4. If the owner changes, the system verifies the new owner is an existing, non-logically-deleted person who is either a `User` belonging to the application's scope or a `ScopeAdmin` who owns it.
+   - Scope Admin: can update only the applications they own.
+4. If the owner changes, the system verifies the new owner is an existing, non-logically-deleted `ScopeAdmin` who owns the application's scope.
 5. The system applies the updates and sets `UpdatedAt`.
 6. The system returns the updated application.
 
@@ -942,7 +940,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-18a | Application not found or logically deleted | Return `404 Not Found` |
-| AF-18b | New owner not found, logically deleted, or not associated with the application's scope | Return `400 Bad Request` |
+| AF-18b | New owner not found, logically deleted, not a `ScopeAdmin`, or not an owner of the application's scope | Return `400 Bad Request` |
 | AF-18c | Actor not authorized | Return `403 Forbidden` |
 
 ---
@@ -953,7 +951,7 @@ sequenceDiagram
 | ------- | ------- |
 | **ID** | UC-19 |
 | **Name** | Logical Delete Application |
-| **Actors** | System Admin, Scope Admin, User |
+| **Actors** | System Admin, Scope Admin |
 | **Description** | Soft-delete an application by setting `IsDeleted = true` |
 | **Preconditions** | Actor is authenticated; application exists |
 | **Postconditions** | Application's `IsDeleted` is `true` |
@@ -961,7 +959,7 @@ sequenceDiagram
 **Main Flow:**
 
 1. Actor sends a delete request for an application.
-2. The system checks authorization (System Admin, Scope Admin of the scope, or the owning User).
+2. The system checks authorization (System Admin, or the `ScopeAdmin` who owns the application).
 3. The system sets `IsDeleted = true` on the application record.
 4. The system returns success.
 

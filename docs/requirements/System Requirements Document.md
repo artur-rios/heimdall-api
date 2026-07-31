@@ -17,7 +17,7 @@ The system encompasses person CRUD, application CRUD, scope CRUD, role-based acc
 | Term | Definition |
 | ------ | ----------- |
 | Person | A registered identity containing id, name, email, role, and deletion status. Has no direct scope attribute — its relationship to scopes depends on its role |
-| Application | A registered non-human identity representing another system, containing id, name, and deletion status, associated with exactly one scope and owned by exactly one person |
+| Application | A registered non-human identity representing another system, containing id, name, and deletion status, associated with exactly one scope and owned by exactly one `ScopeAdmin` person who owns that scope |
 | Scope | A logical boundary that groups owners, persons, and applications belonging to a specific client system |
 | Scope Owner | A Person with the `ScopeAdmin` role who owns a scope; a scope may have one or more owners, and a Scope Admin may own one or more scopes (many-to-many relationship) |
 | Scope User | A Person with the `User` role who belongs to exactly one scope (many-to-one relationship) |
@@ -160,7 +160,7 @@ graph LR
 | ---- | ------------ | ---------- |
 | FR-AP-01 | The system shall allow creation of an application with: `Id`, `Name`, `ScopeId`, `OwnerId`, `IsDeleted` | High |
 | FR-AP-02 | Every application must be associated with exactly **one** scope at creation time | High |
-| FR-AP-03 | Every application must have exactly **one** owner, which must be an existing, non-logically-deleted person who is either a `User` belonging to the application's scope or a `ScopeAdmin` who owns the application's scope | High |
+| FR-AP-03 | Every application must have exactly **one** owner, which must be an existing, non-logically-deleted `ScopeAdmin` person who owns the application's scope. A `User` may never own an application | High |
 | FR-AP-04 | The system shall allow reading an application's details by ID | High |
 | FR-AP-05 | The system shall allow listing applications within a scope (with pagination and filtering) | High |
 | FR-AP-06 | The system shall allow updating an application's name and owner | High |
@@ -425,11 +425,11 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 
 | Method | Endpoint | Description | Auth Required |
 | -------- | ---------- | ------------- | --------------- |
-| POST | `/api/scopes/{scopeId}/applications` | Create an application in a scope | ScopeAdmin (owner)+ / User (self as owner) |
-| GET | `/api/scopes/{scopeId}/applications` | List applications in a scope | ScopeAdmin+ |
-| GET | `/api/scopes/{scopeId}/applications/{id}` | Get application by ID | Authenticated |
-| PUT | `/api/scopes/{scopeId}/applications/{id}` | Update an application | ScopeAdmin+ / Owner |
-| DELETE | `/api/scopes/{scopeId}/applications/{id}` | Logically delete an application | ScopeAdmin+ / Owner |
+| POST | `/api/scopes/{scopeId}/applications` | Create an application in a scope | SystemAdmin / ScopeAdmin (owner of the scope, self as owner) |
+| GET | `/api/scopes/{scopeId}/applications` | List applications in a scope — every one for a SystemAdmin, only the caller's own for a ScopeAdmin | SystemAdmin / ScopeAdmin (owner of the scope) |
+| GET | `/api/scopes/{scopeId}/applications/{id}` | Get application by ID | SystemAdmin / ScopeAdmin (owner of the application) |
+| PUT | `/api/scopes/{scopeId}/applications/{id}` | Update an application | SystemAdmin / ScopeAdmin (owner of the application) |
+| DELETE | `/api/scopes/{scopeId}/applications/{id}` | Logically delete an application | SystemAdmin / ScopeAdmin (owner of the application) |
 | DELETE | `/api/scopes/{scopeId}/applications/{id}/hard` | Hard delete an application | SystemAdmin |
 
 ### 5.4 Authentication Endpoints
@@ -507,10 +507,10 @@ block-beta
         G1["Password Recovery"] G2["✅"] G3["✅"] G4["✅"] G5["✅"]
     end
     block:row8:5
-        H1["Create Application"] H2["✅"] H3["✅ (own scope)"] H4["✅ (self as owner)"] H5["❌"]
+        H1["Create Application"] H2["✅"] H3["✅ (own scope, self as owner)"] H4["❌"] H5["❌"]
     end
     block:row9:5
-        I1["Update/Delete Application"] I2["✅"] I3["✅ (own scope)"] I4["✅ (owned)"] I5["❌"]
+        I1["Update/Delete Application"] I2["✅"] I3["✅ (owned application)"] I4["❌"] I5["❌"]
     end
     block:row10:5
         J1["Add/Remove Scope Owner"] J2["✅"] J3["✅ (owned scope)"] J4["❌"] J5["❌"]
@@ -552,10 +552,10 @@ block-beta
 | Login | ✅ | ✅ | ✅ | ✅ |
 | Password Recovery | ✅ | ✅ | ✅ | ✅ |
 | Email Verification | ✅ | ✅ | ✅ | ❌ |
-| Create Application | ✅ | ✅ (owned scope) | ✅ (self as owner) | ❌ |
-| Read Application | ✅ | ✅ (owned scope) | ✅ (owned) | ❌ |
-| Update Application | ✅ | ✅ (owned scope) | ✅ (owned) | ❌ |
-| Delete Application (logical) | ✅ | ✅ (owned scope) | ✅ (owned) | ❌ |
+| Create Application | ✅ | ✅ (owned scope, self as owner) | ❌ | ❌ |
+| Read Application | ✅ (any scope) | ✅ (owned application) | ❌ | ❌ |
+| Update Application | ✅ | ✅ (owned application) | ❌ | ❌ |
+| Delete Application (logical) | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
@@ -597,9 +597,9 @@ Notes on cascading behavior:
 
 - Logically deleting a scope logically deletes its `SCOPE_USER` persons (Users), its Google Users, and its applications, but does **not** affect Scope Admins who own it — they may own other, active scopes.
 - Hard deleting a scope permanently removes its `SCOPE_OWNER` and `SCOPE_USER` rows, its Users, its Google Users, and its applications. It does not remove Scope Admin person records themselves, since they may still own other scopes. NFR-12 does **not** guard this direction: it protects a scope from losing its owners, and a scope that no longer exists has nothing to protect. A `ScopeAdmin` whose only scope was hard-deleted is therefore left owning none — see the note below.
-- Hard deleting a `User` person removes their `SCOPE_USER` row and any applications they own.
-- Hard deleting a `ScopeAdmin` person removes all of their `SCOPE_OWNER` rows; per NFR-12, this is rejected if it would leave any owned scope with zero owners.
-- Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `User` or `ScopeAdmin` person), so no further cascade is needed.
+- Hard deleting a `User` person removes their `SCOPE_USER` row. A `User` cannot own an application (FR-AP-03), so there is nothing further to cascade.
+- Hard deleting a `ScopeAdmin` person removes all of their `SCOPE_OWNER` rows and any applications they own; per NFR-12, this is rejected if it would leave any owned scope with zero owners.
+- Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `ScopeAdmin` who owns the scope), so no further cascade is needed.
 
 **On a `ScopeAdmin` left owning no scope.** Hard-deleting a scope (UC-05) — and removing an owner (UC-22) — can leave a `ScopeAdmin` person with zero `SCOPE_OWNER` rows, which FR-PE-11 says should not happen. The record is deliberately left in place rather than deleted along with the scope: the person may be about to be given another scope (UC-21), and destroying a person as a side effect of a scope operation is not something either use case promises. Until they own a scope again they cannot authenticate — FR-AU-07 rejects a `ScopeAdmin` with no live owned scope — so the dangling state grants no access. Cleaning it up is UC-10 (Hard Delete Person). Read FR-PE-11 as an invariant the *scope-assignment* operations maintain (UC-01, UC-06 path c, UC-21, UC-23), not one that survives the removal of the scope itself.
 

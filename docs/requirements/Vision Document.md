@@ -8,7 +8,7 @@ This document establishes the vision for the **Identity Manager API**, a .NET We
 
 ### 1.2 Scope
 
-The Identity Manager API will serve as a single source of truth for person management, application management, authentication, role-based access control, and multi-tenant scoping. It is designed to be consumed by multiple client systems, each operating within its own isolated scope. Beyond human persons, the system also registers **Applications** — non-human identities representing other systems, each owned by a Person.
+The Identity Manager API will serve as a single source of truth for person management, application management, authentication, role-based access control, and multi-tenant scoping. It is designed to be consumed by multiple client systems, each operating within its own isolated scope. Beyond human persons, the system also registers **Applications** — non-human identities representing other systems, each owned by a Scope Admin who owns the application's scope.
 
 ### 1.3 Definitions and Acronyms
 
@@ -16,7 +16,7 @@ The Identity Manager API will serve as a single source of truth for person manag
 | ------ | ----------- |
 | **Scope** | A logical tenant boundary that isolates owners, users, and applications belonging to different client systems |
 | **Person** | A registered identity whose relationship to scopes depends on its role: a User belongs to exactly one scope, a Scope Admin owns one or more scopes, and a System Admin belongs to no scope |
-| **Application** | A non-human registered identity within exactly one scope, representing another system rather than a person, and owned by exactly one Person |
+| **Application** | A non-human registered identity within exactly one scope, representing another system rather than a person, and owned by exactly one Scope Admin who owns that scope |
 | **Scope Owner** | A Scope Admin who owns a scope; a scope may have multiple owners and a Scope Admin may own multiple scopes |
 | **Scope User** | A User belonging to exactly one scope |
 | **Role** | A permission level assigned to a person (User, Scope Admin, System Admin), stored as a reference to a dedicated Role table |
@@ -98,7 +98,7 @@ C4Context
 | F-07 | Authentication | Verify credentials and issue authentication tokens |
 | F-08 | Password Recovery | Allow users to reset their password via email |
 | F-09 | Email Verification | Confirm person email addresses through a verification flow |
-| F-10 | Application Management | Create, read, update, and delete Application records representing non-person systems, each owned by a Person within a scope |
+| F-10 | Application Management | Create, read, update, and delete Application records representing non-person systems, each owned by a Scope Admin who owns the application's scope |
 | F-11 | Google Sign-In | Allow a Scope Admin to enable Google-based sign-up/sign-in for their scope, letting Users register and authenticate with a Google account instead of a password |
 
 ---
@@ -191,7 +191,7 @@ graph TD
 | ------ | --------------------- | ------------ |
 | **System Admin** | Belongs to no scope | Full access: manage all scopes, all persons, and all applications across the entire system |
 | **Scope Admin** | Owns one or more scopes | Manage the users and applications within the scopes they own; add co-owners to their own scope either by creating a new Scope Admin or by promoting an existing User of that scope; add/remove existing Scope Admins as co-owners |
-| **User** | Belongs to exactly one scope | Authenticate, view own profile, recover password, verify email, manage owned applications |
+| **User** | Belongs to exactly one scope | Authenticate, view own profile, recover password, verify email |
 
 ---
 

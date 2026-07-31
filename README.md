@@ -10,7 +10,7 @@ password recovery, email verification, and Google Sign-In for multiple client sy
 - **Multi-tenant by scope.** Every `User` belongs to exactly one scope; a `ScopeAdmin` owns one or
   more scopes; a `SystemAdmin` governs the whole system and belongs to no scope.
 - **Persons & applications.** Manages human identities (persons) and non-human identities
-  (applications owned by a person within a scope).
+  (applications, each owned by a Scope Admin who owns the application's scope).
 - **Authentication.** Password-based login (JWT), password recovery, email verification, and
   optional Google Sign-In per scope.
 - **Deletion strategies.** Both logical (soft) and hard deletion, with well-defined cascade rules.

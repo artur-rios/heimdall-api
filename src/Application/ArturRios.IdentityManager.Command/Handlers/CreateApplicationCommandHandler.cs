@@ -16,9 +16,9 @@ namespace ArturRios.IdentityManager.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="CreateApplicationCommand" /> (UC-16, FR-AP-01/02/03): validates input
 ///     (AF-16d), verifies the target scope exists and is active (AF-16a), enforces the acting role's
-///     rule — a Scope Admin must own the scope, a User may only name themself as owner (AF-16c), a
-///     System Admin bypasses both — verifies the owner is a non-deleted person tied to the scope
-///     (AF-16b), then creates the application record.
+///     rule — a Scope Admin must own the scope (AF-16e) and may only name themself as owner
+///     (AF-16c), a System Admin bypasses both — verifies the owner is a non-deleted
+///     <c>ScopeAdmin</c> who owns the scope (AF-16b), then creates the application record.
 /// </summary>
 public class CreateApplicationCommandHandler(
     IValidator<CreateApplicationCommand> validator,
@@ -49,29 +49,30 @@ public class CreateApplicationCommandHandler(
             return output.WithError(ApplicationMessages.ScopeNotFound);
         }
 
-        // AF-16c: a User may only create applications they own. Decided from the command alone, before
-        // the owner is read, so the refusal cannot reveal whether the named person exists.
-        if (command.ActingRole == (int)Roles.User)
-        {
-            if (command.OwnerId != command.ActingPersonId)
-            {
-                return output.WithError(ApplicationMessages.CannotSetAnotherOwner);
-            }
-        }
-        // A Scope Admin actor may only act on a scope they own; a System Admin bypasses. The
-        // ownership checker answers false for a User, so it is only consulted for the other roles.
-        else if (!await scopeOwnership.ActorMayManageScopeAsync(
-                     command.ActingRole, command.ActingPersonId, scope.Id))
+        // AF-16e: a Scope Admin actor may only act on a scope they own; a System Admin bypasses the
+        // check inside the checker. Asked before who was named, so an actor acting where they have no
+        // standing is told that, rather than being told about the owner.
+        if (!await scopeOwnership.ActorMayManageScopeAsync(
+                command.ActingRole, command.ActingPersonId, scope.Id))
         {
             return output.WithError(ApplicationMessages.NotScopeOwner);
         }
 
-        // AF-16b / FR-AP-03: the owner must be an existing, non-logically-deleted person who is either
-        // a User belonging to the scope (SCOPE_USER) or a ScopeAdmin who owns it (SCOPE_OWNER).
+        // AF-16c: a Scope Admin may only create applications they own. Decided from the command
+        // alone, before the owner is read, so the refusal cannot reveal whether the named person
+        // exists. A System Admin may name any owner FR-AP-03 accepts.
+        if (command.ActingRole != (int)Roles.SystemAdmin && command.OwnerId != command.ActingPersonId)
+        {
+            return output.WithError(ApplicationMessages.CannotSetAnotherOwner);
+        }
+
+        // AF-16b / FR-AP-03: the owner must be an existing, non-logically-deleted ScopeAdmin who owns
+        // the scope. The role is asserted alongside the SCOPE_OWNER row: SRD §4.5 already restricts
+        // that table to ScopeAdmins, so this states the requirement rather than adding to it.
         var owner = await personReader.Query().FirstOrDefaultAsync(person =>
             person.PublicId == command.OwnerId && !person.IsDeleted &&
-            ((person.ScopeMembership != null && person.ScopeMembership.ScopeId == scope.Id) ||
-             person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id)));
+            person.RoleId == (long)Roles.ScopeAdmin &&
+            person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
 
         if (owner is null)
         {
