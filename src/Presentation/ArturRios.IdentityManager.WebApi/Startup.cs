@@ -159,6 +159,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>,
                 DeleteApplicationCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>,
+                HardDeleteApplicationCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
