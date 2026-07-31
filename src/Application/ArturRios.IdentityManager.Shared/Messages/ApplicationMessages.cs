@@ -53,4 +53,13 @@ public static class ApplicationMessages
 
     /// <summary>AF-18c: the caller is not allowed to update the requested application.</summary>
     public const string NotAuthorizedToUpdateApplication = "You are not allowed to update this application.";
+
+    /// <summary>
+    ///     UC-19 success: the application is logically deleted. Also carries the idempotent AF-19b
+    ///     path, where the application was already deleted and nothing was written.
+    /// </summary>
+    public const string ApplicationDeletedSuccessfully = "Application deleted successfully.";
+
+    /// <summary>AF-19c: the caller is not allowed to delete the requested application.</summary>
+    public const string NotAuthorizedToDeleteApplication = "You are not allowed to delete this application.";
 }
