@@ -415,7 +415,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
@@ -423,7 +423,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-20: **342 unit** and **260 functional** tests, all passing. Run them
+Suite totals as of UC-21: **355 unit** and **271 functional** tests, all passing. Run them
 separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -441,6 +441,19 @@ settled by `[RoleRequirement]` alone and the command carries no acting person, s
 including the Scope Admin who owns the application — is a functional test. The pair also pins the two
 deletions apart: `ApplicationControllerDeleteTests` asserts a repeated call is an idempotent `200`,
 while `ApplicationControllerHardDeleteTests` asserts it is a `404`.
+
+UC-21 added `AddScopeOwnerCommandHandlerTests` to the Command.Tests project and
+`PersonControllerAddScopeOwnerTests` to the functional suite, and has no validator test class — both
+identifiers are route values, so there is no body to guard. It is the first use case whose main flow
+and idempotent alternative flow answer with **different** status codes: AF-21d returns `200` where the
+main flow returns `201`, so the functional pair asserts the two statuses *and* that a second call
+leaves exactly one `scope_owner` row. Contrast UC-19, where AF-19b shares the main flow's `200` and
+only the `AlreadyDeleted` flag separates them (§10.2 covers the harder case, where even the message
+matches).
+
+Its unit tests also pin an ordering guarantee rather than a flow: an actor the ownership checker
+rejects, naming a person who does not exist, must be refused with AF-21c and never AF-21b — the
+authorization answer must not depend on data the caller is not allowed to learn.
 
 UC-17 also carried a specification correction — application ownership was restricted to a
 `ScopeAdmin` who owns the application's scope — so the UC-16 tests were rewritten rather than merely
