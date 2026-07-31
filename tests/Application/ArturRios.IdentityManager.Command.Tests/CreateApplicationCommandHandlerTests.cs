@@ -13,10 +13,12 @@ using Application = ArturRios.IdentityManager.Domain.Entities.Application;
 
 namespace ArturRios.IdentityManager.Command.Tests;
 
-// Unit tests for CreateApplicationCommandHandler (UC-16): main flow for each of the three actors and
-// both owner legs of FR-AP-03, plus AF-16a (scope missing/deleted), AF-16b (owner not tied to the
-// scope), AF-16c (a User naming someone else), AF-16d (invalid input), and the Scope Admin ownership
-// refusal. The ownership rule itself is covered by ScopeOwnershipCheckerTests.
+// Unit tests for CreateApplicationCommandHandler (UC-16): main flow for a System Admin and for an
+// owning Scope Admin naming themself, plus AF-16a (scope missing/deleted), AF-16b (owner is not a
+// ScopeAdmin owning the scope), AF-16c (a Scope Admin naming a co-owner), AF-16d (invalid input),
+// and AF-16e (a Scope Admin acting on a scope they do not own). A `User` never reaches the handler —
+// [RoleRequirement] refuses them at the endpoint, covered in ApplicationControllerCreateTests. The
+// ownership rule itself is covered by ScopeOwnershipCheckerTests.
 public class CreateApplicationCommandHandlerTests
 {
     private static Mock<IValidator<CreateApplicationCommand>> ValidValidator()
@@ -63,7 +65,7 @@ public class CreateApplicationCommandHandlerTests
     }
 
     private static async Task<Person> SeedScopeAdminAsync(
-        AsyncFakeRepository<Person> persons, Scope? ownedScope = null)
+        AsyncFakeRepository<Person> persons, Scope? ownedScope = null, bool isDeleted = false)
     {
         var person = new Person
         {
@@ -71,7 +73,7 @@ public class CreateApplicationCommandHandlerTests
             Name = "Admin",
             Email = $"admin-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.ScopeAdmin,
-            IsDeleted = false
+            IsDeleted = isDeleted
         };
 
         if (ownedScope is not null)
@@ -103,13 +105,13 @@ public class CreateApplicationCommandHandlerTests
             ownership ?? OwnershipChecker());
 
     [UnitFact]
-    public async Task GivenSystemAdminAndScopeUserOwner_WhenHandlingCreateApplication_ThenApplicationIsCreated()
+    public async Task GivenSystemAdminAndOwningScopeAdminOwner_WhenHandlingCreateApplication_ThenApplicationIsCreated()
     {
-        // Given a SystemAdmin actor and an owner who is a User of the scope (FR-AP-03 leg 1)
+        // Given a SystemAdmin actor and an owner who is a ScopeAdmin owning the scope (FR-AP-03)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeUserAsync(persons, scope);
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -125,55 +127,18 @@ public class CreateApplicationCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenSystemAdminAndScopeOwnerOwner_WhenHandlingCreateApplication_ThenApplicationIsCreated()
+    public async Task GivenOwningScopeAdminNamingThemself_WhenHandlingCreateApplication_ThenApplicationIsCreated()
     {
-        // Given an owner who is a ScopeAdmin owning the scope (FR-AP-03 leg 2)
+        // Given a ScopeAdmin who owns the scope and names themself as owner (matrix: "self as owner")
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
-        var handler = Handler(scopes, persons, applications);
-
-        // When
-        var output = await handler.HandleAsync(
-            Command(scope.PublicId, owner.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid()));
-
-        // Then
-        Assert.True(output.Success);
-        Assert.Equal(owner.PublicId, output.Data!.OwnerId);
-    }
-
-    [UnitFact]
-    public async Task GivenOwningScopeAdmin_WhenHandlingCreateApplication_ThenApplicationIsCreated()
-    {
-        // Given a ScopeAdmin actor the ownership checker allows
-        var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeUserAsync(persons, scope);
+        var caller = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: true));
 
         // When
         var output = await handler.HandleAsync(
-            Command(scope.PublicId, owner.PublicId, (int)Roles.ScopeAdmin, Guid.NewGuid()));
-
-        // Then
-        Assert.True(output.Success);
-    }
-
-    [UnitFact]
-    public async Task GivenUserNamingThemself_WhenHandlingCreateApplication_ThenApplicationIsCreated()
-    {
-        // Given a User of the scope who names themself as owner (matrix: "self as owner")
-        var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
-        var caller = await SeedScopeUserAsync(persons, scope);
-        var handler = Handler(scopes, persons, applications);
-
-        // When
-        var output = await handler.HandleAsync(
-            Command(scope.PublicId, caller.PublicId, (int)Roles.User, caller.PublicId));
+            Command(scope.PublicId, caller.PublicId, (int)Roles.ScopeAdmin, caller.PublicId));
 
         // Then
         Assert.True(output.Success);
@@ -187,7 +152,7 @@ public class CreateApplicationCommandHandlerTests
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeUserAsync(persons, scope);
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -240,55 +205,13 @@ public class CreateApplicationCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenUserNamingAnotherPerson_WhenHandlingCreateApplication_ThenCannotSetAnotherOwnerIsReported()
-    {
-        // Given a User of the scope naming a different — real — person as owner (AF-16c)
-        var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
-        var caller = await SeedScopeUserAsync(persons, scope);
-        var other = await SeedScopeUserAsync(persons, scope);
-        var handler = Handler(scopes, persons, applications);
-
-        // When
-        var output = await handler.HandleAsync(
-            Command(scope.PublicId, other.PublicId, (int)Roles.User, caller.PublicId));
-
-        // Then
-        Assert.False(output.Success);
-        Assert.Contains(ApplicationMessages.CannotSetAnotherOwner, output.Errors);
-        Assert.Empty((await applications.GetAllAsync()).Data!);
-    }
-
-    [UnitFact]
-    public async Task GivenUserNamingANonExistentPerson_WhenHandlingCreateApplication_ThenCannotSetAnotherOwnerIsReported()
-    {
-        // Given a User naming an id nobody holds: the refusal must not depend on whether the person
-        // exists, so AF-16c cannot be used to probe for real ids
-        var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
-        var caller = await SeedScopeUserAsync(persons, scope);
-        var handler = Handler(scopes, persons, applications);
-
-        // When
-        var output = await handler.HandleAsync(
-            Command(scope.PublicId, Guid.NewGuid(), (int)Roles.User, caller.PublicId));
-
-        // Then
-        Assert.False(output.Success);
-        Assert.Contains(ApplicationMessages.CannotSetAnotherOwner, output.Errors);
-        Assert.DoesNotContain(ApplicationMessages.OwnerNotValidForScope, output.Errors);
-    }
-
-    [UnitFact]
     public async Task GivenScopeAdminWhoDoesNotOwnTheScope_WhenHandlingCreateApplication_ThenNotScopeOwnerIsReported()
     {
-        // Given the ownership checker rejects the acting ScopeAdmin
+        // Given the ownership checker rejects the acting ScopeAdmin (AF-16e)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeUserAsync(persons, scope);
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: false));
 
         // When
@@ -298,6 +221,29 @@ public class CreateApplicationCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(ApplicationMessages.NotScopeOwner, output.Errors);
+        Assert.Empty((await applications.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
+    public async Task GivenScopeAdminNamingACoOwner_WhenHandlingCreateApplication_ThenCannotSetAnotherOwnerIsReported()
+    {
+        // Given a ScopeAdmin who owns the scope naming a co-owner as the application's owner (AF-16c).
+        // The co-owner would satisfy FR-AP-03, so the refusal is about who asked, not about the owner.
+        var (scopes, scope) = await ScopeStoreAsync();
+        var persons = new AsyncFakeRepository<Person>();
+        var applications = new AsyncFakeRepository<Application>();
+        var caller = await SeedScopeAdminAsync(persons, ownedScope: scope);
+        var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
+        var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: true));
+
+        // When
+        var output = await handler.HandleAsync(
+            Command(scope.PublicId, coOwner.PublicId, (int)Roles.ScopeAdmin, caller.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(ApplicationMessages.CannotSetAnotherOwner, output.Errors);
+        Assert.DoesNotContain(ApplicationMessages.OwnerNotValidForScope, output.Errors);
         Assert.Empty((await applications.GetAllAsync()).Data!);
     }
 
@@ -322,11 +268,11 @@ public class CreateApplicationCommandHandlerTests
     [UnitFact]
     public async Task GivenLogicallyDeletedOwner_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
     {
-        // Given a logically deleted User of the scope (AF-16b)
+        // Given a logically deleted ScopeAdmin owning the scope (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var owner = await SeedScopeUserAsync(persons, scope, isDeleted: true);
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope, isDeleted: true);
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -339,15 +285,36 @@ public class CreateApplicationCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenOwnerOfADifferentScope_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
+    public async Task GivenOwnerWithUserRole_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
     {
-        // Given a User who belongs to another scope entirely (AF-16b)
+        // Given a User of the scope as the proposed owner: FR-AP-03 restricts ownership to a
+        // ScopeAdmin who owns the scope, so a User is refused however well they belong to it (AF-16b)
+        var (scopes, scope) = await ScopeStoreAsync();
+        var persons = new AsyncFakeRepository<Person>();
+        var applications = new AsyncFakeRepository<Application>();
+        var owner = await SeedScopeUserAsync(persons, scope);
+        var handler = Handler(scopes, persons, applications);
+
+        // When
+        var output = await handler.HandleAsync(
+            Command(scope.PublicId, owner.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid()));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(ApplicationMessages.OwnerNotValidForScope, output.Errors);
+        Assert.Empty((await applications.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
+    public async Task GivenOwnerScopeAdminOfADifferentScope_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
+    {
+        // Given a ScopeAdmin who owns another scope entirely (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
         var otherScope = new Scope { PublicId = Guid.NewGuid(), Name = "Other" };
         await scopes.CreateAsync(otherScope);
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();
-        var stranger = await SeedScopeUserAsync(persons, otherScope);
+        var stranger = await SeedScopeAdminAsync(persons, ownedScope: otherScope);
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -362,8 +329,8 @@ public class CreateApplicationCommandHandlerTests
     [UnitFact]
     public async Task GivenSystemAdminAsOwner_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
     {
-        // Given a SystemAdmin person as the proposed owner: they hold neither a SCOPE_USER nor a
-        // SCOPE_OWNER row, so FR-AP-03 excludes them (AF-16b) without a rule of their own
+        // Given a SystemAdmin person as the proposed owner: they hold no SCOPE_OWNER row and do not
+        // carry the ScopeAdmin role, so FR-AP-03 excludes them (AF-16b) without a rule of their own
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person>();
         var applications = new AsyncFakeRepository<Application>();

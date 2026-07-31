@@ -14,8 +14,8 @@ public static class ApplicationMessageMap
         [ApplicationMessages.ApplicationCreatedSuccessfully] = HttpStatusCodes.Created,
         // AF-16a — scope not found.
         [ApplicationMessages.ScopeNotFound] = HttpStatusCodes.NotFound,
-        // UC-16 — the acting Scope Admin does not own the target scope; AF-16c — a User named
-        // someone else as owner.
+        // AF-16e — the acting Scope Admin does not own the target scope; AF-16c — a Scope Admin
+        // named someone else as owner.
         [ApplicationMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
         [ApplicationMessages.CannotSetAnotherOwner] = HttpStatusCodes.Forbidden,
         // AF-16b — the owner is not tied to the scope.
@@ -23,6 +23,13 @@ public static class ApplicationMessageMap
         // AF-16d — invalid input.
         [ApplicationMessages.NameRequired] = HttpStatusCodes.BadRequest,
         [ApplicationMessages.NameTooLong] = HttpStatusCodes.BadRequest,
-        [ApplicationMessages.OwnerRequired] = HttpStatusCodes.BadRequest
+        [ApplicationMessages.OwnerRequired] = HttpStatusCodes.BadRequest,
+        // UC-17 main flow — application(s) retrieved.
+        [ApplicationMessages.ApplicationRetrievedSuccessfully] = HttpStatusCodes.Ok,
+        [ApplicationMessages.ApplicationsRetrievedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-17a — application not found. The listing's own 404 reuses ScopeNotFound above.
+        [ApplicationMessages.ApplicationNotFound] = HttpStatusCodes.NotFound,
+        // AF-17b — caller may not view the application. The listing's 403 reuses NotScopeOwner.
+        [ApplicationMessages.NotAuthorizedToViewApplication] = HttpStatusCodes.Forbidden
     };
 }

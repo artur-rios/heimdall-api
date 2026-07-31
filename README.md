@@ -10,7 +10,7 @@ password recovery, email verification, and Google Sign-In for multiple client sy
 - **Multi-tenant by scope.** Every `User` belongs to exactly one scope; a `ScopeAdmin` owns one or
   more scopes; a `SystemAdmin` governs the whole system and belongs to no scope.
 - **Persons & applications.** Manages human identities (persons) and non-human identities
-  (applications owned by a person within a scope).
+  (applications, each owned by a Scope Admin who owns the application's scope).
 - **Authentication.** Password-based login (JWT), password recovery, email verification, and
   optional Google Sign-In per scope.
 - **Deletion strategies.** Both logical (soft) and hard deletion, with well-defined cascade rules.
@@ -105,7 +105,7 @@ request — see the
 | Use case | Status | Issue |
 | --- | --- | --- |
 | UC-16: Create Application | ✅ | [#17](https://github.com/artur-rios/identity-manager-api/issues/17) |
-| UC-17: View Application | ⬜ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
+| UC-17: View Application | ✅ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
 | UC-18: Update Application | ⬜ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
 | UC-19: Logical Delete Application | ⬜ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
 | UC-20: Hard Delete Application | ⬜ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
