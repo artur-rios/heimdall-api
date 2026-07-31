@@ -121,6 +121,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IValidator<CreateScopeOwnerCommand>, CreateScopeOwnerCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>, CreateScopeOwnerCommandHandler>();
+        // No validator: UC-21's request carries no body — both identifiers are route values already
+        // constrained to GUIDs — so there is nothing left for NFR-10 to validate.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>,
+                AddScopeOwnerCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdatePersonCommand>, UpdatePersonCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>, UpdatePersonCommandHandler>();

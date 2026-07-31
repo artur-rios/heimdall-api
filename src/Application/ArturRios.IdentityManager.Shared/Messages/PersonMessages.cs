@@ -86,4 +86,17 @@ public static class PersonMessages
 
     /// <summary>UC-10 success: the person was permanently (hard) deleted.</summary>
     public const string PersonHardDeletedSuccessfully = "Person hard deleted successfully.";
+
+    /// <summary>UC-21 success: the person was added as an owner of the scope.</summary>
+    public const string ScopeOwnerAddedSuccessfully = "Scope owner added successfully.";
+
+    /// <summary>AF-21d: the person already owns the scope, so nothing was written.</summary>
+    public const string AlreadyScopeOwner = "Person is already an owner of this scope.";
+
+    /// <summary>
+    ///     AF-21b: the person named as the new owner does not exist, is logically deleted, or does
+    ///     not hold the <c>ScopeAdmin</c> role. All three answer alike so the endpoint cannot be used
+    ///     to probe which persons exist.
+    /// </summary>
+    public const string PersonNotValidScopeAdmin = "The person must be an existing, non-deleted ScopeAdmin.";
 }

@@ -50,6 +50,12 @@ public static class PersonMessageMap
         [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden,
         // UC-10 main flow — person hard deleted. AF-10a reuses PersonNotFound (404), AF-10b reuses
         // ScopeWouldLoseLastOwner (409), and AF-10c reuses CannotDeleteSelf (403).
-        [PersonMessages.PersonHardDeletedSuccessfully] = HttpStatusCodes.Ok
+        [PersonMessages.PersonHardDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-21 main flow — ownership added. AF-21d answers 200 instead, so the two paths carry
+        // different messages; AF-21a reuses ScopeNotFound (404) and AF-21c NotScopeOwner (403).
+        [PersonMessages.ScopeOwnerAddedSuccessfully] = HttpStatusCodes.Created,
+        [PersonMessages.AlreadyScopeOwner] = HttpStatusCodes.Ok,
+        // AF-21b — the named person is not a usable ScopeAdmin.
+        [PersonMessages.PersonNotValidScopeAdmin] = HttpStatusCodes.BadRequest
     };
 }
