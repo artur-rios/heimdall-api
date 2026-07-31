@@ -3,8 +3,8 @@ using ArturRios.Util.Http;
 namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
-///     Maps each <see cref="ApplicationMessages" /> value to its HTTP status code, following the UC-16
-///     flows. Passed to the response resolver.
+///     Maps each <see cref="ApplicationMessages" /> value to its HTTP status code, following the
+///     UC-16 – UC-18 flows. Passed to the response resolver.
 /// </summary>
 public static class ApplicationMessageMap
 {
@@ -30,6 +30,11 @@ public static class ApplicationMessageMap
         // AF-17a — application not found. The listing's own 404 reuses ScopeNotFound above.
         [ApplicationMessages.ApplicationNotFound] = HttpStatusCodes.NotFound,
         // AF-17b — caller may not view the application. The listing's 403 reuses NotScopeOwner.
-        [ApplicationMessages.NotAuthorizedToViewApplication] = HttpStatusCodes.Forbidden
+        [ApplicationMessages.NotAuthorizedToViewApplication] = HttpStatusCodes.Forbidden,
+        // UC-18 main flow — application updated.
+        [ApplicationMessages.ApplicationUpdatedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-18c — caller may not update the application. AF-18a reuses ApplicationNotFound above,
+        // AF-18b reuses OwnerNotValidForScope, and UC-18's input validation reuses the UC-16 messages.
+        [ApplicationMessages.NotAuthorizedToUpdateApplication] = HttpStatusCodes.Forbidden
     };
 }

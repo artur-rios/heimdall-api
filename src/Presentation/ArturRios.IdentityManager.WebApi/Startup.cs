@@ -152,6 +152,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,
                 CreateApplicationCommandHandler>();
+        Builder.Services.AddScoped<IValidator<UpdateApplicationCommand>, UpdateApplicationCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>,
+                UpdateApplicationCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
