@@ -56,6 +56,13 @@ public static class PersonMessageMap
         [PersonMessages.ScopeOwnerAddedSuccessfully] = HttpStatusCodes.Created,
         [PersonMessages.AlreadyScopeOwner] = HttpStatusCodes.Ok,
         // AF-21b — the named person is not a usable ScopeAdmin.
-        [PersonMessages.PersonNotValidScopeAdmin] = HttpStatusCodes.BadRequest
+        [PersonMessages.PersonNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
+        // UC-23 main flow — the User was promoted to owner. AF-23a reuses ScopeNotFound (404),
+        // AF-23c NotScopeOwner (403), and the FR-PE-09 namespace guard EmailAlreadyExists (409).
+        [PersonMessages.ScopeUserPromotedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-23b — the named person is not a usable User of the target scope.
+        [PersonMessages.PersonNotScopeUser] = HttpStatusCodes.BadRequest,
+        // AF-23d — the person is already a ScopeAdmin.
+        [PersonMessages.AlreadyScopeAdmin] = HttpStatusCodes.Conflict
     };
 }

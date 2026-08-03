@@ -99,4 +99,17 @@ public static class PersonMessages
     ///     to probe which persons exist.
     /// </summary>
     public const string PersonNotValidScopeAdmin = "The person must be an existing, non-deleted ScopeAdmin.";
+
+    /// <summary>UC-23 success: the person was promoted from User to owner of the scope.</summary>
+    public const string ScopeUserPromotedSuccessfully = "Person promoted to scope owner successfully.";
+
+    /// <summary>
+    ///     AF-23b: the person named for promotion does not exist, is logically deleted, or is not a
+    ///     <c>User</c> of the target scope. All the conditions answer alike so the endpoint cannot be
+    ///     used to probe which persons exist or which scope they belong to.
+    /// </summary>
+    public const string PersonNotScopeUser = "The person must be an existing, non-deleted User of this scope.";
+
+    /// <summary>AF-23d: the person already holds the <c>ScopeAdmin</c> role, so there is nothing to promote.</summary>
+    public const string AlreadyScopeAdmin = "Person already holds the ScopeAdmin role.";
 }

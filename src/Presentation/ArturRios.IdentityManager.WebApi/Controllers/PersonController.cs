@@ -92,6 +92,28 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
+    ///     Promotes an existing <c>User</c> of a scope to <c>ScopeAdmin</c>, making them a co-owner of
+    ///     that scope (UC-23, FR-SC-08/FR-SC-13/FR-RO-03). The attribute keeps a <c>User</c> out —
+    ///     they can never be a System Admin nor an existing owner — while the rules that depend on
+    ///     data it cannot see are the handler's: whether the acting Scope Admin owns this scope
+    ///     (AF-23c), whether the scope is active (AF-23a), whether the named person is a <c>User</c>
+    ///     of it (AF-23b), and whether they already hold the role (AF-23d).
+    /// </summary>
+    [HttpPost("scopes/{scopeId:guid}/users/{personId:guid}/promote")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<PromoteScopeUserCommandOutput?>>> PromoteScopeUser(
+        Guid scopeId, Guid personId)
+    {
+        var command = new PromoteScopeUserCommand { ScopeId = scopeId, PersonId = personId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to
     ///     any authenticated actor because a User may update their own record; the per-actor rule and
     ///     the role-change restriction (AF-08c) are enforced by the handler.
