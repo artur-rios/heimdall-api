@@ -124,6 +124,10 @@ it does.
 
 ## Open questions for the gate
 
+> **Resolved at Gate 1: open question A was approved.** `Enabled` is a `bool?`,
+> `SetGoogleSignInCommandValidator` refuses `null`, and `EnabledRequired` (400) is mapped. Every
+> step marked **(A)** in the plan was implemented.
+
 **A. A missing `enabled` in the body is indistinguishable from `enabled: false`.** With a plain
 `bool`, `PUT …/google-signin` with body `{}` — or `{ "enabled": null }`, or a typo'd field name —
 binds to `false` and *disables* Google Sign-In for the scope. A malformed request would silently

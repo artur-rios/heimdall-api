@@ -114,7 +114,7 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-24: Enable/Disable Google Sign-In | ⬜ | [#25](https://github.com/artur-rios/identity-manager-api/issues/25) |
+| UC-24: Enable/Disable Google Sign-In | ✅ | [#25](https://github.com/artur-rios/identity-manager-api/issues/25) |
 | UC-25: Sign Up / Sign In via Google | ⬜ | [#26](https://github.com/artur-rios/identity-manager-api/issues/26) |
 | UC-26: Sign Out via Google | ⬜ | [#27](https://github.com/artur-rios/identity-manager-api/issues/27) |
 | UC-27: View Google User | ⬜ | [#28](https://github.com/artur-rios/identity-manager-api/issues/28) |
