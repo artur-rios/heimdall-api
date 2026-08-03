@@ -415,7 +415,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `PromoteScopeUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
@@ -423,7 +423,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-21: **355 unit** and **271 functional** tests, all passing. Run them
+Suite totals as of UC-23: **371 unit** and **284 functional** tests, all passing. Run them
 separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -454,6 +454,26 @@ matches).
 Its unit tests also pin an ordering guarantee rather than a flow: an actor the ownership checker
 rejects, naming a person who does not exist, must be refused with AF-21c and never AF-21b — the
 authorization answer must not depend on data the caller is not allowed to learn.
+
+UC-23 added `PromoteScopeUserCommandHandlerTests` to the Command.Tests project and
+`PersonControllerPromoteScopeUserTests` to the functional suite, and likewise has no validator test
+class. It repeats UC-21's ordering test and adds two of its own kinds:
+
+- **Ordering between two alternative flows, not just between a flow and authorization.** AF-23d
+  (already a `ScopeAdmin`, 409) is checked before AF-23b (not a `User` of this scope, 400), because
+  every person AF-23d describes also satisfies AF-23b. `GivenPersonAlreadyScopeAdmin_…` would still
+  pass against a handler that answered 400, so it asserts the 409 *and* that the ownership rows the
+  person already held are untouched.
+- **A requirement the use case does not name.** Promotion moves the address from the scope's `User`
+  namespace into the system-wide admin one (FR-PE-09), which no `AF-23x` covers. Three tests pin it:
+  a live admin holding the address refuses the promotion, a *logically deleted* admin does not, and a
+  `User` of another scope holding it does not either — the last one is what makes "the two namespaces
+  are independent" a tested claim rather than a comment.
+
+The pair also contrasts with UC-21 on repetition: `PersonControllerAddScopeOwnerTests` asserts a
+second call is an idempotent `200`, while `PersonControllerPromoteScopeUserTests` asserts it is a
+`409` — the first promotion changed the role, so the repeat meets AF-23d rather than finding nothing
+to do.
 
 UC-17 also carried a specification correction — application ownership was restricted to a
 `ScopeAdmin` who owns the application's scope — so the UC-16 tests were rewritten rather than merely
