@@ -173,6 +173,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>,
                 GoogleSignInCommandHandler>();
+        // No validator for UC-26 either, and for UC-15's reason: the sign-out request carries no
+        // caller-supplied input — the Google User comes from the bearer token.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>,
+                GoogleSignOutCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,
