@@ -51,4 +51,11 @@ public static class GoogleUserMessages
 
     /// <summary>AF-28c: the caller is not allowed to delete the requested Google User.</summary>
     public const string NotAuthorizedToDeleteGoogleUser = "You are not allowed to delete this google user.";
+
+    /// <summary>
+    ///     UC-29 success: the Google User record was permanently removed (FR-GO-16). Unlike UC-28's
+    ///     message this carries no idempotent path — UC-29 defines none, so a repeated call is
+    ///     AF-29a.
+    /// </summary>
+    public const string GoogleUserHardDeletedSuccessfully = "Google user hard deleted successfully.";
 }

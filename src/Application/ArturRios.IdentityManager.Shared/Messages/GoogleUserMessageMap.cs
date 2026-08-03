@@ -27,6 +27,10 @@ public static class GoogleUserMessageMap
         // GoogleUserNotFound above.
         [GoogleUserMessages.GoogleUserDeletedSuccessfully] = HttpStatusCodes.Ok,
         // AF-28c — the caller may not delete this Google User.
-        [GoogleUserMessages.NotAuthorizedToDeleteGoogleUser] = HttpStatusCodes.Forbidden
+        [GoogleUserMessages.NotAuthorizedToDeleteGoogleUser] = HttpStatusCodes.Forbidden,
+        // UC-29 main flow — Google User hard deleted. AF-29a reuses GoogleUserNotFound above, and
+        // UC-29's only other refusals are the framework's: 403 from [RoleRequirement], 401
+        // unauthenticated.
+        [GoogleUserMessages.GoogleUserHardDeletedSuccessfully] = HttpStatusCodes.Ok
     };
 }
