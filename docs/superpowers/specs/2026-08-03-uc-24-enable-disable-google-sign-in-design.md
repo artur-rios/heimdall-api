@@ -44,12 +44,12 @@ is approved), `IAsyncReadOnlyRepository<Scope>`, `IAsyncRepository<Scope>`, `ISc
 
 | Step | Behavior | Flow |
 | --- | --- | --- |
-| 1 | *(open question A)* Validate `Enabled` was supplied → else `EnabledRequired` (400) | NFR-10 |
-| 2 | Load the scope by `PublicId == Id` and `!IsDeleted` → else `ScopeNotFound` (404) | AF-24a, UC-24 step 2 |
-| 3 | `ActorMayManageScopeAsync(ActingRole, ActingPersonId, scope.Id)` → else `NotScopeOwner` (403) | AF-24b, UC-24 step 3 |
-| 4 | Project the owners' `PublicId`s for the response | UC-24 step 5 |
-| 5 | `GoogleSignInEnabled = command.Enabled`, stamp `UpdatedAt`, persist via `scopeWriter.UpdateAsync` | UC-24 step 4 |
-| 6 | Return the updated scope with `GoogleSignInUpdatedSuccessfully` (200) | UC-24 step 5 |
+| 1 | Validate `Enabled` was supplied → else `EnabledRequired` (400) | AF-24c, UC-24 step 2, NFR-10 |
+| 2 | Load the scope by `PublicId == Id` and `!IsDeleted` → else `ScopeNotFound` (404) | AF-24a, UC-24 step 3 |
+| 3 | `ActorMayManageScopeAsync(ActingRole, ActingPersonId, scope.Id)` → else `NotScopeOwner` (403) | AF-24b, UC-24 step 4 |
+| 4 | Project the owners' `PublicId`s for the response | UC-24 step 6 |
+| 5 | `GoogleSignInEnabled = command.Enabled`, stamp `UpdatedAt`, persist via `scopeWriter.UpdateAsync` | UC-24 step 5 |
+| 6 | Return the updated scope with `GoogleSignInUpdatedSuccessfully` (200) | UC-24 step 6 |
 
 Failures are returned as errors on the `DataOutput<T>` rather than thrown, as every handler before
 it does.
@@ -127,6 +127,11 @@ it does.
 > **Resolved at Gate 1: open question A was approved.** `Enabled` is a `bool?`,
 > `SetGoogleSignInCommandValidator` refuses `null`, and `EnabledRequired` (400) is mapped. Every
 > step marked **(A)** in the plan was implemented.
+>
+> **Resolved in the specification, after the merge.** The Use Case Specification now names this
+> refusal **AF-24c** and numbers validation as main-flow step 2, the shape UC-01 already had. The
+> step references in this document and in the handler's comments follow the amended numbering; the
+> implementation did not change.
 
 **A. A missing `enabled` in the body is indistinguishable from `enabled: false`.** With a plain
 `bool`, `PUT …/google-signin` with body `{}` — or `{ "enabled": null }`, or a typo'd field name —
@@ -149,7 +154,7 @@ and an empty body disables the flag.
 | --- | --- | --- | --- |
 | AF-24a | Unknown scope, or a logically deleted one | scope lookup returns `null` | `404` `Scope not found.` |
 | AF-24b | Scope Admin acting on a scope they do not own | `IScopeOwnershipChecker` returns `false` | `403` `You are not an owner of the target scope.` |
-| (open question A) | `enabled` not supplied | validator | `400` `Enabled is required.` |
+| AF-24c | `enabled` not supplied | validator | `400` `Enabled is required.` |
 | (precondition) | Caller holds `User` | `[RoleRequirement]` (framework) | `403` |
 | (precondition) | Not authenticated | middleware | `401` |
 
@@ -161,7 +166,7 @@ Added to `ScopeMessages` / `ScopeMessageMap`:
 | --- | --- | --- | --- |
 | `GoogleSignInUpdatedSuccessfully` | `"Google Sign-In setting updated successfully."` | 200 | main flow |
 | `NotScopeOwner` | `"You are not an owner of the target scope."` | 403 | AF-24b |
-| `EnabledRequired` | `"Enabled is required."` | 400 | open question A — **only if approved** |
+| `EnabledRequired` | `"Enabled is required."` | 400 | AF-24c |
 
 Reused: `ScopeNotFound` (404) for AF-24a — already declared and mapped.
 
@@ -231,8 +236,9 @@ flag did not move, which is the whole point of AF-24b.
 The use case specification, the SRD endpoint table (§5.1), FR-GO-01/FR-GO-02, the scope data model
 (§4), the Vision Document, and GitHub issue [#25](https://github.com/artur-rios/identity-manager-api/issues/25)
 agree on every point of UC-24: actor list, route, body, requirements, and the two alternative flows.
-The one thing no document settles is what a request that omits `enabled` should do, raised as open
-question A rather than assumed silently.
+The one thing no document settled was what a request that omits `enabled` should do, raised as open
+question A rather than assumed silently — and since closed by amending the specification with
+AF-24c.
 
 **UC-22 is still designed but not implemented** (`docs: add uc-22 design and plan` on `main` with no
 `feat:` behind it; issue [#23](https://github.com/artur-rios/identity-manager-api/issues/23) open).

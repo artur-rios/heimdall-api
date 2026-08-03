@@ -14,7 +14,7 @@ public class SetGoogleSignInCommandValidatorTests
     public void GivenEnabledNotSupplied_WhenValidating_ThenEnabledRequiredError()
     {
         // Given a request that never said which value to set — the case a plain bool would have
-        // bound to false, silently disabling Google Sign-In (NFR-10)
+        // bound to false, silently disabling Google Sign-In (AF-24c, NFR-10)
         var command = new SetGoogleSignInCommand { Id = Guid.NewGuid(), Enabled = null };
 
         // When

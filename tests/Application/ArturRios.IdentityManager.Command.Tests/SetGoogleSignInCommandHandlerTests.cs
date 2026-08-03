@@ -14,8 +14,8 @@ namespace ArturRios.IdentityManager.Command.Tests;
 
 // Unit tests for SetGoogleSignInCommandHandler (UC-24): the main flow writing the flag in both
 // directions and for both actors, AF-24a (scope missing or logically deleted), AF-24b delegation (the
-// checker rejects the actor), and the NFR-10 guard that keeps an omitted `enabled` from silently
-// disabling the setting. The AF-24b ownership rule itself is covered by ScopeOwnershipCheckerTests;
+// checker rejects the actor), and AF-24c (an omitted `enabled`, which must not silently disable the
+// setting). The AF-24b ownership rule itself is covered by ScopeOwnershipCheckerTests;
 // the 401/403-by-attribute flows are covered by ScopeControllerSetGoogleSignInTests.
 public class SetGoogleSignInCommandHandlerTests
 {
@@ -162,7 +162,7 @@ public class SetGoogleSignInCommandHandlerTests
     [UnitFact]
     public async Task GivenOutput_WhenHandlingSetGoogleSignIn_ThenItCarriesTheScopeWithPublicIdentifiersOnly()
     {
-        // Given a scope with a known owner (UC-24 step 5 returns the scope, SRD §4.0 / NFR-15)
+        // Given a scope with a known owner (UC-24 step 6 returns the scope, SRD §4.0 / NFR-15)
         var scopes = new AsyncFakeRepository<Scope>();
         var ownerPublicId = Guid.NewGuid();
         var scope = await SeedScopeAsync(scopes, ownerPublicId: ownerPublicId);
@@ -258,8 +258,8 @@ public class SetGoogleSignInCommandHandlerTests
     [UnitFact]
     public async Task GivenEnabledNotSupplied_WhenHandlingSetGoogleSignIn_ThenEnabledRequiredIsReported()
     {
-        // Given a validator reporting the NFR-10 failure: without it, a body omitting `enabled` would
-        // bind to false and silently disable the setting
+        // Given a validator reporting the AF-24c failure: without it, a body omitting `enabled` would
+        // bind to false and silently disable the setting (NFR-10)
         var validator = new Mock<IValidator<SetGoogleSignInCommand>>();
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<SetGoogleSignInCommand>(), It.IsAny<CancellationToken>()))

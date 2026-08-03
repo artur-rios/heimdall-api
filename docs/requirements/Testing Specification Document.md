@@ -479,7 +479,7 @@ UC-24 added `SetGoogleSignInCommandHandlerTests` and `SetGoogleSignInCommandVali
 Command.Tests project and `ScopeControllerSetGoogleSignInTests` to the functional suite. It is the
 first use case whose command carries a **single** field and still earns a validator test class, and
 the reason is the point of the coverage: `Enabled` is a `bool?` because a plain `bool` would bind a
-body that omits the field to `false` and silently *disable* Google Sign-In. Three tests pin that —
+body that omits the field to `false` and silently *disable* Google Sign-In (AF-24c). Three tests pin that —
 the validator rejecting `null`, the handler refusing the validation failure, and
 `GivenEmptyBody_WhenPutGoogleSignIn_ThenBadRequestAndFlagIsUnchanged`, which sends `{}` against an
 *enabled* scope so a regression shows up as a flipped row rather than only a changed status code.

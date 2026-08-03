@@ -1150,10 +1150,11 @@ sequenceDiagram
 ```
 
 1. Actor sends a request to enable or disable Google Sign-In for a scope.
-2. The system verifies the scope exists.
-3. The system checks authorization: System Admin, or an existing owner of the scope.
-4. The system sets `GoogleSignInEnabled` to the requested value.
-5. The system returns the updated scope.
+2. The system validates the input fields.
+3. The system verifies the scope exists.
+4. The system checks authorization: System Admin, or an existing owner of the scope.
+5. The system sets `GoogleSignInEnabled` to the requested value.
+6. The system returns the updated scope.
 
 **Alternative Flows:**
 
@@ -1161,6 +1162,13 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-24a | Scope not found | Return `404 Not Found` |
 | AF-24b | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
+| AF-24c | `enabled` not supplied | Return `400 Bad Request` |
+
+> **On AF-24c.** The request body carries a single boolean, so an omitted `enabled` cannot be
+> distinguished from an explicit `false` once bound — a malformed request would silently perform the
+> *disable* half of this use case. The value is therefore required rather than defaulted, and is
+> checked before the scope is looked up (step 2, as in UC-01). NFR-10 already asks for this; the flow
+> is named here so the refusal is specified rather than incidental.
 
 ---
 

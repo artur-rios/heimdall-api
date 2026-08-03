@@ -15,8 +15,8 @@ namespace ArturRios.IdentityManager.WebApi.Tests;
 
 // Functional tests for PUT /api/scopes/{id}/google-signin (UC-24, FR-GO-01/FR-GO-02): the main flow
 // in both directions for a System Admin and for an existing owner, AF-24a (scope unknown or
-// logically deleted), AF-24b (a Scope Admin who owns a different scope), the NFR-10 guard against a
-// body that omits `enabled`, and the framework flows the actor list produces (403 for a User, 401
+// logically deleted), AF-24b (a Scope Admin who owns a different scope), AF-24c (a body that omits
+// `enabled`), and the framework flows the actor list produces (403 for a User, 401
 // unauthenticated). Every refusal asserts the persisted flag did not move — that is the whole point
 // of AF-24b.
 [Collection(nameof(FunctionalCollection))]
@@ -210,8 +210,8 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     [FunctionalFact]
     public async Task GivenEmptyBody_WhenPutGoogleSignIn_ThenBadRequestAndFlagIsUnchanged()
     {
-        // Given an enabled scope and a request that never said which value to set. Without the
-        // nullable Enabled and its validator this would bind to false and disable the scope (NFR-10).
+        // Given an enabled scope and a request that never said which value to set (AF-24c). Without
+        // the nullable Enabled and its validator this would bind to false and disable the scope.
         var scope = await SeedScopeAsync(googleSignInEnabled: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
