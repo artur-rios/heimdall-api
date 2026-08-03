@@ -78,7 +78,7 @@ request — see the
 | UC-05: Hard Delete Scope | ✅ | [#6](https://github.com/artur-rios/identity-manager-api/issues/6) |
 | UC-21: Add Scope Owner | ✅ | [#22](https://github.com/artur-rios/identity-manager-api/issues/22) |
 | UC-22: Remove Scope Owner | ⬜ | [#23](https://github.com/artur-rios/identity-manager-api/issues/23) |
-| UC-23: Promote User to Scope Owner | ⬜ | [#24](https://github.com/artur-rios/identity-manager-api/issues/24) |
+| UC-23: Promote User to Scope Owner | ✅ | [#24](https://github.com/artur-rios/identity-manager-api/issues/24) |
 
 ### Person Management
 
