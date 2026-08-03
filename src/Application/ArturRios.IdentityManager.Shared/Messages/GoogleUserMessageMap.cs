@@ -21,6 +21,12 @@ public static class GoogleUserMessageMap
         // AF-27b — the caller may not view this Google User.
         [GoogleUserMessages.NotAuthorizedToViewGoogleUser] = HttpStatusCodes.Forbidden,
         // AF-27b on the listing — the acting Scope Admin does not own the addressed scope.
-        [GoogleUserMessages.NotScopeOwner] = HttpStatusCodes.Forbidden
+        [GoogleUserMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
+        // UC-28 main flow — Google User logically deleted. AF-28b answers with the same 200, so the
+        // response's AlreadyDeleted flag is what tells the two paths apart. AF-28a reuses
+        // GoogleUserNotFound above.
+        [GoogleUserMessages.GoogleUserDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-28c — the caller may not delete this Google User.
+        [GoogleUserMessages.NotAuthorizedToDeleteGoogleUser] = HttpStatusCodes.Forbidden
     };
 }
