@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="AuthMessages" /> value to its HTTP status code, following the UC-11,
-///     UC-12, UC-13, UC-14, and UC-15 flows. Passed to the response resolver.
+///     UC-12, UC-13, UC-14, UC-15, and UC-25 flows. Passed to the response resolver.
 /// </summary>
 public static class AuthMessageMap
 {
@@ -39,6 +39,16 @@ public static class AuthMessageMap
         // AF-13d, and UC-14's input validation — malformed request. The password messages are shared
         // with AF-11f.
         [AuthMessages.TokenRequired] = HttpStatusCodes.BadRequest,
-        [AuthMessages.PasswordTooShort] = HttpStatusCodes.BadRequest
+        [AuthMessages.PasswordTooShort] = HttpStatusCodes.BadRequest,
+        // UC-25 main flow — the Google account was signed up or signed in and a token issued.
+        [AuthMessages.GoogleSignInSuccessful] = HttpStatusCodes.Ok,
+        // AF-25a and AF-25d — an unverifiable token and a deleted Google User answer alike, as
+        // UC-11's rejections do.
+        [AuthMessages.GoogleAuthenticationFailed] = HttpStatusCodes.Unauthorized,
+        // AF-25b — the scope is missing, deleted, or has the setting off. 403 rather than 404: the
+        // use case refuses the operation without saying which of the three is the reason.
+        [AuthMessages.GoogleSignInUnavailable] = HttpStatusCodes.Forbidden,
+        // AF-25c — the verified address is already taken within the scope.
+        [AuthMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict
     };
 }

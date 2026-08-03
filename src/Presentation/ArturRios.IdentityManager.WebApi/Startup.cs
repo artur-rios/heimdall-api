@@ -167,6 +167,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>,
                 ResendVerificationEmailCommandHandler>();
+        // Likewise no validator for UC-25, for a different reason: the use case defines no 400 flow
+        // and needs none, since an absent ID token fails verification (AF-25a, 401) and an empty
+        // scope identifier matches no scope (AF-25b, 403).
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>,
+                GoogleSignInCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,
@@ -211,6 +217,7 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddSingleton(PasswordResetOptions.FromEnvironment());
         Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
         AddEmailSenders();
+        AddGoogleSignIn();
 
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
@@ -293,6 +300,51 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
         Builder.Services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
         Builder.Services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
+    }
+
+    /// <summary>
+    ///     Chooses how UC-25 verifies a Google ID token (FR-GO-11, NFR-13). With Google client IDs
+    ///     configured, tokens are validated against Google; without them, every token is refused, so
+    ///     an unconfigured deployment answers 401 rather than trusting a token no one checked.
+    /// </summary>
+    /// <remarks>
+    ///     The third branch exists for the functional suite, which cannot override a DI registration
+    ///     (<c>WebApiTest&lt;T&gt;</c> exposes neither its factory nor a settable gateway) and must
+    ///     still reach the flows behind verification. It is guarded twice — never in Production, and
+    ///     never without an explicitly set signing secret — and is checked before the real verifier so
+    ///     a test environment cannot accidentally run both. See <see cref="LocalGoogleIdTokenVerifier" />.
+    /// </remarks>
+    private void AddGoogleSignIn()
+    {
+        var options = GoogleSignInOptions.FromEnvironment();
+
+        Builder.Services.AddSingleton(options);
+
+        if (!Builder.Environment.IsProduction() && options.TestSigningConfigured)
+        {
+            Log.Warning(
+                "Google ID tokens will be verified against a local signing secret ({Variable}), not " +
+                "against Google. This is for automated tests only",
+                GoogleSignInOptions.TestSigningSecretVariable);
+
+            Builder.Services.AddScoped<IGoogleIdTokenVerifier, LocalGoogleIdTokenVerifier>();
+
+            return;
+        }
+
+        if (!options.GoogleConfigured)
+        {
+            Log.Warning(
+                "No Google client is configured ({Variable}); Google sign-in (UC-25) will refuse " +
+                "every token",
+                GoogleSignInOptions.ClientIdsVariable);
+
+            Builder.Services.AddScoped<IGoogleIdTokenVerifier, UnconfiguredGoogleIdTokenVerifier>();
+
+            return;
+        }
+
+        Builder.Services.AddScoped<IGoogleIdTokenVerifier, GoogleIdTokenVerifier>();
     }
 
     /// <summary>

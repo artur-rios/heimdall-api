@@ -104,4 +104,42 @@ public static class AuthMessages
     ///     token messages shared by UC-13 and UC-14 this costs no key collision.
     /// </remarks>
     public const string PersonNotFound = "Person not found.";
+
+    /// <summary>
+    ///     UC-25 success: the Google ID token was verified and an authentication token issued — for a
+    ///     Google User just created from the token's claims (sign-up, FR-GO-09) or one that already
+    ///     existed (sign-in, FR-GO-10). One message for both halves, since the use case makes no
+    ///     distinction to the caller and the response body is the same either way.
+    /// </summary>
+    public const string GoogleSignInSuccessful = "Google sign-in successful.";
+
+    /// <summary>
+    ///     UC-25 AF-25a and AF-25d: the caller was not authenticated. Deliberately one message for
+    ///     both conditions — a token that fails verification (FR-GO-11) and a Google User that has
+    ///     been logically deleted (FR-GO-12) — for the reason UC-11 collapses its five rejections: the
+    ///     endpoint is anonymous, so a distinguishable answer would let anyone holding a Google token
+    ///     discover which accounts a scope has registered and which of them are deleted.
+    /// </summary>
+    public const string GoogleAuthenticationFailed = "Google authentication failed.";
+
+    /// <summary>
+    ///     UC-25 AF-25b: the target scope does not exist, is logically deleted, or has Google Sign-In
+    ///     switched off (FR-GO-03, FR-GO-13). Answered alike for all three, so the endpoint cannot be
+    ///     used to enumerate scopes or read their settings — a caller who may sign in learns that they
+    ///     may, and no one else learns anything.
+    /// </summary>
+    public const string GoogleSignInUnavailable = "Google sign-in is not available for this scope.";
+
+    /// <summary>
+    ///     UC-25 AF-25c: the address on the verified token is already used within the scope, by
+    ///     another Google User or by a <c>User</c> person (FR-GO-07). Unlike AF-25a/AF-25d this is
+    ///     named separately, and nothing is disclosed by that: the caller has proved to Google that
+    ///     the address is theirs, so being told it is taken tells them only about themselves.
+    /// </summary>
+    /// <remarks>
+    ///     Holds the same value as <see cref="PersonMessages.EmailAlreadyExists" /> — the same fact,
+    ///     answered by a different use case — which costs nothing because the two message maps are
+    ///     separate dictionaries. The same arrangement as <see cref="PersonNotFound" />.
+    /// </remarks>
+    public const string EmailAlreadyExists = "A person with this email already exists.";
 }
