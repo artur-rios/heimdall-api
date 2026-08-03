@@ -126,6 +126,29 @@ Beyond the `ArturRios.Util.Test` helpers:
 
 > Use `dotnet test --filter "Category=Unit"` or `"Category=Functional"` to run one kind at a time.
 
+### 5.1 Every run records a `.trx`
+
+`tests/Directory.Build.props` points every test project at `tests/default.runsettings`, which enables
+the `trx` logger. An ordinary `dotnet test` therefore writes a result file per project under
+`TestResults/` (git-ignored) and prints its path.
+
+This exists because a console summary is not evidence. A functional test failed once in a
+full-solution run, the summary was the only record, and the failing test's name was lost — the
+failure never reproduced in 23 subsequent runs, so there was nothing left to investigate. A `.trx`
+costs nothing per run and means the next intermittent failure identifies itself.
+
+To chase a failure that only appears occasionally, repeat the run and let the harness collect the
+names:
+
+```bash
+python scripts/flake_hunt.py --runs 25
+```
+
+It runs the whole solution in a loop, stops at the first failing run (`--keep-going` measures a rate
+instead), and prints every test any run recorded as failed. Hunt with the **whole solution** rather
+than a single project: a failure that only appears under the CPU contention of parallel test
+projects will not reproduce from one project alone.
+
 ## 6. Unit testing standard (Commands, Queries, Domain behavior)
 
 ### 6.1 Scope of a unit test
@@ -302,8 +325,23 @@ suite therefore:
 3. Exports the container's connection string into `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` (and
    `IDENTITY_MANAGER_DATA_DATABASETYPE=PostgreSql`) **before** the host is built, so
    `WebApiTest<Program>` boots against the container.
-4. **Resets state between tests** (truncate tables or run each test in a rolled-back transaction) so
-   tests remain independent and order-agnostic.
+4. **Keeps tests independent by making their data unique, not by resetting the database.** The
+   container's database accumulates rows for the whole run; nothing is truncated between tests and
+   no test runs in a rolled-back transaction. Independence comes from every test seeding its own
+   rows under identifiers no other test can produce — `Guid.NewGuid()` public identifiers,
+   `scope-{Guid:N}` names, `user-{Guid:N}@test.local` addresses — and asserting only about those
+   rows.
+
+   This is a deliberate choice, not an omission. Truncation would delete the roles and the master
+   system administrator that `DatabaseSeeder` writes at startup, which `SeedingTests` and the login
+   tests legitimately depend on, and a per-test transaction cannot wrap work done by the API's own
+   `DbContext` inside the host.
+
+   **What this asks of a new test:** never assert on a global count or an unfiltered query — the
+   only two in the suite (`Roles == 3`, and the master user counted by e-mail) are safe because
+   nothing else can create those rows. Filter every listing by something unique to the test, the way
+   `ScopeControllerViewTests` filters by the scope name it just generated. A test that counts *all*
+   scopes passes alone and fails the moment another class seeds one.
 
 This shared container/fixture is built **once** as test infrastructure; individual use-case tests
 just derive from the functional base class and use it.

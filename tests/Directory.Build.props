@@ -1,0 +1,12 @@
+<Project>
+
+  <!--
+    Scoped to tests/ on purpose: MSBuild walks up from each project to the nearest
+    Directory.Build.props, and every test project lives under this directory while no production
+    project does. Nothing under src/ is affected.
+  -->
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)default.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+</Project>

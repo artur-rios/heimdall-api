@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Applied to every test project through tests/Directory.Build.props, so an ordinary
+  `dotnet test` writes a .trx alongside the console output.
+
+  The reason is a real incident: a single functional test failed once in a full-solution run and the
+  console summary was the only record, so the failing test's name was lost and the failure could not
+  be reproduced in 23 subsequent runs. A .trx per run costs nothing and means the next intermittent
+  failure names itself. See scripts/flake_hunt.py for repeating a run to catch one.
+
+  ResultsDirectory is left at its default (each project's own TestResults/, already git-ignored) so
+  projects running concurrently cannot overwrite each other's results.
+-->
+<RunSettings>
+  <LoggerRunSettings>
+    <Loggers>
+      <Logger friendlyName="trx" enabled="True" />
+    </Loggers>
+  </LoggerRunSettings>
+</RunSettings>

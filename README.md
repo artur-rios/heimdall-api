@@ -250,6 +250,14 @@ dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
 dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
 ```
 
+Every run writes a `.trx` under each project's `TestResults/` (git-ignored), so a failure is always
+recorded by name rather than only as a console count. To chase a test that fails only occasionally,
+repeat the run and let the harness collect the names:
+
+```bash
+python scripts/flake_hunt.py --runs 25
+```
+
 See the [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) for
 the full testing standard.
 
