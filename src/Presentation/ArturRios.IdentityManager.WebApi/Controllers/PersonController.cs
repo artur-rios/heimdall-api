@@ -170,6 +170,27 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
+    ///     Removes a person's ownership of a scope (UC-22, FR-SC-08/FR-SC-10). The attribute keeps a
+    ///     <c>User</c> out — they can never be a System Admin nor an existing owner — while the rules
+    ///     that depend on data it cannot see are the handler's: whether the acting Scope Admin owns
+    ///     this scope (AF-22c), whether the scope is active and the named person actually owns it
+    ///     (AF-22a), and whether the scope would be left without an owner (AF-22b, NFR-12).
+    /// </summary>
+    [HttpDelete("scopes/{scopeId:guid}/owners/{personId:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<RemoveScopeOwnerCommandOutput?>>> RemoveScopeOwner(
+        Guid scopeId, Guid personId)
+    {
+        var command = new RemoveScopeOwnerCommand { ScopeId = scopeId, PersonId = personId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
     ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
     ///     therefore enforced by the handler.

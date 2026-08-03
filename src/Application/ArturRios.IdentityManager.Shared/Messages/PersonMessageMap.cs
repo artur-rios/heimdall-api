@@ -57,6 +57,11 @@ public static class PersonMessageMap
         [PersonMessages.AlreadyScopeOwner] = HttpStatusCodes.Ok,
         // AF-21b — the named person is not a usable ScopeAdmin.
         [PersonMessages.PersonNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
+        // UC-22 main flow — ownership removed. AF-22a reuses ScopeNotFound (404) for its scope half,
+        // AF-22b reuses ScopeWouldLoseLastOwner (409) and AF-22c NotScopeOwner (403).
+        [PersonMessages.ScopeOwnerRemovedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-22a — the named person holds no ownership row for this scope.
+        [PersonMessages.PersonNotScopeOwner] = HttpStatusCodes.NotFound,
         // UC-23 main flow — the User was promoted to owner. AF-23a reuses ScopeNotFound (404),
         // AF-23c NotScopeOwner (403), and the FR-PE-09 namespace guard EmailAlreadyExists (409).
         [PersonMessages.ScopeUserPromotedSuccessfully] = HttpStatusCodes.Ok,

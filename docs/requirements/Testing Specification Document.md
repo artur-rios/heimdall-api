@@ -453,7 +453,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
@@ -461,8 +461,9 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-24: **384 unit** and **293 functional** tests, all passing. Run them
-separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+Suite totals as of UC-22 — implemented last of UC-01…UC-24, after UC-23 and UC-24 had leapfrogged
+it: **398 unit** and **304 functional** tests, all passing. Run them separately with
+`--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
 the Command.Tests project, and `ApplicationControllerUpdateTests` to the functional suite.
@@ -492,6 +493,26 @@ matches).
 Its unit tests also pin an ordering guarantee rather than a flow: an actor the ownership checker
 rejects, naming a person who does not exist, must be refused with AF-21c and never AF-21b — the
 authorization answer must not depend on data the caller is not allowed to learn.
+
+UC-22 added `RemoveScopeOwnerCommandHandlerTests` to the Command.Tests project and
+`PersonControllerRemoveScopeOwnerTests` to the functional suite, and likewise has no validator test
+class. It repeats UC-21's ordering test on the inverse operation and adds two shapes of its own:
+
+- **Every refusal asserts the `scope_owner` row survives.** A removal endpoint that answered the
+  right status while still deleting the row would pass a status-only test, so each 403/404/409/401
+  case reads the join row back — from the fake repository at the unit layer, from PostgreSQL at the
+  functional one.
+- **The last-owner guard is tested from both sides of "live".** `GivenSoleOwner_…` covers the plain
+  NFR-12 case, and `GivenOnlyCoOwnerIsLogicallyDeleted_…` covers the one that makes the guard's
+  `!IsDeleted` filter a tested claim: a deleted co-owner does not keep a scope owned, so removing the
+  only live owner is still refused. The mirror case,
+  `GivenLogicallyDeletedTargetWithLiveCoOwner_…`, pins that a deleted *target* is nonetheless
+  removable — the stale row this endpoint exists to clear.
+
+It also contrasts with UC-21 on repetition a third way: `PersonControllerAddScopeOwnerTests` asserts
+a second call is an idempotent `200` and `PersonControllerPromoteScopeUserTests` a `409`, while
+`PersonControllerRemoveScopeOwnerTests` asserts a `404` — the row is gone, so the repeat meets
+AF-22a rather than finding anything to answer for.
 
 UC-23 added `PromoteScopeUserCommandHandlerTests` to the Command.Tests project and
 `PersonControllerPromoteScopeUserTests` to the functional suite, and likewise has no validator test

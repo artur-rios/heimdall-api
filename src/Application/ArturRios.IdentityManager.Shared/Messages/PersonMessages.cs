@@ -100,6 +100,16 @@ public static class PersonMessages
     /// </summary>
     public const string PersonNotValidScopeAdmin = "The person must be an existing, non-deleted ScopeAdmin.";
 
+    /// <summary>UC-22 success: the person's ownership of the scope was removed.</summary>
+    public const string ScopeOwnerRemovedSuccessfully = "Scope owner removed successfully.";
+
+    /// <summary>
+    ///     AF-22a: the person named for removal does not exist, or holds no ownership row for the
+    ///     target scope. Distinct from <see cref="NotScopeOwner" />, which is about the *caller* and
+    ///     answers 403; this one is about the *target* and answers 404.
+    /// </summary>
+    public const string PersonNotScopeOwner = "The person is not an owner of this scope.";
+
     /// <summary>UC-23 success: the person was promoted from User to owner of the scope.</summary>
     public const string ScopeUserPromotedSuccessfully = "Person promoted to scope owner successfully.";
 

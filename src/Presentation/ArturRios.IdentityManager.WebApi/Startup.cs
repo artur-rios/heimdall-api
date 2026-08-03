@@ -132,6 +132,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>,
                 AddScopeOwnerCommandHandler>();
+        // Likewise no validator for UC-22: both identifiers are route values.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>,
+                RemoveScopeOwnerCommandHandler>();
         // Likewise no validator for UC-23: both identifiers are route values.
         Builder.Services
             .AddScoped<ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>,
