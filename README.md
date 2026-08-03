@@ -119,7 +119,7 @@ request — see the
 | UC-26: Sign Out via Google | ✅ | [#27](https://github.com/artur-rios/identity-manager-api/issues/27) |
 | UC-27: View Google User | ✅ | [#28](https://github.com/artur-rios/identity-manager-api/issues/28) |
 | UC-28: Logical Delete Google User | ✅ | [#29](https://github.com/artur-rios/identity-manager-api/issues/29) |
-| UC-29: Hard Delete Google User | ⬜ | [#30](https://github.com/artur-rios/identity-manager-api/issues/30) |
+| UC-29: Hard Delete Google User | ✅ | [#30](https://github.com/artur-rios/identity-manager-api/issues/30) |
 
 ### Platform
 

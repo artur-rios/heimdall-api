@@ -183,6 +183,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>,
                 DeleteGoogleUserCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>,
+                HardDeleteGoogleUserCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,

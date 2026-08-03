@@ -85,4 +85,27 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
 
         return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Permanently (hard) deletes a Google User, removing the record for good (UC-29, FR-GO-16).
+    ///     Restricted to System Admins — the authorization matrix withholds this even from an owning
+    ///     Scope Admin, who may only delete logically (UC-28).
+    /// </summary>
+    /// <remarks>
+    ///     The one Google User endpoint where the attribute is the whole authorization rule: UC-29
+    ///     names a single actor and nothing about the decision depends on data, so the handler applies
+    ///     none and the command carries no acting person. Nothing cascades either — a Google User owns
+    ///     no dependent row.
+    /// </remarks>
+    [HttpDelete("{id:guid}/hard")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<HardDeleteGoogleUserCommandOutput?>>> HardDelete(
+        Guid scopeId, Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>(
+                new HardDeleteGoogleUserCommand { ScopeId = scopeId, Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
+    }
 }

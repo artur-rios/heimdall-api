@@ -453,15 +453,15 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `HardDeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
 | `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
-`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
+`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
-Suite totals as of UC-28: **440 unit** and **355 functional** tests, all passing. Run them separately
+Suite totals as of UC-29: **445 unit** and **364 functional** tests, all passing. Run them separately
 with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -505,6 +505,18 @@ nothing honours is not a deletion**: one confirms UC-27's default read stops ret
 refused a fresh sign-in (AF-25d) without a duplicate row appearing to route around the deletion.
 Asserting only `IsDeleted == true` would have passed against an implementation nothing downstream
 respected.
+
+UC-29 added `HardDeleteGoogleUserCommandHandlerTests` (5) and
+`GoogleUserControllerHardDeleteTests` (9), completing the Google Sign-In milestone. The unit half
+has **no authorization test**, deliberately: UC-29's only actor is the System Admin, the endpoint's
+`RoleRequirement` settles it entirely, and the command carries no acting person — so there is no
+rule at that level to test, and the functional half proves the endpoint enforces it instead. That
+includes an *owning* Scope Admin being refused, which is the whole difference between UC-28 and
+UC-29.
+
+One functional test asserts the scope and its other Google Users survive the deletion. The foreign
+key points from the Google User to the scope, so a cascade in the wrong direction would take
+everything in it — and would be silent in a suite that only checked the deleted row was gone.
 
 The substitute is deliberately **not** a trust-anything stub — a token still needs a valid HS256
 signature, the expected issuer and audience, and an unexpired lifetime, so the suite exercises the
