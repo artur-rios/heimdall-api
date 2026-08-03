@@ -249,6 +249,32 @@ unaffected either way.
 Google sign-in only ever produces a `User`-equivalent identity (FR-GO-04). It cannot create or
 authenticate a Scope Admin or System Admin, whatever the Google account is.
 
+`POST /api/auth/google/sign-out` (UC-26) ends a Google session. It revokes nothing — tokens here are
+stateless signed JWTs with an expiry, the strategy UC-11 established — so the endpoint confirms the
+caller still holds a live Google session and answers the success that tells the client to drop the
+token. That check is the substance: authentication reads no database per request, so a token outlives
+the account once it is deleted, and one naming a deleted or unknown Google User is refused.
+
+The Google Users of a scope are administered through four endpoints, all nested under the scope they
+belong to (FR-GO-06):
+
+| Endpoint | Use case | Who |
+| --- | --- | --- |
+| `GET /api/scopes/{scopeId}/google-users` | UC-27 | System Admin, or an owner of the scope |
+| `GET /api/scopes/{scopeId}/google-users/{id}` | UC-27 | The above, **or the Google User themselves** |
+| `DELETE /api/scopes/{scopeId}/google-users/{id}` | UC-28 | System Admin, or an owner of the scope |
+| `DELETE /api/scopes/{scopeId}/google-users/{id}/hard` | UC-29 | System Admin only |
+
+The by-id read is the one that admits a Google User, and it is why that endpoint carries no role
+attribute: a Google User's token is `User`-role, so anything strong enough to keep other Users out
+would lock out the actor the use case grants. The listing admits none of them.
+
+Both deletions accept a scope's `PublicId` in the path and refuse a Google User reached through the
+wrong one. The logical delete is idempotent — repeating it answers 200 with `alreadyDeleted: true`
+and writes nothing — and is honoured everywhere it matters: a deleted account cannot sign in
+(UC-25), cannot sign out, and is absent from reads unless `includeDeleted=true`. The hard delete has
+no idempotent path; a second call is a 404. Neither cascades, because a Google User owns nothing.
+
 ## Build
 
 ```bash
