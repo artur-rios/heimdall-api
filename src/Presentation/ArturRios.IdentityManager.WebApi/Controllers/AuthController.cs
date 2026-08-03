@@ -150,4 +150,30 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Ends the caller's Google-authenticated session (UC-26, FR-GO-18). Takes no request body for
+    ///     the reason <c>resend-verification</c> does not: the Google User is read from the bearer
+    ///     token, so a caller can only ever sign themselves out.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, deliberately. The authorization matrix grants Google sign-out to
+    ///     a Google User acting on themselves and marks it not-applicable for both administrator roles
+    ///     — who can never be Google Users (FR-GO-04) — so the rule is "the caller is a live Google
+    ///     User", which is data the attribute cannot see and the handler checks. It also keeps the
+    ///     endpoint to the two answers UC-26 defines: 200, or 401 for every rejection. A missing or
+    ///     malformed token is the other half of AF-26a and never reaches here — authentication answers
+    ///     it with the same 401.
+    /// </remarks>
+    [HttpPost("google/sign-out")]
+    public async Task<ActionResult<DataOutput<GoogleSignOutCommandOutput?>>> GoogleSignOut()
+    {
+        var command = new GoogleSignOutCommand();
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
 }

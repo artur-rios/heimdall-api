@@ -114,13 +114,21 @@ public static class AuthMessages
     public const string GoogleSignInSuccessful = "Google sign-in successful.";
 
     /// <summary>
-    ///     UC-25 AF-25a and AF-25d: the caller was not authenticated. Deliberately one message for
-    ///     both conditions — a token that fails verification (FR-GO-11) and a Google User that has
-    ///     been logically deleted (FR-GO-12) — for the reason UC-11 collapses its five rejections: the
-    ///     endpoint is anonymous, so a distinguishable answer would let anyone holding a Google token
-    ///     discover which accounts a scope has registered and which of them are deleted.
+    ///     UC-25 AF-25a and AF-25d, and UC-26 AF-26a: the caller was not authenticated. Deliberately
+    ///     one message for every condition — a token that fails verification (FR-GO-11), a Google User
+    ///     that has been logically deleted (FR-GO-12), and a sign-out whose token names no live Google
+    ///     User at all — for the reason UC-11 collapses its five rejections: a distinguishable answer
+    ///     would let a caller discover which accounts a scope has registered and which of them are
+    ///     deleted.
     /// </summary>
     public const string GoogleAuthenticationFailed = "Google authentication failed.";
+
+    /// <summary>
+    ///     UC-26 success (FR-GO-18): the caller held a live Google session and it is now over. Under
+    ///     this project's stateless token strategy nothing was revoked — the message is the
+    ///     instruction to discard the token, per UC-26 step 2.
+    /// </summary>
+    public const string GoogleSignOutSuccessful = "Google sign-out successful.";
 
     /// <summary>
     ///     UC-25 AF-25b: the target scope does not exist, is logically deleted, or has Google Sign-In

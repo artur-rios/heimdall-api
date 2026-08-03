@@ -4,7 +4,7 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="AuthMessages" /> value to its HTTP status code, following the UC-11,
-///     UC-12, UC-13, UC-14, UC-15, and UC-25 flows. Passed to the response resolver.
+///     UC-12, UC-13, UC-14, UC-15, UC-25, and UC-26 flows. Passed to the response resolver.
 /// </summary>
 public static class AuthMessageMap
 {
@@ -43,8 +43,10 @@ public static class AuthMessageMap
         // UC-25 main flow — the Google account was signed up or signed in and a token issued.
         [AuthMessages.GoogleSignInSuccessful] = HttpStatusCodes.Ok,
         // AF-25a and AF-25d — an unverifiable token and a deleted Google User answer alike, as
-        // UC-11's rejections do.
+        // UC-11's rejections do. Shared with UC-26 AF-26a, whose refusals are the same fact.
         [AuthMessages.GoogleAuthenticationFailed] = HttpStatusCodes.Unauthorized,
+        // UC-26 main flow — the Google session ended and the client should drop the token.
+        [AuthMessages.GoogleSignOutSuccessful] = HttpStatusCodes.Ok,
         // AF-25b — the scope is missing, deleted, or has the setting off. 403 rather than 404: the
         // use case refuses the operation without saying which of the three is the reason.
         [AuthMessages.GoogleSignInUnavailable] = HttpStatusCodes.Forbidden,
