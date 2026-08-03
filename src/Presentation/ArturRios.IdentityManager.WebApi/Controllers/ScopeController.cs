@@ -76,6 +76,26 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Turns Google Sign-In on or off for a scope (UC-24, FR-GO-01/FR-GO-02). The attribute keeps
+    ///     a <c>User</c> out — they can never be a System Admin nor an existing owner — while the
+    ///     rules that depend on data it cannot see are the handler's: whether the acting Scope Admin
+    ///     owns this scope (AF-24b) and whether the scope is active (AF-24a).
+    /// </summary>
+    [HttpPut("{id:guid}/google-signin")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SetGoogleSignInCommandOutput?>>> SetGoogleSignIn(
+        Guid id, [FromBody] SetGoogleSignInCommand command)
+    {
+        command.Id = id;
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
     /// </summary>
     [HttpGet]

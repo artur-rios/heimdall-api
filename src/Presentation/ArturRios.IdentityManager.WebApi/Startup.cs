@@ -112,6 +112,12 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>, DeleteScopeCommandHandler>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>, HardDeleteScopeCommandHandler>();
+        // UC-24 does have a validator despite carrying a single field: Enabled is nullable so an
+        // omitted value is refused (NFR-10) rather than binding to false and disabling the setting.
+        Builder.Services.AddScoped<IValidator<SetGoogleSignInCommand>, SetGoogleSignInCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>,
+                SetGoogleSignInCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateAdminCommand, CreatePersonCommandOutput>, CreateAdminCommandHandler>();
