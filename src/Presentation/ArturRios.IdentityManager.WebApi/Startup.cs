@@ -178,6 +178,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>,
                 GoogleSignOutCommandHandler>();
+        // UC-28 needs no validator either: both fields are typed route parameters, so there is no
+        // caller-supplied input NFR-10 could reject that the route would not have refused first.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>,
+                DeleteGoogleUserCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
         Builder.Services
             .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,

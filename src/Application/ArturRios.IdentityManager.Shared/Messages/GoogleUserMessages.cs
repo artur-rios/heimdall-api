@@ -40,4 +40,15 @@ public static class GoogleUserMessages
     ///     404s are: the caller failed to reach a scope, not a Google User.
     /// </summary>
     public const string NotScopeOwner = "You are not an owner of the target scope.";
+
+    /// <summary>
+    ///     UC-28 success: the Google User is logically deleted (FR-GO-15). Also carries the idempotent
+    ///     AF-28b path, where the record was already deleted and nothing was written — the
+    ///     specification requires both to answer 200, so the response's <c>AlreadyDeleted</c> flag is
+    ///     what tells them apart.
+    /// </summary>
+    public const string GoogleUserDeletedSuccessfully = "Google user deleted successfully.";
+
+    /// <summary>AF-28c: the caller is not allowed to delete the requested Google User.</summary>
+    public const string NotAuthorizedToDeleteGoogleUser = "You are not allowed to delete this google user.";
 }

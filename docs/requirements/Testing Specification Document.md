@@ -453,15 +453,15 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
 | `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
-`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
+`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
-Suite totals as of UC-27: **433 unit** and **345 functional** tests, all passing. Run them separately
+Suite totals as of UC-28: **440 unit** and **355 functional** tests, all passing. Run them separately
 with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -497,6 +497,14 @@ in one class rather than the usual one-class-per-endpoint split: the thing worth
 asymmetry between them — a Google User may read their own record but may never list a scope — and
 splitting the class would put the two halves of that single rule in two files where neither states
 it.
+
+UC-28 added `DeleteGoogleUserCommandHandlerTests` (7) and `GoogleUserControllerDeleteTests` (10).
+Two of the functional tests deliberately reach past the endpoint under test, because **a flag
+nothing honours is not a deletion**: one confirms UC-27's default read stops returning the record
+(FR-GO-17), and one signs an account up through UC-25, deletes it, and confirms the same GoogleId is
+refused a fresh sign-in (AF-25d) without a duplicate row appearing to route around the deletion.
+Asserting only `IsDeleted == true` would have passed against an implementation nothing downstream
+respected.
 
 The substitute is deliberately **not** a trust-anything stub — a token still needs a valid HS256
 signature, the expected issuer and audience, and an unexpired lifetime, so the suite exercises the
