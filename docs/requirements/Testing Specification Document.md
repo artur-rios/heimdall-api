@@ -415,7 +415,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `PromoteScopeUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
@@ -423,7 +423,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
 
-Suite totals as of UC-23: **371 unit** and **284 functional** tests, all passing. Run them
+Suite totals as of UC-24: **384 unit** and **293 functional** tests, all passing. Run them
 separately with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -474,6 +474,26 @@ The pair also contrasts with UC-21 on repetition: `PersonControllerAddScopeOwner
 second call is an idempotent `200`, while `PersonControllerPromoteScopeUserTests` asserts it is a
 `409` — the first promotion changed the role, so the repeat meets AF-23d rather than finding nothing
 to do.
+
+UC-24 added `SetGoogleSignInCommandHandlerTests` and `SetGoogleSignInCommandValidatorTests` to the
+Command.Tests project and `ScopeControllerSetGoogleSignInTests` to the functional suite. It is the
+first use case whose command carries a **single** field and still earns a validator test class, and
+the reason is the point of the coverage: `Enabled` is a `bool?` because a plain `bool` would bind a
+body that omits the field to `false` and silently *disable* Google Sign-In. Three tests pin that —
+the validator rejecting `null`, the handler refusing the validation failure, and
+`GivenEmptyBody_WhenPutGoogleSignIn_ThenBadRequestAndFlagIsUnchanged`, which sends `{}` against an
+*enabled* scope so a regression shows up as a flipped row rather than only a changed status code.
+
+Two smaller shapes it contributes:
+
+- **A toggle is tested in both directions.** The main flow is not one test but two — enable and
+  disable — at both layers, because "Enable/Disable" is one endpoint doing opposite things and a
+  handler that ignored the requested value would still pass the enable-only half.
+- **Every refusal asserts the persisted flag, not just the status.** AF-24b's whole content is that
+  an unauthorized actor changes nothing, so each 403/404/400/401 test reads
+  `google_sign_in_enabled` back from the database. The functional helper sends the SRD's wire body
+  (`{ enabled }`) as an anonymous object rather than a serialized command, so the test pins the
+  contract a client uses.
 
 UC-17 also carried a specification correction — application ownership was restricted to a
 `ScopeAdmin` who owns the application's scope — so the UC-16 tests were rewritten rather than merely

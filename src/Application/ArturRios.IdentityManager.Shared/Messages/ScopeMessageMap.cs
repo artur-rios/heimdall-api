@@ -32,6 +32,12 @@ public static class ScopeMessageMap
         // AF-01a — scope name already exists.
         [ScopeMessages.NameAlreadyExists] = HttpStatusCodes.Conflict,
         // AF-01d — an owner is not an existing, non-deleted ScopeAdmin.
-        [ScopeMessages.OwnerNotValidScopeAdmin] = HttpStatusCodes.BadRequest
+        [ScopeMessages.OwnerNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
+        // UC-24 main flow — Google Sign-In enabled or disabled. AF-24a reuses ScopeNotFound (404).
+        [ScopeMessages.GoogleSignInUpdatedSuccessfully] = HttpStatusCodes.Ok,
+        // AF-24b — actor is not an owner of the target scope.
+        [ScopeMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
+        // UC-24 (NFR-10) — the request omitted the value to set.
+        [ScopeMessages.EnabledRequired] = HttpStatusCodes.BadRequest
     };
 }

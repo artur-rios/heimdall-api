@@ -43,4 +43,17 @@ public static class ScopeMessages
     /// <summary>AF-01d: an owner does not reference an existing, non-deleted ScopeAdmin.</summary>
     public const string OwnerNotValidScopeAdmin =
         "One or more owners do not reference an existing, non-deleted ScopeAdmin.";
+
+    /// <summary>UC-24 success: the scope's Google Sign-In setting was changed.</summary>
+    public const string GoogleSignInUpdatedSuccessfully = "Google Sign-In setting updated successfully.";
+
+    /// <summary>
+    ///     AF-24b: a Scope Admin acted on a scope they do not own. Same wording as the
+    ///     <c>NotScopeOwner</c> of <see cref="PersonMessages" /> and <see cref="ApplicationMessages" />
+    ///     so every controller answers an unowned scope identically.
+    /// </summary>
+    public const string NotScopeOwner = "You are not an owner of the target scope.";
+
+    /// <summary>UC-24 (NFR-10): the Google Sign-In request did not say which value to set.</summary>
+    public const string EnabledRequired = "Enabled is required.";
 }
