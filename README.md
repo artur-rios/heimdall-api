@@ -115,7 +115,7 @@ request — see the
 | Use case | Status | Issue |
 | --- | --- | --- |
 | UC-24: Enable/Disable Google Sign-In | ✅ | [#25](https://github.com/artur-rios/identity-manager-api/issues/25) |
-| UC-25: Sign Up / Sign In via Google | ⬜ | [#26](https://github.com/artur-rios/identity-manager-api/issues/26) |
+| UC-25: Sign Up / Sign In via Google | ✅ | [#26](https://github.com/artur-rios/identity-manager-api/issues/26) |
 | UC-26: Sign Out via Google | ⬜ | [#27](https://github.com/artur-rios/identity-manager-api/issues/27) |
 | UC-27: View Google User | ⬜ | [#28](https://github.com/artur-rios/identity-manager-api/issues/28) |
 | UC-28: Logical Delete Google User | ⬜ | [#29](https://github.com/artur-rios/identity-manager-api/issues/29) |
@@ -224,6 +224,30 @@ is already verified is refused: a link mailed to it could do nothing when clicke
 > A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
 > identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
 > into a 500 that tells an anonymous caller their guess was a real account.
+
+### Google Sign-In
+
+`POST /api/auth/google` (UC-25) signs a Google account up or in against a scope: the caller sends the
+ID token they obtained from Google plus the scope's `PublicId`, and gets back the same kind of bearer
+token a password login yields. The first call for a given Google account in a given scope creates the
+Google User; every later one authenticates it.
+
+Two things must be true before it works. The scope must have Google Sign-In switched on through
+`PUT /api/scopes/{id}/google-signin` (UC-24) — it is off by default — and the API must know which
+OAuth client the tokens were minted for:
+
+| Variable | Value |
+| --- | --- |
+| `IDENTITY_MANAGER_GOOGLE_CLIENT_IDS` | Comma-separated Google OAuth client IDs accepted as an ID token's audience |
+
+Leave it unset and Google sign-in **refuses every token** with a 401, warning once at start-up. Unlike
+the email fallback, this is not a convenience mode: verification needs an audience to check against
+(NFR-13), and a verifier with no configured client could only reject everything or trust everything —
+so it rejects. Every other endpoint keeps working; a scope that never enabled the feature is
+unaffected either way.
+
+Google sign-in only ever produces a `User`-equivalent identity (FR-GO-04). It cannot create or
+authenticate a Scope Admin or System Admin, whatever the Google account is.
 
 ## Build
 

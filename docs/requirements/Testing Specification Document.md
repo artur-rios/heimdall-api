@@ -453,20 +453,39 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
 | `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
 | `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
-`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`) |
+`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
-Suite totals as of UC-22 — implemented last of UC-01…UC-24, after UC-23 and UC-24 had leapfrogged
-it: **398 unit** and **304 functional** tests, all passing. Run them separately with
-`--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+Suite totals as of UC-25: **412 unit** and **318 functional** tests, all passing. Run them separately
+with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
 the Command.Tests project, and `ApplicationControllerUpdateTests` to the functional suite.
+
+UC-25 added `GoogleSignInCommandHandlerTests` and `AuthControllerGoogleSignInTests`, 14 tests each,
+covering both halves of the main flow and AF-25a…AF-25d. Its functional half also added
+`Support/TestGoogleTokens`, and is worth reading before writing tests for UC-26…UC-29, because it
+solves a problem those use cases inherit: **how to test an endpoint whose input is verified by a
+third party.**
+
+`WebApiTest<T>` keeps its `WebApplicationFactory` private and its `Gateway` protected-readonly, so a
+functional test cannot replace a DI registration — every substitution in this suite is chosen at
+start-up from the environment, as `Startup.AddEmailSenders` is. `PostgresFixture` therefore publishes
+`IDENTITY_MANAGER_GOOGLE_TEST_SIGNING_SECRET`, which makes the host under test resolve
+`LocalGoogleIdTokenVerifier`, and `TestGoogleTokens` mints ID tokens signed with the same secret.
+Without it only AF-25a and AF-25b would be reachable: the main flow, AF-25c, and AF-25d all sit
+behind token verification, and §7.4 asks for every alternative flow.
+
+The substitute is deliberately **not** a trust-anything stub — a token still needs a valid HS256
+signature, the expected issuer and audience, and an unexpired lifetime, so the suite exercises the
+same verification path a real deployment does and only the signing authority differs. Two guards keep
+it out of production: `Startup` never registers it in the Production environment, and never without
+that variable explicitly set. No `.env` file carries it.
 
 UC-19 added `DeleteApplicationCommandHandlerTests` to the Command.Tests project and
 `ApplicationControllerDeleteTests` to the functional suite. It has no validator test class: the

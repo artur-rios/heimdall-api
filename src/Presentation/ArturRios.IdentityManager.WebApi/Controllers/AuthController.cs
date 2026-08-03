@@ -124,4 +124,30 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Signs a Google account up or in against a scope and returns a token (UC-25,
+    ///     FR-GO-03…FR-GO-13). The caller sends the ID token they obtained from Google and the
+    ///     <c>PublicId</c> of the scope they are entering; the first call for a given Google account
+    ///     in a given scope creates the Google User, every later one authenticates it. Open to
+    ///     anonymous callers for the same reason <c>login</c> is — this is where a Google User gets
+    ///     the token every other endpoint requires.
+    /// </summary>
+    /// <remarks>
+    ///     Both 401 flows answer alike (AF-25a, AF-25d), as UC-11's do, so an anonymous caller cannot
+    ///     use the endpoint to learn which Google accounts a scope has registered or which were
+    ///     deleted. AF-25b answers 403 for a missing, deleted, and disabled scope alike — a scope is
+    ///     not enumerable through here either. Only AF-25c (409) is named, and it discloses nothing:
+    ///     the caller has already proved the address is theirs.
+    /// </remarks>
+    [HttpPost("google")]
+    [AllowAnonymous]
+    public async Task<ActionResult<DataOutput<GoogleSignInCommandOutput?>>> GoogleSignIn(
+        [FromBody] GoogleSignInCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<GoogleSignInCommand, GoogleSignInCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+    }
 }

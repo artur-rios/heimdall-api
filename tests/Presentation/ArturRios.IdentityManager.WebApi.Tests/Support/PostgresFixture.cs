@@ -1,5 +1,6 @@
 using ArturRios.IdentityManager.Data.Configuration;
 using ArturRios.IdentityManager.Data.Seeding;
+using ArturRios.IdentityManager.WebApi.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.PostgreSql;
@@ -27,6 +28,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>Password the master system administrator is seeded with.</summary>
     public const string MasterUserPassword = "Str0ng-Master-Pass!";
 
+    /// <summary>
+    ///     Secret the suite's stand-in Google ID tokens are signed with (UC-25). Long enough for
+    ///     HMAC-SHA256, which refuses a key shorter than its 256-bit output.
+    /// </summary>
+    public const string GoogleTestSigningSecret = "functional-tests-google-id-token-signing-secret";
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine")
         .Build();
 
@@ -46,6 +53,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(TokenSecretVariable, "functional-tests-signing-secret-key");
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "identity-manager-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "identity-manager-tests");
+
+        // UC-25 verifies Google ID tokens. Publishing this secret makes the host under test resolve
+        // LocalGoogleIdTokenVerifier instead of the real one, so the suite exercises sign-up,
+        // sign-in, AF-25c, and AF-25d — all of which sit behind verification — without reaching
+        // Google. Tokens still have to be validly signed; TestGoogleTokens mints them with this same
+        // secret. Never set outside the suite: Startup ignores it in Production and no .env file
+        // carries it.
+        Environment.SetEnvironmentVariable(
+            GoogleSignInOptions.TestSigningSecretVariable, GoogleTestSigningSecret);
 
         // The seeder refuses to start without a configured master user.
         Environment.SetEnvironmentVariable(MasterUserOptions.NameVariable, "Master User");

@@ -10,6 +10,13 @@
     <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
     <PackageReference Include="ArturRios.Messaging" Version="1.1.0" />
     <PackageReference Include="ArturRios.Util.WebApi" Version="3.0.0" />
+    <!-- UC-25 verifies Google ID tokens itself (GoogleIdTokenVerifier) rather than through the
+         library's IGoogleTokenVerifier, whose payload carries no name or picture claim and so cannot
+         populate a Google User (FR-GO-05). Both packages arrive transitively via ArturRios.Util.WebApi;
+         they are declared here because this project uses their types directly, and pinned to the
+         versions that package already resolves. -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Map" Version="2.0.0" />

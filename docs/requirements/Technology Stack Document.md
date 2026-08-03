@@ -79,6 +79,8 @@ The data access pattern is **repository-based**: application handlers depend on 
 | Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
 | Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`, `Serilog.Sinks.Map`) | `4.4.0` / `10.0.0` / `2.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory is configurable via environment variable. |
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `IDENTITY_MANAGER_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
+| Google ID token verification | **Google.Apis.Auth** | `1.75.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
+| Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.19.2` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
 | Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ResponseResolver` maps it to an HTTP response. |
 | API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Enabled with JWT auth support (`UseSwaggerGen(jwtAuthentication: true)`). |
 | Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `Startup.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
@@ -121,6 +123,8 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | First-party | ArturRios.Data.PostgreSql | `3.0.0` |
 | Data | Microsoft.EntityFrameworkCore.Design | `10.0.10` |
 | Data | EFCore.NamingConventions | `10.0.1` |
+| Authentication | Google.Apis.Auth | `1.75.0` |
+| Authentication | Microsoft.IdentityModel.JsonWebTokens | `8.19.2` |
 | Validation | FluentValidation | `12.1.1` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
