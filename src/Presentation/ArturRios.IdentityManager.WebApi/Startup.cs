@@ -210,6 +210,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>,
                 ListScopeApplicationsQueryHandler>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<GetGoogleUserByIdQuery, GoogleUserOutput>,
+                GetGoogleUserByIdQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>,
+                ListScopeGoogleUsersQueryHandler>();
 
         // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
         // handler resolves them all as IEnumerable, so new checks are added by registering another.
