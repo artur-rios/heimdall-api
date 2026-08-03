@@ -35,6 +35,10 @@ flowchart TD
     M --> N["Move issue → Done and close it"]
 ```
 
+> The diagram shows the default flow, where a human reviews and merges. In an authorized batch run
+> the agent merges its own pull request instead — every other step, including the testing gate, is
+> identical. See [Step 7.1](#step-71--authorized-batch-runs).
+
 ## 3. Issue status lifecycle
 
 Each use case is tracked by its GitHub issue on the project board. The `Status` field moves through
@@ -120,7 +124,30 @@ is linked to the PR.
 - The **feature branch is deleted** after the merge.
 
 > Review and merge are **human actions**. An agent may prepare and push the PR, but must not
-> self-approve or merge it.
+> self-approve or merge it. The single exception is an authorized batch run — see
+> [Step 7.1](#step-71--authorized-batch-runs).
+
+### Step 7.1 — Authorized batch runs
+
+When several use cases are delivered in one unattended run, the human approval gates would stop the
+run at every use case, which defeats the point of batching them. For a **batch run only**, an agent
+may merge its own pull requests, subject to all of the following:
+
+- **The batch was authorized up front.** A human agreed to the specific use cases, in order, and was
+  told explicitly that the agent would merge, close the issues, and delete the branches. A general
+  instruction to work autonomously is not this authorization.
+- **The invariant still holds.** One use case = one branch = one issue = one pull request. Use cases
+  are never batched into a shared branch or a shared pull request, so the run stays reviewable after
+  the fact.
+- **The testing gate is unchanged.** The full suite is run and read for every use case, per Step 5.
+  A merge on an unread or failing suite is never permitted.
+- **No protection is bypassed.** No `--admin` merge, no self-approval to satisfy a required review,
+  no force-push, and no disabling or filtering of a test to make the suite green.
+- **A failure stops the whole run.** A red suite, a merge conflict, an ambiguous specification, or a
+  requirement that does not exist ends the batch. Already-merged use cases stay merged; the failing
+  branch and its pull request are left in place as evidence.
+
+Outside an authorized batch run, Step 7 applies as written: a human reviews and a human merges.
 
 ### Step 8 — Close the issue
 
@@ -137,7 +164,8 @@ A use case is done only when **all** of the following hold:
 - [ ] Unit tests cover each handler and new Domain behavior (main + applicable `AF-xx`).
 - [ ] Functional tests cover each endpoint (main + every `AF-xx`, including authorization).
 - [ ] The full test suite passes (`Category=Unit` and `Category=Functional`).
-- [ ] A pull request was reviewed by a human and merged to `main`.
+- [ ] A pull request was merged to `main` — reviewed by a human, or merged by an agent under an
+      authorized batch run (Step 7.1).
 - [ ] The feature branch was deleted.
 - [ ] The issue is in **Done** and closed.
 
