@@ -20,6 +20,7 @@ public class AppDbContext(
     public DbSet<GoogleUser> GoogleUsers { get; init; }
     public DbSet<ScopeOwner> ScopeOwners { get; init; }
     public DbSet<ScopeUser> ScopeUsers { get; init; }
+    public DbSet<ScopePermission> ScopePermissions { get; init; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; init; }
     public DbSet<EmailVerificationToken> EmailVerificationTokens { get; init; }
 
@@ -41,6 +42,7 @@ public class AppDbContext(
         modelBuilder.Entity<Role>().Configure();
         modelBuilder.Entity<Application>().Configure();
         modelBuilder.Entity<GoogleUser>().Configure();
+        modelBuilder.Entity<ScopePermission>().Configure();
         modelBuilder.Entity<ScopeOwner>().Configure();
         modelBuilder.Entity<ScopeUser>().Configure();
         modelBuilder.Entity<PasswordResetToken>().Configure();

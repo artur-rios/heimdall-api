@@ -52,4 +52,7 @@ public class Scope : Entity
 
     /// <summary>Google Users contained in this scope.</summary>
     public ICollection<GoogleUser> GoogleUsers { get; set; } = new List<GoogleUser>();
+
+    /// <summary>Scope-specific permissions defined within this scope.</summary>
+    public ICollection<ScopePermission> ScopePermissions { get; set; } = new List<ScopePermission>();
 }
