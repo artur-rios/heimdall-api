@@ -116,11 +116,16 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-31: Create Scope Permission | 🚧 | — |
-| UC-32: View Scope Permission | 🚧 | — |
-| UC-33: Update Scope Permission | 🚧 | — |
-| UC-34: Logical Delete Scope Permission | 🚧 | — |
-| UC-35: Hard Delete Scope Permission | 🚧 | — |
+| UC-31: Create Scope Permission | ✅ | — |
+| UC-32: View Scope Permission | ✅ | — |
+| UC-33: Update Scope Permission | ✅ | — |
+| UC-34: Logical Delete Scope Permission | ✅ | — |
+| UC-35: Hard Delete Scope Permission | ✅ | — |
+
+> These five were delivered together on one branch rather than one branch, issue, and pull request
+> each, so they carry no issue link. See the
+> [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) for the
+> standard the rest of the tracker follows.
 
 ### Google Sign-In
 

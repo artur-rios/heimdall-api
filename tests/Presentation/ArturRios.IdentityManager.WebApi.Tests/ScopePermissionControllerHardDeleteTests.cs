@@ -113,8 +113,8 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     [FunctionalFact]
     public async Task GivenLogicallyDeletedScopePermission_WhenHardDeleteScopePermission_ThenOkAndRowIsGone()
     {
-        // Given a permission already logically deleted by UC-34 or by UC-04's scope cascade — the
-        // lookup finds it regardless, so a cleanup pass can purge it
+        // Given a permission already logically deleted by UC-34, sitting in a logically deleted
+        // scope — neither flag is consulted by the lookup, so a cleanup pass can purge it
         var scope = await SeedScopeAsync(isDeleted: true);
         var permission = await SeedScopePermissionAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));

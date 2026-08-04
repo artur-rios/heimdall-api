@@ -53,9 +53,10 @@ public class DeleteScopePermissionCommandHandler(
             return output.WithError(ScopePermissionMessages.NotScopeOwner);
         }
 
-        // AF-34b: already deleted — whether directly or by UC-04's cascade from its scope — so there
-        // is nothing to write. UpdatedAt is left alone: the row already carries the requested state,
-        // and re-stamping it would misreport when the deletion happened.
+        // AF-34b: already deleted by an earlier call, so there is nothing to write. It cannot have
+        // arrived here from its scope: logically deleting a scope (UC-04) does not cascade to its
+        // permissions. UpdatedAt is left alone — the row already carries the requested state, and
+        // re-stamping it would misreport when the deletion happened.
         if (permission.IsDeleted)
         {
             return output

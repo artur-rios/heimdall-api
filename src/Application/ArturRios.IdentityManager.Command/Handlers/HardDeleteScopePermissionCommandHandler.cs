@@ -28,8 +28,8 @@ public class HardDeleteScopePermissionCommandHandler(
         var output = DataOutput<HardDeleteScopePermissionCommandOutput?>.New;
 
         // AF-35a: the permission must exist inside the addressed scope. The lookup omits an
-        // !IsDeleted filter — a logically deleted permission, whether by UC-34 or by UC-04's cascade
-        // from its scope, is exactly what a cleanup pass starts from and must still be purgeable. The
+        // !IsDeleted filter — a permission logically deleted by UC-34 is exactly what a cleanup pass
+        // starts from and must still be purgeable. The
         // route's scopeId qualifies it: an unknown permission, an unknown scope, and a permission
         // living in another scope are all one 404, because the addressed resource genuinely does not
         // exist in any of the three cases. A repeated call lands here too — the row is already gone,

@@ -4,7 +4,7 @@
 
 This document defines **how a use case is tested once it has been implemented**. It is a standard
 to be followed by any human or agent that builds tests for this project. Following it guarantees
-that every use case (UC-01 … UC-29 in the [Use Case Specification Document](Use%20Case%20Specification%20Document.md))
+that every use case (UC-01 … UC-35 in the [Use Case Specification Document](Use%20Case%20Specification%20Document.md))
 receives the same shape of testing, with the same tools, naming, and structure.
 
 The rule is simple:
@@ -453,15 +453,15 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `HardDeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
-| `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
+| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `HardDeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication`, `CreateScopePermission`, `UpdateScopePermission`, `DeleteScopePermission`, `HardDeleteScopePermission` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetScopePermissionByIdQueryHandlerTests`, `ListScopePermissionsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
 | `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
 | `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
 | `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
 | `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
-`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
+`AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `ScopePermissionController*`, `AuthControllerScopePermissionClaim`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
-Suite totals as of UC-29: **445 unit** and **364 functional** tests, all passing. Run them separately
+Suite totals as of UC-35: **520 unit** and **428 functional** tests, all passing. Run them separately
 with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
@@ -616,6 +616,39 @@ added to. `CreateApplicationCommandHandlerTests` lost its `User`-actor and `SCOP
 and gained the Scope Admin equivalents; `ApplicationControllerCreateTests` gained the `User`-role
 `403` and the `User`-as-owner `400`. A use-case correction is expected to update the tests that
 pinned the old behaviour, in the same change.
+
+UC-31…UC-35 added 75 unit and 64 functional tests: `CreateScopePermission`,
+`UpdateScopePermission`, `DeleteScopePermission`, and `HardDeleteScopePermission` handler tests plus
+the two validator classes (72 in Command.Tests and Query.Tests), three more cases in
+`IdentityUserMapperTests`, and one functional class per endpoint —
+`ScopePermissionControllerCreate`, `…List`, `…GetById`, `…Update`, `…Delete`, `…HardDelete` — with
+`AuthControllerScopePermissionClaimTests` alongside them. UC-35's unit half has no authorization
+test, for the reason UC-20 and UC-29 don't either: its only actor is the System Admin, so
+`[RoleRequirement]` settles it and the functional half proves it, including an *owning* Scope Admin
+being refused. Three shapes are new here:
+
+- **The claim is tested where it is read, not only where it is written.** `IncludeAsJwtClaim` is a
+  column, and a column nothing reads is not a feature — the same argument UC-28 makes about a
+  deletion flag. `AuthControllerScopePermissionClaimTests` therefore logs in through
+  `POST /api/auth/login` and decodes the issued token, covering all four halves of FR-AU-08: a User
+  gets their scope's flagged names and not the unflagged ones, a Scope Admin gets the union over the
+  scopes they own, a flagged-but-deleted permission is absent, and a System Admin carries no such
+  claim at all. Asserting the flag round-trips through the CRUD endpoints would have passed against
+  an issuer that never consulted it.
+- **A scope-qualified route is tested for the wrong scope, not just the wrong id.** Every read and
+  write has a `GivenScopePermissionOfAnotherScope_…ThenNotFound` case. The permission exists and the
+  caller may be entitled to it in its own scope, so a handler that ignored the route's `scopeId`
+  would answer `200` and leak a resource across a boundary while every unknown-id test still passed.
+- **A permission's deletion state is independent of its scope's.** UC-04 does not cascade to
+  permissions, so both delete endpoints seed a permission inside a logically deleted scope and assert
+  the handler answers from the permission's own flag — `200` with `AlreadyDeleted` for UC-34, a
+  successful purge for UC-35. The pair also repeats the UC-19/UC-20 contrast on a second call: UC-34
+  is an idempotent `200`, UC-35 a `404`.
+
+One create test pins an absence rather than a rule: `GivenDuplicateName_…ThenBothAreCreated`. No
+`FR-SP` requirement makes a permission name unique within its scope, so the test states that on
+purpose — if uniqueness is ever wanted, it is a specification change and this test is what fails
+first.
 
 ### 10.2 Testing an endpoint that answers the same way twice
 

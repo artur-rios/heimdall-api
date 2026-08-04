@@ -13,8 +13,9 @@ namespace ArturRios.IdentityManager.WebApi.Tests;
 
 // Functional tests for DELETE /api/scopes/{scopeId}/permissions/{id} (UC-34, FR-SP-07): the main flow
 // for a System Admin and for the owning Scope Admin, AF-34a (unknown id, wrong scope), AF-34b (already
-// deleted — directly, by a repeated call, or by UC-04's scope cascade), AF-34e (a Scope Admin who does
-// not own the scope), and the framework-level flows (403 for a User, 401 unauthenticated).
+// deleted — seeded that way, by a repeated call, or sitting inside a logically deleted scope), AF-34e
+// (a Scope Admin who does not own the scope), and the framework-level flows (403 for a User, 401
+// unauthenticated).
 [Collection(nameof(FunctionalCollection))]
 public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -184,10 +185,11 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     }
 
     [FunctionalFact]
-    public async Task GivenScopePermissionDeletedByItsScopeCascade_WhenDeleteScopePermission_ThenOkAndAlreadyDeleted()
+    public async Task GivenDeletedScopePermissionInLogicallyDeletedScope_WhenDeleteScopePermission_ThenOkAndAlreadyDeleted()
     {
-        // Given a permission already carrying IsDeleted from UC-04's cascade off its scope: the
-        // handler does not consult the scope's own state, it just finds the deleted row (AF-34b)
+        // Given a deleted permission inside a logically deleted scope. UC-04 does not cascade to
+        // permissions, so the two flags are independent; the handler does not consult the scope's
+        // own state either way, it just finds the deleted row (AF-34b)
         var scope = await SeedScopeAsync(isDeleted: true);
         var permission = await SeedScopePermissionAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
