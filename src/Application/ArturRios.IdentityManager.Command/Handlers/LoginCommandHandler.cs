@@ -82,7 +82,7 @@ public class LoginCommandHandler(
 
         // UC-11 step 6 (FR-AU-03/04). A User claims the scope they belong to, a Scope Admin the live
         // scopes they own, a System Admin neither — a deleted scope is never claimed.
-        var token = tokenIssuer.Issue(new AuthTokenSubject(
+        var token = await tokenIssuer.IssueAsync(new AuthTokenSubject(
             person.PublicId,
             (int)person.RoleId,
             person.RoleId == (long)Roles.User ? person.ScopeMembership!.Scope.PublicId : null,

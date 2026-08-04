@@ -88,7 +88,7 @@ public class GoogleSignInCommandHandler(
         // Google account is never a ScopeAdmin or SystemAdmin — and the one scope it belongs to.
         // Internal bigint Ids never reach a token (NFR-15), and OwnedScopeIds is empty because
         // ownership is a ScopeAdmin concept.
-        var token = tokenIssuer.Issue(new AuthTokenSubject(
+        var token = await tokenIssuer.IssueAsync(new AuthTokenSubject(
             googleUser.PublicId,
             (int)Roles.User,
             scope.PublicId,

@@ -27,11 +27,13 @@ public record AuthToken(string Token, DateTime ExpiresAt);
 /// <summary>
 ///     Issues the authentication token UC-11 returns on a successful login (FR-AU-03). The signing
 ///     scheme and the claim vocabulary belong to the presentation layer, so the application layer
-///     only says who the token is for.
+///     only says who the token is for. The call is asynchronous because the presentation's
+///     implementation reads the acting scope's flagged permissions from the database before it
+///     builds the claims (UC-31…UC-35, FR-SP).
 /// </summary>
 public interface IAuthTokenIssuer
 {
     /// <param name="subject">The person the token represents, and the scopes it should claim.</param>
     /// <returns>The signed token and its expiry.</returns>
-    AuthToken Issue(AuthTokenSubject subject);
+    Task<AuthToken> IssueAsync(AuthTokenSubject subject);
 }

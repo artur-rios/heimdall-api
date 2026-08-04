@@ -45,8 +45,8 @@ public class GoogleSignInCommandHandlerTests
     {
         var issuer = new Mock<IAuthTokenIssuer>();
         issuer
-            .Setup(i => i.Issue(It.IsAny<AuthTokenSubject>()))
-            .Returns(new AuthToken("issued-token", TokenExpiry));
+            .Setup(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()))
+            .ReturnsAsync(new AuthToken("issued-token", TokenExpiry));
         return (issuer.Object, issuer);
     }
 
@@ -158,7 +158,7 @@ public class GoogleSignInCommandHandlerTests
         // Then — the existing row was reused, not duplicated
         var stored = (await googleUsers.GetAllAsync()).Data!.Single();
         Assert.Equal(existing.PublicId, stored.PublicId);
-        issuerMock.Verify(i => i.Issue(It.Is<AuthTokenSubject>(s => s.PersonId == existing.PublicId)), Times.Once);
+        issuerMock.Verify(i => i.IssueAsync(It.Is<AuthTokenSubject>(s => s.PersonId == existing.PublicId)), Times.Once);
     }
 
     [UnitFact]
@@ -180,7 +180,7 @@ public class GoogleSignInCommandHandlerTests
         // scope it belongs to, and no owned scopes
         var created = (await googleUsers.GetAllAsync()).Data!.Single();
         issuerMock.Verify(
-            i => i.Issue(It.Is<AuthTokenSubject>(s =>
+            i => i.IssueAsync(It.Is<AuthTokenSubject>(s =>
                 s.PersonId == created.PublicId &&
                 s.RoleId == (int)Roles.User &&
                 s.ScopeId == scope.PublicId &&
@@ -403,7 +403,7 @@ public class GoogleSignInCommandHandlerTests
         var created = stored.Single(x => x.ScopeId == targetScope.Id);
         Assert.NotEqual(existing.PublicId, created.PublicId);
         issuerMock.Verify(
-            i => i.Issue(It.Is<AuthTokenSubject>(s =>
+            i => i.IssueAsync(It.Is<AuthTokenSubject>(s =>
                 s.PersonId == created.PublicId && s.ScopeId == targetScope.PublicId)),
             Times.Once);
     }

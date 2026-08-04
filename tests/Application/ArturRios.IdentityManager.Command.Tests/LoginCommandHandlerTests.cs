@@ -89,10 +89,11 @@ public class LoginCommandHandlerTests
     {
         public AuthTokenSubject? Subject { get; private set; }
 
-        public AuthToken Issue(AuthTokenSubject subject)
+        public Task<AuthToken> IssueAsync(AuthTokenSubject subject)
         {
             Subject = subject;
-            return new AuthToken("issued-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            return Task.FromResult(
+                new AuthToken("issued-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
     }
 
