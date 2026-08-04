@@ -11,6 +11,8 @@ password recovery, email verification, and Google Sign-In for multiple client sy
   more scopes; a `SystemAdmin` governs the whole system and belongs to no scope.
 - **Persons & applications.** Manages human identities (persons) and non-human identities
   (applications, each owned by a Scope Admin who owns the application's scope).
+- **Scope-specific permissions.** Each scope can define its own permissions, and a permission
+  flagged `IncludeAsJwtClaim` is folded into the JWT issued to identities acting within that scope.
 - **Authentication.** Password-based login (JWT), password recovery, email verification, and
   optional Google Sign-In per scope.
 - **Deletion strategies.** Both logical (soft) and hard deletion, with well-defined cascade rules.
@@ -47,7 +49,7 @@ Detailed documentation lives under [`docs/requirements`](docs/requirements):
 - [System Requirements Document](docs/requirements/System%20Requirements%20Document.md) — functional
   and non-functional requirements, data model, endpoints, and authorization matrix.
 - [Use Case Specification Document](docs/requirements/Use%20Case%20Specification%20Document.md) —
-  the 29 use cases with flows and alternative flows.
+  the use cases with flows and alternative flows.
 - [Operations & Infrastructure Document](docs/requirements/Operations%20%26%20Infrastructure%20Document.md) —
   technical foundation and the health-check feature.
 - [Technology Stack Document](docs/requirements/Technology%20Stack%20Document.md) — the technologies,
@@ -59,7 +61,7 @@ Detailed documentation lives under [`docs/requirements`](docs/requirements):
 
 ## Use case status
 
-Delivery tracker for the 29 use cases in the
+Delivery tracker for the use cases in the
 [Use Case Specification Document](docs/requirements/Use%20Case%20Specification%20Document.md), plus
 the platform work that is not itself a use case. Each one ships on its own branch, issue, and pull
 request — see the
@@ -109,6 +111,16 @@ request — see the
 | UC-18: Update Application | ✅ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
 | UC-19: Logical Delete Application | ✅ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
 | UC-20: Hard Delete Application | ✅ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
+
+### Scope Permission Management
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-31: Create Scope Permission | 🚧 | — |
+| UC-32: View Scope Permission | 🚧 | — |
+| UC-33: Update Scope Permission | 🚧 | — |
+| UC-34: Logical Delete Scope Permission | 🚧 | — |
+| UC-35: Hard Delete Scope Permission | 🚧 | — |
 
 ### Google Sign-In
 
