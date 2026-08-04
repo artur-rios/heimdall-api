@@ -5,9 +5,9 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 /// <summary>
 ///     Maps each <see cref="ScopePermissionMessages" /> value to its HTTP status code, following the
 ///     UC-31 – UC-35 flows. Passed to the response resolver. The single <see cref="ScopePermissionMessages.NotScopeOwner" />
-///     message covers the scope-ownership refusal for create, update, and delete: a scope permission
-///     has no owner of its own, so owning the scope is the only authorization there is. UC-35's only
-///     refusals are the framework's: 403 from [RoleRequirement], 401 unauthenticated.
+///     message covers the scope-ownership refusal for create, retrieve, update, and delete: a scope
+///     permission has no owner of its own, so owning the scope is the only authorization there is.
+///     UC-35's only refusals are the framework's: 403 from [RoleRequirement], 401 unauthenticated.
 /// </summary>
 public static class ScopePermissionMessageMap
 {
@@ -17,7 +17,7 @@ public static class ScopePermissionMessageMap
         [ScopePermissionMessages.ScopePermissionCreatedSuccessfully] = HttpStatusCodes.Created,
         // AF-31a — scope not found.
         [ScopePermissionMessages.ScopeNotFound] = HttpStatusCodes.NotFound,
-        // AF-31e / AF-33e / AF-34e — acting Scope Admin does not own the target scope.
+        // AF-31e / AF-32e / AF-33e / AF-34e — acting Scope Admin does not own the target scope.
         [ScopePermissionMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
         // AF-31d — invalid input.
         [ScopePermissionMessages.NameRequired] = HttpStatusCodes.BadRequest,

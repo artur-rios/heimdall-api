@@ -4,9 +4,9 @@ namespace ArturRios.IdentityManager.Shared.Messages;
 ///     Canonical messages produced by the scope-permission use cases (UC-31 – UC-35). Each is mapped
 ///     to an HTTP status code in <see cref="ScopePermissionMessageMap" />. A scope permission is a
 ///     scope-child resource — it carries no separate owner of its own — so authorization is the
-///     scope-ownership check, and a single <see cref="NotScopeOwner" /> covers create, update, and
-///     delete. UC-35's only actor is the System Admin, settled entirely by the endpoint's role
-///     requirement, so its single refusal message is the framework's 403.
+///     scope-ownership check, and a single <see cref="NotScopeOwner" /> covers create, retrieve,
+///     update, and delete. UC-35's only actor is the System Admin, settled entirely by the
+///     endpoint's role requirement, so its single refusal message is the framework's 403.
 /// </summary>
 public static class ScopePermissionMessages
 {
@@ -17,8 +17,8 @@ public static class ScopePermissionMessages
     public const string ScopeNotFound = "Scope not found.";
 
     /// <summary>
-    ///     AF-31e / AF-33e / AF-34e: the caller is not a System Admin and does not own the target
-    ///     scope, so they may not manage the scope's permissions.
+    ///     AF-31e / AF-32e / AF-33e / AF-34e: the caller is not a System Admin and does not own the
+    ///     target scope, so they may not manage or retrieve the scope's permissions.
     /// </summary>
     public const string NotScopeOwner = "You are not an owner of the target scope.";
 
