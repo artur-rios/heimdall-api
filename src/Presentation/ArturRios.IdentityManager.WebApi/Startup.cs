@@ -200,6 +200,20 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>,
                 HardDeleteApplicationCommandHandler>();
+        Builder.Services.AddScoped<IValidator<CreateScopePermissionCommand>, CreateScopePermissionCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<CreateScopePermissionCommand, CreateScopePermissionCommandOutput>,
+                CreateScopePermissionCommandHandler>();
+        Builder.Services.AddScoped<IValidator<UpdateScopePermissionCommand>, UpdateScopePermissionCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput>,
+                UpdateScopePermissionCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput>,
+                DeleteScopePermissionCommandHandler>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput>,
+                HardDeleteScopePermissionCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -218,6 +232,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>,
                 ListScopeApplicationsQueryHandler>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>,
+                GetScopePermissionByIdQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopePermissionsQuery, ScopePermissionOutput>,
+                ListScopePermissionsQueryHandler>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetGoogleUserByIdQuery, GoogleUserOutput>,
                 GetGoogleUserByIdQueryHandler>();

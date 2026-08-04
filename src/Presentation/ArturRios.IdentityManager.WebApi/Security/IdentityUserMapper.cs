@@ -1,6 +1,7 @@
 using ArturRios.IdentityManager.Domain.Enums;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using System.Text.Json;
 
 namespace ArturRios.IdentityManager.WebApi.Security;
 
@@ -22,6 +23,9 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
 
     /// <summary>The claim holding the scopes a <c>ScopeAdmin</c> owns, comma-separated.</summary>
     public const string OwnedScopeIdsClaim = "ownedScopeIds";
+
+    /// <summary>The claim holding the flagged scope-permission names, as a JSON array.</summary>
+    public const string ScopePermissionClaimsClaim = "scopePermissions";
 
     private const char OwnedScopeIdsSeparator = ',';
 
@@ -52,6 +56,15 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
                 OwnedScopeIdsSeparator, identityUser.OwnedScopeIds);
         }
 
+        // FR-SP (UC-31…UC-35): the flagged scope-permission names travel as a JSON array rather than
+        // the comma-separated form above, because — unlike PublicIds — a permission name is a freeform
+        // string and may contain the separator. Omitted when empty, like the scope claims.
+        if (identityUser.ScopePermissionClaims.Count > 0)
+        {
+            claims[ScopePermissionClaimsClaim] =
+                JsonSerializer.Serialize(identityUser.ScopePermissionClaims);
+        }
+
         return claims;
     }
 
@@ -73,7 +86,10 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             ? parsedScopeId
             : (Guid?)null;
 
-        return new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims));
+        return new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims))
+        {
+            ScopePermissionClaims = ReadScopePermissionClaims(claims)
+        };
     }
 
     private static IReadOnlyCollection<Guid> ReadOwnedScopeIds(IReadOnlyDictionary<string, string> claims)
@@ -93,6 +109,26 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             .Where(scopeId => scopeId is not null)
             .Select(scopeId => scopeId!.Value)
             .ToList();
+    }
+
+    private static IReadOnlyCollection<string> ReadScopePermissionClaims(IReadOnlyDictionary<string, string> claims)
+    {
+        if (!claims.TryGetValue(ScopePermissionClaimsClaim, out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        // A malformed permission claim is dropped rather than failing the whole token, mirroring
+        // ReadOwnedScopeIds: the remaining identity is still a true statement about the caller, and
+        // authorization on permissions is a separate check anyway.
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(raw) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static bool TryReadGuid(

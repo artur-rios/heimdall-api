@@ -157,4 +157,54 @@ public class IdentityUserMapperTests
         // Then
         Assert.Equal([readable], restored.OwnedScopeIds);
     }
+
+    [UnitFact]
+    public void GivenIdentityWithScopePermissionClaims_WhenRoundTrippingClaims_ThenClaimsArePreserved()
+    {
+        // Given an identity carrying the names of its scope's flagged permissions
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), [])
+        {
+            ScopePermissionClaims = ["documents.read", "documents.write"]
+        };
+
+        // When
+        var restored = (IdentityUser)Mapper.FromClaims(Mapper.ToClaims(user))!;
+
+        // Then — the permission names survive the round trip, in order
+        Assert.Equal(user.ScopePermissionClaims, restored.ScopePermissionClaims);
+    }
+
+    [UnitFact]
+    public void GivenIdentityWithNoScopePermissionClaims_WhenWritingClaims_ThenNoPermissionClaimIsEmitted()
+    {
+        // Given an identity with no flagged permissions
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin);
+
+        // When
+        var claims = Mapper.ToClaims(user);
+
+        // Then — the claim is absent, not empty, so a token never claims permissions the caller lacks
+        Assert.False(claims.ContainsKey(IdentityUserMapper.ScopePermissionClaimsClaim));
+    }
+
+    [UnitFact]
+    public void GivenMalformedScopePermissionClaim_WhenReadingClaims_ThenIdentityIsReadWithoutIt()
+    {
+        // Given a valid identity carrying an unparseable permission claim
+        var id = Guid.NewGuid();
+        var claims = new Dictionary<string, string>
+        {
+            [TokenClaimKeys.Id] = id.ToString(),
+            [TokenClaimKeys.RoleId] = ((int)Roles.User).ToString(),
+            [IdentityUserMapper.ScopePermissionClaimsClaim] = "not-json"
+        };
+
+        // When
+        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+
+        // Then — the caller is still identified, but carries no permission claim, mirroring how a
+        // malformed scope claim is dropped rather than rejecting the whole token
+        Assert.Equal(id, restored.Id);
+        Assert.Empty(restored.ScopePermissionClaims);
+    }
 }

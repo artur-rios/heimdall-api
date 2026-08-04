@@ -24,6 +24,13 @@ public sealed record IdentityUser(
     Guid? ScopeId,
     IReadOnlyCollection<Guid> OwnedScopeIds) : IAuthenticatedUser
 {
+    /// <summary>
+    ///     The names of the acting scope's permissions whose <c>IncludeAsJwtClaim</c> flag is set,
+    ///     folded into the token at login so a downstream caller can authorize on them (UC-31…UC-35).
+    ///     Empty for a <c>SystemAdmin</c> (no scope) and when a scope has no flagged permissions.
+    /// </summary>
+    public IReadOnlyCollection<string> ScopePermissionClaims { get; init; } = [];
+
     /// <summary>An identity carrying no scope claim, for a <c>SystemAdmin</c>.</summary>
     public IdentityUser(Guid id, int roleId) : this(id, roleId, null, [])
     {

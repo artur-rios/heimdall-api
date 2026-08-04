@@ -78,6 +78,14 @@ graph LR
         UC29[UC-29: Hard Delete Google User]
     end
 
+    subgraph "Scope Permission Management"
+        UC31[UC-31: Create Scope Permission]
+        UC32[UC-32: View Scope Permission]
+        UC33[UC-33: Update Scope Permission]
+        UC34[UC-34: Logical Delete Scope Permission]
+        UC35[UC-35: Hard Delete Scope Permission]
+    end
+
     SA --> UC01 & UC02 & UC03 & UC04 & UC05
     SA --> UC21 & UC22 & UC23
     SCA --> UC02 & UC21 & UC22 & UC23
@@ -98,6 +106,8 @@ graph LR
     UC25 --> GIP
     GU --> UC26 & UC27
     UC25 -.-> GU
+    SA --> UC31 & UC32 & UC33 & UC34 & UC35
+    SCA --> UC31 & UC32 & UC33 & UC34
 ```
 
 ---
@@ -1341,6 +1351,176 @@ sequenceDiagram
 
 ---
 
+### UC-31: Create Scope Permission
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-31 |
+| **Name** | Create Scope Permission |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Register a new scope-specific permission within a scope. The permission carries a `Name`, an optional `Description`, and an `IncludeAsJwtClaim` flag controlling whether the `Name` is folded into the JWT issued to identities acting within the scope (FR-AU-08). A scope permission has no separate owner of its own — owning the scope is the whole of the authorization |
+| **Preconditions** | Actor is authenticated; target scope exists and is not logically deleted; for a Scope Admin, the actor must own the target scope |
+| **Postconditions** | A new scope permission record exists, associated with the scope, with `IsDeleted = false` and `IncludeAsJwtClaim` set as supplied (default `false`) |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor Caller as System Admin / Scope Admin (owner)
+    participant API as Identity Manager API
+    participant DB as Database
+
+    Caller->>API: POST /api/scopes/{scopeId}/permissions { name, description?, includeAsJwtClaim? }
+    API->>API: Validate input
+    API->>DB: Verify scope exists and is not logically deleted
+    DB-->>API: Scope found
+    API->>API: Verify actor may manage the scope (System Admin bypasses; Scope Admin must own it)
+    API->>DB: Insert scope permission record { Name, Description, IncludeAsJwtClaim, ScopeId, IsDeleted = false }
+    DB-->>API: Permission created
+    API-->>Caller: 201 Created { permission }
+```
+
+1. Caller sends a request with the permission `Name`, an optional `Description`, and an optional `IncludeAsJwtClaim` flag, targeting a scope.
+2. The system validates the input shape: `Name` is required and at most 200 characters; `Description`, when supplied, is at most 500 characters.
+3. The system verifies the target scope exists and is not logically deleted.
+4. The system verifies the actor may manage the scope — a System Admin bypasses the check; a Scope Admin must own it.
+5. The system creates the scope permission record with `IsDeleted = false` and `IncludeAsJwtClaim` as supplied (defaulting to `false` when omitted).
+6. The system returns the created permission.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-31a | Scope not found or logically deleted | Return `404 Not Found` |
+| AF-31d | Invalid input — `Name` missing or over 200 characters, or `Description` over 500 characters | Return `400 Bad Request` with validation errors |
+| AF-31e | Scope Admin does not own the target scope | Return `403 Forbidden` |
+
+> **On the role gate.** The endpoint carries `[RoleRequirement(SystemAdmin, ScopeAdmin)]`, so a `User` is refused with `403` before the handler runs — independently of the data-dependent AF-31e. The same framework-level refusal applies to every scope-permission endpoint in UC-31 through UC-34; only UC-35 restricts further, to `SystemAdmin` alone. These framework refusals are not listed as separate alternative flows because they are settled by the attribute, not by the use case's data rules.
+
+---
+
+### UC-32: View Scope Permission
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-32 |
+| **Name** | View Scope Permission |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Retrieve a scope permission's details or list the permissions within a scope. There are two distinct reads: (a) a single permission by ID, via `GET /api/scopes/{scopeId}/permissions/{id}`; or (b) the permissions of a scope, via `GET /api/scopes/{scopeId}/permissions` |
+| **Preconditions** | Actor is authenticated |
+| **Postconditions** | Scope permission information is returned |
+
+**Main Flow (read a — permission by ID):**
+
+1. Actor requests a scope permission by ID within a scope.
+2. The system loads the permission, qualifying the lookup by the route's `scopeId`, and excluding logically deleted permissions unless `includeDeleted` is explicitly requested (FR-SP-09).
+3. The system checks authorization: a System Admin sees any permission; a Scope Admin must own the permission's scope.
+4. The system returns the permission data.
+
+**Main Flow (read b — list a scope's permissions):**
+
+1. A System Admin or a Scope Admin requests the permissions of a scope, optionally filtering by `Name` (case-insensitive) and paging the result (FR-SP-05).
+2. The system verifies the scope exists and is not logically deleted.
+3. The system verifies the actor may manage the scope: a System Admin always may; a Scope Admin must own it.
+4. The system returns the page of the scope's permissions, excluding logically deleted permissions unless explicitly requested. There is no per-owner narrowing — a scope permission has no owner of its own, so owning the scope is the whole of the rule.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-32a | Permission not found under the addressed scope, or logically deleted and not explicitly requested (read a) | Return `404 Not Found` |
+| AF-32b | Scope not found or logically deleted (read b — reuses AF-31a) | Return `404 Not Found` |
+| AF-32e | Actor not authorized — a Scope Admin who does not own the target scope (reads a, b) | Return `403 Forbidden` |
+
+---
+
+### UC-33: Update Scope Permission
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-33 |
+| **Name** | Update Scope Permission |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Modify a scope permission's `Name`, `Description`, and `IncludeAsJwtClaim` flag |
+| **Preconditions** | Actor is authenticated; permission exists under the addressed scope and is not logically deleted |
+| **Postconditions** | Scope permission record is updated |
+
+**Main Flow:**
+
+1. Actor sends an update request to `PUT /api/scopes/{scopeId}/permissions/{id}` with the new `Name`, `Description`, and `IncludeAsJwtClaim` values.
+2. The system validates the input shape, reusing UC-31's rules.
+3. The system loads the permission inside the addressed scope, excluding logically deleted permissions.
+4. The system checks authorization: a System Admin may update any permission; a Scope Admin must own the permission's scope.
+5. The system applies the updates and stamps `UpdatedAt`.
+6. The system returns the updated permission.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-33a | Permission not found under the addressed scope, or logically deleted | Return `404 Not Found` |
+| AF-33d | Invalid input (reuses AF-31d) | Return `400 Bad Request` with validation errors |
+| AF-33e | Scope Admin does not own the permission's scope | Return `403 Forbidden` |
+
+---
+
+### UC-34: Logical Delete Scope Permission
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-34 |
+| **Name** | Logical Delete Scope Permission |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Soft-delete a scope permission by setting `IsDeleted = true`. Nothing cascades — a scope permission owns no dependent row |
+| **Preconditions** | Actor is authenticated; the permission exists under the addressed scope |
+| **Postconditions** | The permission's `IsDeleted` is `true` |
+
+**Main Flow:**
+
+1. Actor sends `DELETE /api/scopes/{scopeId}/permissions/{id}`.
+2. The system locates the permission inside the addressed scope in **any** deletion state — an already-deleted permission must be found so AF-34b can answer idempotently rather than as a `404`.
+3. The system checks authorization: a System Admin may delete any permission; a Scope Admin must own the permission's scope. This runs before the idempotent check, so an already-deleted permission cannot be used to probe for scopes the caller may not act on.
+4. If the permission is already logically deleted, the system returns success with `alreadyDeleted = true` and writes nothing.
+5. Otherwise the system sets `IsDeleted = true`, stamps `UpdatedAt`, and returns success with `alreadyDeleted = false`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-34a | Permission not found under the addressed scope | Return `404 Not Found` |
+| AF-34b | Already logically deleted | Return `200 OK` (idempotent), with `alreadyDeleted = true` |
+| AF-34e | Scope Admin does not own the permission's scope | Return `403 Forbidden` |
+
+---
+
+### UC-35: Hard Delete Scope Permission
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-35 |
+| **Name** | Hard Delete Scope Permission |
+| **Actors** | System Admin |
+| **Description** | Permanently remove a scope permission record from the database |
+| **Preconditions** | Actor is authenticated with `SystemAdmin` role; the permission exists under the addressed scope |
+| **Postconditions** | The scope permission record is permanently removed. Nothing cascades — a scope permission is a leaf in the data model |
+
+**Main Flow:**
+
+1. System Admin sends `DELETE /api/scopes/{scopeId}/permissions/{id}/hard`.
+2. The system locates the permission inside the addressed scope in **any** deletion state — a logically deleted permission is exactly what a cleanup pass starts from, so soft deletion must not block a hard one.
+3. The system permanently deletes the record. No dependent is removed first — no entity carries a foreign key to a scope permission.
+4. The system returns success.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-35a | Permission not found under the addressed scope (includes a repeated call — the row is already gone, and UC-35 has no idempotent path) | Return `404 Not Found` |
+
+> **On UC-35's only refusals.** Authorization is settled entirely by the endpoint's `[RoleRequirement(SystemAdmin)]`: a `ScopeAdmin` or `User` is refused with `403` before the handler runs, and an unauthenticated caller is refused with `401`. No data-dependent authorization rule is left for the handler to apply, which is why no AF-35e appears here — unlike UC-31 through UC-34, whose scope-ownership rule is data-dependent and lives in the handler.
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -1374,6 +1554,11 @@ sequenceDiagram
 | UC-27: View Google User | FR-GO-14, FR-GO-17 |
 | UC-28: Logical Delete Google User | FR-GO-15, FR-GO-17 |
 | UC-29: Hard Delete Google User | FR-GO-16 |
+| UC-31: Create Scope Permission | FR-SP-01, FR-SP-02, FR-SP-03 |
+| UC-32: View Scope Permission | FR-SP-04, FR-SP-05, FR-SP-09 |
+| UC-33: Update Scope Permission | FR-SP-06 |
+| UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
+| UC-35: Hard Delete Scope Permission | FR-SP-08 |
 
 ---
 
@@ -1433,3 +1618,17 @@ stateDiagram-v2
 ```
 
 Note: A Google User has no `Created`/unverified-email intermediate state — Google has already verified the account before the ID token is issued, so the record is `Active` immediately upon sign-up.
+
+### 4.5 Scope Permission Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: UC-31 Create Scope Permission
+    Active --> Active: UC-33 Update Scope Permission
+    Active --> LogicallyDeleted: UC-34 Logical Delete
+    LogicallyDeleted --> Active: Restore (set IsDeleted = false)
+    LogicallyDeleted --> [*]: UC-35 Hard Delete
+    Active --> [*]: UC-35 Hard Delete
+```
+
+Note: Logically deleting a scope (UC-04) does **not** cascade to its scope permissions — they keep whatever `IsDeleted` state they had. They become unreachable through the listing endpoint (which gates on the scope's deletion) and are excluded from the JWT-claim fold at login, but are not purged; a restored scope recovers its permission set unchanged. Hard-deleting a scope (UC-05) does purge its scope permissions, via the `scope_permission → scope` foreign key's `ON DELETE CASCADE`.
