@@ -24,6 +24,7 @@ public class SchemaTests(PostgresFixture fixture)
             "role",
             "scope",
             "scope_owner",
+            "scope_permission",
             "scope_user"
         ];
 
