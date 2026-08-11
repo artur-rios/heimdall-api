@@ -79,22 +79,42 @@ public class AuditingCommandHandler<TCommand, TOutput>(
 }
 ```
 
-`IAuditLogWriter` (new interface + implementation in the same `Auditing` folder) reads the acting
-identity from `IHttpContextAccessor.HttpContext` — via `HttpContext.GetUser<IdentityUser>()`, the
-same accessor `ActorExtensions.ApplyActor` already uses — and persists an `AuditLog` row through
-`IAsyncRepository<AuditLog>`. Reading the actor from `HttpContext` rather than from the command
+**Layering constraint.** `IdentityUser` — the type `HttpContext.GetUser<IdentityUser>()` returns —
+is defined in `ArturRios.Heimdall.WebApi.Security` (Presentation layer). `AuditingCommandHandler`
+lives in `ArturRios.Heimdall.Command` (Application layer), which must not reference Presentation
+types. The actor is therefore read through a new abstraction instead of `HttpContext` directly:
+
+```csharp
+// ArturRios.Heimdall.Shared/Security/IActorAccessor.cs
+public interface IActorAccessor
+{
+    Guid? ActorPersonId { get; }
+    int? ActorRole { get; }
+}
+```
+
+`IAuditLogWriter` (new interface + implementation in `ArturRios.Heimdall.Command`'s `Auditing`
+folder) depends on `IActorAccessor` and persists an `AuditLog` row through
+`IAsyncRepository<AuditLog>`. The implementation, `HttpContextActorAccessor`, lives in
+`ArturRios.Heimdall.WebApi.Security` next to `IdentityUser` and `ActorExtensions`, and reads
+`IHttpContextAccessor.HttpContext?.GetUser<IdentityUser>()` — the same accessor
+`ActorExtensions.ApplyActor` already uses. Reading the actor this way rather than from the command
 means every handler is covered uniformly, including the ones with no `IActorScoped` field at all
 (`ResendVerificationEmailCommand`, `GoogleSignOutCommand`, `PasswordRecoveryCommand`, ...). When
 there is no authenticated user on the context (anonymous endpoints), `ActorPersonId`/`ActorRole`
-are written as `null`.
+are `null`.
 
 A failure inside `auditLogWriter.WriteAsync` must never fail the original write — it is caught and
-logged via Serilog (`Log.Warning`) rather than rethrown, so an audit-logging outage cannot take down
-the API's actual functionality.
+logged via `ILogger<AuditingCommandHandler<TCommand, TOutput>>` (bridged to Serilog through
+`Host.UseSerilog()`) rather than rethrown, so an audit-logging outage cannot take down the API's
+actual functionality.
 
-`ArturRios.Heimdall.Command` gains a package reference to `Microsoft.AspNetCore.Http.Abstractions`
-for `IHttpContextAccessor`, and `Startup.AddDependencies` registers it (`AddHttpContextAccessor()`)
-if not already present.
+`ArturRios.Heimdall.Command` gains package references to
+`Microsoft.Extensions.DependencyInjection.Abstractions` (for the `IServiceCollection` extension
+method) and `Microsoft.Extensions.Logging.Abstractions` (for `ILogger<T>`). `Startup.AddDependencies`
+registers `IHttpContextAccessor` (`AddHttpContextAccessor()` — available for free since
+`ArturRios.Heimdall.WebApi` already uses the `Microsoft.NET.Sdk.Web` SDK) and
+`IActorAccessor`/`IAuditLogWriter`.
 
 ## 5. DI registration
 
