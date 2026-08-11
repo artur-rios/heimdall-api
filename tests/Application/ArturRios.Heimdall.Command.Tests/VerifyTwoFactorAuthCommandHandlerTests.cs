@@ -56,10 +56,8 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 EmailCodes,
-                EmailCodes,
                 RecoveryCodes,
-                RecoveryCodes,
-                Protector.Object,
+                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object),
                 new StubChallengeTokenValidator(challengePersonId ?? Person.PublicId),
                 new PersonAuthTokenService(TokenIssuer));
 
@@ -68,10 +66,8 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 EmailCodes,
-                EmailCodes,
                 RecoveryCodes,
-                RecoveryCodes,
-                Protector.Object,
+                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object),
                 new StubChallengeTokenValidator(null),
                 new PersonAuthTokenService(TokenIssuer));
 
