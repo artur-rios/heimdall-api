@@ -118,7 +118,7 @@ registers `IHttpContextAccessor` (`AddHttpContextAccessor()` — available for f
 
 ## 5. DI registration
 
-Every one of the ~33 `.AddScoped<ICommandHandlerAsync<TCommand, TOutput>, THandler>()` calls in
+Every one of the 36 `.AddScoped<ICommandHandlerAsync<TCommand, TOutput>, THandler>()` calls in
 `Startup.cs` is replaced by a call to a new extension method:
 
 ```csharp
@@ -156,7 +156,7 @@ verification, 2FA enable/confirm/verify/disable, Google sign-in/out), per NFR-09
 New GitHub issue, "Audit logging for write operations (NFR-09)", tracked in the README's Platform
 table (replacing the current `—` issue link). Branch
 `feature/nfr-09-audit-logging-for-write-operations`. One PR covering: migration, entity, decorator,
-`IAuditLogWriter`, the ~33 DI registration edits, and the tests above.
+`IAuditLogWriter`, the 36 DI registration edits, and the tests above.
 
 ## 8. Out of scope
 
@@ -165,3 +165,15 @@ table (replacing the current `—` issue link). Branch
 - Logging failed/rejected write attempts.
 - Retention/archival policy for the `audit_log` table.
 - Capturing before/after field-level diffs — only actor, action, and target id.
+- **Known limitation: no target identification for anonymous-actor flows.** Five command handlers —
+  `LoginCommand`, `PasswordRecoveryCommand`, `ResetPasswordCommand`, `VerifyEmailCommand`, and
+  `GoogleSignInCommand` — run on anonymous endpoints (no authenticated actor), and their output DTOs
+  carry no `Id`/`PublicId` property for `AuditingCommandHandler`'s reflection-based
+  `ResolveTargetId` to pick up. Their audit rows therefore carry only `(action, created_at)`, with
+  both actor and target null — no forensic identification of which account was affected. This is a
+  real gap for exactly the flows most worth auditing (password resets, logins), discovered during
+  implementation rather than planned for. Fixing it — e.g. adding the affected person's `PublicId`
+  to `ResetPasswordCommandOutput`/`VerifyEmailCommandOutput`, which are currently empty marker
+  classes, and to the other three outputs similarly — is additive work, better scoped as its own
+  follow-up than done reactively in this fix wave. Stated here plainly as a known limitation, not a
+  TODO to silently drop.
