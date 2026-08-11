@@ -1,7 +1,7 @@
 # UC-22: Remove Scope Owner — Implementation Plan
 
 Design: [2026-07-31-uc-22-remove-scope-owner-design.md](../specs/2026-07-31-uc-22-remove-scope-owner-design.md)
-Issue: [#23](https://github.com/artur-rios/identity-manager-api/issues/23)
+Issue: [#23](https://github.com/artur-rios/heimdall-api/issues/23)
 Branch: `feature/uc-22-remove-scope-owner`
 
 Sequenced test-first per the
@@ -57,7 +57,7 @@ ownership check → person + ownership-row lookup → last-owner guard → remov
 `personWriter.UpdateAsync` → return. Each step commented with the UC/AF it implements; failures
 returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -101,5 +101,5 @@ co-owner's row is untouched.
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #23`.

@@ -17,62 +17,62 @@
 - **Acting user:** the auth middleware attaches an `ArturRios.Util.WebApi.Security.Records.AuthenticatedUser(int Id, int Role)` to `HttpContext.Items["User"]`; the `Id` claim is the person's internal `Id`.
 - **Password hashing:** `ArturRios.Util.Hashing.Hash.EncodeWithRandomSalt(password, out byte[] salt)` returns the `byte[]` hash.
 - **Tests:** unit tests use `AsyncFakeRepository<T>` (one instance = reader + writer), Moq for validators/services, Bogus optional; functional tests derive from `WebApiTest<Program>`, join `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response **and** DB state via `db.CreateContext()`. GWT naming, `// Given / // When / // Then`. Attributes `[UnitFact]` / `[FunctionalFact]`.
-- **Run filters:** `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and `"Category=Functional"`.
+- **Run filters:** `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and `"Category=Functional"`.
 
 ---
 
 ## File Structure
 
 **New — production:**
-- `src/Application/ArturRios.IdentityManager.Command/Services/IEmailVerificationSender.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Services/IEmailVerificationService.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Services/EmailVerificationService.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Services/EmailVerificationOptions.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/CreateAdminCommand.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/CreateUserCommand.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/CreateScopeOwnerCommand.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateAdminCommandValidator.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateUserCommandValidator.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateScopeOwnerCommandValidator.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateAdminCommandHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Output/CreatePersonCommandOutput.cs`
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Security/LoggingEmailVerificationSender.cs`
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/IEmailVerificationSender.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/IEmailVerificationService.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/EmailVerificationService.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/EmailVerificationOptions.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/CreateAdminCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/CreateUserCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/CreateScopeOwnerCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateAdminCommandValidator.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateUserCommandValidator.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateScopeOwnerCommandValidator.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateAdminCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateUserCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Output/CreatePersonCommandOutput.cs`
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
+- `src/Presentation/ArturRios.Heimdall.WebApi/Security/LoggingEmailVerificationSender.cs`
+- `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
 
 **Modified — production:**
-- `src/Application/ArturRios.IdentityManager.Command/ArturRios.IdentityManager.Command.csproj` (add `ArturRios.Util`)
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs` (DI)
+- `src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj` (add `ArturRios.Util`)
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` (DI)
 
 **New — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/EmailVerificationServiceTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandHandlerTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandValidatorTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateAdminTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateUserTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/EmailVerificationServiceTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandHandlerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandValidatorTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateAdminTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateUserTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`
 
 **Modified — tests:**
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/TestTokens.cs` (add id-specific overload)
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/TestTokens.cs` (add id-specific overload)
 
 ---
 
 ## Task 1: Email verification service + stub sender
 
 **Files:**
-- Modify: `src/Application/ArturRios.IdentityManager.Command/ArturRios.IdentityManager.Command.csproj`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Services/IEmailVerificationSender.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Services/EmailVerificationOptions.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Services/IEmailVerificationService.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Services/EmailVerificationService.cs`
-- Create: `src/Presentation/ArturRios.IdentityManager.WebApi/Security/LoggingEmailVerificationSender.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/EmailVerificationServiceTests.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj`
+- Create: `src/Application/ArturRios.Heimdall.Command/Services/IEmailVerificationSender.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Services/EmailVerificationOptions.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Services/IEmailVerificationService.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Services/EmailVerificationService.cs`
+- Create: `src/Presentation/ArturRios.Heimdall.WebApi/Security/LoggingEmailVerificationSender.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/EmailVerificationServiceTests.cs`
 
 **Interfaces:**
 - Produces:
@@ -83,7 +83,7 @@
 
 - [ ] **Step 1: Add the ArturRios.Util package reference to the Command project**
 
-In `src/Application/ArturRios.IdentityManager.Command/ArturRios.IdentityManager.Command.csproj`, add inside the package `<ItemGroup>` (alongside the existing `ArturRios.*` references):
+In `src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj`, add inside the package `<ItemGroup>` (alongside the existing `ArturRios.*` references):
 
 ```xml
       <PackageReference Include="ArturRios.Util" Version="1.4.2" />
@@ -94,7 +94,7 @@ In `src/Application/ArturRios.IdentityManager.Command/ArturRios.IdentityManager.
 Create `Services/IEmailVerificationSender.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Delivers an email-verification token to a person's address (UC-06 / FR-EV-01). The concrete
@@ -109,7 +109,7 @@ public interface IEmailVerificationSender
 Create `Services/EmailVerificationOptions.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Settings for email-verification token issuance. <see cref="TokenLifetime" /> is read from the
@@ -117,7 +117,7 @@ namespace ArturRios.IdentityManager.Command.Services;
 /// </summary>
 public class EmailVerificationOptions
 {
-    private const string LifetimeVariable = "IDENTITY_MANAGER_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS";
+    private const string LifetimeVariable = "HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS";
     private const double DefaultLifetimeSeconds = 86400;
 
     public TimeSpan TokenLifetime { get; init; } = TimeSpan.FromSeconds(DefaultLifetimeSeconds);
@@ -135,16 +135,16 @@ public class EmailVerificationOptions
 
 - [ ] **Step 3: Write the failing test**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/EmailVerificationServiceTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/EmailVerificationServiceTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for EmailVerificationService (UC-06, FR-EV-01/02): a token is persisted for the person
 // with a future expiry and Used=false, then handed to the sender.
@@ -179,7 +179,7 @@ public class EmailVerificationServiceTests
 
 - [ ] **Step 4: Run the test to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~EmailVerificationServiceTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~EmailVerificationServiceTests"`
 Expected: FAIL — `EmailVerificationService` / `IEmailVerificationService` do not exist (compile error).
 
 - [ ] **Step 5: Create the service interface and implementation**
@@ -187,9 +187,9 @@ Expected: FAIL — `EmailVerificationService` / `IEmailVerificationService` do n
 Create `Services/IEmailVerificationService.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
+using ArturRios.Heimdall.Domain.Entities;
 
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Issues, persists, and dispatches an email-verification token for a person (UC-06 /
@@ -205,10 +205,10 @@ Create `Services/EmailVerificationService.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Domain.Entities;
+using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Util.Random;
 
-namespace ArturRios.IdentityManager.Command.Services;
+namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Default <see cref="IEmailVerificationService" />: builds a random, time-limited
@@ -248,17 +248,17 @@ public class EmailVerificationService(
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~EmailVerificationServiceTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~EmailVerificationServiceTests"`
 Expected: PASS.
 
 - [ ] **Step 7: Create the logging stub sender in the Web API project**
 
-Create `src/Presentation/ArturRios.IdentityManager.WebApi/Security/LoggingEmailVerificationSender.cs`:
+Create `src/Presentation/ArturRios.Heimdall.WebApi/Security/LoggingEmailVerificationSender.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Services;
+using ArturRios.Heimdall.Command.Services;
 
-namespace ArturRios.IdentityManager.WebApi.Security;
+namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
 ///     UC-06 stub for <see cref="IEmailVerificationSender" />: logs the recipient and token instead of
@@ -278,11 +278,11 @@ public class LoggingEmailVerificationSender(ILogger<LoggingEmailVerificationSend
 
 - [ ] **Step 8: Register the service, sender, and options in DI**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, add these `using`s at the top:
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, add these `using`s at the top:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.WebApi.Security;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.WebApi.Security;
 ```
 
 In `AddDependencies()`, immediately before `Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());`, add:
@@ -295,13 +295,13 @@ In `AddDependencies()`, immediately before `Builder.Services.AddSingleton(Master
 
 - [ ] **Step 9: Build to verify wiring compiles**
 
-Run: `dotnet build src/ArturRios.IdentityManager.sln`
+Run: `dotnet build src/ArturRios.Heimdall.sln`
 Expected: Build succeeded.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command tests/Application/ArturRios.IdentityManager.Command.Tests/EmailVerificationServiceTests.cs src/Presentation/ArturRios.IdentityManager.WebApi/Security src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs
+git add src/Application/ArturRios.Heimdall.Command tests/Application/ArturRios.Heimdall.Command.Tests/EmailVerificationServiceTests.cs src/Presentation/ArturRios.Heimdall.WebApi/Security src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs
 git commit -m "feat: add UC-06 email verification service and logging sender"
 ```
 
@@ -310,14 +310,14 @@ git commit -m "feat: add UC-06 email verification service and logging sender"
 ## Task 2: Shared output, messages, and Create Admin handler (path b)
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/CreatePersonCommandOutput.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/CreateAdminCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateAdminCommandValidator.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateAdminCommandHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandValidatorTests.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/CreatePersonCommandOutput.cs`
+- Create: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- Create: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/CreateAdminCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateAdminCommandValidator.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/CreateAdminCommandHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandValidatorTests.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `IEmailVerificationService` (Task 1).
@@ -334,7 +334,7 @@ Create `Output/CreatePersonCommandOutput.cs`:
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Output;
+namespace ArturRios.Heimdall.Command.Output;
 
 /// <summary>
 ///     The person created by any UC-06 path. Exposes only external-facing identifiers; never
@@ -371,7 +371,7 @@ public class CreatePersonCommandOutput : CommandOutput
 Create `Shared/Messages/PersonMessages.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Shared.Messages;
+namespace ArturRios.Heimdall.Shared.Messages;
 
 /// <summary>
 ///     Canonical messages produced by the person use cases. Each is mapped to an HTTP status code in
@@ -419,7 +419,7 @@ Create `Shared/Messages/PersonMessageMap.cs`:
 ```csharp
 using ArturRios.Util.Http;
 
-namespace ArturRios.IdentityManager.Shared.Messages;
+namespace ArturRios.Heimdall.Shared.Messages;
 
 /// <summary>
 ///     Maps each <see cref="PersonMessages" /> value to its HTTP status code, following the UC-06
@@ -456,7 +456,7 @@ Create `Input/CreateAdminCommand.cs`:
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to create a <c>ScopeAdmin</c> or <c>SystemAdmin</c> person without any scope
@@ -477,16 +477,16 @@ public class CreateAdminCommand : BaseCommand
 
 - [ ] **Step 4: Write the failing validator test**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandValidatorTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandValidatorTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Input.Validation;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for CreateAdminCommandValidator (UC-06 path b, AF-06d).
 public class CreateAdminCommandValidatorTests
@@ -537,7 +537,7 @@ public class CreateAdminCommandValidatorTests
 
 - [ ] **Step 5: Run to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateAdminCommandValidatorTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateAdminCommandValidatorTests"`
 Expected: FAIL — `CreateAdminCommandValidator` does not exist (compile error).
 
 - [ ] **Step 6: Create the validator**
@@ -545,11 +545,11 @@ Expected: FAIL — `CreateAdminCommandValidator` does not exist (compile error).
 Create `Input/Validation/CreateAdminCommandValidator.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
-namespace ArturRios.IdentityManager.Command.Input.Validation;
+namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Shape validation for <see cref="CreateAdminCommand" /> (UC-06 path b, AF-06d). Business rules
@@ -580,27 +580,27 @@ public class CreateAdminCommandValidator : AbstractValidator<CreateAdminCommand>
 
 - [ ] **Step 7: Run to verify the validator tests pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateAdminCommandValidatorTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateAdminCommandValidatorTests"`
 Expected: PASS.
 
 - [ ] **Step 8: Write the failing handler test**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommandHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for CreateAdminCommandHandler (UC-06 path b): main flow + AF-06a (duplicate admin
 // email system-wide). AF-06c (non-System-Admin) and AF-06d (invalid input) are functional/validator
@@ -695,7 +695,7 @@ public class CreateAdminCommandHandlerTests
 
 - [ ] **Step 9: Run to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateAdminCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateAdminCommandHandlerTests"`
 Expected: FAIL — `CreateAdminCommandHandler` does not exist (compile error).
 
 - [ ] **Step 10: Create the handler**
@@ -704,19 +704,19 @@ Create `Handlers/CreateAdminCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="CreateAdminCommand" /> (UC-06 path b): validates the request, verifies the
@@ -792,13 +792,13 @@ public class CreateAdminCommandHandler(
 
 - [ ] **Step 11: Run to verify the handler tests pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateAdminCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateAdminCommandHandlerTests"`
 Expected: PASS.
 
 - [ ] **Step 12: Commit**
 
 ```bash
-git add src/Application tests/Application/ArturRios.IdentityManager.Command.Tests/CreateAdminCommand*
+git add src/Application tests/Application/ArturRios.Heimdall.Command.Tests/CreateAdminCommand*
 git commit -m "feat: add UC-06 create admin handler (path b)"
 ```
 
@@ -807,9 +807,9 @@ git commit -m "feat: add UC-06 create admin handler (path b)"
 ## Task 3: Create Admin endpoint (path b) + functional tests
 
 **Files:**
-- Create: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateAdminTests.cs`
+- Create: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateAdminTests.cs`
 
 **Interfaces:**
 - Consumes: `CreateAdminCommand`, `CreatePersonCommandOutput`, `PersonMessageMap`, `CreateAdminCommandHandler` (Task 2).
@@ -817,13 +817,13 @@ git commit -m "feat: add UC-06 create admin handler (path b)"
 
 - [ ] **Step 1: Register the path-b validator and handler in DI**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, add these `using`s if not present:
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, add these `using`s if not present:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Input.Validation;
+using ArturRios.Heimdall.Command.Input.Validation;
 ```
 
-(`ArturRios.IdentityManager.Command.Input`, `ArturRios.IdentityManager.Command.Handlers`, `ArturRios.IdentityManager.Command.Output`, `ArturRios.Mediator.Command.Interfaces`, and `FluentValidation` are already imported by the scope registrations.)
+(`ArturRios.Heimdall.Command.Input`, `ArturRios.Heimdall.Command.Handlers`, `ArturRios.Heimdall.Command.Output`, `ArturRios.Mediator.Command.Interfaces`, and `FluentValidation` are already imported by the scope registrations.)
 
 In `AddDependencies()`, after the last scope command-handler registration (the `HardDeleteScopeCommandHandler` line) and before `Builder.Services.AddScoped<QueryMediator>();`, add:
 
@@ -835,20 +835,20 @@ In `AddDependencies()`, after the last scope command-handler registration (the `
 
 - [ ] **Step 2: Create the controller with the path-b endpoint**
 
-Create `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`:
+Create `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
 
-namespace ArturRios.IdentityManager.WebApi.Controllers;
+namespace ArturRios.Heimdall.WebApi.Controllers;
 
 [Route("api")]
 public class PersonController(CommandMediator commandMediator) : Controller
@@ -872,22 +872,22 @@ public class PersonController(CommandMediator commandMediator) : Controller
 
 - [ ] **Step 3: Write the failing functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateAdminTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateAdminTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -987,13 +987,13 @@ public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<P
 
 - [ ] **Step 4: Run to verify they fail, then pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~PersonControllerCreateAdminTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~PersonControllerCreateAdminTests"`
 Expected: PASS (all five). If the controller/DI were missing it would fail to compile/authorize; confirm green before committing.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Presentation tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateAdminTests.cs
+git add src/Presentation tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateAdminTests.cs
 git commit -m "feat: expose UC-06 create admin endpoint (path b)"
 ```
 
@@ -1002,10 +1002,10 @@ git commit -m "feat: expose UC-06 create admin endpoint (path b)"
 ## Task 4: Create User handler (path a)
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/CreateUserCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateUserCommandValidator.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/CreateUserCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateUserCommandValidator.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/CreateUserCommandHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `CreatePersonCommandOutput`, `PersonMessages`, `IEmailVerificationService`.
@@ -1021,7 +1021,7 @@ Create `Input/CreateUserCommand.cs`:
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to create a <c>User</c> within a scope (UC-06 path a). <see cref="ScopeId" /> comes from
@@ -1049,10 +1049,10 @@ public class CreateUserCommand : BaseCommand
 Create `Input/Validation/CreateUserCommandValidator.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
-namespace ArturRios.IdentityManager.Command.Input.Validation;
+namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Shape validation for <see cref="CreateUserCommand" /> (UC-06 path a, AF-06d). Scope existence,
@@ -1079,22 +1079,22 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
 
 - [ ] **Step 3: Write the failing handler test**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for CreateUserCommandHandler (UC-06 path a): main flow + AF-06b (scope missing/deleted),
 // AF-06e (actor not owner / owner / SystemAdmin bypass), AF-06a (duplicate email in scope).
@@ -1243,7 +1243,7 @@ public class CreateUserCommandHandlerTests
 
 - [ ] **Step 4: Run to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateUserCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateUserCommandHandlerTests"`
 Expected: FAIL — `CreateUserCommandHandler` does not exist (compile error).
 
 - [ ] **Step 5: Create the handler**
@@ -1252,19 +1252,19 @@ Create `Handlers/CreateUserCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="CreateUserCommand" /> (UC-06 path a): validates input, verifies the target
@@ -1366,13 +1366,13 @@ public class CreateUserCommandHandler(
 
 - [ ] **Step 6: Run to verify the handler tests pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateUserCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateUserCommandHandlerTests"`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs
+git add src/Application/ArturRios.Heimdall.Command tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs
 git commit -m "feat: add UC-06 create user handler (path a)"
 ```
 
@@ -1381,10 +1381,10 @@ git commit -m "feat: add UC-06 create user handler (path a)"
 ## Task 5: Create User endpoint (path a) + functional tests
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/TestTokens.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateUserTests.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/TestTokens.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateUserTests.cs`
 
 **Interfaces:**
 - Consumes: `CreateUserCommand`, `CreateUserCommandHandler`, `CreateUserCommandValidator`, `AuthenticatedUser` (`HttpContext.Items["User"]`).
@@ -1405,7 +1405,7 @@ In `AddDependencies()` in `Startup.cs`, directly after the path-b registrations 
 In `PersonController.cs`, add these `using`s:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
+using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Util.WebApi.Security.Records;
 ```
 
@@ -1436,7 +1436,7 @@ Add this action inside the `PersonController` class (after `CreateAdmin`):
 
 - [ ] **Step 3: Add an id-specific token helper to TestTokens**
 
-In `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/TestTokens.cs`, add this method inside the `TestTokens` class and make `ForRole` delegate to it:
+In `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/TestTokens.cs`, add this method inside the `TestTokens` class and make `ForRole` delegate to it:
 
 ```csharp
     /// <summary>Builds a bearer token for a specific person id and role value (see <c>Roles</c>).</summary>
@@ -1463,22 +1463,22 @@ Then replace the body of `ForRole` with:
 
 - [ ] **Step 4: Write the failing functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateUserTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateUserTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -1631,7 +1631,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
 
 - [ ] **Step 5: Run to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~PersonControllerCreateUserTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~PersonControllerCreateUserTests"`
 Expected: PASS (all seven).
 
 - [ ] **Step 6: Commit**
@@ -1646,10 +1646,10 @@ git commit -m "feat: expose UC-06 create user endpoint (path a)"
 ## Task 6: Create Scope Owner handler (path c)
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/CreateScopeOwnerCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/Validation/CreateScopeOwnerCommandValidator.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/CreateScopeOwnerCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/Validation/CreateScopeOwnerCommandValidator.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
 
 **Interfaces:**
 - Produces:
@@ -1664,7 +1664,7 @@ Create `Input/CreateScopeOwnerCommand.cs`:
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to create a brand-new <c>ScopeAdmin</c> person directly as a co-owner of a scope
@@ -1693,10 +1693,10 @@ public class CreateScopeOwnerCommand : BaseCommand
 Create `Input/Validation/CreateScopeOwnerCommandValidator.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
-namespace ArturRios.IdentityManager.Command.Input.Validation;
+namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Shape validation for <see cref="CreateScopeOwnerCommand" /> (UC-06 path c, AF-06d). Scope
@@ -1723,22 +1723,22 @@ public class CreateScopeOwnerCommandValidator : AbstractValidator<CreateScopeOwn
 
 - [ ] **Step 3: Write the failing handler test**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for CreateScopeOwnerCommandHandler (UC-06 path c): main flow + AF-06b (scope
 // missing/deleted), AF-06e (actor not owner), AF-06a (duplicate admin email system-wide).
@@ -1855,7 +1855,7 @@ public class CreateScopeOwnerCommandHandlerTests
 
 - [ ] **Step 4: Run to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateScopeOwnerCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateScopeOwnerCommandHandlerTests"`
 Expected: FAIL — `CreateScopeOwnerCommandHandler` does not exist (compile error).
 
 - [ ] **Step 5: Create the handler**
@@ -1864,19 +1864,19 @@ Create `Handlers/CreateScopeOwnerCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Command.Services;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="CreateScopeOwnerCommand" /> (UC-06 path c, FR-SC-12): validates input,
@@ -1978,13 +1978,13 @@ public class CreateScopeOwnerCommandHandler(
 
 - [ ] **Step 6: Run to verify the handler tests pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~CreateScopeOwnerCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~CreateScopeOwnerCommandHandlerTests"`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs
+git add src/Application/ArturRios.Heimdall.Command tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs
 git commit -m "feat: add UC-06 create scope owner handler (path c)"
 ```
 
@@ -1993,9 +1993,9 @@ git commit -m "feat: add UC-06 create scope owner handler (path c)"
 ## Task 7: Create Scope Owner endpoint (path c) + functional tests
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`
 
 **Interfaces:**
 - Consumes: `CreateScopeOwnerCommand`, `CreateScopeOwnerCommandHandler`, `CreateScopeOwnerCommandValidator`, `AuthenticatedUser`, `TestTokens.For`.
@@ -2041,22 +2041,22 @@ In `PersonController.cs`, add this action inside the class (after `CreateUser`):
 
 - [ ] **Step 3: Write the failing functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -2189,13 +2189,13 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
 
 - [ ] **Step 4: Run to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~PersonControllerCreateScopeOwnerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~PersonControllerCreateScopeOwnerTests"`
 Expected: PASS (all six).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Presentation tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs
+git add src/Presentation tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerCreateScopeOwnerTests.cs
 git commit -m "feat: expose UC-06 create scope owner endpoint (path c)"
 ```
 
@@ -2207,17 +2207,17 @@ git commit -m "feat: expose UC-06 create scope owner endpoint (path c)"
 
 - [ ] **Step 1: Run the entire unit suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all unit tests, including the four new UC-06 handler/service test classes and two validator test classes.
 
 - [ ] **Step 2: Run the entire functional suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — all functional tests, including the three new `PersonController*Tests` classes.
 
 - [ ] **Step 3: Confirm no stray build warnings for the new files**
 
-Run: `dotnet build src/ArturRios.IdentityManager.sln`
+Run: `dotnet build src/ArturRios.Heimdall.sln`
 Expected: Build succeeded, 0 errors.
 
 ---

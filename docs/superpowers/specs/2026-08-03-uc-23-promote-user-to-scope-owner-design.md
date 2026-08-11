@@ -158,7 +158,7 @@ promotion can produce a duplicate admin email, and the specification should prob
 alternative flow instead.
 
 **B. UC-22 is designed but not implemented.** `main` carries `docs: add uc-22 design and plan` with
-no `feat:` commit behind it, and issue [#23](https://github.com/artur-rios/identity-manager-api/issues/23)
+no `feat:` commit behind it, and issue [#23](https://github.com/artur-rios/heimdall-api/issues/23)
 is still open. UC-23 does not depend on it — this is only a note that the ownership use cases are
 being taken out of order.
 
@@ -248,7 +248,7 @@ no token → 401. Refusals assert the `scope_user` row survives and no `scope_ow
 ## Specification note
 
 The use case specification, the SRD endpoint table (§5.3), FR-SC-08/FR-SC-13/FR-RO-03, FR-PE-11,
-SRD §8, and GitHub issue [#24](https://github.com/artur-rios/identity-manager-api/issues/24) agree on
+SRD §8, and GitHub issue [#24](https://github.com/artur-rios/heimdall-api/issues/24) agree on
 every point of UC-23: actor list, route, requirements, and the four alternative flows. The one thing
 no document settles is the FR-PE-09 namespace move, raised as open question A rather than assumed
 silently.

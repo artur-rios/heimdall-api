@@ -1,7 +1,7 @@
 # UC-14: Verify Email — Implementation Plan
 
 Design: [2026-07-30-uc-14-verify-email-design.md](../specs/2026-07-30-uc-14-verify-email-design.md)
-Issue: [#15](https://github.com/artur-rios/identity-manager-api/issues/15)
+Issue: [#15](https://github.com/artur-rios/heimdall-api/issues/15)
 Branch: `feature/uc-14-verify-email`
 
 Sequenced test-first per the
@@ -103,8 +103,8 @@ Verify: `dotnet test --filter "Category=Functional"` green.
 ## Step 8 — Full suite
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 
 Both green before Gate 3.

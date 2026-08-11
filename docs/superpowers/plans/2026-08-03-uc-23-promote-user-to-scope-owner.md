@@ -1,7 +1,7 @@
 # UC-23: Promote User to Scope Owner — Implementation Plan
 
 Design: [2026-08-03-uc-23-promote-user-to-scope-owner-design.md](../specs/2026-08-03-uc-23-promote-user-to-scope-owner-design.md)
-Issue: [#24](https://github.com/artur-rios/identity-manager-api/issues/24)
+Issue: [#24](https://github.com/artur-rios/heimdall-api/issues/24)
 Branch: `feature/uc-23-promote-user-to-scope-owner`
 
 Sequenced test-first per the
@@ -60,7 +60,7 @@ check → person lookup → AF-23d → AF-23b → (open question A) → role cha
 ownership insert through `personWriter.UpdateAsync` → return the person. Each step commented with the
 UC/AF it implements; failures returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -104,5 +104,5 @@ tests assert the inverse.
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #24`.

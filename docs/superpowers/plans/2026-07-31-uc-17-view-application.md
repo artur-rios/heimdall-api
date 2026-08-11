@@ -1,7 +1,7 @@
 # UC-17: View Application — Implementation Plan
 
 Design: [2026-07-31-uc-17-view-application-design.md](../specs/2026-07-31-uc-17-view-application-design.md)
-Issue: [#18](https://github.com/artur-rios/identity-manager-api/issues/18)
+Issue: [#18](https://github.com/artur-rios/heimdall-api/issues/18)
 Branch: `feature/uc-17-view-application`
 
 Sequenced test-first per the
@@ -77,7 +77,7 @@ Removed: `GivenSystemAdminAndScopeUserOwner_…`, `GivenUserNamingThemself_…`,
   this scope → insert.
 - `ApplicationController.Create` — add `[RoleRequirement((int)Roles.SystemAdmin,
   (int)Roles.ScopeAdmin)]`; rewrite the XML doc.
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ### Step 3 — Corrected UC-16 functional tests
 
@@ -95,7 +95,7 @@ owner) and a `SeedScopeAdminAsync(ownedScope:)` owner becomes the happy path.
 
 Removed: `GivenUserNamingThemself_…`, `GivenUserNamingAnotherPerson_…`, `GivenUserOfADifferentScope_…`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` green.
 
 ---
 
@@ -168,7 +168,7 @@ success message `ApplicationRetrievedSuccessfully`. Each step commented with the
 Scope lookup → ownership check → owner narrowing for a non-System-Admin actor → filters → project →
 `PaginateAsync(…, x => x.Name)` with `ApplicationsRetrievedSuccessfully`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ### Step 10 — Endpoints and DI
 
@@ -218,7 +218,7 @@ plus a `SeedApplicationAsync`, authorised with `TestTokens.For(person.PublicId, 
 | `GivenForgedActingRoleInQueryString_WhenGetApplications_ThenItIsIgnored` | `ApplyActor` |
 | `GivenNoToken_WhenGetApplications_ThenUnauthorized` | precondition |
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` green.
 
 ---
 
@@ -232,6 +232,6 @@ plus a `SeedApplicationAsync`, authorised with `TestTokens.For(person.PublicId, 
 
 ## Step 13 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body records the ownership correction and the deliberate departure from
 one-use-case-per-branch.

@@ -20,7 +20,7 @@
 - **The NFR-12 guard is unconditional** — it applies even when the target is already logically deleted (Decision 4). This is deliberately the opposite of UC-09's AF-09b ordering.
 - **Join rows are never deleted in code.** `ScopeUser` / `ScopeOwner` have composite keys and no surrogate `Id`, so no `IAsyncRepository<T>` can address them; deleting the person row clears them by database cascade.
 - **Tests:** unit tests use one `AsyncFakeRepository<T>` per aggregate, each passed as both the reader and the writer argument; functional tests derive from `WebApiTest<Program>`, join `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response **and** database state via `db.CreateContext()`. GWT naming, `// Given` / `// When` / `// Then`, `[UnitFact]` / `[FunctionalFact]`.
-- **Run filters:** `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
+- **Run filters:** `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
 - **Commit style:** lowercase Conventional Commits subject, ≤50 chars, imperative; body wrapped at 72; trailer `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
 ---
@@ -28,19 +28,19 @@
 ## File Structure
 
 **New — production:**
-- `src/Application/ArturRios.IdentityManager.Command/Input/HardDeletePersonCommand.cs` — the route id plus the acting fields.
-- `src/Application/ArturRios.IdentityManager.Command/Output/HardDeletePersonCommandOutput.cs` — the removed person's `PublicId` and the two cascade counts.
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/HardDeletePersonCommandHandler.cs` — the whole flow: lookup, both guards, the cascade, the delete.
+- `src/Application/ArturRios.Heimdall.Command/Input/HardDeletePersonCommand.cs` — the route id plus the acting fields.
+- `src/Application/ArturRios.Heimdall.Command/Output/HardDeletePersonCommandOutput.cs` — the removed person's `PublicId` and the two cascade counts.
+- `src/Application/ArturRios.Heimdall.Command/Handlers/HardDeletePersonCommandHandler.cs` — the whole flow: lookup, both guards, the cascade, the delete.
 
 **Modified — production:**
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs` — one new message.
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs` — its status code.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs` — one DELETE action.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs` — handler registration.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs` — one new message.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs` — its status code.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs` — one DELETE action.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` — handler registration.
 
 **New — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/HardDeletePersonCommandHandlerTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerHardDeleteTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/HardDeletePersonCommandHandlerTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerHardDeleteTests.cs`
 
 **Modified — docs:**
 - `docs/requirements/Use Case Specification Document.md` — UC-10 brought in line with the behaviour.
@@ -53,22 +53,22 @@
 The inputs and vocabulary the handler needs. No handler yet, so nothing to unit-test in this task — the code must compile and the existing suite must stay green.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/HardDeletePersonCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/HardDeletePersonCommandOutput.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/HardDeletePersonCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/HardDeletePersonCommandOutput.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
 
 **Interfaces:**
-- Consumes: `BaseCommand` (`ArturRios.Mediator.Command`), `CommandOutput` (same namespace), `IActorScoped` (`ArturRios.IdentityManager.Shared.Security` — `long ActingPersonId { get; set; }`, `int ActingRole { get; set; }`), `HttpStatusCodes` (`ArturRios.Util.Http`).
+- Consumes: `BaseCommand` (`ArturRios.Mediator.Command`), `CommandOutput` (same namespace), `IActorScoped` (`ArturRios.Heimdall.Shared.Security` — `long ActingPersonId { get; set; }`, `int ActingRole { get; set; }`), `HttpStatusCodes` (`ArturRios.Util.Http`).
 - Produces: `HardDeletePersonCommand { Guid Id; long ActingPersonId; int ActingRole }`, `HardDeletePersonCommandOutput { Guid Id; int DeletedApplicationCount; int DeletedTokenCount }`, and `PersonMessages.PersonHardDeletedSuccessfully`.
 
 - [ ] **Step 1: Create `HardDeletePersonCommand`**
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to permanently (hard) delete a person (UC-10). The person is addressed by
@@ -94,7 +94,7 @@ public class HardDeletePersonCommand : BaseCommand, IActorScoped
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Output;
+namespace ArturRios.Heimdall.Command.Output;
 
 /// <summary>
 ///     Result of <see cref="Input.HardDeletePersonCommand" /> (UC-10). Reports the removed person's
@@ -138,16 +138,16 @@ Also update the class XML doc so it reads "following the UC-06, UC-07, UC-08, UC
 
 - [ ] **Step 5: Verify the build and the existing suite**
 
-Run: `dotnet build src/ArturRios.IdentityManager.sln`
+Run: `dotnet build src/ArturRios.Heimdall.sln`
 Expected: `Build succeeded`, 0 errors.
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: all tests pass (no new tests yet).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command/Input/HardDeletePersonCommand.cs src/Application/ArturRios.IdentityManager.Command/Output/HardDeletePersonCommandOutput.cs src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs
+git add src/Application/ArturRios.Heimdall.Command/Input/HardDeletePersonCommand.cs src/Application/ArturRios.Heimdall.Command/Output/HardDeletePersonCommandOutput.cs src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs
 git commit -m "feat: add hard delete person command (UC-10)"
 ```
 
@@ -156,8 +156,8 @@ git commit -m "feat: add hard delete person command (UC-10)"
 ## Task 2: Handler (test-first)
 
 **Files:**
-- Create: `tests/Application/ArturRios.IdentityManager.Command.Tests/HardDeletePersonCommandHandlerTests.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/HardDeletePersonCommandHandler.cs`
+- Create: `tests/Application/ArturRios.Heimdall.Command.Tests/HardDeletePersonCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/HardDeletePersonCommandHandler.cs`
 
 **Interfaces:**
 - Consumes: `HardDeletePersonCommand`, `HardDeletePersonCommandOutput`, `PersonMessages.{PersonHardDeletedSuccessfully, PersonNotFound, ScopeWouldLoseLastOwner, CannotDeleteSelf}` from Task 1; `IAsyncReadOnlyRepository<T>.Query()` and `IAsyncRepository<T>.DeleteAsync(T)` / `.DeleteRangeAsync(IEnumerable<long>)` from `ArturRios.Data.Relational.Core.Interfaces`; `Entity` (base class carrying `long Id`) from `ArturRios.Data.Relational.Core.Entities`.
@@ -170,15 +170,15 @@ git commit -m "feat: add hard delete person command (UC-10)"
 Create the file with the fixture helpers plus all nine tests. The `Fakes` record mirrors `HardDeleteScopeCommandHandlerTests`: one fake per aggregate, each passed as both reader and writer.
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for HardDeletePersonCommandHandler (UC-10). Cover the main flow with and without
 // dependents, on an already logically deleted person, and on a co-owned ScopeAdmin; AF-10a (not
@@ -470,7 +470,7 @@ public class HardDeletePersonCommandHandlerTests
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation FAILS with `CS0246` — the type `HardDeletePersonCommandHandler` could not be found.
 
 - [ ] **Step 3: Implement `HardDeletePersonCommandHandler`**
@@ -478,16 +478,16 @@ Expected: compilation FAILS with `CS0246` — the type `HardDeletePersonCommandH
 ```csharp
 using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="HardDeletePersonCommand" /> (UC-10): locates the person in any deletion state
@@ -632,13 +632,13 @@ public class HardDeletePersonCommandHandler(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — every existing unit test plus the nine new ones.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command/Handlers/HardDeletePersonCommandHandler.cs tests/Application/ArturRios.IdentityManager.Command.Tests/HardDeletePersonCommandHandlerTests.cs
+git add src/Application/ArturRios.Heimdall.Command/Handlers/HardDeletePersonCommandHandler.cs tests/Application/ArturRios.Heimdall.Command.Tests/HardDeletePersonCommandHandlerTests.cs
 git commit -m "feat: add hard delete person handler (UC-10)"
 ```
 
@@ -647,8 +647,8 @@ git commit -m "feat: add hard delete person handler (UC-10)"
 ## Task 3: Endpoint and wiring
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
 
 **Interfaces:**
 - Consumes: `HardDeletePersonCommand` / `HardDeletePersonCommandOutput` (Task 1), `HardDeletePersonCommandHandler` (Task 2), the controller's existing private `ApplyActor(IActorScoped)`.
@@ -690,16 +690,16 @@ Insert immediately after the `DeletePersonCommand` registration:
 
 - [ ] **Step 3: Verify the build and the unit suite**
 
-Run: `dotnet build src/ArturRios.IdentityManager.sln`
+Run: `dotnet build src/ArturRios.Heimdall.sln`
 Expected: `Build succeeded`, 0 errors.
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS, same count as at the end of Task 2.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs
+git add src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs
 git commit -m "feat: expose hard delete person endpoint (UC-10)"
 ```
 
@@ -708,7 +708,7 @@ git commit -m "feat: expose hard delete person endpoint (UC-10)"
 ## Task 4: Functional tests
 
 **Files:**
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerHardDeleteTests.cs`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerHardDeleteTests.cs`
 
 **Interfaces:**
 - Consumes: the route from Task 3, `HardDeletePersonCommandOutput` from Task 1, and the existing test support — `PostgresFixture.CreateContext()`, `FunctionalCollection`, `TestTokens.ForRole(int)` / `TestTokens.For(int id, int role)`, `WebApiTest<Program>`'s `Gateway` and `Authorize`.
@@ -721,17 +721,17 @@ Seeding helpers follow `PersonControllerDeleteTests` and `ScopeControllerHardDel
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for DELETE /api/persons/{id}/hard (UC-10): the main flow for a User with every kind
 // of dependent and for a co-owned ScopeAdmin, an already logically deleted person, AF-10a (404),
@@ -1011,18 +1011,18 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
 
 - [ ] **Step 2: Run the functional suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — every existing functional test plus the nine new ones. Requires Docker running for Testcontainers.
 
 - [ ] **Step 3: Run the whole suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln`
+Run: `dotnet test src/ArturRios.Heimdall.sln`
 Expected: PASS, 0 failed.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerHardDeleteTests.cs
+git add tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerHardDeleteTests.cs
 git commit -m "test: cover hard delete person endpoint (UC-10)"
 ```
 
@@ -1076,4 +1076,4 @@ git commit -m "docs: align UC-10 spec with implemented behavior"
 ## After the merge (Gate 4)
 
 - [ ] Mark UC-10 ✅ in the README status tracker.
-- [ ] Confirm issue [#11](https://github.com/artur-rios/identity-manager-api/issues/11) is in **Done** and closed.
+- [ ] Confirm issue [#11](https://github.com/artur-rios/heimdall-api/issues/11) is in **Done** and closed.

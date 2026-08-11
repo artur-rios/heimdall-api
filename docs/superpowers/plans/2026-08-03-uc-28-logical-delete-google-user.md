@@ -1,7 +1,7 @@
 # UC-28 — Logical Delete Google User — Implementation Plan
 
 Design: [2026-08-03-uc-28-logical-delete-google-user-design.md](../specs/2026-08-03-uc-28-logical-delete-google-user-design.md)
-Issue: [#29](https://github.com/artur-rios/identity-manager-api/issues/29) · Branch:
+Issue: [#29](https://github.com/artur-rios/heimdall-api/issues/29) · Branch:
 `feature/uc-28-logical-delete-google-user` · Milestone: Google Sign-In
 
 Sequenced test-first per the Testing Specification §9: each implementation step is followed by the
@@ -68,7 +68,7 @@ nothing honours is not a deletion.
 
 ## Step 8 — Run the suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request.
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request.
 
 ## Step 9 — Tracker and pull request
 

@@ -17,7 +17,7 @@
 - **Roles:** `SystemAdmin = 1`, `ScopeAdmin = 2`, `User = 3`; the seeder guarantees `Role.Id == (long)Roles`.
 - **Acting user:** `AuthenticationMiddleware` attaches an `ArturRios.Util.WebApi.Security.Records.AuthenticatedUser(int Id, int Role)` to `HttpContext.Items["User"]`; the `Id` claim is the person's **internal** `Id`.
 - **Tests:** unit tests use `AsyncFakeRepository<T>` from `ArturRios.Util.Test.Mock` and Moq for non-repository collaborators; functional tests derive from `WebApiTest<Program>`, join `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response **and** database state via `db.CreateContext()`. GWT naming `Given…_When…_Then…`, `// Given` / `// When` / `// Then` sections, `[UnitFact]` / `[FunctionalFact]`.
-- **Run filters:** `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
+- **Run filters:** `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
 - **Commit style:** lowercase Conventional Commits subject, ≤50 chars, imperative; body wrapped at 72; trailer `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
 ---
@@ -25,48 +25,48 @@
 ## File Structure
 
 **New — production:**
-- `src/Application/ArturRios.IdentityManager.Shared/Security/IActorScoped.cs` — the two acting-caller members, shared by commands and queries.
-- `src/Application/ArturRios.IdentityManager.Shared/Services/IScopeOwnershipChecker.cs` — moved from `Command/Services`.
-- `src/Application/ArturRios.IdentityManager.Shared/Services/ScopeOwnershipChecker.cs` — moved from `Command/Services`.
-- `src/Application/ArturRios.IdentityManager.Query/Output/PersonOutput.cs` — the person projection returned by all three endpoints.
-- `src/Application/ArturRios.IdentityManager.Query/Input/GetPersonByIdQuery.cs`
-- `src/Application/ArturRios.IdentityManager.Query/Input/ListScopePersonsQuery.cs`
-- `src/Application/ArturRios.IdentityManager.Query/Input/ListScopeOwnersQuery.cs`
-- `src/Application/ArturRios.IdentityManager.Query/Handlers/GetPersonByIdQueryHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopePersonsQueryHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopeOwnersQueryHandler.cs`
+- `src/Application/ArturRios.Heimdall.Shared/Security/IActorScoped.cs` — the two acting-caller members, shared by commands and queries.
+- `src/Application/ArturRios.Heimdall.Shared/Services/IScopeOwnershipChecker.cs` — moved from `Command/Services`.
+- `src/Application/ArturRios.Heimdall.Shared/Services/ScopeOwnershipChecker.cs` — moved from `Command/Services`.
+- `src/Application/ArturRios.Heimdall.Query/Output/PersonOutput.cs` — the person projection returned by all three endpoints.
+- `src/Application/ArturRios.Heimdall.Query/Input/GetPersonByIdQuery.cs`
+- `src/Application/ArturRios.Heimdall.Query/Input/ListScopePersonsQuery.cs`
+- `src/Application/ArturRios.Heimdall.Query/Input/ListScopeOwnersQuery.cs`
+- `src/Application/ArturRios.Heimdall.Query/Handlers/GetPersonByIdQueryHandler.cs`
+- `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopePersonsQueryHandler.cs`
+- `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopeOwnersQueryHandler.cs`
 
 **Deleted — production:**
-- `src/Application/ArturRios.IdentityManager.Command/Services/IScopeOwnershipChecker.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Services/ScopeOwnershipChecker.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/IActorScopedCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/IScopeOwnershipChecker.cs`
+- `src/Application/ArturRios.Heimdall.Command/Services/ScopeOwnershipChecker.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/IActorScopedCommand.cs`
 
 **Modified — production:**
-- `src/Application/ArturRios.IdentityManager.Shared/ArturRios.IdentityManager.Shared.csproj` — add `Domain` project reference and the `ArturRios.Data.Relational.Core` package.
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs` — four new messages.
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs` — their status codes.
-- `src/Application/ArturRios.IdentityManager.Command/Input/CreateUserCommand.cs`, `CreateScopeOwnerCommand.cs` — implement `IActorScoped`.
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`, `CreateScopeOwnerCommandHandler.cs` — `using` for the relocated checker.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs` — three GET actions, `ApplyActor(IActorScoped)`.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs` — three handler registrations, relocated checker namespace.
-- `src/ArturRios.IdentityManager.sln` — register the new `Shared.Tests` project.
+- `src/Application/ArturRios.Heimdall.Shared/ArturRios.Heimdall.Shared.csproj` — add `Domain` project reference and the `ArturRios.Data.Relational.Core` package.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs` — four new messages.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs` — their status codes.
+- `src/Application/ArturRios.Heimdall.Command/Input/CreateUserCommand.cs`, `CreateScopeOwnerCommand.cs` — implement `IActorScoped`.
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateUserCommandHandler.cs`, `CreateScopeOwnerCommandHandler.cs` — `using` for the relocated checker.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs` — three GET actions, `ApplyActor(IActorScoped)`.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` — three handler registrations, relocated checker namespace.
+- `src/ArturRios.Heimdall.sln` — register the new `Shared.Tests` project.
 
 **New — tests:**
-- `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.IdentityManager.Shared.Tests.csproj`
-- `tests/Application/ArturRios.IdentityManager.Shared.Tests/ScopeOwnershipCheckerTests.cs` — moved from `Command.Tests`.
-- `tests/Application/ArturRios.IdentityManager.Query.Tests/GetPersonByIdQueryHandlerTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopePersonsQueryHandlerTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerGetByIdTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopePersonsTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`
+- `tests/Application/ArturRios.Heimdall.Shared.Tests/ArturRios.Heimdall.Shared.Tests.csproj`
+- `tests/Application/ArturRios.Heimdall.Shared.Tests/ScopeOwnershipCheckerTests.cs` — moved from `Command.Tests`.
+- `tests/Application/ArturRios.Heimdall.Query.Tests/GetPersonByIdQueryHandlerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopePersonsQueryHandlerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerGetByIdTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopePersonsTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`
 
 **Modified — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`, `CreateScopeOwnerCommandHandlerTests.cs` — `using` for the relocated checker.
-- `tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj` — add Moq and Bogus.
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`, `CreateScopeOwnerCommandHandlerTests.cs` — `using` for the relocated checker.
+- `tests/Application/ArturRios.Heimdall.Query.Tests/ArturRios.Heimdall.Query.Tests.csproj` — add Moq and Bogus.
 
 **Deleted — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/ScopeOwnershipCheckerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/ScopeOwnershipCheckerTests.cs`
 
 ---
 
@@ -75,30 +75,30 @@
 Pure relocation. Behaviour must not change; the existing suite is the proof.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Shared/Services/IScopeOwnershipChecker.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Shared/Services/ScopeOwnershipChecker.cs`
-- Delete: `src/Application/ArturRios.IdentityManager.Command/Services/IScopeOwnershipChecker.cs`
-- Delete: `src/Application/ArturRios.IdentityManager.Command/Services/ScopeOwnershipChecker.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/ArturRios.IdentityManager.Shared.csproj`
-- Modify: `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Modify: `src/ArturRios.IdentityManager.sln`
-- Create: `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.IdentityManager.Shared.Tests.csproj`
-- Create: `tests/Application/ArturRios.IdentityManager.Shared.Tests/ScopeOwnershipCheckerTests.cs`
-- Modify: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
-- Modify: `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
-- Delete: `tests/Application/ArturRios.IdentityManager.Command.Tests/ScopeOwnershipCheckerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Shared/Services/IScopeOwnershipChecker.cs`
+- Create: `src/Application/ArturRios.Heimdall.Shared/Services/ScopeOwnershipChecker.cs`
+- Delete: `src/Application/ArturRios.Heimdall.Command/Services/IScopeOwnershipChecker.cs`
+- Delete: `src/Application/ArturRios.Heimdall.Command/Services/ScopeOwnershipChecker.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/ArturRios.Heimdall.Shared.csproj`
+- Modify: `src/Application/ArturRios.Heimdall.Command/Handlers/CreateUserCommandHandler.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Modify: `src/ArturRios.Heimdall.sln`
+- Create: `tests/Application/ArturRios.Heimdall.Shared.Tests/ArturRios.Heimdall.Shared.Tests.csproj`
+- Create: `tests/Application/ArturRios.Heimdall.Shared.Tests/ScopeOwnershipCheckerTests.cs`
+- Modify: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`
+- Modify: `tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
+- Delete: `tests/Application/ArturRios.Heimdall.Command.Tests/ScopeOwnershipCheckerTests.cs`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `ArturRios.IdentityManager.Shared.Services.IScopeOwnershipChecker` with
+- Produces: `ArturRios.Heimdall.Shared.Services.IScopeOwnershipChecker` with
   `Task<bool> ActorMayManageScopeAsync(int actingRole, long actingPersonId, long scopeId)`, and its
   implementation `ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader)`.
 
 - [ ] **Step 1: Give `Shared` access to the domain and repository abstractions**
 
-Replace the `ItemGroup`s in `src/Application/ArturRios.IdentityManager.Shared/ArturRios.IdentityManager.Shared.csproj` so the file's item groups read:
+Replace the `ItemGroup`s in `src/Application/ArturRios.Heimdall.Shared/ArturRios.Heimdall.Shared.csproj` so the file's item groups read:
 
 ```xml
     <ItemGroup>
@@ -107,7 +107,7 @@ Replace the `ItemGroup`s in `src/Application/ArturRios.IdentityManager.Shared/Ar
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Domain\ArturRios.IdentityManager.Domain\ArturRios.IdentityManager.Domain.csproj" />
+        <ProjectReference Include="..\..\Domain\ArturRios.Heimdall.Domain\ArturRios.Heimdall.Domain.csproj" />
     </ItemGroup>
 ```
 
@@ -115,10 +115,10 @@ Leave the existing `PropertyGroup` untouched.
 
 - [ ] **Step 2: Create the interface in `Shared`**
 
-Create `src/Application/ArturRios.IdentityManager.Shared/Services/IScopeOwnershipChecker.cs`:
+Create `src/Application/ArturRios.Heimdall.Shared/Services/IScopeOwnershipChecker.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Shared.Services;
+namespace ArturRios.Heimdall.Shared.Services;
 
 /// <summary>
 ///     Decides whether an acting caller is authorized to manage or read a given scope (UC-06 AF-06e,
@@ -137,15 +137,15 @@ public interface IScopeOwnershipChecker
 
 - [ ] **Step 3: Create the implementation in `Shared`**
 
-Create `src/Application/ArturRios.IdentityManager.Shared/Services/ScopeOwnershipChecker.cs`:
+Create `src/Application/ArturRios.Heimdall.Shared/Services/ScopeOwnershipChecker.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Shared.Services;
+namespace ArturRios.Heimdall.Shared.Services;
 
 /// <summary>
 ///     Default <see cref="IScopeOwnershipChecker" />: a System Admin bypasses ownership; any other
@@ -172,7 +172,7 @@ public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader
 - [ ] **Step 4: Delete the originals**
 
 ```bash
-git rm src/Application/ArturRios.IdentityManager.Command/Services/IScopeOwnershipChecker.cs src/Application/ArturRios.IdentityManager.Command/Services/ScopeOwnershipChecker.cs
+git rm src/Application/ArturRios.Heimdall.Command/Services/IScopeOwnershipChecker.cs src/Application/ArturRios.Heimdall.Command/Services/ScopeOwnershipChecker.cs
 ```
 
 - [ ] **Step 5: Point every consumer and the DI registration at the new namespace**
@@ -180,16 +180,16 @@ git rm src/Application/ArturRios.IdentityManager.Command/Services/IScopeOwnershi
 Four production files and two test files reference the checker. In each, add:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Shared.Services;
 ```
 
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateUserCommandHandler.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateUserCommandHandlerTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateUserCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/CreateScopeOwnerCommandHandler.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateUserCommandHandlerTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/CreateScopeOwnerCommandHandlerTests.cs`
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
 
-Keep the existing `using ArturRios.IdentityManager.Command.Services;` in the two handlers and the
+Keep the existing `using ArturRios.Heimdall.Command.Services;` in the two handlers and the
 two handler test classes — `IEmailVerificationService` still lives in that namespace, so removing it
 breaks the build.
 
@@ -201,7 +201,7 @@ In `Startup.cs` the registration line itself is unchanged:
 
 - [ ] **Step 6: Create the `Shared.Tests` project**
 
-Create `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.IdentityManager.Shared.Tests.csproj`:
+Create `tests/Application/ArturRios.Heimdall.Shared.Tests/ArturRios.Heimdall.Shared.Tests.csproj`:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -234,7 +234,7 @@ Create `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.Ident
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\src\Application\ArturRios.IdentityManager.Shared\ArturRios.IdentityManager.Shared.csproj" />
+        <ProjectReference Include="..\..\..\src\Application\ArturRios.Heimdall.Shared\ArturRios.Heimdall.Shared.csproj" />
     </ItemGroup>
 
 </Project>
@@ -242,17 +242,17 @@ Create `tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.Ident
 
 - [ ] **Step 7: Move the ownership tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Shared.Tests/ScopeOwnershipCheckerTests.cs` with the
+Create `tests/Application/ArturRios.Heimdall.Shared.Tests/ScopeOwnershipCheckerTests.cs` with the
 existing test bodies, changing only the namespace and the `using` for the class under test:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
-namespace ArturRios.IdentityManager.Shared.Tests;
+namespace ArturRios.Heimdall.Shared.Tests;
 
 // Unit tests for ScopeOwnershipChecker (UC-06 AF-06e / UC-07 AF-07b authorization): a System Admin
 // always may act; any other actor must own the target scope (a SCOPE_OWNER row links their person
@@ -314,19 +314,19 @@ public class ScopeOwnershipCheckerTests
 Then remove the old copy:
 
 ```bash
-git rm tests/Application/ArturRios.IdentityManager.Command.Tests/ScopeOwnershipCheckerTests.cs
+git rm tests/Application/ArturRios.Heimdall.Command.Tests/ScopeOwnershipCheckerTests.cs
 ```
 
 - [ ] **Step 8: Register the new test project in the solution**
 
 ```bash
-dotnet sln src/ArturRios.IdentityManager.sln add tests/Application/ArturRios.IdentityManager.Shared.Tests/ArturRios.IdentityManager.Shared.Tests.csproj --solution-folder Tests/Application
+dotnet sln src/ArturRios.Heimdall.sln add tests/Application/ArturRios.Heimdall.Shared.Tests/ArturRios.Heimdall.Shared.Tests.csproj --solution-folder Tests/Application
 ```
 
 - [ ] **Step 9: Build and run the unit suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
-Expected: build succeeds and every unit test passes, including the three `ScopeOwnershipCheckerTests` now reported from `ArturRios.IdentityManager.Shared.Tests`.
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
+Expected: build succeeds and every unit test passes, including the three `ScopeOwnershipCheckerTests` now reported from `ArturRios.Heimdall.Shared.Tests`.
 
 - [ ] **Step 10: Commit**
 
@@ -343,23 +343,23 @@ The three UC-07 queries need the same two acting-caller members, so the interfac
 command-specific. Name and namespace change only.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Shared/Security/IActorScoped.cs`
-- Delete: `src/Application/ArturRios.IdentityManager.Command/Input/IActorScopedCommand.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Command/Input/CreateUserCommand.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Command/Input/CreateScopeOwnerCommand.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
+- Create: `src/Application/ArturRios.Heimdall.Shared/Security/IActorScoped.cs`
+- Delete: `src/Application/ArturRios.Heimdall.Command/Input/IActorScopedCommand.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Command/Input/CreateUserCommand.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Command/Input/CreateScopeOwnerCommand.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
 
 **Interfaces:**
 - Consumes: nothing from Task 1.
-- Produces: `ArturRios.IdentityManager.Shared.Security.IActorScoped` with settable
+- Produces: `ArturRios.Heimdall.Shared.Security.IActorScoped` with settable
   `long ActingPersonId` and `int ActingRole`.
 
 - [ ] **Step 1: Create the shared interface**
 
-Create `src/Application/ArturRios.IdentityManager.Shared/Security/IActorScoped.cs`:
+Create `src/Application/ArturRios.Heimdall.Shared/Security/IActorScoped.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Shared.Security;
+namespace ArturRios.Heimdall.Shared.Security;
 
 /// <summary>
 ///     A command or query whose authorization depends on the acting caller. The controller populates
@@ -379,16 +379,16 @@ public interface IActorScoped
 - [ ] **Step 2: Delete the command-only interface**
 
 ```bash
-git rm src/Application/ArturRios.IdentityManager.Command/Input/IActorScopedCommand.cs
+git rm src/Application/ArturRios.Heimdall.Command/Input/IActorScopedCommand.cs
 ```
 
 - [ ] **Step 3: Point the two commands at it**
 
-In `src/Application/ArturRios.IdentityManager.Command/Input/CreateUserCommand.cs`, add the `using`
+In `src/Application/ArturRios.Heimdall.Command/Input/CreateUserCommand.cs`, add the `using`
 and change the base list:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 ```
 
@@ -397,14 +397,14 @@ public class CreateUserCommand : BaseCommand, IActorScoped
 ```
 
 Apply the identical two edits to
-`src/Application/ArturRios.IdentityManager.Command/Input/CreateScopeOwnerCommand.cs` (its class
+`src/Application/ArturRios.Heimdall.Command/Input/CreateScopeOwnerCommand.cs` (its class
 declaration becomes `public class CreateScopeOwnerCommand : BaseCommand, IActorScoped`). Leave every
 property in both files untouched.
 
 - [ ] **Step 4: Widen the controller helper**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`, add
-`using ArturRios.IdentityManager.Shared.Security;` and change the helper's parameter type and
+In `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`, add
+`using ArturRios.Heimdall.Shared.Security;` and change the helper's parameter type and
 comment:
 
 ```csharp
@@ -426,7 +426,7 @@ The three existing call sites (`ApplyActor(command)`) need no change.
 
 - [ ] **Step 5: Build and run the unit suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: build succeeds, every unit test still passes.
 
 - [ ] **Step 6: Commit**
@@ -444,20 +444,20 @@ Delivers the by-id read (FR-PE-03) with its visibility rule, plus the output typ
 the two later tasks also use.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Query/Output/PersonOutput.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Query/Input/GetPersonByIdQuery.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Query/Handlers/GetPersonByIdQueryHandler.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Query.Tests/GetPersonByIdQueryHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Output/PersonOutput.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Input/GetPersonByIdQuery.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Handlers/GetPersonByIdQueryHandler.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Query.Tests/GetPersonByIdQueryHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `IActorScoped` (Task 2).
 - Produces:
-  - `ArturRios.IdentityManager.Query.Output.PersonOutput : QueryOutput` with `Guid Id`,
+  - `ArturRios.Heimdall.Query.Output.PersonOutput : QueryOutput` with `Guid Id`,
     `string Name`, `string Email`, `int Role`, `bool EmailVerified`, `bool IsDeleted`,
     `Guid? ScopeId`, `IEnumerable<Guid> OwnedScopeIds`, `DateTime CreatedAt`, `DateTime UpdatedAt`.
-  - `ArturRios.IdentityManager.Query.Input.GetPersonByIdQuery : BaseQuery, IActorScoped` with
+  - `ArturRios.Heimdall.Query.Input.GetPersonByIdQuery : BaseQuery, IActorScoped` with
     `Guid Id`, `bool IncludeDeleted`.
   - `GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personReader)` implementing
     `IQueryHandlerAsync<GetPersonByIdQuery, PersonOutput>`.
@@ -466,7 +466,7 @@ the two later tasks also use.
 
 - [ ] **Step 1: Add the four messages**
 
-Append to `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`, inside the
+Append to `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`, inside the
 class:
 
 ```csharp
@@ -486,7 +486,7 @@ class:
 - [ ] **Step 2: Map them to status codes**
 
 Append to the dictionary initializer in
-`src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`, after the existing
+`src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`, after the existing
 `[PersonMessages.InvalidRole]` entry (add a comma to that line):
 
 ```csharp
@@ -503,12 +503,12 @@ Also update the class summary comment to read `following the UC-06 and UC-07 flo
 
 - [ ] **Step 3: Create `PersonOutput`**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Output/PersonOutput.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Output/PersonOutput.cs`:
 
 ```csharp
 using ArturRios.Mediator.Query;
 
-namespace ArturRios.IdentityManager.Query.Output;
+namespace ArturRios.Heimdall.Query.Output;
 
 /// <summary>
 ///     Person data returned by the UC-07 view/list queries. Only externally-facing <c>PublicId</c>
@@ -551,13 +551,13 @@ public class PersonOutput : QueryOutput
 
 - [ ] **Step 4: Create `GetPersonByIdQuery`**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Input/GetPersonByIdQuery.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Input/GetPersonByIdQuery.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
 
-namespace ArturRios.IdentityManager.Query.Input;
+namespace ArturRios.Heimdall.Query.Input;
 
 /// <summary>
 ///     Request to retrieve a single person by their <c>PublicId</c> (UC-07, FR-PE-03). The pagination
@@ -581,18 +581,18 @@ public class GetPersonByIdQuery : BaseQuery, IActorScoped
 
 - [ ] **Step 5: Write the failing unit tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Query.Tests/GetPersonByIdQueryHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Query.Tests/GetPersonByIdQueryHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Handlers;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Handlers;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
-namespace ArturRios.IdentityManager.Query.Tests;
+namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for GetPersonByIdQueryHandler (UC-07, FR-PE-03/FR-PE-08). Cover the main flow for each
 // actor the use case allows, AF-07a (person not found, including logically deleted), AF-07b (caller
@@ -860,25 +860,25 @@ public class GetPersonByIdQueryHandlerTests
 
 - [ ] **Step 6: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation error — `GetPersonByIdQueryHandler` does not exist.
 
 - [ ] **Step 7: Implement the handler**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Handlers/GetPersonByIdQueryHandler.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Handlers/GetPersonByIdQueryHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Query.Handlers;
+namespace ArturRios.Heimdall.Query.Handlers;
 
 /// <summary>
 ///     Handles <see cref="GetPersonByIdQuery" /> (UC-07, FR-PE-03): retrieves a person by their
@@ -984,7 +984,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
 
 - [ ] **Step 8: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all ten `GetPersonByIdQueryHandlerTests` green, and no previously passing test broken.
 
 - [ ] **Step 9: Commit**
@@ -999,10 +999,10 @@ git commit -m "feat: add get person by id query (UC-07)"
 ## Task 4: `GET /api/scopes/{scopeId}/persons` query handler
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Query/Input/ListScopePersonsQuery.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopePersonsQueryHandler.cs`
-- Modify: `tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj`
-- Test: `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopePersonsQueryHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Input/ListScopePersonsQuery.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopePersonsQueryHandler.cs`
+- Modify: `tests/Application/ArturRios.Heimdall.Query.Tests/ArturRios.Heimdall.Query.Tests.csproj`
+- Test: `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopePersonsQueryHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `PersonOutput`, `PersonMessages.PersonsRetrievedSuccessfully` (Task 3);
@@ -1017,7 +1017,7 @@ git commit -m "feat: add get person by id query (UC-07)"
 This task's tests are the first in `Query.Tests` to mock a collaborator, and the project was
 scaffolded without Moq or Bogus. Add both — Testing Specification §5 requires the same stack in
 every test project — inside the existing `ItemGroup`, after the `ArturRios.Util.Test` reference in
-`tests/Application/ArturRios.IdentityManager.Query.Tests/ArturRios.IdentityManager.Query.Tests.csproj`:
+`tests/Application/ArturRios.Heimdall.Query.Tests/ArturRios.Heimdall.Query.Tests.csproj`:
 
 ```xml
         <PackageReference Include="Bogus" Version="35.6.3" />
@@ -1026,13 +1026,13 @@ every test project — inside the existing `ItemGroup`, after the `ArturRios.Uti
 
 - [ ] **Step 1: Create the query**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Input/ListScopePersonsQuery.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Input/ListScopePersonsQuery.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
 
-namespace ArturRios.IdentityManager.Query.Input;
+namespace ArturRios.Heimdall.Query.Input;
 
 /// <summary>
 ///     Request to list the <c>User</c> persons of a scope, with pagination and optional filtering
@@ -1062,20 +1062,20 @@ public class ListScopePersonsQuery : BaseQuery, IActorScoped
 
 - [ ] **Step 2: Write the failing unit tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopePersonsQueryHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopePersonsQueryHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Handlers;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Handlers;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
 
-namespace ArturRios.IdentityManager.Query.Tests;
+namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for ListScopePersonsQueryHandler (UC-07, FR-PE-04/FR-PE-08): the scope's Users only,
 // paginated and filterable, gated by scope ownership. Covers the main flow, a missing or logically
@@ -1312,25 +1312,25 @@ public class ListScopePersonsQueryHandlerTests
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation error — `ListScopePersonsQueryHandler` does not exist.
 
 - [ ] **Step 4: Implement the handler**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopePersonsQueryHandler.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopePersonsQueryHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Query.Handlers;
+namespace ArturRios.Heimdall.Query.Handlers;
 
 /// <summary>
 ///     Handles <see cref="ListScopePersonsQuery" /> (UC-07, FR-PE-04): lists the <c>User</c> persons
@@ -1407,7 +1407,7 @@ public class ListScopePersonsQueryHandler(
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all eight `ListScopePersonsQueryHandlerTests` green, nothing else broken.
 
 - [ ] **Step 6: Commit**
@@ -1424,9 +1424,9 @@ git commit -m "feat: add list scope persons query (UC-07)"
 Same shape as Task 4, selecting `SCOPE_OWNER` rows instead of `SCOPE_USER` ones.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Query/Input/ListScopeOwnersQuery.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopeOwnersQueryHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Input/ListScopeOwnersQuery.cs`
+- Create: `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopeOwnersQueryHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `PersonOutput`, `PersonMessages.PersonsRetrievedSuccessfully` (Task 3);
@@ -1438,13 +1438,13 @@ Same shape as Task 4, selecting `SCOPE_OWNER` rows instead of `SCOPE_USER` ones.
 
 - [ ] **Step 1: Create the query**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Input/ListScopeOwnersQuery.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Input/ListScopeOwnersQuery.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
 
-namespace ArturRios.IdentityManager.Query.Input;
+namespace ArturRios.Heimdall.Query.Input;
 
 /// <summary>
 ///     Request to list the <c>ScopeAdmin</c> owners of a scope, with pagination and optional
@@ -1474,20 +1474,20 @@ public class ListScopeOwnersQuery : BaseQuery, IActorScoped
 
 - [ ] **Step 2: Write the failing unit tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Query.Tests/ListScopeOwnersQueryHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Handlers;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Handlers;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
 
-namespace ArturRios.IdentityManager.Query.Tests;
+namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for ListScopeOwnersQueryHandler (UC-07, FR-PE-04/FR-PE-08): the scope's ScopeAdmin
 // owners only, paginated and filterable, gated by scope ownership. Covers the main flow, a missing
@@ -1724,25 +1724,25 @@ public class ListScopeOwnersQueryHandlerTests
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation error — `ListScopeOwnersQueryHandler` does not exist.
 
 - [ ] **Step 4: Implement the handler**
 
-Create `src/Application/ArturRios.IdentityManager.Query/Handlers/ListScopeOwnersQueryHandler.cs`:
+Create `src/Application/ArturRios.Heimdall.Query/Handlers/ListScopeOwnersQueryHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Query.Handlers;
+namespace ArturRios.Heimdall.Query.Handlers;
 
 /// <summary>
 ///     Handles <see cref="ListScopeOwnersQuery" /> (UC-07, FR-PE-04): lists the <c>ScopeAdmin</c>
@@ -1819,7 +1819,7 @@ public class ListScopeOwnersQueryHandler(
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all eight `ListScopeOwnersQueryHandlerTests` green, nothing else broken.
 
 - [ ] **Step 6: Commit**
@@ -1837,9 +1837,9 @@ Wires all three routes and their DI registrations — the later two tasks then o
 coverage against routes that already exist.
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerGetByIdTests.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerGetByIdTests.cs`
 
 **Interfaces:**
 - Consumes: all three queries, `PersonOutput`, the handlers (Tasks 3–5), `IActorScoped` (Task 2).
@@ -1854,12 +1854,12 @@ coverage against routes that already exist.
 
 - [ ] **Step 1: Add the three controller actions**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`, extend the
+In `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`, extend the
 using block with:
 
 ```csharp
-using ArturRios.IdentityManager.Query.Input;
-using ArturRios.IdentityManager.Query.Output;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
 using ArturRios.Mediator.Query;
 ```
 
@@ -1933,7 +1933,7 @@ query string is overwritten by the token's values.
 
 - [ ] **Step 2: Register the three handlers**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, immediately after the existing
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, immediately after the existing
 `ListScopesQuery` registration, add:
 
 ```csharp
@@ -1947,20 +1947,20 @@ In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, immediately a
 
 - [ ] **Step 3: Write the functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerGetByIdTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerGetByIdTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for GET /api/persons/{id} (UC-07, FR-PE-03/FR-PE-08): the main flow for each
 // actor the use case allows, AF-07a (404), AF-07b (403), and the unauthenticated flow (401).
@@ -2172,7 +2172,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
 
 - [ ] **Step 4: Run the functional tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — all nine `PersonControllerGetByIdTests` green, and the existing functional suites
 (`ScopeController*`, `PersonControllerCreate*`, `HealthCheckTests`, `SchemaTests`, `SeedingTests`)
 still green.
@@ -2189,7 +2189,7 @@ git commit -m "feat: expose person view endpoints (UC-07)"
 ## Task 7: Functional coverage for `GET /api/scopes/{scopeId}/persons`
 
 **Files:**
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopePersonsTests.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopePersonsTests.cs`
 
 **Interfaces:**
 - Consumes: the route and DI wiring from Task 6; `PersonOutput` from Task 3.
@@ -2197,20 +2197,20 @@ git commit -m "feat: expose person view endpoints (UC-07)"
 
 - [ ] **Step 1: Write the functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopePersonsTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopePersonsTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for GET /api/scopes/{scopeId}/persons (UC-07, FR-PE-04): the main flow for a
 // System Admin and an owning Scope Admin, AF-07a (unknown scope → 404), AF-07b (non-owner → 403),
@@ -2408,7 +2408,7 @@ public class PersonControllerListScopePersonsTests(PostgresFixture db) : WebApiT
 
 - [ ] **Step 2: Run the functional tests**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — all eight `PersonControllerListScopePersonsTests` green, nothing else broken.
 
 - [ ] **Step 3: Commit**
@@ -2423,7 +2423,7 @@ git commit -m "test: cover list scope persons endpoint (UC-07)"
 ## Task 8: Functional coverage for `GET /api/scopes/{scopeId}/owners`
 
 **Files:**
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`
 
 **Interfaces:**
 - Consumes: the route and DI wiring from Task 6; `PersonOutput` from Task 3.
@@ -2431,20 +2431,20 @@ git commit -m "test: cover list scope persons endpoint (UC-07)"
 
 - [ ] **Step 1: Write the functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerListScopeOwnersTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Query.Output;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for GET /api/scopes/{scopeId}/owners (UC-07, FR-PE-04): the main flow for a
 // System Admin and an owning Scope Admin, AF-07a (unknown scope → 404), AF-07b (non-owner → 403),
@@ -2627,10 +2627,10 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
 
 - [ ] **Step 2: Run the full suite**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS.
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — all seven `PersonControllerListScopeOwnersTests` green, nothing else broken.
 
 - [ ] **Step 3: Commit**
@@ -2651,6 +2651,6 @@ Walk this before opening the pull request:
 - [ ] Unit tests cover each of the three query handlers (main + applicable `AF-xx`), and the
       relocated `ScopeOwnershipCheckerTests` still pass from `Shared.Tests`.
 - [ ] Functional tests cover each endpoint, including the authorization flows (403 and 401).
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and
+- [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and
       `--filter "Category=Functional"` both pass — real output read, not assumed.
 - [ ] Pull request opened into `main` with `Closes #8` in the description, awaiting human review.

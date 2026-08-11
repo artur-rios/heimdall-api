@@ -1,10 +1,10 @@
-# Use Case Specification Document — Identity Manager API
+# Use Case Specification Document — Heimdall API
 
 ## 1. Introduction
 
 ### 1.1 Purpose
 
-This document specifies the use cases for the **Identity Manager API**. Each use case describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.
+This document specifies the use cases for the **Heimdall API**. Each use case describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.
 
 Note on identifiers: every `{id}` / `{scopeId}` / `{personId}` referenced in these flows is the entity's `PublicId` (a GUID). Internally, each entity also has an auto-increment `bigint Id` used only for storage and joins — it is never seen by any actor in these use cases (see the System Requirements Document, §4.0).
 
@@ -132,7 +132,7 @@ graph LR
 ```mermaid
 sequenceDiagram
     actor SA as System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     SA->>API: POST /api/scopes { name, description, ownerIds }
@@ -253,7 +253,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor SA as System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     SA->>API: DELETE /api/scopes/{id}
@@ -338,7 +338,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Admin as Scope Admin (owner) / System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
     participant ES as Email Service
 
@@ -383,7 +383,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Owner as Scope Admin (owner) / System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
     participant ES as Email Service
 
@@ -633,7 +633,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor U as User
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     U->>API: POST /api/auth/login { email, password, scopeId }
@@ -652,7 +652,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor A as Scope Admin / System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     A->>API: POST /api/auth/login { email, password }
@@ -714,7 +714,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor U as Anonymous
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
     participant ES as Email Service
 
@@ -788,7 +788,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor U as Person
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     U->>API: POST /api/auth/verify-email { token }
@@ -861,7 +861,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Caller
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Caller->>API: POST /api/scopes/{scopeId}/applications { name, ownerId }
@@ -1024,7 +1024,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Admin as System Admin / Existing Owner
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Admin->>API: POST /api/scopes/{id}/owners/{personId}
@@ -1099,7 +1099,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Admin as System Admin / Existing Owner
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Admin->>API: POST /api/scopes/{id}/users/{personId}/promote
@@ -1148,7 +1148,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Admin as System Admin / Existing Owner
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Admin->>API: PUT /api/scopes/{id}/google-signin { enabled }
@@ -1199,7 +1199,7 @@ sequenceDiagram
 sequenceDiagram
     actor Caller as Anonymous
     participant GIP as Google Identity Platform
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Caller->>GIP: Authenticate with Google
@@ -1367,7 +1367,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Caller as System Admin / Scope Admin (owner)
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     Caller->>API: POST /api/scopes/{scopeId}/permissions { name, description?, includeAsJwtClaim? }

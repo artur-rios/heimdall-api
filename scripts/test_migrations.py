@@ -10,9 +10,9 @@ from migrations import describe_connection, parse_env_file
 
 class ParseEnvFileTests(unittest.TestCase):
     def test_given_quoted_values_when_parsed_then_quotes_are_stripped(self):
-        parsed = parse_env_file('IDENTITY_MANAGER_DATA_DATABASETYPE="PostgreSql"\n')
+        parsed = parse_env_file('HEIMDALL_DATA_DATABASETYPE="PostgreSql"\n')
 
-        self.assertEqual({"IDENTITY_MANAGER_DATA_DATABASETYPE": "PostgreSql"}, parsed)
+        self.assertEqual({"HEIMDALL_DATA_DATABASETYPE": "PostgreSql"}, parsed)
 
     def test_given_a_byte_order_mark_when_parsed_then_the_first_key_is_clean(self):
         parsed = parse_env_file("﻿FIRST=1\n")
@@ -25,9 +25,9 @@ class ParseEnvFileTests(unittest.TestCase):
         self.assertEqual({"KEY": "value"}, parsed)
 
     def test_given_a_value_containing_equals_when_parsed_then_the_value_is_intact(self):
-        parsed = parse_env_file('CONN="Host=localhost;Database=identity_manager"\n')
+        parsed = parse_env_file('CONN="Host=localhost;Database=heimdall"\n')
 
-        self.assertEqual({"CONN": "Host=localhost;Database=identity_manager"}, parsed)
+        self.assertEqual({"CONN": "Host=localhost;Database=heimdall"}, parsed)
 
     def test_given_a_line_without_a_separator_when_parsed_then_it_is_ignored(self):
         parsed = parse_env_file("NOT_A_PAIR\nKEY=value\n")

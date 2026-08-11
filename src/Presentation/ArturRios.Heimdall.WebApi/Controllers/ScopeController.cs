@@ -1,0 +1,127 @@
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
+using ArturRios.Mediator.Command;
+using ArturRios.Mediator.Query;
+using ArturRios.Output;
+using ArturRios.Util.WebApi.AspNetCore;
+using ArturRios.Util.WebApi.Security.Attributes;
+using Microsoft.AspNetCore.Mvc;
+
+namespace ArturRios.Heimdall.WebApi.Controllers;
+
+[Route("api/scopes")]
+public class ScopeController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
+{
+    /// <summary>
+    ///     Creates a new scope with one or more initial owners (UC-01). Restricted to System Admins.
+    /// </summary>
+    [HttpPost]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<CreateScopeCommandOutput?>>> Create([FromBody] CreateScopeCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<CreateScopeCommand, CreateScopeCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Updates an existing scope's name and description (UC-03). Restricted to System Admins.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<UpdateScopeCommandOutput?>>> Update(
+        Guid id, [FromBody] UpdateScopeCommand command)
+    {
+        command.Id = id;
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<UpdateScopeCommand, UpdateScopeCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Logically deletes a scope, cascading to its Users, Google Users, and applications (UC-04).
+    ///     Restricted to System Admins.
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<DeleteScopeCommandOutput?>>> Delete(Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<DeleteScopeCommand, DeleteScopeCommandOutput>(new DeleteScopeCommand { Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Permanently (hard) deletes a scope, removing its Users, Google Users, applications, and
+    ///     ownership/membership join rows (UC-05). Restricted to System Admins.
+    /// </summary>
+    [HttpDelete("{id:guid}/hard")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<HardDeleteScopeCommandOutput?>>> HardDelete(Guid id)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>(
+                new HardDeleteScopeCommand { Id = id });
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Turns Google Sign-In on or off for a scope (UC-24, FR-GO-01/FR-GO-02). The attribute keeps
+    ///     a <c>User</c> out — they can never be a System Admin nor an existing owner — while the
+    ///     rules that depend on data it cannot see are the handler's: whether the acting Scope Admin
+    ///     owns this scope (AF-24b) and whether the scope is active (AF-24a).
+    /// </summary>
+    [HttpPut("{id:guid}/google-signin")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SetGoogleSignInCommandOutput?>>> SetGoogleSignIn(
+        Guid id, [FromBody] SetGoogleSignInCommand command)
+    {
+        command.Id = id;
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
+    /// </summary>
+    [HttpGet]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<PaginatedOutput<ScopeOutput>>> List([FromQuery] ListScopesQuery query)
+    {
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListScopesQuery, ScopeOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Retrieves a single scope by its public identifier (UC-02). Open to any authenticated actor
+    ///     because a Scope Admin reads the scopes they own and a User the scope they belong to; that
+    ///     per-actor visibility rule (AF-02b) is data-dependent and is therefore enforced by the
+    ///     handler.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<DataOutput<ScopeOutput?>>> GetById(Guid id, [FromQuery] bool includeDeleted = false)
+    {
+        var query = new GetScopeByIdQuery { Id = id, IncludeDeleted = includeDeleted };
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    }
+}

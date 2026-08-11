@@ -1,7 +1,7 @@
 # UC-26 — Sign Out via Google — Implementation Plan
 
 Design: [2026-08-03-uc-26-sign-out-via-google-design.md](../specs/2026-08-03-uc-26-sign-out-via-google-design.md)
-Issue: [#27](https://github.com/artur-rios/identity-manager-api/issues/27) · Branch:
+Issue: [#27](https://github.com/artur-rios/heimdall-api/issues/27) · Branch:
 `feature/uc-26-sign-out-via-google` · Milestone: Google Sign-In
 
 Sequenced test-first per the Testing Specification §9: each implementation step is followed by the
@@ -71,7 +71,7 @@ No validator, and no new service interface: nothing is verified, issued, or pers
 
 ## Step 8 — Run the suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both `Category=Unit` and `Category=Functional`
+`dotnet test src/ArturRios.Heimdall.sln` — both `Category=Unit` and `Category=Functional`
 green before the pull request.
 
 ## Step 9 — Tracker and pull request

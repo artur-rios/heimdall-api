@@ -1,7 +1,7 @@
 # UC-21: Add Scope Owner — Implementation Plan
 
 Design: [2026-07-31-uc-21-add-scope-owner-design.md](../specs/2026-07-31-uc-21-add-scope-owner-design.md)
-Issue: [#22](https://github.com/artur-rios/identity-manager-api/issues/22)
+Issue: [#22](https://github.com/artur-rios/heimdall-api/issues/22)
 Branch: `feature/uc-21-add-scope-owner`
 
 Sequenced test-first per the
@@ -57,7 +57,7 @@ ownership check → person lookup → idempotent short-circuit → add the join 
 `personWriter.UpdateAsync` → return. Each step commented with the UC/AF it implements; failures
 returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -101,5 +101,5 @@ Refusal tests assert no `scope_owner` row was created; success tests assert exac
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #22`.

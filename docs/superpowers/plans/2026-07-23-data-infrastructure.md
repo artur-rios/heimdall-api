@@ -2,27 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the Identity Manager API run against a real PostgreSQL database — snake_case schema, EF Core migrations driven by a Python menu, guaranteed reference data, and no sensitive-value logging in production.
+**Goal:** Make the Heimdall API run against a real PostgreSQL database — snake_case schema, EF Core migrations driven by a Python menu, guaranteed reference data, and no sensitive-value logging in production.
 
-**Architecture:** `ArturRios.IdentityManager.Data` keeps the `AppDbContext` and gains three things: a design-time factory so `dotnet ef` can build the context without booting the API, a `Migrations` folder, and an idempotent `DatabaseSeeder` the Web API runs at startup. Migrations are never applied by the application — `scripts/migrations.py` applies them, and the seeder refuses to start against a schema with pending migrations.
+**Architecture:** `ArturRios.Heimdall.Data` keeps the `AppDbContext` and gains three things: a design-time factory so `dotnet ef` can build the context without booting the API, a `Migrations` folder, and an idempotent `DatabaseSeeder` the Web API runs at startup. Migrations are never applied by the application — `scripts/migrations.py` applies them, and the seeder refuses to start against a schema with pending migrations.
 
 **Tech Stack:** .NET 10, EF Core 10.0.10, Npgsql 10.0.3, `EFCore.NamingConventions` 10.0.1, `ArturRios.Data.Relational.Core` 3.0.0, `ArturRios.Util` (Argon2id hashing), xUnit + Testcontainers, Python 3 (standard library only).
 
 ## Global Constraints
 
 - Target framework `net10.0`; `Nullable` and `ImplicitUsings` enabled on every project.
-- Database schema is `identity_manager`. Tables are **snake_case and singular**; columns, keys and indexes are snake_case.
+- Database schema is `heimdall`. Tables are **snake_case and singular**; columns, keys and indexes are snake_case.
 - `role.id` equals the `Roles` enum value: `SystemAdmin = 1`, `ScopeAdmin = 2`, `User = 3`.
 - EF diagnostics (`EnableSensitiveDataLogging`, `EnableDetailedErrors`) default to **off**; they are enabled only when the host environment is not Production.
-- Migrations live in `src/Infrastructure/ArturRios.IdentityManager.Data/Migrations/` and are applied only through `scripts/migrations.py`.
+- Migrations live in `src/Infrastructure/ArturRios.Heimdall.Data/Migrations/` and are applied only through `scripts/migrations.py`.
 - The Python script uses the standard library only — no pip installs.
 - Test names follow Given/When/Then per `docs/Testing Specification Document.md`: `GivenSomeCondition_WhenSomeAction_ThenSomeOutput` in C#, `test_given_..._when_..._then_...` in Python.
 - Package versions to use exactly: `EFCore.NamingConventions` `10.0.1`, `Microsoft.EntityFrameworkCore.Design` `10.0.10`, `dotnet-ef` `10.0.10`, `ArturRios.Util` `1.4.0`.
 
 ## Baseline (verified 2026-07-23)
 
-- `dotnet build src/ArturRios.IdentityManager.sln` — succeeds, 0 warnings.
-- `dotnet test src/ArturRios.IdentityManager.sln` — **1 test, failing.** `HealthCheckTests` throws `DataAccessException: Environment variable 'IDENTITY_MANAGER_DATA_DATABASETYPE' is unset` because the class never joins `FunctionalCollection`, so no container starts. Task 4 fixes this.
+- `dotnet build src/ArturRios.Heimdall.sln` — succeeds, 0 warnings.
+- `dotnet test src/ArturRios.Heimdall.sln` — **1 test, failing.** `HealthCheckTests` throws `DataAccessException: Environment variable 'HEIMDALL_DATA_DATABASETYPE' is unset` because the class never joins `FunctionalCollection`, so no container starts. Task 4 fixes this.
 - `CreateScopeCommandHandlerTests`, `GetScopeByIdQueryHandlerTests` and `ListScopesQueryHandlerTests` are empty scaffolding classes with no test methods. Leave them alone — filling them in is not part of this plan.
 - **Docker was not running.** Tasks 4 and 6 need it for Testcontainers. Start Docker Desktop before those tasks and confirm with `docker version`.
 
@@ -30,7 +30,7 @@
 
 | File | Responsibility |
 | --- | --- |
-| `src/Presentation/.../ArturRios.IdentityManager.WebApi.csproj` | Copies `Environments/` and `Settings/` to the build output |
+| `src/Presentation/.../ArturRios.Heimdall.WebApi.csproj` | Copies `Environments/` and `Settings/` to the build output |
 | `src/Infrastructure/.../Configuration/DbContextDiagnosticsOptions.cs` | **New.** Carries the two diagnostics flags, defaulting to off |
 | `src/Infrastructure/.../Configuration/AppDbContext.cs` | Applies snake_case naming and the diagnostics flags |
 | `src/Infrastructure/.../Configuration/DesignTimeDbContextFactory.cs` | **New.** Builds the context for `dotnet ef` from the environment |
@@ -39,7 +39,7 @@
 | `src/Infrastructure/.../Seeding/MasterUserOptions.cs` | **New.** Master-user credentials read from the environment |
 | `src/Infrastructure/.../Seeding/DatabaseSeeder.cs` | **New.** Migration guard, role reconciliation, system-admin bootstrap |
 | `src/Presentation/.../Startup.cs` | Registers the diagnostics options and the seeder, and runs the seeder |
-| `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/` | **New.** Unit tests for the Data project |
+| `tests/Infrastructure/ArturRios.Heimdall.Data.Tests/` | **New.** Unit tests for the Data project |
 | `tests/Presentation/.../Support/PostgresFixture.cs` | Migrates the throwaway container and exposes a context factory |
 | `tests/Presentation/.../SchemaTests.cs` | **New.** Asserts the migrated schema's table names |
 | `tests/Presentation/.../SeedingTests.cs` | **New.** Asserts roles and the system admin after the API boots |
@@ -55,7 +55,7 @@
 `ConfigurationLoader` resolves `Environments/.env.<environment>` (falling back to `Environments/.env.local`) and `Settings/appsettings.<environment>.json` relative to the **application base path** — `bin/Debug/net10.0/`. Neither folder is copied there today, so the connection string is never loaded from a file.
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/ArturRios.IdentityManager.WebApi.csproj`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall.WebApi.csproj`
 - Modify: `README.md`
 
 **Interfaces:**
@@ -67,14 +67,14 @@
 Run:
 
 ```bash
-ls src/Presentation/ArturRios.IdentityManager.WebApi/bin/Debug/net10.0/Environments src/Presentation/ArturRios.IdentityManager.WebApi/bin/Debug/net10.0/Settings
+ls src/Presentation/ArturRios.Heimdall.WebApi/bin/Debug/net10.0/Environments src/Presentation/ArturRios.Heimdall.WebApi/bin/Debug/net10.0/Settings
 ```
 
 Expected: both paths report "No such file or directory".
 
 - [ ] **Step 2: Add the content items to the Web API project**
 
-In `ArturRios.IdentityManager.WebApi.csproj`, add this `ItemGroup` immediately after the closing `</ItemGroup>` of the `ProjectReference` group:
+In `ArturRios.Heimdall.WebApi.csproj`, add this `ItemGroup` immediately after the closing `</ItemGroup>` of the `ProjectReference` group:
 
 ```xml
   <ItemGroup>
@@ -90,7 +90,7 @@ In `ArturRios.IdentityManager.WebApi.csproj`, add this `ItemGroup` immediately a
 Run:
 
 ```bash
-dotnet build src/ArturRios.IdentityManager.sln -v q --nologo && ls src/Presentation/ArturRios.IdentityManager.WebApi/bin/Debug/net10.0/Environments src/Presentation/ArturRios.IdentityManager.WebApi/bin/Debug/net10.0/Settings
+dotnet build src/ArturRios.Heimdall.sln -v q --nologo && ls src/Presentation/ArturRios.Heimdall.WebApi/bin/Debug/net10.0/Environments src/Presentation/ArturRios.Heimdall.WebApi/bin/Debug/net10.0/Settings
 ```
 
 Expected: `Build succeeded.`, then `.env` listed under `Environments` and `appsettings.json` under `Settings`.
@@ -108,11 +108,11 @@ Replace the `## Run` section of `README.md` with:
 per-environment files that are gitignored. Create your local one before the first run:
 
 ```bash
-cp src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env.local
+cp src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env.local
 ```
 
-Then fill in `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` (a PostgreSQL connection string),
-`IDENTITY_MANAGER_DATA_DATABASETYPE` (`PostgreSql`), and the `IDENTITY_MANAGER_MASTER_USER_*`
+Then fill in `HEIMDALL_DATA_CONNECTIONSTRING` (a PostgreSQL connection string),
+`HEIMDALL_DATA_DATABASETYPE` (`PostgreSql`), and the `HEIMDALL_MASTER_USER_*`
 values used to seed the first system administrator.
 
 ## Database
@@ -134,14 +134,14 @@ dotnet tool restore
 ## Run
 
 ```bash
-dotnet run --project src/Presentation/ArturRios.IdentityManager.WebApi
+dotnet run --project src/Presentation/ArturRios.Heimdall.WebApi
 ```
 ````
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Presentation/ArturRios.IdentityManager.WebApi/ArturRios.IdentityManager.WebApi.csproj README.md
+git add src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall.WebApi.csproj README.md
 git commit -m "build: copy environment and settings files to the output"
 ```
 
@@ -152,16 +152,16 @@ git commit -m "build: copy environment and settings files to the output"
 Both changes rewrite `AppDbContext.OnConfiguring`, so they land together to avoid touching the same method twice.
 
 **Files:**
-- Create: `src/Infrastructure/ArturRios.IdentityManager.Data/Configuration/DbContextDiagnosticsOptions.cs`
-- Modify: `src/Infrastructure/ArturRios.IdentityManager.Data/Configuration/AppDbContext.cs`
-- Modify: `src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj`
-- Modify: all nine files in `src/Infrastructure/ArturRios.IdentityManager.Data/EntityMaps/`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+- Create: `src/Infrastructure/ArturRios.Heimdall.Data/Configuration/DbContextDiagnosticsOptions.cs`
+- Modify: `src/Infrastructure/ArturRios.Heimdall.Data/Configuration/AppDbContext.cs`
+- Modify: `src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj`
+- Modify: all nine files in `src/Infrastructure/ArturRios.Heimdall.Data/EntityMaps/`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces:
-  - `ArturRios.IdentityManager.Data.Configuration.DbContextDiagnosticsOptions` — sealed class with `bool SensitiveDataLogging { get; init; }`, `bool DetailedErrors { get; init; }`, both defaulting to `false`, and `static readonly DbContextDiagnosticsOptions Disabled`.
+  - `ArturRios.Heimdall.Data.Configuration.DbContextDiagnosticsOptions` — sealed class with `bool SensitiveDataLogging { get; init; }`, `bool DetailedErrors { get; init; }`, both defaulting to `false`, and `static readonly DbContextDiagnosticsOptions Disabled`.
   - `AppDbContext(DbContextOptions options, ILoggerFactory loggerFactory, DbContextDiagnosticsOptions diagnostics)` — the third parameter is new and every caller must supply it.
 
 - [ ] **Step 1: Add the naming-convention package**
@@ -169,17 +169,17 @@ Both changes rewrite `AppDbContext.OnConfiguring`, so they land together to avoi
 Run:
 
 ```bash
-dotnet add src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj package EFCore.NamingConventions --version 10.0.1
+dotnet add src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj package EFCore.NamingConventions --version 10.0.1
 ```
 
 Expected: `info : PackageReference for package 'EFCore.NamingConventions' version '10.0.1' added`.
 
 - [ ] **Step 2: Create the diagnostics options**
 
-Create `src/Infrastructure/ArturRios.IdentityManager.Data/Configuration/DbContextDiagnosticsOptions.cs`:
+Create `src/Infrastructure/ArturRios.Heimdall.Data/Configuration/DbContextDiagnosticsOptions.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Data.Configuration;
+namespace ArturRios.Heimdall.Data.Configuration;
 
 /// <summary>
 ///     Controls the EF Core diagnostics that expose data values in logs and exception messages.
@@ -209,7 +209,7 @@ public class AppDbContext(
     ILoggerFactory loggerFactory,
     DbContextDiagnosticsOptions diagnostics) : BaseDbContext(options)
 {
-    private const string Schema = "identity_manager";
+    private const string Schema = "heimdall";
 ```
 
 ```csharp
@@ -288,7 +288,7 @@ The rest of the method is unchanged. If `IsProduction()` does not resolve, add `
 Run:
 
 ```bash
-dotnet build src/ArturRios.IdentityManager.sln -v q --nologo
+dotnet build src/ArturRios.Heimdall.sln -v q --nologo
 ```
 
 Expected: `Build succeeded.` with 0 errors.
@@ -296,7 +296,7 @@ Expected: `Build succeeded.` with 0 errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/Infrastructure/ArturRios.IdentityManager.Data src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs
+git add src/Infrastructure/ArturRios.Heimdall.Data src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs
 git commit -m "feat: use snake_case singular tables and gate EF diagnostics"
 ```
 
@@ -307,14 +307,14 @@ git commit -m "feat: use snake_case singular tables and gate EF diagnostics"
 `dotnet ef` cannot construct `AppDbContext` — the constructor takes an `ILoggerFactory` and now a `DbContextDiagnosticsOptions`. A design-time factory supplies both.
 
 **Files:**
-- Create: `src/Infrastructure/ArturRios.IdentityManager.Data/Configuration/DesignTimeDbContextFactory.cs`
+- Create: `src/Infrastructure/ArturRios.Heimdall.Data/Configuration/DesignTimeDbContextFactory.cs`
 - Create: `.config/dotnet-tools.json` (generated)
-- Create: `src/Infrastructure/ArturRios.IdentityManager.Data/Migrations/` (generated)
-- Modify: `src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj`
+- Create: `src/Infrastructure/ArturRios.Heimdall.Data/Migrations/` (generated)
+- Modify: `src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj`
 
 **Interfaces:**
 - Consumes: `AppDbContext(DbContextOptions, ILoggerFactory, DbContextDiagnosticsOptions)` and `DbContextDiagnosticsOptions.Disabled` from Task 2.
-- Produces: a migration named `InitialCreate` in the `ArturRios.IdentityManager.Data.Migrations` namespace, and `DesignTimeDbContextFactory` reading `IDENTITY_MANAGER_DATA_CONNECTIONSTRING`.
+- Produces: a migration named `InitialCreate` in the `ArturRios.Heimdall.Data.Migrations` namespace, and `DesignTimeDbContextFactory` reading `HEIMDALL_DATA_CONNECTIONSTRING`.
 
 - [ ] **Step 1: Pin the EF tool**
 
@@ -331,10 +331,10 @@ Expected: `The template "Dotnet local tool manifest file" was created successful
 Run:
 
 ```bash
-dotnet add src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj package Microsoft.EntityFrameworkCore.Design --version 10.0.10
+dotnet add src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj package Microsoft.EntityFrameworkCore.Design --version 10.0.10
 ```
 
-Then edit the resulting `PackageReference` in `ArturRios.IdentityManager.Data.csproj` so the design package does not flow to consumers, and let the class library act as its own EF startup project:
+Then edit the resulting `PackageReference` in `ArturRios.Heimdall.Data.csproj` so the design package does not flow to consumers, and let the class library act as its own EF startup project:
 
 ```xml
     <PropertyGroup>
@@ -355,25 +355,25 @@ Then edit the resulting `PackageReference` in `ArturRios.IdentityManager.Data.cs
 
 - [ ] **Step 3: Create the design-time factory**
 
-Create `src/Infrastructure/ArturRios.IdentityManager.Data/Configuration/DesignTimeDbContextFactory.cs`:
+Create `src/Infrastructure/ArturRios.Heimdall.Data/Configuration/DesignTimeDbContextFactory.cs`:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace ArturRios.IdentityManager.Data.Configuration;
+namespace ArturRios.Heimdall.Data.Configuration;
 
 /// <summary>
 ///     Builds an <see cref="AppDbContext" /> for the EF Core command-line tools, which have no
 ///     access to the application's dependency-injection container. The connection string comes from
-///     <c>IDENTITY_MANAGER_DATA_CONNECTIONSTRING</c>; <c>scripts/migrations.py</c> loads it from the
+///     <c>HEIMDALL_DATA_CONNECTIONSTRING</c>; <c>scripts/migrations.py</c> loads it from the
 ///     selected environment file before invoking <c>dotnet ef</c>. Diagnostics are disabled — design
 ///     time never needs them and the tools may well be pointed at production.
 /// </summary>
 public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
-    private const string ConnectionStringVariable = "IDENTITY_MANAGER_DATA_CONNECTIONSTRING";
+    private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
 
     public AppDbContext CreateDbContext(string[] args)
     {
@@ -401,12 +401,12 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
 Run:
 
 ```bash
-dotnet ef migrations list --project src/Infrastructure/ArturRios.IdentityManager.Data --startup-project src/Infrastructure/ArturRios.IdentityManager.Data
+dotnet ef migrations list --project src/Infrastructure/ArturRios.Heimdall.Data --startup-project src/Infrastructure/ArturRios.Heimdall.Data
 ```
 
-Expected: failure mentioning `Environment variable 'IDENTITY_MANAGER_DATA_CONNECTIONSTRING' is unset`.
+Expected: failure mentioning `Environment variable 'HEIMDALL_DATA_CONNECTIONSTRING' is unset`.
 
-If instead it fails with `Unable to create a 'DbContext'` or complains the startup project is not executable, rerun with `--startup-project src/Presentation/ArturRios.IdentityManager.WebApi` and use that flag for the rest of this task and in Task 7's `DATA_PROJECT`/`STARTUP_PROJECT` constants.
+If instead it fails with `Unable to create a 'DbContext'` or complains the startup project is not executable, rerun with `--startup-project src/Presentation/ArturRios.Heimdall.WebApi` and use that flag for the rest of this task and in Task 7's `DATA_PROJECT`/`STARTUP_PROJECT` constants.
 
 - [ ] **Step 5: Generate the initial migration**
 
@@ -415,13 +415,13 @@ The connection string only has to be well-formed — EF does not connect to scaf
 In bash:
 
 ```bash
-IDENTITY_MANAGER_DATA_CONNECTIONSTRING="Host=localhost;Database=identity_manager;Username=postgres;Password=postgres" dotnet ef migrations add InitialCreate --project src/Infrastructure/ArturRios.IdentityManager.Data --startup-project src/Infrastructure/ArturRios.IdentityManager.Data --output-dir Migrations
+HEIMDALL_DATA_CONNECTIONSTRING="Host=localhost;Database=heimdall;Username=postgres;Password=postgres" dotnet ef migrations add InitialCreate --project src/Infrastructure/ArturRios.Heimdall.Data --startup-project src/Infrastructure/ArturRios.Heimdall.Data --output-dir Migrations
 ```
 
 In PowerShell, which has no inline environment-variable prefix, set it first:
 
 ```bash
-$env:IDENTITY_MANAGER_DATA_CONNECTIONSTRING = "Host=localhost;Database=identity_manager;Username=postgres;Password=postgres"; dotnet ef migrations add InitialCreate --project src/Infrastructure/ArturRios.IdentityManager.Data --startup-project src/Infrastructure/ArturRios.IdentityManager.Data --output-dir Migrations
+$env:HEIMDALL_DATA_CONNECTIONSTRING = "Host=localhost;Database=heimdall;Username=postgres;Password=postgres"; dotnet ef migrations add InitialCreate --project src/Infrastructure/ArturRios.Heimdall.Data --startup-project src/Infrastructure/ArturRios.Heimdall.Data --output-dir Migrations
 ```
 
 Expected: `Build succeeded.` then `Done. To undo this action, use 'ef migrations remove'`.
@@ -431,7 +431,7 @@ Expected: `Build succeeded.` then `Done. To undo this action, use 'ef migrations
 Run:
 
 ```bash
-grep -E 'CreateTable|name: "(person|scope|role|google_user|scope_owner|scope_user|application|password_reset_token|email_verification_token)"|public_id|created_at' src/Infrastructure/ArturRios.IdentityManager.Data/Migrations/*_InitialCreate.cs | head -40
+grep -E 'CreateTable|name: "(person|scope|role|google_user|scope_owner|scope_user|application|password_reset_token|email_verification_token)"|public_id|created_at' src/Infrastructure/ArturRios.Heimdall.Data/Migrations/*_InitialCreate.cs | head -40
 ```
 
 Expected: nine `CreateTable` calls with the singular snake_case names from Task 2's table, and snake_case columns such as `public_id` and `created_at`. If any table is still plural or PascalCase, the `ToTable` call or `UseSnakeCaseNamingConvention()` is missing — fix it, delete the `Migrations` folder, and redo Step 5.
@@ -439,7 +439,7 @@ Expected: nine `CreateTable` calls with the singular snake_case names from Task 
 Also confirm the role key is not an identity column:
 
 ```bash
-grep -A 3 'name: "role"' src/Infrastructure/ArturRios.IdentityManager.Data/Migrations/*_InitialCreate.cs
+grep -A 3 'name: "role"' src/Infrastructure/ArturRios.Heimdall.Data/Migrations/*_InitialCreate.cs
 ```
 
 Expected: the `id` column has **no** `.Annotation("Npgsql:ValueGenerationStrategy", ...)`.
@@ -447,7 +447,7 @@ Expected: the `id` column has **no** `.Annotation("Npgsql:ValueGenerationStrateg
 - [ ] **Step 7: Commit**
 
 ```bash
-git add .config src/Infrastructure/ArturRios.IdentityManager.Data
+git add .config src/Infrastructure/ArturRios.Heimdall.Data
 git commit -m "feat: add design-time factory and the initial migration"
 ```
 
@@ -460,9 +460,9 @@ git commit -m "feat: add design-time factory and the initial migration"
 **Requires Docker.** Run `docker version` first; start Docker Desktop if it errors.
 
 **Files:**
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/PostgresFixture.cs`
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/HealthCheckTests.cs`
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/SchemaTests.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/PostgresFixture.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/HealthCheckTests.cs`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/SchemaTests.cs`
 
 **Interfaces:**
 - Consumes: `AppDbContext(DbContextOptions, ILoggerFactory, DbContextDiagnosticsOptions)`, `DbContextDiagnosticsOptions.Disabled`, and the `InitialCreate` migration.
@@ -473,25 +473,25 @@ git commit -m "feat: add design-time factory and the initial migration"
 Run:
 
 ```bash
-dotnet test tests/Presentation/ArturRios.IdentityManager.WebApi.Tests --nologo -v q
+dotnet test tests/Presentation/ArturRios.Heimdall.WebApi.Tests --nologo -v q
 ```
 
-Expected: `Failed: 1` with `DataAccessException : Environment variable 'IDENTITY_MANAGER_DATA_DATABASETYPE' is unset`.
+Expected: `Failed: 1` with `DataAccessException : Environment variable 'HEIMDALL_DATA_DATABASETYPE' is unset`.
 
 - [ ] **Step 2: Write the failing schema test**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/SchemaTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/SchemaTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Npgsql;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
 ///     Verifies that the migration applied to the throwaway container produces the schema the
-///     design calls for: everything under <c>identity_manager</c>, singular snake_case table names.
+///     design calls for: everything under <c>heimdall</c>, singular snake_case table names.
 /// </summary>
 [Collection(nameof(FunctionalCollection))]
 public class SchemaTests(PostgresFixture fixture)
@@ -528,7 +528,7 @@ public class SchemaTests(PostgresFixture fixture)
             """
             select table_name
             from information_schema.tables
-            where table_schema = 'identity_manager' and table_name <> '__EFMigrationsHistory'
+            where table_schema = 'heimdall' and table_name <> '__EFMigrationsHistory'
             order by table_name
             """,
             connection);
@@ -550,7 +550,7 @@ public class SchemaTests(PostgresFixture fixture)
 Run:
 
 ```bash
-dotnet test tests/Presentation/ArturRios.IdentityManager.WebApi.Tests --nologo -v q --filter "FullyQualifiedName~SchemaTests"
+dotnet test tests/Presentation/ArturRios.Heimdall.WebApi.Tests --nologo -v q --filter "FullyQualifiedName~SchemaTests"
 ```
 
 Expected: FAIL — the container starts but has no tables, so the assertion reports an empty actual list.
@@ -560,12 +560,12 @@ Expected: FAIL — the container starts but has no tables, so the assertion repo
 Replace the whole body of `PostgresFixture.cs` with:
 
 ```csharp
-using ArturRios.IdentityManager.Data.Configuration;
+using ArturRios.Heimdall.Data.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.PostgreSql;
 
-namespace ArturRios.IdentityManager.WebApi.Tests.Support;
+namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
 /// <summary>
 ///     Starts a throwaway PostgreSQL container once for the whole functional test suite, applies the
@@ -576,8 +576,8 @@ namespace ArturRios.IdentityManager.WebApi.Tests.Support;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private const string ConnectionStringVariable = "IDENTITY_MANAGER_DATA_CONNECTIONSTRING";
-    private const string DatabaseTypeVariable = "IDENTITY_MANAGER_DATA_DATABASETYPE";
+    private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
+    private const string DatabaseTypeVariable = "HEIMDALL_DATA_DATABASETYPE";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine")
         .Build();
@@ -619,12 +619,12 @@ The class boots the API, which needs the container's environment variables, so i
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // The fixture parameter is unused, but taking it makes the dependency on the migrated container
 // explicit — xUnit builds the collection fixture before constructing this class, and the base
@@ -643,7 +643,7 @@ An unread primary-constructor parameter produces no warning, so nothing further 
 Run:
 
 ```bash
-dotnet test tests/Presentation/ArturRios.IdentityManager.WebApi.Tests --nologo -v q
+dotnet test tests/Presentation/ArturRios.Heimdall.WebApi.Tests --nologo -v q
 ```
 
 Expected: `Passed: 2, Failed: 0`.
@@ -651,7 +651,7 @@ Expected: `Passed: 2, Failed: 0`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add tests/Presentation/ArturRios.IdentityManager.WebApi.Tests
+git add tests/Presentation/ArturRios.Heimdall.WebApi.Tests
 git commit -m "test: migrate the functional container and assert the schema"
 ```
 
@@ -662,32 +662,32 @@ git commit -m "test: migrate the functional container and assert the schema"
 The Data project has no test project yet; the Testing Specification requires one per production project. `MasterUserOptions` is the piece of the seeder that is testable without a database.
 
 **Files:**
-- Create: `src/Infrastructure/ArturRios.IdentityManager.Data/Seeding/MasterUserOptions.cs`
-- Create: `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/ArturRios.IdentityManager.Data.Tests.csproj`
-- Create: `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/Seeding/MasterUserOptionsTests.cs`
-- Modify: `src/ArturRios.IdentityManager.sln`
+- Create: `src/Infrastructure/ArturRios.Heimdall.Data/Seeding/MasterUserOptions.cs`
+- Create: `tests/Infrastructure/ArturRios.Heimdall.Data.Tests/ArturRios.Heimdall.Data.Tests.csproj`
+- Create: `tests/Infrastructure/ArturRios.Heimdall.Data.Tests/Seeding/MasterUserOptionsTests.cs`
+- Modify: `src/ArturRios.Heimdall.sln`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `ArturRios.IdentityManager.Data.Seeding.MasterUserOptions` — `sealed record MasterUserOptions(string Name, string Email, string Password)` with `const string NameVariable/EmailVariable/PasswordVariable`, `static MasterUserOptions FromEnvironment()`, and `bool IsComplete`. Tasks 6 uses all of them.
+- Produces: `ArturRios.Heimdall.Data.Seeding.MasterUserOptions` — `sealed record MasterUserOptions(string Name, string Email, string Password)` with `const string NameVariable/EmailVariable/PasswordVariable`, `static MasterUserOptions FromEnvironment()`, and `bool IsComplete`. Tasks 6 uses all of them.
 
 - [ ] **Step 1: Create the test project and add it to the solution**
 
 Run:
 
 ```bash
-dotnet new xunit -o tests/Infrastructure/ArturRios.IdentityManager.Data.Tests -n ArturRios.IdentityManager.Data.Tests --force
+dotnet new xunit -o tests/Infrastructure/ArturRios.Heimdall.Data.Tests -n ArturRios.Heimdall.Data.Tests --force
 ```
 
 ```bash
-dotnet sln src/ArturRios.IdentityManager.sln add tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/ArturRios.IdentityManager.Data.Tests.csproj --solution-folder "Tests/Infrastructure"
+dotnet sln src/ArturRios.Heimdall.sln add tests/Infrastructure/ArturRios.Heimdall.Data.Tests/ArturRios.Heimdall.Data.Tests.csproj --solution-folder "Tests/Infrastructure"
 ```
 
 Expected: `Project ... added to the solution.`
 
 - [ ] **Step 2: Replace the generated project file**
 
-Overwrite `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/ArturRios.IdentityManager.Data.Tests.csproj` with:
+Overwrite `tests/Infrastructure/ArturRios.Heimdall.Data.Tests/ArturRios.Heimdall.Data.Tests.csproj` with:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -718,7 +718,7 @@ Overwrite `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/ArturRios.I
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\..\src\Infrastructure\ArturRios.IdentityManager.Data\ArturRios.IdentityManager.Data.csproj" />
+      <ProjectReference Include="..\..\..\src\Infrastructure\ArturRios.Heimdall.Data\ArturRios.Heimdall.Data.csproj" />
     </ItemGroup>
 
 </Project>
@@ -727,34 +727,34 @@ Overwrite `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/ArturRios.I
 Then delete the template's placeholder test:
 
 ```bash
-rm -f tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/UnitTest1.cs
+rm -f tests/Infrastructure/ArturRios.Heimdall.Data.Tests/UnitTest1.cs
 ```
 
 - [ ] **Step 3: Write the failing tests**
 
-Create `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests/Seeding/MasterUserOptionsTests.cs`:
+Create `tests/Infrastructure/ArturRios.Heimdall.Data.Tests/Seeding/MasterUserOptionsTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Data.Seeding;
+using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Util.Test.Attributes;
 
-namespace ArturRios.IdentityManager.Data.Tests.Seeding;
+namespace ArturRios.Heimdall.Data.Tests.Seeding;
 
 public class MasterUserOptionsTests
 {
     [UnitFact]
     public void GivenAllValuesPresent_WhenCompletenessChecked_ThenOptionsAreComplete()
     {
-        var options = new MasterUserOptions("Master User", "master@identity-manager.test", "Str0ng-Pass!");
+        var options = new MasterUserOptions("Master User", "master@heimdall.test", "Str0ng-Pass!");
 
         Assert.True(options.IsComplete);
     }
 
     [UnitTheory]
-    [InlineData("", "master@identity-manager.test", "Str0ng-Pass!")]
+    [InlineData("", "master@heimdall.test", "Str0ng-Pass!")]
     [InlineData("Master User", "", "Str0ng-Pass!")]
-    [InlineData("Master User", "master@identity-manager.test", "")]
-    [InlineData("   ", "master@identity-manager.test", "Str0ng-Pass!")]
+    [InlineData("Master User", "master@heimdall.test", "")]
+    [InlineData("   ", "master@heimdall.test", "Str0ng-Pass!")]
     public void GivenAMissingValue_WhenCompletenessChecked_ThenOptionsAreIncomplete(
         string name,
         string email,
@@ -787,34 +787,34 @@ public class MasterUserOptionsTests
 Run:
 
 ```bash
-dotnet test tests/Infrastructure/ArturRios.IdentityManager.Data.Tests --nologo -v q
+dotnet test tests/Infrastructure/ArturRios.Heimdall.Data.Tests --nologo -v q
 ```
 
 Expected: build failure — `The type or namespace name 'MasterUserOptions' could not be found`.
 
 - [ ] **Step 5: Implement `MasterUserOptions`**
 
-Create `src/Infrastructure/ArturRios.IdentityManager.Data/Seeding/MasterUserOptions.cs`:
+Create `src/Infrastructure/ArturRios.Heimdall.Data/Seeding/MasterUserOptions.cs`:
 
 ```csharp
-namespace ArturRios.IdentityManager.Data.Seeding;
+namespace ArturRios.Heimdall.Data.Seeding;
 
 /// <summary>
 ///     Credentials for the master system administrator, read from the
-///     <c>IDENTITY_MANAGER_MASTER_USER_*</c> environment variables. They are used only when the
+///     <c>HEIMDALL_MASTER_USER_*</c> environment variables. They are used only when the
 ///     database holds no system administrator yet — see
 ///     <see cref="DatabaseSeeder" />.
 /// </summary>
 public sealed record MasterUserOptions(string Name, string Email, string Password)
 {
     /// <summary>Environment variable holding the master user's display name.</summary>
-    public const string NameVariable = "IDENTITY_MANAGER_MASTER_USER_NAME";
+    public const string NameVariable = "HEIMDALL_MASTER_USER_NAME";
 
     /// <summary>Environment variable holding the master user's e-mail address.</summary>
-    public const string EmailVariable = "IDENTITY_MANAGER_MASTER_USER_EMAIL";
+    public const string EmailVariable = "HEIMDALL_MASTER_USER_EMAIL";
 
     /// <summary>Environment variable holding the master user's plain-text password.</summary>
-    public const string PasswordVariable = "IDENTITY_MANAGER_MASTER_USER_PASSWORD";
+    public const string PasswordVariable = "HEIMDALL_MASTER_USER_PASSWORD";
 
     /// <summary>Whether all three values are present, so a master user could be created.</summary>
     public bool IsComplete =>
@@ -837,7 +837,7 @@ The `<see cref="DatabaseSeeder" />` reference resolves in Task 6. Until then the
 Run:
 
 ```bash
-dotnet test tests/Infrastructure/ArturRios.IdentityManager.Data.Tests --nologo -v q
+dotnet test tests/Infrastructure/ArturRios.Heimdall.Data.Tests --nologo -v q
 ```
 
 Expected: `Passed: 6, Failed: 0` — two facts plus the four theory cases, each counted individually.
@@ -845,7 +845,7 @@ Expected: `Passed: 6, Failed: 0` — two facts plus the four theory cases, each 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/ArturRios.IdentityManager.sln src/Infrastructure/ArturRios.IdentityManager.Data/Seeding tests/Infrastructure
+git add src/ArturRios.Heimdall.sln src/Infrastructure/ArturRios.Heimdall.Data/Seeding tests/Infrastructure
 git commit -m "feat: add master user options with unit tests"
 ```
 
@@ -856,22 +856,22 @@ git commit -m "feat: add master user options with unit tests"
 **Requires Docker.**
 
 **Files:**
-- Create: `src/Infrastructure/ArturRios.IdentityManager.Data/Seeding/DatabaseSeeder.cs`
-- Modify: `src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/PostgresFixture.cs`
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/SeedingTests.cs`
+- Create: `src/Infrastructure/ArturRios.Heimdall.Data/Seeding/DatabaseSeeder.cs`
+- Modify: `src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/PostgresFixture.cs`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/SeedingTests.cs`
 
 **Interfaces:**
 - Consumes: `MasterUserOptions` (Task 5), `PostgresFixture.CreateContext()` (Task 4), `AppDbContext`.
-- Produces: `ArturRios.IdentityManager.Data.Seeding.DatabaseSeeder` with constructor `(AppDbContext context, MasterUserOptions masterUser, ILogger<DatabaseSeeder> logger)` and `Task SeedAsync(CancellationToken cancellationToken = default)`. Also `PostgresFixture.MasterUserEmail`.
+- Produces: `ArturRios.Heimdall.Data.Seeding.DatabaseSeeder` with constructor `(AppDbContext context, MasterUserOptions masterUser, ILogger<DatabaseSeeder> logger)` and `Task SeedAsync(CancellationToken cancellationToken = default)`. Also `PostgresFixture.MasterUserEmail`.
 
 - [ ] **Step 1: Add the hashing package**
 
 Run:
 
 ```bash
-dotnet add src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj package ArturRios.Util --version 1.4.0
+dotnet add src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj package ArturRios.Util --version 1.4.0
 ```
 
 - [ ] **Step 2: Set the master-user variables in the fixture**
@@ -880,7 +880,7 @@ In `PostgresFixture.cs`, add the constant below the two existing `private const 
 
 ```csharp
     /// <summary>E-mail of the master system administrator the API seeds into the container.</summary>
-    public const string MasterUserEmail = "master@identity-manager.test";
+    public const string MasterUserEmail = "master@heimdall.test";
 ```
 
 and add these three lines in `InitializeAsync`, immediately after the `DatabaseTypeVariable` assignment:
@@ -892,21 +892,21 @@ and add these three lines in `InitializeAsync`, immediately after the `DatabaseT
         Environment.SetEnvironmentVariable(MasterUserOptions.PasswordVariable, "Str0ng-Master-Pass!");
 ```
 
-Add `using ArturRios.IdentityManager.Data.Seeding;` to the file's usings.
+Add `using ArturRios.Heimdall.Data.Seeding;` to the file's usings.
 
 - [ ] **Step 3: Write the failing seeding tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/SeedingTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/SeedingTests.cs`:
 
 ```csharp
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
 ///     The API seeds reference data as it starts. Constructing this class boots the API against the
@@ -968,7 +968,7 @@ public class SeedingTests(PostgresFixture fixture) : WebApiTest<Program>(Environ
 This file needs two more usings beyond those listed above — add them to the block at the top:
 
 ```csharp
-using ArturRios.IdentityManager.Data.Seeding;
+using ArturRios.Heimdall.Data.Seeding;
 using Microsoft.Extensions.Logging.Abstractions;
 ```
 
@@ -977,26 +977,26 @@ using Microsoft.Extensions.Logging.Abstractions;
 Run:
 
 ```bash
-dotnet test tests/Presentation/ArturRios.IdentityManager.WebApi.Tests --nologo -v q --filter "FullyQualifiedName~SeedingTests"
+dotnet test tests/Presentation/ArturRios.Heimdall.WebApi.Tests --nologo -v q --filter "FullyQualifiedName~SeedingTests"
 ```
 
 Expected: build failure — `The type or namespace name 'DatabaseSeeder' could not be found`. That is the failing state for this task; Step 5 introduces the type.
 
 - [ ] **Step 5: Implement the seeder**
 
-Create `src/Infrastructure/ArturRios.IdentityManager.Data/Seeding/DatabaseSeeder.cs`:
+Create `src/Infrastructure/ArturRios.Heimdall.Data/Seeding/DatabaseSeeder.cs`:
 
 ```csharp
 using System.ComponentModel;
 using System.Reflection;
-using ArturRios.IdentityManager.Data.Configuration;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
+using ArturRios.Heimdall.Data.Configuration;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Util.Hashing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace ArturRios.IdentityManager.Data.Seeding;
+namespace ArturRios.Heimdall.Data.Seeding;
 
 /// <summary>
 ///     Brings a migrated database to the state the application assumes: every <see cref="Roles" />
@@ -1115,7 +1115,7 @@ public class DatabaseSeeder(
 In `Startup.cs`, add to the usings:
 
 ```csharp
-using ArturRios.IdentityManager.Data.Seeding;
+using ArturRios.Heimdall.Data.Seeding;
 ```
 
 Register it at the end of `AddDependencies()`:
@@ -1145,7 +1145,7 @@ Place it after `ConfigureWebApi()` and before `ConfigureLogging()`. If `StartSer
 Run:
 
 ```bash
-dotnet test tests/Presentation/ArturRios.IdentityManager.WebApi.Tests --nologo -v q
+dotnet test tests/Presentation/ArturRios.Heimdall.WebApi.Tests --nologo -v q
 ```
 
 Expected: `Passed: 5, Failed: 0` — the health check, the schema test, and three seeding tests.
@@ -1155,7 +1155,7 @@ Expected: `Passed: 5, Failed: 0` — the health check, the schema test, and thre
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --nologo -v q
+dotnet test src/ArturRios.Heimdall.sln --nologo -v q
 ```
 
 Expected: no failures across all five test projects.
@@ -1163,7 +1163,7 @@ Expected: no failures across all five test projects.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/Infrastructure/ArturRios.IdentityManager.Data src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs tests/Presentation/ArturRios.IdentityManager.WebApi.Tests
+git add src/Infrastructure/ArturRios.Heimdall.Data src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs tests/Presentation/ArturRios.Heimdall.WebApi.Tests
 git commit -m "feat: seed roles and the master system admin on startup"
 ```
 
@@ -1196,9 +1196,9 @@ from migrations import describe_connection, parse_env_file
 
 class ParseEnvFileTests(unittest.TestCase):
     def test_given_quoted_values_when_parsed_then_quotes_are_stripped(self):
-        parsed = parse_env_file('IDENTITY_MANAGER_DATA_DATABASETYPE="PostgreSql"\n')
+        parsed = parse_env_file('HEIMDALL_DATA_DATABASETYPE="PostgreSql"\n')
 
-        self.assertEqual({"IDENTITY_MANAGER_DATA_DATABASETYPE": "PostgreSql"}, parsed)
+        self.assertEqual({"HEIMDALL_DATA_DATABASETYPE": "PostgreSql"}, parsed)
 
     def test_given_a_byte_order_mark_when_parsed_then_the_first_key_is_clean(self):
         parsed = parse_env_file("\ufeffFIRST=1\n")
@@ -1211,9 +1211,9 @@ class ParseEnvFileTests(unittest.TestCase):
         self.assertEqual({"KEY": "value"}, parsed)
 
     def test_given_a_value_containing_equals_when_parsed_then_the_value_is_intact(self):
-        parsed = parse_env_file('CONN="Host=localhost;Database=identity_manager"\n')
+        parsed = parse_env_file('CONN="Host=localhost;Database=heimdall"\n')
 
-        self.assertEqual({"CONN": "Host=localhost;Database=identity_manager"}, parsed)
+        self.assertEqual({"CONN": "Host=localhost;Database=heimdall"}, parsed)
 
     def test_given_a_line_without_a_separator_when_parsed_then_it_is_ignored(self):
         parsed = parse_env_file("NOT_A_PAIR\nKEY=value\n")
@@ -1258,9 +1258,9 @@ Create `scripts/migrations.py`:
 
 ```python
 #!/usr/bin/env python3
-"""Interactive menu for the Identity Manager's EF Core migrations.
+"""Interactive menu for the Heimdall's EF Core migrations.
 
-Lists, creates and applies migrations for ArturRios.IdentityManager.Data, loading the
+Lists, creates and applies migrations for ArturRios.Heimdall.Data, loading the
 connection string from one of the environment files under the Web API's Environments folder.
 
 Usage (from anywhere in the repository):
@@ -1278,11 +1278,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENVIRONMENTS_DIR = REPO_ROOT / "src/Presentation/ArturRios.IdentityManager.WebApi/Environments"
-DATA_PROJECT = REPO_ROOT / "src/Infrastructure/ArturRios.IdentityManager.Data"
+ENVIRONMENTS_DIR = REPO_ROOT / "src/Presentation/ArturRios.Heimdall.WebApi/Environments"
+DATA_PROJECT = REPO_ROOT / "src/Infrastructure/ArturRios.Heimdall.Data"
 STARTUP_PROJECT = DATA_PROJECT
 
-CONNECTION_STRING_VARIABLE = "IDENTITY_MANAGER_DATA_CONNECTIONSTRING"
+CONNECTION_STRING_VARIABLE = "HEIMDALL_DATA_CONNECTIONSTRING"
 SECRET_KEYS = {"password", "pwd"}
 MIGRATION_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 
@@ -1489,7 +1489,7 @@ Expected: `Ran 8 tests` and `OK`.
 
 - [ ] **Step 5: Exercise the menu end to end**
 
-Start a local PostgreSQL (any instance you can reach), make sure `Environments/.env.local` exists with a matching `IDENTITY_MANAGER_DATA_CONNECTIONSTRING`, then run:
+Start a local PostgreSQL (any instance you can reach), make sure `Environments/.env.local` exists with a matching `HEIMDALL_DATA_CONNECTIONSTRING`, then run:
 
 ```bash
 python scripts/migrations.py
@@ -1503,7 +1503,7 @@ Verify all three paths:
 Then confirm the API starts against that database:
 
 ```bash
-dotnet run --project src/Presentation/ArturRios.IdentityManager.WebApi
+dotnet run --project src/Presentation/ArturRios.Heimdall.WebApi
 ```
 
 Expected: the log shows `Seeding role SystemAdmin with id 1` (first run only) and `Ready to run!`.
@@ -1519,7 +1519,7 @@ git commit -m "feat: add migration menu script"
 
 ## Final verification
 
-- [ ] `dotnet build src/ArturRios.IdentityManager.sln` — succeeds with 0 warnings.
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln` — all tests pass (Docker running).
+- [ ] `dotnet build src/ArturRios.Heimdall.sln` — succeeds with 0 warnings.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln` — all tests pass (Docker running).
 - [ ] `python -m unittest discover -s scripts -p "test_*.py"` — `OK`.
 - [ ] `git status` — clean; `Migrations/`, `scripts/` and `.config/dotnet-tools.json` are tracked, `Environments/.env.local` is not.

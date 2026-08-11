@@ -1,7 +1,7 @@
 # UC-27 — View Google User — Implementation Plan
 
 Design: [2026-08-03-uc-27-view-google-user-design.md](../specs/2026-08-03-uc-27-view-google-user-design.md)
-Issue: [#28](https://github.com/artur-rios/identity-manager-api/issues/28) · Branch:
+Issue: [#28](https://github.com/artur-rios/heimdall-api/issues/28) · Branch:
 `feature/uc-27-view-google-user` · Milestone: Google Sign-In
 
 Sequenced test-first per the Testing Specification §9: each implementation step is followed by the
@@ -72,7 +72,7 @@ One class for both endpoints, because the point being pinned is the asymmetry be
 
 ## Step 8 — Run the suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request.
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request.
 
 ## Step 9 — Tracker and pull request
 

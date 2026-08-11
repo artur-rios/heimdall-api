@@ -1,10 +1,10 @@
-# Operations & Infrastructure Document — Identity Manager API
+# Operations & Infrastructure Document — Heimdall API
 
 ## 1. Introduction
 
 ### 1.1 Purpose
 
-This document captures **cross-cutting platform concerns** for the **Identity Manager API** that fall outside the identity domain modeled in the [Vision Document](Vision%20Document.md), [System Requirements Document](System%20Requirements%20Document.md), and [Use Case Specification Document](Use%20Case%20Specification%20Document.md).
+This document captures **cross-cutting platform concerns** for the **Heimdall API** that fall outside the identity domain modeled in the [Vision Document](Vision%20Document.md), [System Requirements Document](System%20Requirements%20Document.md), and [Use Case Specification Document](Use%20Case%20Specification%20Document.md).
 
 It covers two areas:
 
@@ -17,14 +17,14 @@ These are functional/operational capabilities of the *platform* rather than the 
 
 | Item | GitHub Issue | Status |
 | ------ | -------------- | -------- |
-| Project scaffolding & initial infrastructure | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) | ✅ Implemented |
-| Health Check feature | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) | ✅ Implemented |
+| Project scaffolding & initial infrastructure | [#31](https://github.com/artur-rios/heimdall-api/issues/31) | ✅ Implemented |
+| Health Check feature | [#32](https://github.com/artur-rios/heimdall-api/issues/32) | ✅ Implemented |
 
 ---
 
 ## 2. Technical Foundation (Project Scaffolding & Initial Infrastructure)
 
-> Corresponds to issue [#31](https://github.com/artur-rios/identity-manager-api/issues/31). **Status: Implemented** (delivered via PR #1 — `feat/data-infrastructure` — and preceding commits).
+> Corresponds to issue [#31](https://github.com/artur-rios/heimdall-api/issues/31). **Status: Implemented** (delivered via PR #1 — `feat/data-infrastructure` — and preceding commits).
 
 ### 2.1 Overview
 
@@ -35,18 +35,18 @@ The solution is a **layered (DDD-style) .NET Web API**. The foundational scaffol
 ```mermaid
 graph TD
     subgraph Presentation
-        WebApi[ArturRios.IdentityManager.WebApi<br/>ASP.NET Core Web API host]
+        WebApi[ArturRios.Heimdall.WebApi<br/>ASP.NET Core Web API host]
     end
     subgraph Application
-        Command[ArturRios.IdentityManager.Command]
-        Query[ArturRios.IdentityManager.Query]
-        Shared[ArturRios.IdentityManager.Shared]
+        Command[ArturRios.Heimdall.Command]
+        Query[ArturRios.Heimdall.Query]
+        Shared[ArturRios.Heimdall.Shared]
     end
     subgraph Domain
-        DomainLayer[ArturRios.IdentityManager.Domain<br/>Entities & data model]
+        DomainLayer[ArturRios.Heimdall.Domain<br/>Entities & data model]
     end
     subgraph Infrastructure
-        Data[ArturRios.IdentityManager.Data<br/>EF Core DbContext & migrations]
+        Data[ArturRios.Heimdall.Data<br/>EF Core DbContext & migrations]
         DB[(Database)]
     end
 
@@ -84,7 +84,7 @@ The concrete technologies, libraries, and versions behind this foundation (.NET 
 
 ## 3. Health & Monitoring
 
-> Corresponds to issue [#32](https://github.com/artur-rios/identity-manager-api/issues/32). **Status: Implemented** (delivered via PR #39 — `feature/uc-30-check-api-health`). Both the public liveness endpoint and the System Admin-only detailed health check are in place.
+> Corresponds to issue [#32](https://github.com/artur-rios/heimdall-api/issues/32). **Status: Implemented** (delivered via PR #39 — `feature/uc-30-check-api-health`). Both the public liveness endpoint and the System Admin-only detailed health check are in place.
 
 ### 3.1 Overview
 
@@ -163,7 +163,7 @@ The aggregate `status` is `Healthy` only when **every** entry in `services` is h
 ```mermaid
 sequenceDiagram
     actor SA as System Admin
-    participant API as Identity Manager API
+    participant API as Heimdall API
     participant DB as Database
 
     SA->>API: GET /HealthCheck/detailed
@@ -210,5 +210,5 @@ The detailed health check is designed so that additional service verifications c
 
 | Capability | Requirements | Use Case | Issue |
 | ------------ | ------------- | ---------- | ------- |
-| Project scaffolding & initial infrastructure | IR-01 … IR-09 | — | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
-| Health & monitoring | FR-HC-01 … FR-HC-07 | UC-30 | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
+| Project scaffolding & initial infrastructure | IR-01 … IR-09 | — | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
+| Health & monitoring | FR-HC-01 … FR-HC-07 | UC-30 | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |

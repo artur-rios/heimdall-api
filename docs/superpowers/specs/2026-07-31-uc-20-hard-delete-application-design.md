@@ -163,6 +163,6 @@ still present and its `is_deleted` unchanged.
 ## Specification note
 
 The use case specification, the SRD endpoint table (§5.3), and GitHub issue
-[#21](https://github.com/artur-rios/identity-manager-api/issues/21) agree on every point of UC-20:
+[#21](https://github.com/artur-rios/heimdall-api/issues/21) agree on every point of UC-20:
 actor, route, requirement, and the single alternative flow. Nothing needed correcting for this use
 case.

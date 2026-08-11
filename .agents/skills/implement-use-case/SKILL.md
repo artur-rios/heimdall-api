@@ -1,7 +1,7 @@
 ---
 name: implement-use-case
 description: >-
-  Use when the user wants to implement, build, or start a use case in the Identity Manager API,
+  Use when the user wants to implement, build, or start a use case in the Heimdall API,
   identified by its use case number (e.g. "implement UC-03", "start UC-11", "let's do use case 7",
   "begin the create scope use case"). Orchestrates the full delivery flow defined in the Development
   Workflow Document — reading the specs from docs/requirements, refining spec and plan via the
@@ -13,7 +13,7 @@ description: >-
 
 # Implement a Use Case
 
-This skill drives the implementation of a single Identity Manager API use case from backlog to a
+This skill drives the implementation of a single Heimdall API use case from backlog to a
 review-ready pull request, following the project's own [Development Workflow Document](../../../docs/requirements/Development%20Workflow%20Document.md).
 
 ## Invocation
@@ -121,8 +121,8 @@ Following the [Testing Specification Document](../../../docs/requirements/Testin
 - Run the suite, fix failures, and **re-run until everything passes**:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 
 Report the passing results. **Do not open a PR yet — stop and ask.**
@@ -133,7 +133,7 @@ Once the user approves, push the branch and open a PR into `main` that reference
 merge closes it:
 
 ```bash
-gh pr create --repo artur-rios/identity-manager-api --base main \
+gh pr create --repo artur-rios/heimdall-api --base main \
   --title "UC-03: Update Scope" \
   --body "Implements UC-03. Closes #4."
 ```

@@ -213,7 +213,7 @@ Refusals assert the `scope_owner` row is still there.
 ## Specification note
 
 The use case specification, the SRD endpoint table (§5.3), FR-SC-08/FR-SC-10, NFR-12, SRD §8, and
-GitHub issue [#23](https://github.com/artur-rios/identity-manager-api/issues/23) agree on every point
+GitHub issue [#23](https://github.com/artur-rios/heimdall-api/issues/23) agree on every point
 of UC-22: actor list, route, requirements, and the three alternative flows. Two points the documents
 leave open are settled by Decisions 3 (logically deleted scope) and 7 (which 409 message), both
 raised for approval rather than assumed silently.

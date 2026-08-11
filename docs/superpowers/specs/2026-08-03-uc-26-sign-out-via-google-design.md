@@ -1,6 +1,6 @@
 # UC-26 — Sign Out via Google — Design
 
-**Issue:** [#27](https://github.com/artur-rios/identity-manager-api/issues/27)
+**Issue:** [#27](https://github.com/artur-rios/heimdall-api/issues/27)
 **Branch:** `feature/uc-26-sign-out-via-google`
 **Traces to:** FR-GO-18. AF-26a leans on FR-GO-04 (a Google User is always `User`-equivalent) and on
 FR-GO-12's stance that a logically deleted Google User is not authenticated.

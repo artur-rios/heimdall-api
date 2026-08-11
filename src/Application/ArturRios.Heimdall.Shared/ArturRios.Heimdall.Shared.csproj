@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="ArturRios.Util" Version="1.5.0" />
+      <PackageReference Include="ArturRios.Data.Relational.Core" Version="3.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\Domain\ArturRios.Heimdall.Domain\ArturRios.Heimdall.Domain.csproj" />
+    </ItemGroup>
+
+</Project>

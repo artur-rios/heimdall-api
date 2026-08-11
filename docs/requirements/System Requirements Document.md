@@ -1,10 +1,10 @@
-# System Requirements Document — Identity Manager API
+# System Requirements Document — Heimdall API
 
 ## 1. Introduction
 
 ### 1.1 Purpose
 
-This document specifies the functional and non-functional requirements for the **Identity Manager API**, a .NET Web API that provides centralized person management, application management, authentication, and authorization for multiple client systems through scope-based tenancy.
+This document specifies the functional and non-functional requirements for the **Heimdall API**, a .NET Web API that provides centralized person management, application management, authentication, and authorization for multiple client systems through scope-based tenancy.
 
 The concrete technology stack — framework and language versions, first-party libraries, database, data-access, and tooling — is defined in the [Technology Stack Document](Technology%20Stack%20Document.md). This document states requirements and refers to that one for specific technologies and versions rather than restating them.
 
@@ -43,7 +43,7 @@ graph LR
         C3[Client System N]
     end
 
-    subgraph Identity Manager API
+    subgraph Heimdall API
         AUTH[Authentication Module]
         PM[Person Management]
         AM[Application Management]

@@ -169,14 +169,14 @@ Both are required by the work, not opportunistic refactoring.
 ### 1. `IScopeOwnershipChecker` moves to `Shared`
 
 `Command/Services/IScopeOwnershipChecker.cs` and `ScopeOwnershipChecker.cs` move to
-`Shared/Services/`. `ArturRios.IdentityManager.Shared.csproj` gains a project reference to `Domain`
+`Shared/Services/`. `ArturRios.Heimdall.Shared.csproj` gains a project reference to `Domain`
 and a package reference to `ArturRios.Data.Relational.Core`. `CreateUserCommandHandler` and
 `CreateScopeOwnerCommandHandler` change their `using`; the DI registration in `Startup` changes
 namespace only. Behaviour is unchanged.
 
 Consequence: per Testing Specification §4 (one test project per production project), the existing
 `ScopeOwnershipCheckerTests` moves out of `Command.Tests` into a new
-`tests/Application/ArturRios.IdentityManager.Shared.Tests` project, registered in the solution under
+`tests/Application/ArturRios.Heimdall.Shared.Tests` project, registered in the solution under
 the `Tests/Application` folder with the standard package set.
 
 ### 2. `IActorScopedCommand` becomes `IActorScoped`
@@ -206,11 +206,11 @@ Register the three query handlers alongside the existing scope ones:
 | Shared / Security | `Shared/Security/IActorScoped.cs` | new (replaces `Command/Input/IActorScopedCommand.cs`) |
 | Shared / Services | `Shared/Services/IScopeOwnershipChecker.cs`, `ScopeOwnershipChecker.cs` | moved from `Command/Services` |
 | Shared / Messages | `Shared/Messages/PersonMessages.cs`, `PersonMessageMap.cs` | edit |
-| Shared | `ArturRios.IdentityManager.Shared.csproj` | edit (Domain ref, Data.Relational.Core package) |
+| Shared | `ArturRios.Heimdall.Shared.csproj` | edit (Domain ref, Data.Relational.Core package) |
 | Command | `Command/Input/CreateUserCommand.cs`, `CreateScopeOwnerCommand.cs`, `Command/Handlers/CreateUserCommandHandler.cs`, `CreateScopeOwnerCommandHandler.cs` | edit (usings / interface) |
 | Presentation | `WebApi/Controllers/PersonController.cs` | edit (three actions, `ApplyActor` signature) |
 | DI | `WebApi/Startup.cs` | edit |
-| Solution | `src/ArturRios.IdentityManager.sln` | edit (new Shared.Tests project) |
+| Solution | `src/ArturRios.Heimdall.sln` | edit (new Shared.Tests project) |
 
 ## Testing (Testing Specification §6–§7)
 
@@ -243,7 +243,7 @@ one class per endpoint as UC-06 does):
   401; name filter and pagination narrow the result.
 - `PersonControllerListScopeOwnersTests`: the equivalent set over `SCOPE_OWNER`.
 
-**Moved:** `ScopeOwnershipCheckerTests` → `tests/Application/ArturRios.IdentityManager.Shared.Tests`,
+**Moved:** `ScopeOwnershipCheckerTests` → `tests/Application/ArturRios.Heimdall.Shared.Tests`,
 unchanged apart from its namespace.
 
 ## Out of scope / non-goals

@@ -1,4 +1,4 @@
-# Development Workflow Document — Identity Manager API
+# Development Workflow Document — Heimdall API
 
 ## 1. Purpose
 

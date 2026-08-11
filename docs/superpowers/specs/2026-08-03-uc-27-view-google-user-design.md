@@ -1,6 +1,6 @@
 # UC-27 — View Google User — Design
 
-**Issue:** [#28](https://github.com/artur-rios/identity-manager-api/issues/28)
+**Issue:** [#28](https://github.com/artur-rios/heimdall-api/issues/28)
 **Branch:** `feature/uc-27-view-google-user`
 **Traces to:** FR-GO-14 (read by id, list within a scope with pagination and filtering), FR-GO-17
 (logically deleted excluded from default results). NFR-15 governs what may appear in the payload.

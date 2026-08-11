@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Interactive menu for the Identity Manager's EF Core migrations.
+"""Interactive menu for the Heimdall's EF Core migrations.
 
-Lists, creates and applies migrations for ArturRios.IdentityManager.Data, loading the
+Lists, creates and applies migrations for ArturRios.Heimdall.Data, loading the
 connection string from one of the environment files under the Web API's Environments folder.
 
 Usage (from anywhere in the repository):
@@ -19,11 +19,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENVIRONMENTS_DIR = REPO_ROOT / "src/Presentation/ArturRios.IdentityManager.WebApi/Environments"
-DATA_PROJECT = REPO_ROOT / "src/Infrastructure/ArturRios.IdentityManager.Data"
+ENVIRONMENTS_DIR = REPO_ROOT / "src/Presentation/ArturRios.Heimdall.WebApi/Environments"
+DATA_PROJECT = REPO_ROOT / "src/Infrastructure/ArturRios.Heimdall.Data"
 STARTUP_PROJECT = DATA_PROJECT
 
-CONNECTION_STRING_VARIABLE = "IDENTITY_MANAGER_DATA_CONNECTIONSTRING"
+CONNECTION_STRING_VARIABLE = "HEIMDALL_DATA_CONNECTIONSTRING"
 SECRET_KEYS = {"password", "pwd"}
 MIGRATION_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 

@@ -1,7 +1,7 @@
 # UC-29 — Hard Delete Google User — Implementation Plan
 
 Design: [2026-08-03-uc-29-hard-delete-google-user-design.md](../specs/2026-08-03-uc-29-hard-delete-google-user-design.md)
-Issue: [#30](https://github.com/artur-rios/identity-manager-api/issues/30) · Branch:
+Issue: [#30](https://github.com/artur-rios/heimdall-api/issues/30) · Branch:
 `feature/uc-29-hard-delete-google-user` · Milestone: Google Sign-In
 
 Sequenced test-first per the Testing Specification §9: each implementation step is followed by the
@@ -69,7 +69,7 @@ silent.
 
 ## Step 8 — Run the suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request.
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request.
 
 ## Step 9 — Tracker and pull request
 

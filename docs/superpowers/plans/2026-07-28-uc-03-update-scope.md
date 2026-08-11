@@ -16,7 +16,7 @@
 - Depend on `IAsyncReadOnlyRepository<Scope>` for reads and `IAsyncRepository<Scope>` for writes; query with `.Query()` + EF Core async LINQ (`AnyAsync`, `FirstOrDefaultAsync`, `ToListAsync`) — identical to `CreateScopeCommandHandler`.
 - Controllers are thin: bind → dispatch via `CommandMediator` → `ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes)`; authorization via `[RoleRequirement((int)Roles.SystemAdmin)]`.
 - Every test is Given/When/Then in name and body (`// Given` → `// When` → `// Then`); unit tests use `[UnitFact]`, functional tests use `[FunctionalFact]` (from `ArturRios.Util.Test.Attributes`).
-- **Do not modify any repository other than `identity-manager-api`.** `AsyncFakeRepository` and its async-capable `Query()` are provided by the `ArturRios.Util.Test` 2.2.0 package (owned separately).
+- **Do not modify any repository other than `heimdall-api`.** `AsyncFakeRepository` and its async-capable `Query()` are provided by the `ArturRios.Util.Test` 2.2.0 package (owned separately).
 - PUT semantics: full replace — `Name` and `Description` come from the body; an omitted/null `description` clears the stored value.
 
 **External dependency:** the handler unit tests (Task 2) can only be *run* once `ArturRios.Util.Test` **2.2.0 with an async-capable `AsyncFakeRepository.Query()`** is restorable from a configured NuGet source. The production code, the validator test (Task 1), and the functional tests (Tasks 3–5) do not depend on it, so they can be implemented and run independently.
@@ -28,10 +28,10 @@
 The write-side contracts for UC-03. Mirrors `CreateScopeCommand` / `CreateScopeCommandValidator` / `CreateScopeCommandOutput`.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/UpdateScopeCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/Validation/UpdateScopeCommandValidator.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/UpdateScopeCommandOutput.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdateScopeCommandValidatorTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/UpdateScopeCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/Validation/UpdateScopeCommandValidator.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/UpdateScopeCommandOutput.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/UpdateScopeCommandValidatorTests.cs`
 
 **Interfaces:**
 - Produces: `UpdateScopeCommand { Guid Id; string Name; string? Description }` (`: BaseCommand`); `UpdateScopeCommandOutput { Guid Id; string Name; string? Description; bool GoogleSignInEnabled; IEnumerable<Guid> OwnerIds; DateTime CreatedAt; DateTime UpdatedAt }` (`: CommandOutput`); `UpdateScopeCommandValidator : AbstractValidator<UpdateScopeCommand>` (Name required).
@@ -41,13 +41,13 @@ The write-side contracts for UC-03. Mirrors `CreateScopeCommand` / `CreateScopeC
 Create `UpdateScopeCommandValidatorTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Input.Validation;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using FluentValidation.TestHelper;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 public class UpdateScopeCommandValidatorTests
 {
@@ -85,7 +85,7 @@ public class UpdateScopeCommandValidatorTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~UpdateScopeCommandValidatorTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~UpdateScopeCommandValidatorTests"`
 Expected: FAIL to compile — `UpdateScopeCommand` / `UpdateScopeCommandValidator` do not exist.
 
 - [ ] **Step 3: Create the command, output, and validator**
@@ -95,7 +95,7 @@ Expected: FAIL to compile — `UpdateScopeCommand` / `UpdateScopeCommandValidato
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to update an existing scope's name and description (UC-03). The scope is addressed by
@@ -120,7 +120,7 @@ public class UpdateScopeCommand : BaseCommand
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Output;
+namespace ArturRios.Heimdall.Command.Output;
 
 /// <summary>
 ///     The scope as updated by <see cref="Input.UpdateScopeCommand" /> (UC-03). Only externally-facing
@@ -154,10 +154,10 @@ public class UpdateScopeCommandOutput : CommandOutput
 `Input/Validation/UpdateScopeCommandValidator.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
-namespace ArturRios.IdentityManager.Command.Input.Validation;
+namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Input validation for <see cref="UpdateScopeCommand" /> (UC-03). Only checks the shape of the
@@ -177,13 +177,13 @@ public class UpdateScopeCommandValidator : AbstractValidator<UpdateScopeCommand>
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~UpdateScopeCommandValidatorTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~UpdateScopeCommandValidatorTests"`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command tests/Application/ArturRios.IdentityManager.Command.Tests/UpdateScopeCommandValidatorTests.cs
+git add src/Application/ArturRios.Heimdall.Command tests/Application/ArturRios.Heimdall.Command.Tests/UpdateScopeCommandValidatorTests.cs
 git commit -m "feat: add UpdateScopeCommand input, validator, and output (UC-03)"
 ```
 
@@ -194,11 +194,11 @@ git commit -m "feat: add UpdateScopeCommand input, validator, and output (UC-03)
 The business logic and its canonical messages. Reuses the existing `ScopeNotFound` (404) and `NameAlreadyExists` (409) messages; adds only the success message. Handler unit tests use `AsyncFakeRepository<Scope>` from `ArturRios.Util.Test` 2.2.0.
 
 **Files:**
-- Modify: `tests/Application/ArturRios.IdentityManager.Command.Tests/ArturRios.IdentityManager.Command.Tests.csproj`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/UpdateScopeCommandHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdateScopeCommandHandlerTests.cs`
+- Modify: `tests/Application/ArturRios.Heimdall.Command.Tests/ArturRios.Heimdall.Command.Tests.csproj`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessageMap.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/UpdateScopeCommandHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/UpdateScopeCommandHandlerTests.cs`
 - (Docs) Modify: `docs/requirements/Technology Stack Document.md`
 
 **Interfaces:**
@@ -207,7 +207,7 @@ The business logic and its canonical messages. Reuses the existing `ScopeNotFoun
 
 - [ ] **Step 1: Bump the test packages**
 
-In `ArturRios.IdentityManager.Command.Tests.csproj`, change the `ArturRios.Util.Test` version and add Moq + Bogus (leave the other entries untouched):
+In `ArturRios.Heimdall.Command.Tests.csproj`, change the `ArturRios.Util.Test` version and add Moq + Bogus (leave the other entries untouched):
 
 ```xml
 <PackageReference Include="ArturRios.Util.Test" Version="2.2.0" />
@@ -242,10 +242,10 @@ In `ScopeMessageMap.cs`, add inside the dictionary (after the `ScopeCreatedSucce
 Create `UpdateScopeCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Bogus;
@@ -253,7 +253,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 public class UpdateScopeCommandHandlerTests
 {
@@ -427,7 +427,7 @@ public class UpdateScopeCommandHandlerTests
 
 - [ ] **Step 4: Run tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~UpdateScopeCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~UpdateScopeCommandHandlerTests"`
 Expected: FAIL to compile — `UpdateScopeCommandHandler` does not exist. (If restore fails because `ArturRios.Util.Test` 2.2.0 with the async-capable `AsyncFakeRepository.Query()` is not yet published, pause here until it is available — see the external dependency note above.)
 
 - [ ] **Step 5: Implement the handler**
@@ -436,16 +436,16 @@ Create `Handlers/UpdateScopeCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="UpdateScopeCommand" /> (UC-03): validates the request, verifies the scope
@@ -530,13 +530,13 @@ public class UpdateScopeCommandHandler(
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~UpdateScopeCommandHandlerTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~UpdateScopeCommandHandlerTests"`
 Expected: PASS (7 tests).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Shared src/Application/ArturRios.IdentityManager.Command/Handlers "docs/requirements/Technology Stack Document.md" tests/Application/ArturRios.IdentityManager.Command.Tests
+git add src/Application/ArturRios.Heimdall.Shared src/Application/ArturRios.Heimdall.Command/Handlers "docs/requirements/Technology Stack Document.md" tests/Application/ArturRios.Heimdall.Command.Tests
 git commit -m "feat: add UpdateScopeCommandHandler with messages and status map (UC-03)"
 ```
 
@@ -547,8 +547,8 @@ git commit -m "feat: add UpdateScopeCommandHandler with messages and status map 
 Exposes the use case and registers it. Deliverable: the whole solution builds and the endpoint is wired and authorized.
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/ScopeController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/ScopeController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
 
 **Interfaces:**
 - Consumes: `UpdateScopeCommand`, `UpdateScopeCommandOutput`, `UpdateScopeCommandHandler`, `UpdateScopeCommandValidator`.
@@ -578,7 +578,7 @@ The file already imports `Command.Input`, `Command.Output`, `Domain.Enums`, `Sha
 
 - [ ] **Step 2: Register the handler and validator in `Startup.AddDependencies`**
 
-`Startup.cs` already imports `ArturRios.IdentityManager.Command.Handlers` and `ArturRios.IdentityManager.Command.Input.Validation`. Add these registrations right after the two `CreateScopeCommand` registrations:
+`Startup.cs` already imports `ArturRios.Heimdall.Command.Handlers` and `ArturRios.Heimdall.Command.Input.Validation`. Add these registrations right after the two `CreateScopeCommand` registrations:
 
 ```csharp
         Builder.Services.AddScoped<IValidator<UpdateScopeCommand>, UpdateScopeCommandValidator>();
@@ -588,13 +588,13 @@ The file already imports `Command.Input`, `Command.Output`, `Domain.Enums`, `Sha
 
 - [ ] **Step 3: Build the solution**
 
-Run: `dotnet build src/ArturRios.IdentityManager.sln`
+Run: `dotnet build src/ArturRios.Heimdall.sln`
 Expected: Build succeeded, 0 errors.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/Presentation/ArturRios.IdentityManager.WebApi
+git add src/Presentation/ArturRios.Heimdall.WebApi
 git commit -m "feat: expose PUT /api/scopes/{id} and register UC-03 handler"
 ```
 
@@ -605,9 +605,9 @@ git commit -m "feat: expose PUT /api/scopes/{id} and register UC-03 handler"
 Establishes the authenticated-functional-test pattern (mint the app JWT directly, since UC-11 Login is not implemented) and proves the endpoint end-to-end against Testcontainers PostgreSQL.
 
 **Files:**
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ArturRios.IdentityManager.WebApi.Tests.csproj`
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/Support/TestTokens.cs`
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerUpdateTests.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ArturRios.Heimdall.WebApi.Tests.csproj`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/Support/TestTokens.cs`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerUpdateTests.cs`
 
 **Interfaces:**
 - Consumes: `PostgresFixture` (existing), `FunctionalCollection` (existing), `WebApiTest<Program>.Authorize(string)` and `.Gateway`.
@@ -615,7 +615,7 @@ Establishes the authenticated-functional-test pattern (mint the app JWT directly
 
 - [ ] **Step 1: Align the test package version**
 
-In `ArturRios.IdentityManager.WebApi.Tests.csproj`, bump `ArturRios.Util.Test` to keep one version across the solution:
+In `ArturRios.Heimdall.WebApi.Tests.csproj`, bump `ArturRios.Util.Test` to keep one version across the solution:
 
 ```xml
 <PackageReference Include="ArturRios.Util.Test" Version="2.2.0" />
@@ -630,7 +630,7 @@ using ArturRios.Jwt;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Records;
 
-namespace ArturRios.IdentityManager.WebApi.Tests.Support;
+namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
 /// <summary>
 ///     Mints the application's own HMAC JWT directly for functional tests. UC-11 (Login) is not yet
@@ -640,9 +640,9 @@ namespace ArturRios.IdentityManager.WebApi.Tests.Support;
 /// </summary>
 public static class TestTokens
 {
-    private const string SecretVariable = "IDENTITY_MANAGER_AUTH_TOKEN_SECRET";
-    private const string IssuerVariable = "IDENTITY_MANAGER_AUTH_TOKEN_ISSUER";
-    private const string AudienceVariable = "IDENTITY_MANAGER_AUTH_TOKEN_AUDIENCE";
+    private const string SecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
+    private const string IssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
+    private const string AudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
     /// <summary>Builds a bearer token for a user with the given role value (see <c>Roles</c>).</summary>
     public static string ForRole(int role)
@@ -668,17 +668,17 @@ Create `ScopeControllerUpdateTests.cs`:
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 [Collection(nameof(FunctionalCollection))]
 public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -728,18 +728,18 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
 
 - [ ] **Step 4: Run test to verify it fails, then make it pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
 Expected: FAIL until `TestTokens` / the test compile; then PASS. The production code from Tasks 1–3 already implements the behavior — no production change should be needed for the main flow. If it fails at runtime, debug per `superpowers:systematic-debugging` (common causes: claim/secret mismatch → 401; wrong `WebApiTest`/attribute namespace → compile error).
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
 Expected: PASS (1 test).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tests/Presentation/ArturRios.IdentityManager.WebApi.Tests
+git add tests/Presentation/ArturRios.Heimdall.WebApi.Tests
 git commit -m "test: add functional token helper and UC-03 main-flow test"
 ```
 
@@ -750,7 +750,7 @@ git commit -m "test: add functional token helper and UC-03 main-flow test"
 Covers every remaining UC-03 flow at the API boundary: AF-03a (missing / deleted → 404), AF-03b (name conflict → 409), invalid input (empty name → 400), and authorization (non-System-Admin → 403, unauthenticated → 401).
 
 **Files:**
-- Modify: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerUpdateTests.cs`
+- Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerUpdateTests.cs`
 
 - [ ] **Step 1: Add the alternative-flow tests**
 
@@ -860,22 +860,22 @@ Append these methods to `ScopeControllerUpdateTests`:
 
 - [ ] **Step 2: Run to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~ScopeControllerUpdateTests"`
 Expected: all 7 tests PASS. If 403/401 return the wrong code, confirm the `[RoleRequirement]` attribute and that the unauthenticated test issues no token; debug per `superpowers:systematic-debugging`. No production change is expected beyond what Tasks 1–3 built.
 
 - [ ] **Step 3: Run the full suite**
 
 Run:
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 Expected: both green.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerUpdateTests.cs
+git add tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerUpdateTests.cs
 git commit -m "test: cover UC-03 alternative and authorization flows end-to-end"
 ```
 

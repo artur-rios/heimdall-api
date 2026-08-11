@@ -1,7 +1,7 @@
 # UC-15: Resend Verification Email — Implementation Plan
 
 Design: [2026-07-30-uc-15-resend-verification-email-design.md](../specs/2026-07-30-uc-15-resend-verification-email-design.md)
-Issue: [#16](https://github.com/artur-rios/identity-manager-api/issues/16)
+Issue: [#16](https://github.com/artur-rios/heimdall-api/issues/16)
 Branch: `feature/uc-15-resend-verification-email`
 
 Sequenced test-first per the
@@ -96,4 +96,4 @@ action binds no body, so it is ignored.
 
 ## Step 7 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request.
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request.

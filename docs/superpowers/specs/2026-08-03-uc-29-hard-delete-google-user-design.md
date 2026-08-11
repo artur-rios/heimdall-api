@@ -1,6 +1,6 @@
 # UC-29 — Hard Delete Google User — Design
 
-**Issue:** [#30](https://github.com/artur-rios/identity-manager-api/issues/30)
+**Issue:** [#30](https://github.com/artur-rios/heimdall-api/issues/30)
 **Branch:** `feature/uc-29-hard-delete-google-user`
 **Traces to:** FR-GO-16 (hard deletion, permanently removing the record).
 

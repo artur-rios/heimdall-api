@@ -19,7 +19,7 @@
 - **No cascade.** SRD §8: logically deleting a person leaves join rows, tokens, and owned applications untouched.
 - **Lookup in any deletion state** so AF-09b is an idempotent 200 rather than a 404.
 - **Tests:** unit tests use `AsyncFakeRepository<Person>` (one instance as both reader and writer) and Moq for `IScopeOwnershipChecker`; functional tests derive from `WebApiTest<Program>`, join `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response **and** database state via `db.CreateContext()`. GWT naming, `// Given` / `// When` / `// Then`, `[UnitFact]` / `[FunctionalFact]`.
-- **Run filters:** `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
+- **Run filters:** `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
 - **Commit style:** lowercase Conventional Commits subject, ≤50 chars, imperative; body wrapped at 72; trailer `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
 ---
@@ -27,19 +27,19 @@
 ## File Structure
 
 **New — production:**
-- `src/Application/ArturRios.IdentityManager.Command/Input/DeletePersonCommand.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Output/DeletePersonCommandOutput.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/DeletePersonCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/DeletePersonCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Output/DeletePersonCommandOutput.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/DeletePersonCommandHandler.cs`
 
 **Modified — production:**
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs` — three new messages.
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs` — their status codes.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs` — one DELETE action.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs` — handler registration.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs` — three new messages.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs` — their status codes.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs` — one DELETE action.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` — handler registration.
 
 **New — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/DeletePersonCommandHandlerTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerDeleteTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/DeletePersonCommandHandlerTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerDeleteTests.cs`
 
 **Modified — docs:**
 - `docs/requirements/Use Case Specification Document.md` — UC-09 brought in line with the behaviour.
@@ -53,10 +53,10 @@ The inputs and vocabulary the handler needs. No handler yet, so nothing to unit-
 the code must compile and the existing suite must stay green.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/DeletePersonCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/DeletePersonCommandOutput.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/DeletePersonCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/DeletePersonCommandOutput.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
 
 **Step 1: `DeletePersonCommand`**
 - [ ] `public class DeletePersonCommand : BaseCommand, IActorScoped`
@@ -82,8 +82,8 @@ the code must compile and the existing suite must stay green.
 - [ ] Update the class XML doc to mention UC-09.
 
 **Verification:**
-- [ ] `dotnet build src/ArturRios.IdentityManager.sln` succeeds.
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` still passes.
+- [ ] `dotnet build src/ArturRios.Heimdall.sln` succeeds.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` still passes.
 
 **Commit:** `feat: add delete person command and messages (UC-09)`
 
@@ -92,8 +92,8 @@ the code must compile and the existing suite must stay green.
 ## Task 2: Handler (test-first)
 
 **Files:**
-- Create: `tests/Application/ArturRios.IdentityManager.Command.Tests/DeletePersonCommandHandlerTests.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/DeletePersonCommandHandler.cs`
+- Create: `tests/Application/ArturRios.Heimdall.Command.Tests/DeletePersonCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/DeletePersonCommandHandler.cs`
 
 **Step 1: write the failing unit tests** (they will not compile until the handler exists — write the
 handler's signature first if that helps, but assert nothing until the tests are in place)
@@ -125,7 +125,7 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 - [ ] XML doc summarising the flows the handler serves, matching the sibling handlers' style.
 
 **Verification:**
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` — all pass, including the ten new tests.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` — all pass, including the ten new tests.
 
 **Commit:** `feat: add logical delete person handler (UC-09)`
 
@@ -134,8 +134,8 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 ## Task 3: Endpoint and wiring
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
 
 **Step 1: controller action**
 - [ ] `[HttpDelete("persons/{id:guid}")]` with `[RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]`.
@@ -147,8 +147,8 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 - [ ] Register `ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>` → `DeletePersonCommandHandler`, next to the `UpdatePersonCommand` registration. No validator.
 
 **Verification:**
-- [ ] `dotnet build src/ArturRios.IdentityManager.sln` succeeds.
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` still passes.
+- [ ] `dotnet build src/ArturRios.Heimdall.sln` succeeds.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` still passes.
 
 **Commit:** `feat: expose logical delete person endpoint (UC-09)`
 
@@ -157,7 +157,7 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 ## Task 4: Functional tests
 
 **Files:**
-- Create: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerDeleteTests.cs`
+- Create: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerDeleteTests.cs`
 
 **Step 1: seeding helpers** — copy the shape of `PersonControllerUpdateTests`: `SeedScopeAsync`,
 `SeedUserAsync(scope)`, `SeedScopeAdminAsync(ownedScope)`, `UniqueEmail`.
@@ -175,8 +175,8 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 - [ ] `GivenNoToken_WhenDeletePerson_ThenReturnsUnauthorized` — 401.
 
 **Verification:**
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` — all pass.
-- [ ] `dotnet test src/ArturRios.IdentityManager.sln` — the full suite is green.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` — all pass.
+- [ ] `dotnet test src/ArturRios.Heimdall.sln` — the full suite is green.
 
 **Commit:** `test: cover logical delete person endpoint (UC-09)`
 
@@ -203,4 +203,4 @@ returning what the scenario needs; Bogus for entity fields the behaviour does no
 ## After the merge (Gate 4)
 
 - [ ] Mark UC-09 ✅ in the README status tracker.
-- [ ] Confirm issue [#10](https://github.com/artur-rios/identity-manager-api/issues/10) is in **Done** and closed.
+- [ ] Confirm issue [#10](https://github.com/artur-rios/heimdall-api/issues/10) is in **Done** and closed.

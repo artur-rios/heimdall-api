@@ -1,7 +1,7 @@
 # UC-20: Hard Delete Application — Implementation Plan
 
 Design: [2026-07-31-uc-20-hard-delete-application-design.md](../specs/2026-07-31-uc-20-hard-delete-application-design.md)
-Issue: [#21](https://github.com/artur-rios/identity-manager-api/issues/21)
+Issue: [#21](https://github.com/artur-rios/heimdall-api/issues/21)
 Branch: `feature/uc-20-hard-delete-application`
 
 Sequenced test-first per the
@@ -47,7 +47,7 @@ Every refusal test also asserts the stored row is still present.
 `PublicId` + `Scope.PublicId` in any deletion state → delete the record → return. Each step commented
 with the UC/AF it implements, failures returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -85,5 +85,5 @@ Refusal tests assert the persisted row is still present; success tests assert it
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #21`.

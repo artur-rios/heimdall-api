@@ -19,7 +19,7 @@
 - **Role transitions:** only `→ SystemAdmin` is supported, and only for a System Admin actor. Everything else is rejected — never guess a scope.
 - **Join-row removal:** there is no repository for `ScopeUser`/`ScopeOwner` (the generic repository requires `Entity`). Rows are removed by severing the tracked navigation on `Person` and updating it; EF deletes the orphans because both relationships are required with `DeleteBehavior.Cascade`. The handler must therefore `Include` both navigations. `AsyncFakeRepository<Person>` does **not** model this cascade — unit tests assert the navigation is cleared, functional tests assert the row is gone from the database.
 - **Tests:** unit tests use `AsyncFakeRepository<T>` and Moq for the validator and `IScopeOwnershipChecker`; functional tests derive from `WebApiTest<Program>`, join `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response **and** database state via `db.CreateContext()`. GWT naming, `// Given` / `// When` / `// Then`, `[UnitFact]` / `[FunctionalFact]`.
-- **Run filters:** `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
+- **Run filters:** `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and `--filter "Category=Functional"`.
 - **Commit style:** lowercase Conventional Commits subject, ≤50 chars, imperative; body wrapped at 72; trailer `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
 ---
@@ -27,21 +27,21 @@
 ## File Structure
 
 **New — production:**
-- `src/Application/ArturRios.IdentityManager.Command/Input/UpdatePersonCommand.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Input/Validation/UpdatePersonCommandValidator.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Output/UpdatePersonCommandOutput.cs`
-- `src/Application/ArturRios.IdentityManager.Command/Handlers/UpdatePersonCommandHandler.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/UpdatePersonCommand.cs`
+- `src/Application/ArturRios.Heimdall.Command/Input/Validation/UpdatePersonCommandValidator.cs`
+- `src/Application/ArturRios.Heimdall.Command/Output/UpdatePersonCommandOutput.cs`
+- `src/Application/ArturRios.Heimdall.Command/Handlers/UpdatePersonCommandHandler.cs`
 
 **Modified — production:**
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs` — six new messages.
-- `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs` — their status codes.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs` — one PUT action.
-- `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs` — validator + handler registration.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs` — six new messages.
+- `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs` — their status codes.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs` — one PUT action.
+- `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` — validator + handler registration.
 
 **New — tests:**
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandValidatorTests.cs`
-- `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandHandlerTests.cs`
-- `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerUpdateTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandValidatorTests.cs`
+- `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandHandlerTests.cs`
+- `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerUpdateTests.cs`
 
 **Modified — docs:**
 - `docs/requirements/Use Case Specification Document.md` — UC-08 brought in line with the behaviour.
@@ -53,15 +53,15 @@
 Everything the handler needs, with the validator unit-tested. No handler yet.
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/UpdatePersonCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/Validation/UpdatePersonCommandValidator.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/UpdatePersonCommandOutput.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandValidatorTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/UpdatePersonCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/Validation/UpdatePersonCommandValidator.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/UpdatePersonCommandOutput.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandValidatorTests.cs`
 
 **Interfaces:**
-- Consumes: `IActorScoped` from `ArturRios.IdentityManager.Shared.Security` (UC-07).
+- Consumes: `IActorScoped` from `ArturRios.Heimdall.Shared.Security` (UC-07).
 - Produces:
   - `UpdatePersonCommand : BaseCommand, IActorScoped` with `Guid Id`, `string Name`, `string Email`, `int? RoleId`, `long ActingPersonId`, `int ActingRole`.
   - `UpdatePersonCommandValidator : AbstractValidator<UpdatePersonCommand>`.
@@ -70,7 +70,7 @@ Everything the handler needs, with the validator unit-tested. No handler yet.
 
 - [ ] **Step 1: Add the six messages**
 
-Append inside the class in `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessages.cs`:
+Append inside the class in `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessages.cs`:
 
 ```csharp
     /// <summary>UC-08 success: the person was updated.</summary>
@@ -100,7 +100,7 @@ Append inside the class in `src/Application/ArturRios.IdentityManager.Shared/Mes
 
 - [ ] **Step 2: Map them to status codes**
 
-In `src/Application/ArturRios.IdentityManager.Shared/Messages/PersonMessageMap.cs`, add a comma to
+In `src/Application/ArturRios.Heimdall.Shared/Messages/PersonMessageMap.cs`, add a comma to
 the last existing entry and append:
 
 ```csharp
@@ -120,13 +120,13 @@ Update the class summary to read `following the UC-06, UC-07 and UC-08 flows`.
 
 - [ ] **Step 3: Create the command**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Input/UpdatePersonCommand.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Input/UpdatePersonCommand.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Shared.Security;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to update a person's name, email, and — for a System Admin — role (UC-08). The person
@@ -158,12 +158,12 @@ public class UpdatePersonCommand : BaseCommand, IActorScoped
 
 - [ ] **Step 4: Create the output**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Output/UpdatePersonCommandOutput.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Output/UpdatePersonCommandOutput.cs`:
 
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Output;
+namespace ArturRios.Heimdall.Command.Output;
 
 /// <summary>
 ///     The person as it stands after a UC-08 update. Exposes only external-facing identifiers and
@@ -202,16 +202,16 @@ public class UpdatePersonCommandOutput : CommandOutput
 
 - [ ] **Step 5: Write the failing validator tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandValidatorTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandValidatorTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Input.Validation;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for UpdatePersonCommandValidator (UC-08 shape validation). Business rules that need
 // data access — existence, authorization, email uniqueness, ownership — are the handler's job.
@@ -337,19 +337,19 @@ public class UpdatePersonCommandValidatorTests
 
 - [ ] **Step 6: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation error — `UpdatePersonCommandValidator` does not exist.
 
 - [ ] **Step 7: Create the validator**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Input/Validation/UpdatePersonCommandValidator.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Input/Validation/UpdatePersonCommandValidator.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
-namespace ArturRios.IdentityManager.Command.Input.Validation;
+namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Shape validation for <see cref="UpdatePersonCommand" /> (UC-08 step 2). Business rules that
@@ -380,7 +380,7 @@ public class UpdatePersonCommandValidator : AbstractValidator<UpdatePersonComman
 
 - [ ] **Step 8: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all nine `UpdatePersonCommandValidatorTests` green, nothing else broken.
 
 - [ ] **Step 9: Commit**
@@ -395,31 +395,31 @@ git commit -m "feat: add update person command and validator (UC-08)"
 ## Task 2: The update handler
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/UpdatePersonCommandHandler.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/UpdatePersonCommandHandler.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandHandlerTests.cs`
 
 **Interfaces:**
-- Consumes: `UpdatePersonCommand`, `UpdatePersonCommandOutput`, the new `PersonMessages` (Task 1); `IScopeOwnershipChecker` from `ArturRios.IdentityManager.Shared.Services` (UC-07).
+- Consumes: `UpdatePersonCommand`, `UpdatePersonCommandOutput`, the new `PersonMessages` (Task 1); `IScopeOwnershipChecker` from `ArturRios.Heimdall.Shared.Services` (UC-07).
 - Produces: `UpdatePersonCommandHandler(IValidator<UpdatePersonCommand> validator, IAsyncReadOnlyRepository<Person> personReader, IAsyncRepository<Person> personWriter, IScopeOwnershipChecker scopeOwnership)` implementing `ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>`.
 
 - [ ] **Step 1: Write the failing handler tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/UpdatePersonCommandHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/UpdatePersonCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for UpdatePersonCommandHandler (UC-08). Cover the main flow for each permitted actor,
 // AF-08a (not found), AF-08b (email conflict), AF-08c (role change by a non-System-Admin), the
@@ -818,27 +818,27 @@ public class UpdatePersonCommandHandlerTests
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: compilation error — `UpdatePersonCommandHandler` does not exist.
 
 - [ ] **Step 3: Implement the handler**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Handlers/UpdatePersonCommandHandler.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Handlers/UpdatePersonCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.Shared.Messages;
-using ArturRios.IdentityManager.Shared.Services;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="UpdatePersonCommand" /> (UC-08): validates the request, loads the person
@@ -1040,7 +1040,7 @@ public class UpdatePersonCommandHandler(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS — all sixteen `UpdatePersonCommandHandlerTests` green, nothing else broken.
 
 - [ ] **Step 5: Commit**
@@ -1059,9 +1059,9 @@ functional tests, because a functional test cannot fail for the right reason aga
 does not exist — it returns 404 for every case, including the ones expecting 404.
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerUpdateTests.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerUpdateTests.cs`
 
 **Interfaces:**
 - Consumes: `UpdatePersonCommand`, `UpdatePersonCommandOutput`, `UpdatePersonCommandHandler`, `UpdatePersonCommandValidator` (Tasks 1–2).
@@ -1069,7 +1069,7 @@ does not exist — it returns 404 for every case, including the ones expecting 4
 
 - [ ] **Step 1: Add the controller action**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/PersonController.cs`, add this
+In `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/PersonController.cs`, add this
 action after `CreateScopeOwner` and before the `GetById` read action:
 
 ```csharp
@@ -1094,7 +1094,7 @@ action after `CreateScopeOwner` and before the `GetById` read action:
 
 - [ ] **Step 2: Register the validator and handler**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, after the existing
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, after the existing
 `CreateScopeOwnerCommand` registrations, add:
 
 ```csharp
@@ -1105,22 +1105,22 @@ In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, after the exi
 
 - [ ] **Step 3: Write the functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/PersonControllerUpdateTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/PersonControllerUpdateTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for PUT /api/persons/{id} (UC-08): the main flow for each permitted actor,
 // AF-08a (404), AF-08b (409), AF-08c (403), the unsupported transition (400), the NFR-12 last-owner
@@ -1431,10 +1431,10 @@ and `PostAsync` the existing suites use.
 
 - [ ] **Step 4: Run both suites**
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"`
 Expected: PASS.
 
-Run: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"`
+Run: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"`
 Expected: PASS — all thirteen `PersonControllerUpdateTests` green, and the existing functional
 suites still green.
 

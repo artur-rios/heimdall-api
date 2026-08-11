@@ -154,7 +154,7 @@ Extracted into a shared collaborator so the three handlers do not triplicate tok
   Used = false }`, persists it via `IAsyncRepository<EmailVerificationToken>`, then calls the sender.
   - Token string via `ArturRios.Util.Random.CustomRandom.Text` (URL-safe alphanumeric,
     sufficient length).
-  - TTL from an env var (`IDENTITY_MANAGER_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS`) with a
+  - TTL from an env var (`HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS`) with a
     default (24h), mirroring the JWT-config env pattern in `Startup`.
 - **`IEmailVerificationSender`** — `SendAsync(string email, string token)`; implemented now as
   `LoggingEmailVerificationSender`, which logs recipient + token (no real delivery).

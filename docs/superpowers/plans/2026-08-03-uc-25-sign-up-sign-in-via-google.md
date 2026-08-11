@@ -1,7 +1,7 @@
 # UC-25 — Sign Up / Sign In via Google — Implementation Plan
 
 Design: [2026-08-03-uc-25-sign-up-sign-in-via-google-design.md](../specs/2026-08-03-uc-25-sign-up-sign-in-via-google-design.md)
-Issue: [#26](https://github.com/artur-rios/identity-manager-api/issues/26) · Branch:
+Issue: [#26](https://github.com/artur-rios/heimdall-api/issues/26) · Branch:
 `feature/uc-25-sign-up-sign-in-via-google` · Milestone: Google Sign-In
 
 Sequenced test-first per the Testing Specification §9: each implementation step is followed by the
@@ -71,7 +71,7 @@ issuer, Bogus for entities. GWT naming, `// Given / // When / // Then` sections.
 
 ## Step 7 — Functional tests (`WebApi.Tests/AuthControllerGoogleSignInTests.cs`)
 
-`PostgresFixture` sets `IDENTITY_MANAGER_GOOGLE_TEST_SIGNING_SECRET` so the host boots with
+`PostgresFixture` sets `HEIMDALL_GOOGLE_TEST_SIGNING_SECRET` so the host boots with
 `LocalGoogleIdTokenVerifier`. A `TestTokens`-style helper mints the signed ID tokens.
 
 | Test | Flow |

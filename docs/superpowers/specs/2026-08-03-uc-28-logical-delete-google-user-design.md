@@ -1,6 +1,6 @@
 # UC-28 — Logical Delete Google User — Design
 
-**Issue:** [#29](https://github.com/artur-rios/identity-manager-api/issues/29)
+**Issue:** [#29](https://github.com/artur-rios/heimdall-api/issues/29)
 **Branch:** `feature/uc-28-logical-delete-google-user`
 **Traces to:** FR-GO-15 (logical deletion by setting `IsDeleted = true`), FR-GO-17 (deleted records
 excluded from default query results — already delivered by UC-27, and this is what makes it visible).

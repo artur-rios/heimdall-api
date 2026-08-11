@@ -27,7 +27,7 @@ no schema change, no EF migration, no change to `GET /api/scopes`, `ListScopesQu
   unit tests use `AsyncFakeRepository<T>`, functional tests derive from `WebApiTest<Program>`, join
   `[Collection(nameof(FunctionalCollection))]`, authorize via `TestTokens`, and assert response and
   database state.
-- Run filters: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` and
+- Run filters: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` and
   `--filter "Category=Functional"`.
 - Commits: lowercase Conventional Commits subject ≤50 chars, imperative; body wrapped at 72; trailer
   `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
@@ -38,28 +38,28 @@ no schema change, no EF migration, no change to `GET /api/scopes`, `ListScopesQu
 
 Nothing behavioral; the suite stays green.
 
-1.1 `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessages.cs` — add
+1.1 `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessages.cs` — add
 
 ```csharp
 /// <summary>AF-02b: the caller is not allowed to view the requested scope.</summary>
 public const string NotAuthorizedToViewScope = "You are not allowed to view this scope.";
 ```
 
-1.2 `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs` — map it to
+1.2 `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessageMap.cs` — map it to
 `HttpStatusCodes.Forbidden`, under an `// AF-02b — caller may not view this scope.` comment.
 
-1.3 `src/Application/ArturRios.IdentityManager.Query/Input/GetScopeByIdQuery.cs` — implement
-`IActorScoped` (`ArturRios.IdentityManager.Shared.Security`): `Guid ActingPersonId`, `int ActingRole`,
+1.3 `src/Application/ArturRios.Heimdall.Query/Input/GetScopeByIdQuery.cs` — implement
+`IActorScoped` (`ArturRios.Heimdall.Shared.Security`): `Guid ActingPersonId`, `int ActingRole`,
 with the same "set by the controller from the authenticated caller, never from the request" doc note
 `ListScopePersonsQuery` carries.
 
-1.4 `dotnet build src/ArturRios.IdentityManager.sln` → succeeds. Commit.
+1.4 `dotnet build src/ArturRios.Heimdall.sln` → succeeds. Commit.
 
 ## Phase 2 — Carry the acting caller to the query
 
 Still no behavior change: the handler ignores the new fields until Phase 4, so the suite stays green.
 
-2.1 Create `src/Presentation/ArturRios.IdentityManager.WebApi/Security/ActorExtensions.cs` — move
+2.1 Create `src/Presentation/ArturRios.Heimdall.WebApi/Security/ActorExtensions.cs` — move
 `PersonController.ApplyActor` here verbatim as an extension, keeping its doc comment (updated to name
 UC-02 AF-02b alongside UC-06 AF-06e and UC-07 AF-07b):
 
@@ -93,7 +93,7 @@ enforced by the handler.
 
 ## Phase 3 — Tests for the rule (expected red)
 
-3.1 `tests/Application/ArturRios.IdentityManager.Query.Tests/GetScopeByIdQueryHandlerTests.cs` —
+3.1 `tests/Application/ArturRios.Heimdall.Query.Tests/GetScopeByIdQueryHandlerTests.cs` —
 add acting fields to the four existing queries (`ActingRole = (int)Roles.SystemAdmin`,
 `ActingPersonId = Guid.NewGuid()`), extend the `ScopeWithOwner` helper with an optional member so a
 `User` scenario can be seeded, and add the seven scenarios from the design's testing table:
@@ -106,7 +106,7 @@ add acting fields to the four existing queries (`ActingRole = (int)Roles.SystemA
 - `GivenUnrecognizedRole_WhenHandlingGetById_ThenReturnsNotAuthorizedToViewScope`
 - `GivenMissingScopeAndNonAdminActor_WhenHandlingGetById_ThenReturnsScopeNotFound`
 
-3.2 `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerViewTests.cs` — seed
+3.2 `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerViewTests.cs` — seed
 helpers for a `ScopeAdmin` owner (`ScopeOwners` row) and a `User` member (`ScopeUsers` row), following
 `PersonControllerGetByIdTests.SeedScopeAdminAsync`/`SeedUserAsync`, plus four tests:
 
@@ -125,7 +125,7 @@ commit the tests.
 
 ## Phase 4 — The per-actor rule
 
-4.1 `src/Application/ArturRios.IdentityManager.Query/Handlers/GetScopeByIdQueryHandler.cs` — project
+4.1 `src/Application/ArturRios.Heimdall.Query/Handlers/GetScopeByIdQueryHandler.cs` — project
 into a private `ScopeProjection` (mirroring `GetPersonByIdQueryHandler.PersonProjection`) carrying the
 existing `ScopeOutput` plus the one fact the rule needs:
 

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
+    <PackageReference Include="ArturRios.Messaging" Version="1.1.0" />
+    <PackageReference Include="ArturRios.Util.WebApi" Version="3.0.0" />
+    <!-- UC-25 verifies Google ID tokens itself (GoogleIdTokenVerifier) rather than through the
+         library's IGoogleTokenVerifier, whose payload carries no name or picture claim and so cannot
+         populate a Google User (FR-GO-05). Both packages arrive transitively via ArturRios.Util.WebApi;
+         they are declared here because this project uses their types directly, and pinned to the
+         versions that package already resolves. -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Map" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\ArturRios.Heimdall.Command\ArturRios.Heimdall.Command.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.Heimdall.Query\ArturRios.Heimdall.Query.csproj" />
+    <ProjectReference Include="..\..\Application\ArturRios.Heimdall.Shared\ArturRios.Heimdall.Shared.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\ArturRios.Heimdall.Data\ArturRios.Heimdall.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ConfigurationLoader resolves Environments/.env.<environment> relative to the application
+         base path, so the folder must sit next to the built assembly. The Web SDK already copies
+         Settings/appsettings*.json via its default **/*.json content glob; .env has no extension
+         to match, so it needs an explicit item. -->
+    <Content Include="Environments\.env*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

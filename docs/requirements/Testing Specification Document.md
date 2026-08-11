@@ -1,4 +1,4 @@
-# Testing Specification Document — Identity Manager API
+# Testing Specification Document — Heimdall API
 
 ## 1. Purpose
 
@@ -43,7 +43,7 @@ When a use case is implemented, walk this decision list and produce every applic
 Notes:
 
 - **Anemic domain entities** (plain data holders with only properties and navigation collections,
-  e.g. [`Scope`](../src/Domain/ArturRios.IdentityManager.Domain/Entities/Scope.cs)) carry no
+  e.g. [`Scope`](../src/Domain/ArturRios.Heimdall.Domain/Entities/Scope.cs)) carry no
   behavior and therefore get **no unit tests** — their behavior is observed through the handlers and
   functional tests. A domain class earns its own unit tests the moment it gains a method that makes
   a decision (guard clause, state transition, hashing, token validity, etc.).
@@ -60,27 +60,27 @@ the project name. Each production class has one corresponding test class, named 
 ```
 src/
   Application/
-    ArturRios.IdentityManager.Command/           →  CreateScopeCommandHandler.cs
-    ArturRios.IdentityManager.Query/             →  GetScopeByIdQueryHandler.cs
-    ArturRios.IdentityManager.Shared/            →  ScopeOwnershipChecker.cs
+    ArturRios.Heimdall.Command/           →  CreateScopeCommandHandler.cs
+    ArturRios.Heimdall.Query/             →  GetScopeByIdQueryHandler.cs
+    ArturRios.Heimdall.Shared/            →  ScopeOwnershipChecker.cs
   Domain/
-    ArturRios.IdentityManager.Domain/
+    ArturRios.Heimdall.Domain/
   Infrastructure/
-    ArturRios.IdentityManager.Data/              →  Seeding/MasterUserOptions.cs
+    ArturRios.Heimdall.Data/              →  Seeding/MasterUserOptions.cs
   Presentation/
-    ArturRios.IdentityManager.WebApi/            →  ScopeController.cs
+    ArturRios.Heimdall.WebApi/            →  ScopeController.cs
 
 tests/
   Application/
-    ArturRios.IdentityManager.Command.Tests/     →  CreateScopeCommandHandlerTests.cs
-    ArturRios.IdentityManager.Query.Tests/       →  GetScopeByIdQueryHandlerTests.cs
-    ArturRios.IdentityManager.Shared.Tests/      →  ScopeOwnershipCheckerTests.cs
+    ArturRios.Heimdall.Command.Tests/     →  CreateScopeCommandHandlerTests.cs
+    ArturRios.Heimdall.Query.Tests/       →  GetScopeByIdQueryHandlerTests.cs
+    ArturRios.Heimdall.Shared.Tests/      →  ScopeOwnershipCheckerTests.cs
   Domain/
-    ArturRios.IdentityManager.Domain.Tests/
+    ArturRios.Heimdall.Domain.Tests/
   Infrastructure/
-    ArturRios.IdentityManager.Data.Tests/        →  Seeding/MasterUserOptionsTests.cs
+    ArturRios.Heimdall.Data.Tests/        →  Seeding/MasterUserOptionsTests.cs
   Presentation/
-    ArturRios.IdentityManager.WebApi.Tests/      →  ScopeControllerCreateTests.cs (functional)
+    ArturRios.Heimdall.WebApi.Tests/      →  ScopeControllerCreateTests.cs (functional)
 ```
 
 Rules:
@@ -159,7 +159,7 @@ network, no real time.
 
 Handlers in this project return an `ArturRios.Output.DataOutput<T>` and report failures **as errors
 on that output** rather than by throwing (see
-[`CreateScopeCommandHandler`](../src/Application/ArturRios.IdentityManager.Command/Handlers/CreateScopeCommandHandler.cs)).
+[`CreateScopeCommandHandler`](../src/Application/ArturRios.Heimdall.Command/Handlers/CreateScopeCommandHandler.cs)).
 Unit tests therefore assert on `output.Success`, `output.Errors`, `output.Messages`, and
 `output.Data` — not on exceptions (except where the code is genuinely expected to throw).
 
@@ -207,7 +207,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 public class CreateScopeCommandHandlerTests
 {
@@ -290,7 +290,7 @@ A functional test is an **end-to-end** test of a use case through the API. It:
 
 This is where authorization, routing, model binding, validation wiring, the mediator, EF Core
 mapping, and the database schema are all verified together. The existing
-[`HealthCheckTests`](../tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/HealthCheckTests.cs)
+[`HealthCheckTests`](../tests/Presentation/ArturRios.Heimdall.WebApi.Tests/HealthCheckTests.cs)
 is the reference for the request/response half of this pattern:
 
 ```csharp
@@ -313,17 +313,17 @@ public class HealthCheckTests(EnvironmentType environment = EnvironmentType.Loca
 Functional tests **must not** use an in-memory EF provider or a developer's local database. They run
 against a real PostgreSQL instance created by Testcontainers at test time, so the environment closely
 matches production (the app uses the PostgreSQL provider — see
-[`Startup.AddDependencies`](../src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs)).
+[`Startup.AddDependencies`](../src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs)).
 
-The app reads its connection from environment variables (`IDENTITY_MANAGER_DATA_CONNECTIONSTRING`,
-`IDENTITY_MANAGER_DATA_DATABASETYPE`) via `AddDataConfigFromEnvironment<AppDbContext>`. The functional
+The app reads its connection from environment variables (`HEIMDALL_DATA_CONNECTIONSTRING`,
+`HEIMDALL_DATA_DATABASETYPE`) via `AddDataConfigFromEnvironment<AppDbContext>`. The functional
 suite therefore:
 
 1. Starts a `PostgreSqlContainer` **once for the whole functional suite** (an xUnit
    `ICollectionFixture`, so the container isn't recreated per test class).
 2. Applies the schema/migrations to that container's database.
-3. Exports the container's connection string into `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` (and
-   `IDENTITY_MANAGER_DATA_DATABASETYPE=PostgreSql`) **before** the host is built, so
+3. Exports the container's connection string into `HEIMDALL_DATA_CONNECTIONSTRING` (and
+   `HEIMDALL_DATA_DATABASETYPE=PostgreSql`) **before** the host is built, so
    `WebApiTest<Program>` boots against the container.
 4. **Keeps tests independent by making their data unique, not by resetting the database.** The
    container's database accumulates rows for the whole run; nothing is truncated between tests and
@@ -359,8 +359,8 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
-        Environment.SetEnvironmentVariable("IDENTITY_MANAGER_DATA_CONNECTIONSTRING", ConnectionString);
-        Environment.SetEnvironmentVariable("IDENTITY_MANAGER_DATA_DATABASETYPE", "PostgreSql");
+        Environment.SetEnvironmentVariable("HEIMDALL_DATA_CONNECTIONSTRING", ConnectionString);
+        Environment.SetEnvironmentVariable("HEIMDALL_DATA_DATABASETYPE", "PostgreSql");
         // Create the schema by applying the real EF Core migrations — see §10.1.
         await using var context = new AppDbContext(/* options bound to ConnectionString */);
         await context.Database.MigrateAsync();
@@ -421,7 +421,7 @@ from the Use Case Specification, including the authorization flows that unit tes
 
 | Item | Convention | Example |
 | --- | --- | --- |
-| Test project | `<Project>.Tests` | `ArturRios.IdentityManager.Command.Tests` |
+| Test project | `<Project>.Tests` | `ArturRios.Heimdall.Command.Tests` |
 | Test class | `<ClassUnderTest>Tests` | `CreateScopeCommandHandlerTests` |
 | Test method | `Given…_When…_Then…` | `GivenScopeNameAlreadyExists_WhenHandlingCreateScope_ThenReturnsNameAlreadyExistsError` |
 | Unit fact/theory | `[UnitFact]` / `[UnitTheory]` | — |
@@ -453,12 +453,12 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 
 | Test project | References | Test classes |
 | --- | --- | --- |
-| `tests/Application/ArturRios.IdentityManager.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `HardDeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication`, `CreateScopePermission`, `UpdateScopePermission`, `DeleteScopePermission`, `HardDeleteScopePermission` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
-| `tests/Application/ArturRios.IdentityManager.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetScopePermissionByIdQueryHandlerTests`, `ListScopePermissionsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
-| `tests/Application/ArturRios.IdentityManager.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
-| `tests/Domain/ArturRios.IdentityManager.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
-| `tests/Infrastructure/ArturRios.IdentityManager.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
-| `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
+| `tests/Application/ArturRios.Heimdall.Command.Tests` | `…Command` | Handler tests for every command — `CreateScope`, `UpdateScope`, `DeleteScope`, `HardDeleteScope`, `CreateAdmin`, `CreateUser`, `CreateScopeOwner`, `AddScopeOwner`, `RemoveScopeOwner`, `PromoteScopeUser`, `SetGoogleSignIn`, `GoogleSignIn`, `GoogleSignOut`, `DeleteGoogleUser`, `HardDeleteGoogleUser`, `UpdatePerson`, `DeletePerson`, `HardDeletePerson`, `Login`, `PasswordRecovery`, `ResetPassword`, `VerifyEmail`, `ResendVerificationEmail`, `CreateApplication`, `UpdateApplication`, `DeleteApplication`, `HardDeleteApplication`, `CreateScopePermission`, `UpdateScopePermission`, `DeleteScopePermission`, `HardDeleteScopePermission` — plus the validators that guard them, `EmailVerificationServiceTests`, and `PasswordResetServiceTests` |
+| `tests/Application/ArturRios.Heimdall.Query.Tests` | `…Query` | `GetScopeByIdQueryHandlerTests`, `ListScopesQueryHandlerTests`, `GetPersonByIdQueryHandlerTests`, `ListScopePersonsQueryHandlerTests`, `ListScopeOwnersQueryHandlerTests`, `GetApplicationByIdQueryHandlerTests`, `ListScopeApplicationsQueryHandlerTests`, `GetGoogleUserByIdQueryHandlerTests`, `ListScopeGoogleUsersQueryHandlerTests`, `GetScopePermissionByIdQueryHandlerTests`, `ListScopePermissionsQueryHandlerTests`, `GetDetailedHealthQueryHandlerTests`, `DatabaseHealthCheckTests` |
+| `tests/Application/ArturRios.Heimdall.Shared.Tests` | `…Shared` | `ScopeOwnershipCheckerTests` — the scope-authorization rule shared by UC-06 AF-06e and UC-07 AF-07b |
+| `tests/Domain/ArturRios.Heimdall.Domain.Tests` | `…Domain` | Empty by design — every entity is still anemic, so §3's rule gives them no unit tests |
+| `tests/Infrastructure/ArturRios.Heimdall.Data.Tests` | `…Data` | `Seeding/MasterUserOptionsTests` |
+| `tests/Presentation/ArturRios.Heimdall.WebApi.Tests` | `…WebApi` | One functional class per endpoint group (`ScopeController*`, `PersonController*`, `AuthControllerLogin`, `AuthControllerPasswordRecovery`, `AuthControllerPasswordReset`,
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `ScopePermissionController*`, `AuthControllerScopePermissionClaim`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
 Suite totals as of UC-35: **520 unit** and **428 functional** tests, all passing. Run them separately
@@ -476,7 +476,7 @@ third party.**
 `WebApiTest<T>` keeps its `WebApplicationFactory` private and its `Gateway` protected-readonly, so a
 functional test cannot replace a DI registration — every substitution in this suite is chosen at
 start-up from the environment, as `Startup.AddEmailSenders` is. `PostgresFixture` therefore publishes
-`IDENTITY_MANAGER_GOOGLE_TEST_SIGNING_SECRET`, which makes the host under test resolve
+`HEIMDALL_GOOGLE_TEST_SIGNING_SECRET`, which makes the host under test resolve
 `LocalGoogleIdTokenVerifier`, and `TestGoogleTokens` mints ID tokens signed with the same secret.
 Without it only AF-25a and AF-25b would be reachable: the main flow, AF-25c, and AF-25d all sit
 behind token verification, and §7.4 asks for every alternative flow.
@@ -671,12 +671,12 @@ never makes an outbound call.
 ### 10.1 Functional database
 
 `PostgresFixture` starts a `postgres:16-alpine` container, points
-`IDENTITY_MANAGER_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
+`HEIMDALL_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
 suite never touches a developer's local `.env.local` database — and creates the schema by applying
 **the real EF Core migrations** (`context.Database.MigrateAsync()`). Migrations were chosen over
 `EnsureCreated` deliberately: the API refuses to start with migrations pending (see
 `DatabaseSeeder`), and applying them here means the functional suite exercises the same schema
-production gets. `SchemaTests` asserts the result — every table under the `identity_manager` schema,
+production gets. `SchemaTests` asserts the result — every table under the `heimdall` schema,
 named in singular snake_case.
 
 `SeedingTests` covers the other half of startup: `DatabaseSeeder` writes the three `Roles` rows and

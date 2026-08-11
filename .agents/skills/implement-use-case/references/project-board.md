@@ -1,6 +1,6 @@
 # Project Board Operations
 
-The Identity Manager backlog is tracked on **GitHub Project #7** (private, owner `artur-rios`), and
+The Heimdall backlog is tracked on **GitHub Project #7** (private, owner `artur-rios`), and
 each use case has one issue whose title starts with its UC number (e.g. `UC-03: Update Scope`).
 
 The board's `Status` field drives the workflow lifecycle: **Todo → In Progress → Testing → Done**.
@@ -26,7 +26,7 @@ These rarely change, but verify with the discovery commands below if an edit fai
 ## 1. Find the issue for a UC
 
 ```bash
-gh issue list --repo artur-rios/identity-manager-api --search "UC-03 in:title" \
+gh issue list --repo artur-rios/heimdall-api --search "UC-03 in:title" \
   --state all --json number,title -q '.[] | "#\(.number) \(.title)"'
 ```
 
@@ -61,7 +61,7 @@ If the PR merged with a `Closes #<n>` reference, the issue closes automatically 
 close explicitly:
 
 ```bash
-gh issue close <n> --repo artur-rios/identity-manager-api --reason completed
+gh issue close <n> --repo artur-rios/heimdall-api --reason completed
 ```
 
 ## Rediscovering IDs if they ever change

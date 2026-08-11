@@ -1,14 +1,14 @@
-# Vision Document — Identity Manager API
+# Vision Document — Heimdall API
 
 ## 1. Introduction
 
 ### 1.1 Purpose
 
-This document establishes the vision for the **Identity Manager API**, a .NET Web API responsible for centralized management of user identities, authentication, and authorization across multiple independent systems.
+This document establishes the vision for the **Heimdall API**, a .NET Web API responsible for centralized management of user identities, authentication, and authorization across multiple independent systems.
 
 ### 1.2 Scope
 
-The Identity Manager API will serve as a single source of truth for person management, application management, authentication, role-based access control, and multi-tenant scoping. It is designed to be consumed by multiple client systems, each operating within its own isolated scope. Beyond human persons, the system also registers **Applications** — non-human identities representing other systems, each owned by a Scope Admin who owns the application's scope.
+The Heimdall API will serve as a single source of truth for person management, application management, authentication, role-based access control, and multi-tenant scoping. It is designed to be consumed by multiple client systems, each operating within its own isolated scope. Beyond human persons, the system also registers **Applications** — non-human identities representing other systems, each owned by a Scope Admin who owns the application's scope.
 
 ### 1.3 Definitions and Acronyms
 
@@ -41,7 +41,7 @@ Organizations integrating multiple systems face a recurring challenge: each syst
 | ----------- | ------------- |
 | **For** | Development teams and organizations operating multiple systems |
 | **Who** | Need centralized user identity and authentication management |
-| **The Identity Manager API** | Is a .NET Web API |
+| **The Heimdall API** | Is a .NET Web API |
 | **That** | Provides scoped person management, role-based access, authentication, password recovery, and email verification |
 | **Unlike** | System-specific user management modules that create data silos |
 | **Our product** | Offers a single, multi-tenant identity service with clear scope isolation and flexible deletion strategies |
@@ -63,13 +63,13 @@ Organizations integrating multiple systems face a recurring challenge: each syst
 
 ```mermaid
 C4Context
-    title Identity Manager API — Context Diagram
+    title Heimdall API — Context Diagram
 
     Person(sysAdmin, "System Admin", "Manages all scopes, persons, and applications; belongs to no scope")
     Person(scopeAdmin, "Scope Admin", "Owns one or more scopes and manages their users and applications")
     Person(user, "End User", "Belongs to exactly one scope; authenticates and manages own profile")
 
-    System(api, "Identity Manager API", ".NET Web API for identity management")
+    System(api, "Heimdall API", ".NET Web API for identity management")
 
     System_Ext(clientA, "Client System A", "Consumes identity services under Scope A")
     System_Ext(clientB, "Client System B", "Consumes identity services under Scope B")

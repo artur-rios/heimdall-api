@@ -1,7 +1,7 @@
 # UC-18: Update Application — Implementation Plan
 
 Design: [2026-07-31-uc-18-update-application-design.md](../specs/2026-07-31-uc-18-update-application-design.md)
-Issue: [#19](https://github.com/artur-rios/identity-manager-api/issues/19)
+Issue: [#19](https://github.com/artur-rios/heimdall-api/issues/19)
 Branch: `feature/uc-18-update-application`
 
 Sequenced test-first per the
@@ -75,7 +75,7 @@ Every refusal test also asserts the stored row still carries its original `Name`
 eligibility → apply and stamp `UpdatedAt` → return. Each step commented with the UC/AF it implements,
 failures returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 6 — Endpoint and DI
 
@@ -112,7 +112,7 @@ failures returned as errors on `DataOutput`.
 Refusal tests assert the persisted row is unchanged; success tests assert `name` / `owner_id` and a
 moved `updated_at`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` green.
 
 ## Step 8 — Documentation
 
@@ -122,5 +122,5 @@ moved `updated_at`.
 
 ## Step 9 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #19`.

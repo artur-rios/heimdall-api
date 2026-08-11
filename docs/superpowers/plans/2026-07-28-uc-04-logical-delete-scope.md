@@ -24,12 +24,12 @@
 Builds the command, output, canonical message + status mapping, and the handler with its full unit-test suite. Deliverable: green unit tests for the main flow and every handler-level alternative flow (AF-04a, AF-04b, cascade behavior).
 
 **Files:**
-- Create: `src/Application/ArturRios.IdentityManager.Command/Input/DeleteScopeCommand.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Output/DeleteScopeCommandOutput.cs`
-- Create: `src/Application/ArturRios.IdentityManager.Command/Handlers/DeleteScopeCommandHandler.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessages.cs`
-- Modify: `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs`
-- Test: `tests/Application/ArturRios.IdentityManager.Command.Tests/DeleteScopeCommandHandlerTests.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Input/DeleteScopeCommand.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Output/DeleteScopeCommandOutput.cs`
+- Create: `src/Application/ArturRios.Heimdall.Command/Handlers/DeleteScopeCommandHandler.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessages.cs`
+- Modify: `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessageMap.cs`
+- Test: `tests/Application/ArturRios.Heimdall.Command.Tests/DeleteScopeCommandHandlerTests.cs`
 
 **Interfaces:**
 - Consumes: `IAsyncReadOnlyRepository<T>` / `IAsyncRepository<T>` (from `ArturRios.Data.Relational.Core.Interfaces`); `DataOutput<T>` (`.New`, `.WithData`, `.WithMessage`, `.WithError`, `.WithErrors`, `.Success`, `.Data`, `.Errors`, `.Messages`); `ProcessOutput` returned by `UpdateAsync`/`UpdateRangeAsync` (`.Success`, `.Errors`); `ICommandHandlerAsync<TCommand, TOutput>` (from `ArturRios.Mediator.Command.Interfaces`); entities `Scope`, `Person`, `GoogleUser`, `Application`.
@@ -41,12 +41,12 @@ Builds the command, output, canonical message + status mapping, and the handler 
 
 - [ ] **Step 1: Create the command**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Input/DeleteScopeCommand.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Input/DeleteScopeCommand.cs`:
 
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Input;
+namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to logically delete a scope (UC-04). The scope is addressed by its <c>PublicId</c>
@@ -62,12 +62,12 @@ public class DeleteScopeCommand : BaseCommand
 
 - [ ] **Step 2: Create the output**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Output/DeleteScopeCommandOutput.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Output/DeleteScopeCommandOutput.cs`:
 
 ```csharp
 using ArturRios.Mediator.Command;
 
-namespace ArturRios.IdentityManager.Command.Output;
+namespace ArturRios.Heimdall.Command.Output;
 
 /// <summary>
 ///     Result of <see cref="Input.DeleteScopeCommand" /> (UC-04). Reports the deleted scope's
@@ -92,14 +92,14 @@ public class DeleteScopeCommandOutput : CommandOutput
 
 - [ ] **Step 3: Add the canonical message and its status mapping**
 
-In `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessages.cs`, add after the `ScopeUpdatedSuccessfully` constant (line ~14):
+In `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessages.cs`, add after the `ScopeUpdatedSuccessfully` constant (line ~14):
 
 ```csharp
     /// <summary>UC-04 success: the scope was logically deleted (also used for the AF-04b idempotent no-op).</summary>
     public const string ScopeDeletedSuccessfully = "Scope deleted successfully.";
 ```
 
-In `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs`, add an entry after the `ScopeUpdatedSuccessfully` mapping (line ~17):
+In `src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessageMap.cs`, add an entry after the `ScopeUpdatedSuccessfully` mapping (line ~17):
 
 ```csharp
         // UC-04 main flow (and AF-04b idempotent) — scope deleted.
@@ -110,17 +110,17 @@ In `src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs
 
 - [ ] **Step 4: Write the failing unit tests**
 
-Create `tests/Application/ArturRios.IdentityManager.Command.Tests/DeleteScopeCommandHandlerTests.cs`:
+Create `tests/Application/ArturRios.Heimdall.Command.Tests/DeleteScopeCommandHandlerTests.cs`:
 
 ```csharp
-using ArturRios.IdentityManager.Command.Handlers;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Handlers;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
-namespace ArturRios.IdentityManager.Command.Tests;
+namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for DeleteScopeCommandHandler (UC-04).
 // Cover the main flow, the cascade to Users/Google Users/applications, AF-04a (not found), and
@@ -288,27 +288,27 @@ public class DeleteScopeCommandHandlerTests
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~DeleteScopeCommandHandlerTests"
+dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~DeleteScopeCommandHandlerTests"
 ```
 
 Expected: FAIL — build error, `DeleteScopeCommandHandler` does not exist.
 
 - [ ] **Step 6: Implement the handler**
 
-Create `src/Application/ArturRios.IdentityManager.Command/Handlers/DeleteScopeCommandHandler.cs`:
+Create `src/Application/ArturRios.Heimdall.Command/Handlers/DeleteScopeCommandHandler.cs`:
 
 ```csharp
 using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.IdentityManager.Command.Input;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Shared.Messages;
+using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.Command.Handlers;
+namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="DeleteScopeCommand" /> (UC-04): locates the scope (AF-04a), then logically
@@ -431,7 +431,7 @@ public class DeleteScopeCommandHandler(
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~DeleteScopeCommandHandlerTests"
+dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~DeleteScopeCommandHandlerTests"
 ```
 
 Expected: PASS — all five tests green.
@@ -439,12 +439,12 @@ Expected: PASS — all five tests green.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/Application/ArturRios.IdentityManager.Command/Input/DeleteScopeCommand.cs \
-        src/Application/ArturRios.IdentityManager.Command/Output/DeleteScopeCommandOutput.cs \
-        src/Application/ArturRios.IdentityManager.Command/Handlers/DeleteScopeCommandHandler.cs \
-        src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessages.cs \
-        src/Application/ArturRios.IdentityManager.Shared/Messages/ScopeMessageMap.cs \
-        tests/Application/ArturRios.IdentityManager.Command.Tests/DeleteScopeCommandHandlerTests.cs
+git add src/Application/ArturRios.Heimdall.Command/Input/DeleteScopeCommand.cs \
+        src/Application/ArturRios.Heimdall.Command/Output/DeleteScopeCommandOutput.cs \
+        src/Application/ArturRios.Heimdall.Command/Handlers/DeleteScopeCommandHandler.cs \
+        src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessages.cs \
+        src/Application/ArturRios.Heimdall.Shared/Messages/ScopeMessageMap.cs \
+        tests/Application/ArturRios.Heimdall.Command.Tests/DeleteScopeCommandHandlerTests.cs
 git commit -m "feat: add UC-04 logical delete scope command handler"
 ```
 
@@ -455,9 +455,9 @@ git commit -m "feat: add UC-04 logical delete scope command handler"
 Exposes `DELETE /api/scopes/{id}` restricted to System Admins, registers the handler for DI, and covers the endpoint end-to-end (main flow with cascade, AF-04a, AF-04b, and authorization) against Testcontainers PostgreSQL. Deliverable: green functional tests.
 
 **Files:**
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/ScopeController.cs`
-- Modify: `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`
-- Test: `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerDeleteTests.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/ScopeController.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`
+- Test: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerDeleteTests.cs`
 
 **Interfaces:**
 - Consumes: `DeleteScopeCommand`, `DeleteScopeCommandOutput`, `ScopeMessageMap.StatusCodes`, `CommandMediator.ExecuteCommandAsync<DeleteScopeCommand, DeleteScopeCommandOutput>`, `ResponseResolver.Resolve`, `[RoleRequirement((int)Roles.SystemAdmin)]`, `ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>` → `DeleteScopeCommandHandler` (Task 1); test support `TestTokens.ForRole`, `PostgresFixture`, `WebApiTest<Program>.Authorize`, `Gateway.DeleteAsync<T>(url)`.
@@ -465,21 +465,21 @@ Exposes `DELETE /api/scopes/{id}` restricted to System Admins, registers the han
 
 - [ ] **Step 1: Write the failing functional tests**
 
-Create `tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerDeleteTests.cs`:
+Create `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerDeleteTests.cs`:
 
 ```csharp
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.IdentityManager.Command.Output;
-using ArturRios.IdentityManager.Domain.Entities;
-using ArturRios.IdentityManager.Domain.Enums;
-using ArturRios.IdentityManager.WebApi.Tests.Support;
+using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
-namespace ArturRios.IdentityManager.WebApi.Tests;
+namespace ArturRios.Heimdall.WebApi.Tests;
 
 [Collection(nameof(FunctionalCollection))]
 public class ScopeControllerDeleteTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -668,14 +668,14 @@ public class ScopeControllerDeleteTests(PostgresFixture db) : WebApiTest<Program
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~ScopeControllerDeleteTests"
+dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~ScopeControllerDeleteTests"
 ```
 
 Expected: FAIL — the `DELETE` route does not exist yet (main-flow test build fails because `DeleteScopeCommandOutput` is referenced but the endpoint/DI is missing, and the request returns 404/405).
 
 - [ ] **Step 3: Add the controller action**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/ScopeController.cs`, add after the `Update` action (after line ~46, before `List`):
+In `src/Presentation/ArturRios.Heimdall.WebApi/Controllers/ScopeController.cs`, add after the `Update` action (after line ~46, before `List`):
 
 ```csharp
     /// <summary>
@@ -693,11 +693,11 @@ In `src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/ScopeControlle
     }
 ```
 
-(`DeleteScopeCommand` and `DeleteScopeCommandOutput` are already covered by the existing `using ArturRios.IdentityManager.Command.Input;` and `using ArturRios.IdentityManager.Command.Output;` at the top of the file.)
+(`DeleteScopeCommand` and `DeleteScopeCommandOutput` are already covered by the existing `using ArturRios.Heimdall.Command.Input;` and `using ArturRios.Heimdall.Command.Output;` at the top of the file.)
 
 - [ ] **Step 4: Register the handler for DI**
 
-In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, add after the `UpdateScopeCommandHandler` registration (after line ~104):
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, add after the `UpdateScopeCommandHandler` registration (after line ~104):
 
 ```csharp
         Builder.Services
@@ -711,7 +711,7 @@ In `src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs`, add after the
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "FullyQualifiedName~ScopeControllerDeleteTests"
+dotnet test src/ArturRios.Heimdall.sln --filter "FullyQualifiedName~ScopeControllerDeleteTests"
 ```
 
 Expected: PASS — all five tests green.
@@ -721,8 +721,8 @@ Expected: PASS — all five tests green.
 Run:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 
 Expected: PASS — the whole suite is green.
@@ -730,9 +730,9 @@ Expected: PASS — the whole suite is green.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/Presentation/ArturRios.IdentityManager.WebApi/Controllers/ScopeController.cs \
-        src/Presentation/ArturRios.IdentityManager.WebApi/Startup.cs \
-        tests/Presentation/ArturRios.IdentityManager.WebApi.Tests/ScopeControllerDeleteTests.cs
+git add src/Presentation/ArturRios.Heimdall.WebApi/Controllers/ScopeController.cs \
+        src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs \
+        tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ScopeControllerDeleteTests.cs
 git commit -m "feat: expose UC-04 logical delete scope endpoint"
 ```
 

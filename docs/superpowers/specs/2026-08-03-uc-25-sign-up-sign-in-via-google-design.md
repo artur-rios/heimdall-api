@@ -1,6 +1,6 @@
 # UC-25 — Sign Up / Sign In via Google — Design
 
-**Issue:** [#26](https://github.com/artur-rios/identity-manager-api/issues/26)
+**Issue:** [#26](https://github.com/artur-rios/heimdall-api/issues/26)
 **Branch:** `feature/uc-25-sign-up-sign-in-via-google`
 **Traces to:** FR-GO-03 … FR-GO-11 (plus FR-GO-12/FR-GO-13, which AF-25d and AF-25b enforce),
 NFR-13, NFR-15.
@@ -91,7 +91,7 @@ dictionaries.
 | Artifact | Role |
 | --- | --- |
 | `Controllers/AuthController.Google` | `POST /api/auth/google`, `[AllowAnonymous]`, resolved through `AuthMessageMap.StatusCodes`. |
-| `Security/GoogleSignInOptions.cs` | `FromEnvironment()` reading `IDENTITY_MANAGER_GOOGLE_CLIENT_IDS` (comma-separated audiences) and `IDENTITY_MANAGER_GOOGLE_TEST_SIGNING_SECRET`. |
+| `Security/GoogleSignInOptions.cs` | `FromEnvironment()` reading `HEIMDALL_GOOGLE_CLIENT_IDS` (comma-separated audiences) and `HEIMDALL_GOOGLE_TEST_SIGNING_SECRET`. |
 | `Security/GoogleIdTokenVerifier.cs` | The real one. `GoogleJsonWebSignature.ValidateAsync` with `Audience = clientIds` — signature, issuer, audience, expiry (FR-GO-11, NFR-13). Any `InvalidJwtException` → `null`. |
 | `Security/UnconfiguredGoogleIdTokenVerifier.cs` | Rejects every token, logging a warning once. Registered when no client IDs are configured. |
 | `Security/LocalGoogleIdTokenVerifier.cs` | Validates an **HS256 JWT signed with a locally held secret** and reads the same five claims. Registered **only** outside Production and **only** when the test signing secret is set. |
@@ -112,7 +112,7 @@ dictionaries.
 > `LocalGoogleIdTokenVerifier` is the substitute, and it is deliberately **not** a "trust anything"
 > stub: it still requires a cryptographically valid signature, just under a secret the test fixture
 > holds instead of Google's. Two guards keep it out of production: `Builder.Environment.IsProduction()`
-> short-circuits it, and it is inert unless `IDENTITY_MANAGER_GOOGLE_TEST_SIGNING_SECRET` is set.
+> short-circuits it, and it is inert unless `HEIMDALL_GOOGLE_TEST_SIGNING_SECRET` is set.
 > The variable is absent from `.env.local` and is set only by `PostgresFixture`.
 >
 > **The alternative considered** was leaving the main flow functionally untested and covering it in

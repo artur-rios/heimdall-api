@@ -1,8 +1,8 @@
-# Technology Stack Document — Identity Manager API
+# Technology Stack Document — Heimdall API
 
 ## 1. Purpose
 
-This document is the **single source of truth for the technologies used to build the Identity Manager API** — the runtime platform, language, first-party libraries, database, data-access stack, cross-cutting concerns, and testing tools, together with the version each is pinned to and the role it plays.
+This document is the **single source of truth for the technologies used to build the Heimdall API** — the runtime platform, language, first-party libraries, database, data-access stack, cross-cutting concerns, and testing tools, together with the version each is pinned to and the role it plays.
 
 Every other document in this folder **references this document** for technical choices instead of restating them, so that:
 
@@ -51,7 +51,7 @@ The project is built on a set of the author's own reusable libraries, all publis
 | --- | --- |
 | Relational database | **PostgreSQL** — the sole supported relational database for the project. |
 | Provider integration | `ArturRios.Data.PostgreSql` → `AddPostgreSqlProvider()` (EF Core over Npgsql). |
-| Connection configuration | Read from environment variables `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` and `IDENTITY_MANAGER_DATA_DATABASETYPE` (`PostgreSql`) via `AddDataConfigFromEnvironment<AppDbContext>("IDENTITY_MANAGER_DATA")`. |
+| Connection configuration | Read from environment variables `HEIMDALL_DATA_CONNECTIONSTRING` and `HEIMDALL_DATA_DATABASETYPE` (`PostgreSql`) via `AddDataConfigFromEnvironment<AppDbContext>("HEIMDALL_DATA")`. |
 
 PostgreSQL is used in **every** environment, including automated tests — functional tests run against a real PostgreSQL instance provisioned by Testcontainers (never an in-memory provider), so behavior matches production. There is no secondary/alternate relational engine.
 
@@ -64,7 +64,7 @@ PostgreSQL is used in **every** environment, including automated tests — funct
 | ORM | **Entity Framework Core** (code-first) | 10.x |
 | Design-time / migrations | `Microsoft.EntityFrameworkCore.Design` (enables `dotnet ef`; the `Data` library is its own startup project) | `10.0.10` |
 | Naming convention | `EFCore.NamingConventions` — maps entities to **`snake_case`, singular** table/column names | `10.0.1` |
-| Context | `AppDbContext`, based on the `ArturRios.Data.Relational.Core` context base, configured via entity maps (`ArturRios.IdentityManager.Data.EntityMaps`) | — |
+| Context | `AppDbContext`, based on the `ArturRios.Data.Relational.Core` context base, configured via entity maps (`ArturRios.Heimdall.Data.EntityMaps`) | — |
 | Diagnostics | `DbContextDiagnosticsOptions` — sensitive-data logging & detailed errors are **on only outside Production** (they would expose password hashes, salts, e-mails) | — |
 | Startup seeding | `DatabaseSeeder` seeds the roles and the master System Admin on startup | — |
 
@@ -78,7 +78,7 @@ The data access pattern is **repository-based**: application handlers depend on 
 | --- | --- | --- | --- |
 | Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
 | Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`, `Serilog.Sinks.Map`) | `4.4.0` / `10.0.0` / `2.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory is configurable via environment variable. |
-| Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `IDENTITY_MANAGER_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
+| Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `HEIMDALL_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
 | Google ID token verification | **Google.Apis.Auth** | `1.75.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
 | Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.19.2` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
 | Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ResponseResolver` maps it to an HTTP response. |

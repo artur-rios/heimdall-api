@@ -234,13 +234,13 @@ flag did not move, which is the whole point of AF-24b.
 ## Specification note
 
 The use case specification, the SRD endpoint table (§5.1), FR-GO-01/FR-GO-02, the scope data model
-(§4), the Vision Document, and GitHub issue [#25](https://github.com/artur-rios/identity-manager-api/issues/25)
+(§4), the Vision Document, and GitHub issue [#25](https://github.com/artur-rios/heimdall-api/issues/25)
 agree on every point of UC-24: actor list, route, body, requirements, and the two alternative flows.
 The one thing no document settled was what a request that omits `enabled` should do, raised as open
 question A rather than assumed silently — and since closed by amending the specification with
 AF-24c.
 
 **UC-22 is still designed but not implemented** (`docs: add uc-22 design and plan` on `main` with no
-`feat:` behind it; issue [#23](https://github.com/artur-rios/identity-manager-api/issues/23) open).
+`feat:` behind it; issue [#23](https://github.com/artur-rios/heimdall-api/issues/23) open).
 UC-24 does not depend on it — this is only a note that the scope use cases are being taken out of
 order.

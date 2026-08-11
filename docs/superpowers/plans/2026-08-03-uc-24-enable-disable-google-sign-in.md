@@ -1,7 +1,7 @@
 # UC-24: Enable/Disable Google Sign-In — Implementation Plan
 
 Design: [2026-08-03-uc-24-enable-disable-google-sign-in-design.md](../specs/2026-08-03-uc-24-enable-disable-google-sign-in-design.md)
-Issue: [#25](https://github.com/artur-rios/identity-manager-api/issues/25)
+Issue: [#25](https://github.com/artur-rios/heimdall-api/issues/25)
 Branch: `feature/uc-24-enable-disable-google-sign-in`
 
 Sequenced test-first per the
@@ -60,7 +60,7 @@ lookup → ownership check → owner id projection → set flag, stamp `UpdatedA
 `scopeWriter.UpdateAsync` → return the scope. Each step commented with the UC/AF it implements;
 failures returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -105,5 +105,5 @@ the inverse.
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #25`.

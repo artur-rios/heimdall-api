@@ -1,7 +1,7 @@
 # UC-16: Create Application — Implementation Plan
 
 Design: [2026-07-31-uc-16-create-application-design.md](../specs/2026-07-31-uc-16-create-application-design.md)
-Issue: [#17](https://github.com/artur-rios/identity-manager-api/issues/17)
+Issue: [#17](https://github.com/artur-rios/heimdall-api/issues/17)
 Branch: `feature/uc-16-create-application`
 
 Sequenced test-first per the
@@ -21,7 +21,7 @@ Sequenced test-first per the
 - New `…Shared/Messages/ApplicationMessageMap.cs`: created → 201, `ScopeNotFound` → 404,
   `NotScopeOwner` / `CannotSetAnotherOwner` → 403, `OwnerNotValidForScope` → 400, the three
   validation messages → 400.
-- Verify: `dotnet build src/ArturRios.IdentityManager.sln` clean.
+- Verify: `dotnet build src/ArturRios.Heimdall.sln` clean.
 
 ## Step 1 — Command, validator, output
 
@@ -76,7 +76,7 @@ Per the design's handler-flow table. Dependencies: `IValidator<CreateApplication
 `IAsyncRepository<Application>`, `IScopeOwnershipChecker`. Returns `DataOutput<…>`, never throws;
 each step commented with the UC/AF it implements, as the other handlers are.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -112,7 +112,7 @@ each step commented with the UC/AF it implements, as the other handlers are.
 | `GivenNoToken_WhenPostApplications_ThenUnauthorized` | precondition |
 | `GivenDuplicateName_WhenPostApplications_ThenBothAreCreated` | Decision 5 |
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` green.
 
 ## Step 7 — Documentation
 
@@ -123,4 +123,4 @@ each step commented with the UC/AF it implements, as the other handlers are.
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request.
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request.

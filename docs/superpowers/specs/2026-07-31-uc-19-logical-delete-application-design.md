@@ -174,7 +174,7 @@ token → 401. Each refusal asserts the persisted `is_deleted` is unchanged.
 
 ## Specification note
 
-GitHub issue [#20](https://github.com/artur-rios/identity-manager-api/issues/20) still carries the
+GitHub issue [#20](https://github.com/artur-rios/heimdall-api/issues/20) still carries the
 pre-UC-17 wording — it lists `User` among the actors and authorizes "System Admin, Scope Admin of the
 scope, or the owning User". The Use Case Specification Document was corrected during UC-17 (see that
 design's *Documents corrected* table, row "UC Spec UC-18, UC-19"), and the corrected text is what

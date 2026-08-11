@@ -1,4 +1,4 @@
-# ArturRios.IdentityManager
+# ArturRios.Heimdall
 
 A centralized **identity management API** built with ASP.NET Core (.NET 10). It provides person
 management, application (non-human identity) management, authentication and authorization,
@@ -28,14 +28,14 @@ see [Documentation](#documentation).
 docs/requirements/                             Vision, requirements, use cases, tech stack, testing
 scripts/                                        Tooling (EF Core migration menu)
 src/
-  Domain/ArturRios.IdentityManager.Domain/      Domain entities & enums
+  Domain/ArturRios.Heimdall.Domain/      Domain entities & enums
   Application/
-    ArturRios.IdentityManager.Command/          Command (write) handlers — CQRS
-    ArturRios.IdentityManager.Query/            Query (read) handlers — CQRS
-    ArturRios.IdentityManager.Shared/           Shared messages/contracts
-  Infrastructure/ArturRios.IdentityManager.Data/ EF Core DbContext, entity maps, migrations, seeding
-  Presentation/ArturRios.IdentityManager.WebApi/ ASP.NET Core Web API (entry point)
-  ArturRios.IdentityManager.sln
+    ArturRios.Heimdall.Command/          Command (write) handlers — CQRS
+    ArturRios.Heimdall.Query/            Query (read) handlers — CQRS
+    ArturRios.Heimdall.Shared/           Shared messages/contracts
+  Infrastructure/ArturRios.Heimdall.Data/ EF Core DbContext, entity maps, migrations, seeding
+  Presentation/ArturRios.Heimdall.WebApi/ ASP.NET Core Web API (entry point)
+  ArturRios.Heimdall.sln
 tests/                                          Test projects mirroring src/ (unit + functional)
 README.md
 LICENSE
@@ -73,44 +73,44 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-01: Create Scope | ✅ | [#2](https://github.com/artur-rios/identity-manager-api/issues/2) |
-| UC-02: View Scope | ✅ | [#3](https://github.com/artur-rios/identity-manager-api/issues/3) |
-| UC-03: Update Scope | ✅ | [#4](https://github.com/artur-rios/identity-manager-api/issues/4) |
-| UC-04: Logical Delete Scope | ✅ | [#5](https://github.com/artur-rios/identity-manager-api/issues/5) |
-| UC-05: Hard Delete Scope | ✅ | [#6](https://github.com/artur-rios/identity-manager-api/issues/6) |
-| UC-21: Add Scope Owner | ✅ | [#22](https://github.com/artur-rios/identity-manager-api/issues/22) |
-| UC-22: Remove Scope Owner | ✅ | [#23](https://github.com/artur-rios/identity-manager-api/issues/23) |
-| UC-23: Promote User to Scope Owner | ✅ | [#24](https://github.com/artur-rios/identity-manager-api/issues/24) |
+| UC-01: Create Scope | ✅ | [#2](https://github.com/artur-rios/heimdall-api/issues/2) |
+| UC-02: View Scope | ✅ | [#3](https://github.com/artur-rios/heimdall-api/issues/3) |
+| UC-03: Update Scope | ✅ | [#4](https://github.com/artur-rios/heimdall-api/issues/4) |
+| UC-04: Logical Delete Scope | ✅ | [#5](https://github.com/artur-rios/heimdall-api/issues/5) |
+| UC-05: Hard Delete Scope | ✅ | [#6](https://github.com/artur-rios/heimdall-api/issues/6) |
+| UC-21: Add Scope Owner | ✅ | [#22](https://github.com/artur-rios/heimdall-api/issues/22) |
+| UC-22: Remove Scope Owner | ✅ | [#23](https://github.com/artur-rios/heimdall-api/issues/23) |
+| UC-23: Promote User to Scope Owner | ✅ | [#24](https://github.com/artur-rios/heimdall-api/issues/24) |
 
 ### Person Management
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-06: Create Person | ✅ | [#7](https://github.com/artur-rios/identity-manager-api/issues/7) |
-| UC-07: View Person | ✅ | [#8](https://github.com/artur-rios/identity-manager-api/issues/8) |
-| UC-08: Update Person | ✅ | [#9](https://github.com/artur-rios/identity-manager-api/issues/9) |
-| UC-09: Logical Delete Person | ✅ | [#10](https://github.com/artur-rios/identity-manager-api/issues/10) |
-| UC-10: Hard Delete Person | ✅ | [#11](https://github.com/artur-rios/identity-manager-api/issues/11) |
+| UC-06: Create Person | ✅ | [#7](https://github.com/artur-rios/heimdall-api/issues/7) |
+| UC-07: View Person | ✅ | [#8](https://github.com/artur-rios/heimdall-api/issues/8) |
+| UC-08: Update Person | ✅ | [#9](https://github.com/artur-rios/heimdall-api/issues/9) |
+| UC-09: Logical Delete Person | ✅ | [#10](https://github.com/artur-rios/heimdall-api/issues/10) |
+| UC-10: Hard Delete Person | ✅ | [#11](https://github.com/artur-rios/heimdall-api/issues/11) |
 
 ### Authentication & Security
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/identity-manager-api/issues/12) |
-| UC-12: Request Password Recovery | ✅ | [#13](https://github.com/artur-rios/identity-manager-api/issues/13) |
-| UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/identity-manager-api/issues/14) |
-| UC-14: Verify Email | ✅ | [#15](https://github.com/artur-rios/identity-manager-api/issues/15) |
-| UC-15: Resend Verification Email | ✅ | [#16](https://github.com/artur-rios/identity-manager-api/issues/16) |
+| UC-11: Login (Authenticate) | ✅ | [#12](https://github.com/artur-rios/heimdall-api/issues/12) |
+| UC-12: Request Password Recovery | ✅ | [#13](https://github.com/artur-rios/heimdall-api/issues/13) |
+| UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/heimdall-api/issues/14) |
+| UC-14: Verify Email | ✅ | [#15](https://github.com/artur-rios/heimdall-api/issues/15) |
+| UC-15: Resend Verification Email | ✅ | [#16](https://github.com/artur-rios/heimdall-api/issues/16) |
 
 ### Application Management
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-16: Create Application | ✅ | [#17](https://github.com/artur-rios/identity-manager-api/issues/17) |
-| UC-17: View Application | ✅ | [#18](https://github.com/artur-rios/identity-manager-api/issues/18) |
-| UC-18: Update Application | ✅ | [#19](https://github.com/artur-rios/identity-manager-api/issues/19) |
-| UC-19: Logical Delete Application | ✅ | [#20](https://github.com/artur-rios/identity-manager-api/issues/20) |
-| UC-20: Hard Delete Application | ✅ | [#21](https://github.com/artur-rios/identity-manager-api/issues/21) |
+| UC-16: Create Application | ✅ | [#17](https://github.com/artur-rios/heimdall-api/issues/17) |
+| UC-17: View Application | ✅ | [#18](https://github.com/artur-rios/heimdall-api/issues/18) |
+| UC-18: Update Application | ✅ | [#19](https://github.com/artur-rios/heimdall-api/issues/19) |
+| UC-19: Logical Delete Application | ✅ | [#20](https://github.com/artur-rios/heimdall-api/issues/20) |
+| UC-20: Hard Delete Application | ✅ | [#21](https://github.com/artur-rios/heimdall-api/issues/21) |
 
 ### Scope Permission Management
 
@@ -131,12 +131,12 @@ request — see the
 
 | Use case | Status | Issue |
 | --- | --- | --- |
-| UC-24: Enable/Disable Google Sign-In | ✅ | [#25](https://github.com/artur-rios/identity-manager-api/issues/25) |
-| UC-25: Sign Up / Sign In via Google | ✅ | [#26](https://github.com/artur-rios/identity-manager-api/issues/26) |
-| UC-26: Sign Out via Google | ✅ | [#27](https://github.com/artur-rios/identity-manager-api/issues/27) |
-| UC-27: View Google User | ✅ | [#28](https://github.com/artur-rios/identity-manager-api/issues/28) |
-| UC-28: Logical Delete Google User | ✅ | [#29](https://github.com/artur-rios/identity-manager-api/issues/29) |
-| UC-29: Hard Delete Google User | ✅ | [#30](https://github.com/artur-rios/identity-manager-api/issues/30) |
+| UC-24: Enable/Disable Google Sign-In | ✅ | [#25](https://github.com/artur-rios/heimdall-api/issues/25) |
+| UC-25: Sign Up / Sign In via Google | ✅ | [#26](https://github.com/artur-rios/heimdall-api/issues/26) |
+| UC-26: Sign Out via Google | ✅ | [#27](https://github.com/artur-rios/heimdall-api/issues/27) |
+| UC-27: View Google User | ✅ | [#28](https://github.com/artur-rios/heimdall-api/issues/28) |
+| UC-28: Logical Delete Google User | ✅ | [#29](https://github.com/artur-rios/heimdall-api/issues/29) |
+| UC-29: Hard Delete Google User | ✅ | [#30](https://github.com/artur-rios/heimdall-api/issues/30) |
 
 ### Platform
 
@@ -144,8 +144,8 @@ Not use cases, tracked separately.
 
 | Item | Status | Issue |
 | --- | --- | --- |
-| Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/identity-manager-api/issues/31) |
-| Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/identity-manager-api/issues/32) |
+| Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
+| Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |
 | Audit logging for write operations (NFR-09) | ⬜ | — |
 | Real email delivery (Mailgun, via `ArturRios.Messaging`) | ✅ | — |
 
@@ -176,27 +176,27 @@ environments without credentials, which is what keeps the functional suite off t
 per-environment files that are gitignored. Create your local one before the first run:
 
 ```bash
-cp src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env.local
+cp src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env.local
 ```
 
 Then fill it in. These are **required** — the API fails to start without them:
 
 | Variable | Value |
 | --- | --- |
-| `IDENTITY_MANAGER_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
-| `IDENTITY_MANAGER_DATA_DATABASETYPE` | `PostgreSql` |
-| `IDENTITY_MANAGER_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if it is unset — without it every authenticated request would fail inside the token validator with an opaque `IDX10703` |
-| `IDENTITY_MANAGER_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
+| `HEIMDALL_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
+| `HEIMDALL_DATA_DATABASETYPE` | `PostgreSql` |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if it is unset — without it every authenticated request would fail inside the token validator with an opaque `IDX10703` |
+| `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
 
 The rest are optional and fall back to a default:
 
 | Variable | Default |
 | --- | --- |
-| `IDENTITY_MANAGER_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
-| `IDENTITY_MANAGER_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `IDENTITY_MANAGER_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
-| `IDENTITY_MANAGER_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `IDENTITY_MANAGER_LOG_DIRECTORY` | `logs` |
+| `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
+| `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
+| `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
+| `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
+| `HEIMDALL_LOG_DIRECTORY` | `logs` |
 
 ### Email delivery
 
@@ -220,8 +220,8 @@ only a convenience wrapper around it.
 
 | Variable | Value |
 | --- | --- |
-| `IDENTITY_MANAGER_EMAIL_VERIFICATION_URL` | Front-end page that verifies an email address |
-| `IDENTITY_MANAGER_PASSWORD_RESET_URL` | Front-end page that sets a new password |
+| `HEIMDALL_EMAIL_VERIFICATION_URL` | Front-end page that verifies an email address |
+| `HEIMDALL_PASSWORD_RESET_URL` | Front-end page that sets a new password |
 
 Each page finishes the job by posting its token back: the verification page to
 `POST /api/auth/verify-email` (UC-14), the reset page to `POST /api/auth/password-reset` (UC-13),
@@ -255,7 +255,7 @@ OAuth client the tokens were minted for:
 
 | Variable | Value |
 | --- | --- |
-| `IDENTITY_MANAGER_GOOGLE_CLIENT_IDS` | Comma-separated Google OAuth client IDs accepted as an ID token's audience |
+| `HEIMDALL_GOOGLE_CLIENT_IDS` | Comma-separated Google OAuth client IDs accepted as an ID token's audience |
 
 Leave it unset and Google sign-in **refuses every token** with a 401, warning once at start-up. Unlike
 the email fallback, this is not a convenience mode: verification needs an audience to check against
@@ -295,7 +295,7 @@ no idempotent path; a second call is a 404. Neither cascades, because a Google U
 ## Build
 
 ```bash
-dotnet build src/ArturRios.IdentityManager.sln
+dotnet build src/ArturRios.Heimdall.sln
 ```
 
 ## Test
@@ -303,18 +303,18 @@ dotnet build src/ArturRios.IdentityManager.sln
 Run the whole suite:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln
+dotnet test src/ArturRios.Heimdall.sln
 ```
 
 Run one kind at a time — unit tests are isolated; functional tests run end-to-end against a real
 PostgreSQL database provisioned by Testcontainers:
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
 ```
 
 ```bash
-dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"
+dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 
 Every run writes a `.trx` under each project's `TestResults/` (git-ignored), so a failure is always
@@ -340,13 +340,13 @@ python scripts/migrations.py
 
 It asks which environment file to load (for the connection string), then offers the migration
 actions. Creating a migration prompts for its name and adds it to
-`src/Infrastructure/ArturRios.IdentityManager.Data/Migrations`. Requires `dotnet tool restore` (above)
+`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. Requires `dotnet tool restore` (above)
 to have been run once.
 
 ## Run
 
 ```bash
-dotnet run --project src/Presentation/ArturRios.IdentityManager.WebApi
+dotnet run --project src/Presentation/ArturRios.Heimdall.WebApi
 ```
 
 ## Legal

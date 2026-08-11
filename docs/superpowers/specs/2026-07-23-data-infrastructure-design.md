@@ -9,14 +9,14 @@ Postgres expects, generate and apply EF Core migrations from a repeatable script
 reference data the application depends on, and stop leaking sensitive values in production logs.
 
 `AppDbContext`, the nine `EntityMaps`, and the DI registration
-(`AddPostgreSqlProvider()` + `AddDataConfigFromEnvironment<AppDbContext>("IDENTITY_MANAGER_DATA")`)
+(`AddPostgreSqlProvider()` + `AddDataConfigFromEnvironment<AppDbContext>("HEIMDALL_DATA")`)
 already exist. This design covers what is still missing.
 
 ## 2. Current gaps
 
 | # | Gap | Consequence |
 | --- | --- | --- |
-| 1 | No table/column naming configuration | EF would emit quoted PascalCase plural names, clashing with the `identity_manager` schema and the ERD names in the requirements |
+| 1 | No table/column naming configuration | EF would emit quoted PascalCase plural names, clashing with the `heimdall` schema and the ERD names in the requirements |
 | 2 | No `Migrations` folder, no design-time factory | `dotnet ef` cannot construct `AppDbContext` (its constructor takes an `ILoggerFactory`), so no migration can be generated |
 | 3 | No seeding | `CreateScopeCommandHandler` returns `ScopeAdminRoleNotConfigured` on a fresh database; nobody can sign in as a System Admin |
 | 4 | `Environments/` and `Settings/` are not copied to the build output | `ConfigurationLoader` finds no `.env` and no `appsettings.json` at runtime, so the connection string is never loaded |
@@ -25,11 +25,11 @@ already exist. This design covers what is still missing.
 
 ## 3. Naming convention — snake_case, singular
 
-Tables and columns use snake_case; table names are singular. This matches the `identity_manager`
+Tables and columns use snake_case; table names are singular. This matches the `heimdall`
 schema name and the entity names used throughout the requirements (`SCOPE_OWNER`, `GOOGLE_USER`),
 and avoids double-quoting every identifier in hand-written SQL.
 
-- Add `EFCore.NamingConventions` `10.0.1` to `ArturRios.IdentityManager.Data` and call
+- Add `EFCore.NamingConventions` `10.0.1` to `ArturRios.Heimdall.Data` and call
   `.UseSnakeCaseNamingConvention()` in `AppDbContext.OnConfiguring`. This rewrites columns, keys,
   indexes, and foreign-key constraint names.
 - Table names are otherwise derived from the `DbSet` property names, which are plural. Each
@@ -57,11 +57,11 @@ The names passed to `ToTable` are already snake_case, so the convention leaves t
   `<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>` so the class library
   can serve as its own `--startup-project`.
 - Add `Configuration/DesignTimeDbContextFactory.cs` implementing
-  `IDesignTimeDbContextFactory<AppDbContext>`. It reads `IDENTITY_MANAGER_DATA_CONNECTIONSTRING`
+  `IDesignTimeDbContextFactory<AppDbContext>`. It reads `HEIMDALL_DATA_CONNECTIONSTRING`
   from the process environment and throws a message naming the variable and pointing at
   `scripts/migrations.py` when it is absent or blank. It supplies `NullLoggerFactory.Instance` and
   `DbContextDiagnosticsOptions.Disabled` (§7) to the context.
-- Migrations live in `src/Infrastructure/ArturRios.IdentityManager.Data/Migrations/`. The first one
+- Migrations live in `src/Infrastructure/ArturRios.Heimdall.Data/Migrations/`. The first one
   is named `InitialCreate` and covers all nine entities.
 
 If `dotnet ef` turns out to reject the class library as a startup project, the fallback is to point
@@ -72,7 +72,7 @@ changes. This is a tooling detail to confirm during implementation, not a design
 
 A single idempotent `Seeding/DatabaseSeeder.cs` in the Data project, resolved from a scope and run
 on every startup. It takes `AppDbContext`, an `ILogger<DatabaseSeeder>`, and a `MasterUserOptions`
-record carrying the three `IDENTITY_MANAGER_MASTER_USER_*` values.
+record carrying the three `HEIMDALL_MASTER_USER_*` values.
 
 `SeedAsync` performs three steps in order:
 
@@ -108,7 +108,7 @@ runs it synchronously before the host starts serving.
 `Environments/.env.local`) relative to the **application base path**, i.e. `bin/…/net10.0/`. Neither
 folder is currently copied there.
 
-Add to `ArturRios.IdentityManager.WebApi.csproj`:
+Add to `ArturRios.Heimdall.WebApi.csproj`:
 
 ```xml
 <ItemGroup>
@@ -157,7 +157,7 @@ service resolves without further changes.
 A command-line menu at the repository root, Python 3, standard library only.
 
 **Startup:** resolve the repository root from `__file__`; list the files matching
-`src/Presentation/ArturRios.IdentityManager.WebApi/Environments/.env*`; prompt for one. Parse it into
+`src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env*`; prompt for one. Parse it into
 a dict — tolerating a UTF-8 BOM, `KEY="quoted"` values, `#` comments and blank lines — and merge it
 into a copy of `os.environ` used for every subprocess. If no environment file exists, offer to copy
 the `.env` template to `.env.local` and exit so the user can fill it in.
@@ -171,7 +171,7 @@ the `.env` template to `.env.local` and exit so the user can fill it in.
 | Apply migrations | print the target host and database (never the password), confirm, then `dotnet ef database update` |
 
 Every command passes `--project` and `--startup-project` pointing at
-`src/Infrastructure/ArturRios.IdentityManager.Data/ArturRios.IdentityManager.Data.csproj`. The menu
+`src/Infrastructure/ArturRios.Heimdall.Data/ArturRios.Heimdall.Data.csproj`. The menu
 loops until the user exits, and a non-zero exit from `dotnet ef` is reported without killing the
 session.
 
@@ -183,7 +183,7 @@ path, the script prints `dotnet tool restore` rather than failing opaquely.
 `PostgresFixture.InitializeAsync` replaces its TODO: after the container starts and the connection
 string variables are set, construct an `AppDbContext` against the container and call `MigrateAsync()`
 so functional tests exercise the real migrated schema, as required by Testing Specification §7.2.
-The fixture also sets the `IDENTITY_MANAGER_MASTER_USER_*` variables, since the seeder runs inside
+The fixture also sets the `HEIMDALL_MASTER_USER_*` variables, since the seeder runs inside
 the functional host and refuses to start without them.
 
 Verification for this change is the existing suite plus a manual migration round-trip:

@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SOLUTION = REPO_ROOT / "src/ArturRios.IdentityManager.sln"
+SOLUTION = REPO_ROOT / "src/ArturRios.Heimdall.sln"
 TESTS_DIR = REPO_ROOT / "tests"
 TRX_NAMESPACE = {"trx": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
 

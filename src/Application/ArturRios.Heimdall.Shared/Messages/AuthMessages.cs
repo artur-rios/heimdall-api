@@ -1,0 +1,153 @@
+namespace ArturRios.Heimdall.Shared.Messages;
+
+/// <summary>
+///     Canonical messages produced by the authentication use cases. Each is mapped to an HTTP status
+///     code in <see cref="AuthMessageMap" />.
+/// </summary>
+public static class AuthMessages
+{
+    /// <summary>UC-11 success: the person was authenticated and a token issued.</summary>
+    public const string LoginSuccessful = "Login successful.";
+
+    /// <summary>
+    ///     UC-11 AF-11a…AF-11e: the credentials were not accepted. Deliberately one message for all
+    ///     five conditions — unknown person, wrong password, deleted person, deleted scope, and a
+    ///     Scope Admin whose every owned scope is deleted — so a caller cannot use the login
+    ///     endpoint to discover which emails exist, which accounts are deleted, or which scopes are
+    ///     gone.
+    /// </summary>
+    public const string InvalidCredentials = "Invalid credentials.";
+
+    /// <summary>AF-11f: email was not supplied.</summary>
+    public const string EmailRequired = "Email is required.";
+
+    /// <summary>AF-11f: email is not a valid address.</summary>
+    public const string EmailInvalid = "Email is not valid.";
+
+    /// <summary>AF-11f: password was not supplied.</summary>
+    public const string PasswordRequired = "Password is required.";
+
+    /// <summary>
+    ///     UC-12 main flow and AF-12a: the recovery request was accepted. Deliberately the same
+    ///     message whether or not the email belongs to anyone — a caller who cannot already log in
+    ///     learns nothing about which addresses are registered.
+    /// </summary>
+    public const string PasswordRecoveryRequested = "If the email exists, a reset link has been sent.";
+
+    /// <summary>UC-13 success: the password was changed and the token consumed.</summary>
+    public const string PasswordResetSuccessful = "Password reset successfully.";
+
+    /// <summary>
+    ///     AF-13c and AF-14c: no token matches the one supplied. Unlike UC-11 and UC-12, the two
+    ///     token-spending use cases name each rejection separately, and there is nothing to hide by
+    ///     doing so: the value is a 48-character random string, so a caller holding one already knows
+    ///     it was issued to them, and a caller guessing learns only that their guess was wrong.
+    /// </summary>
+    /// <remarks>
+    ///     Shared by UC-13 and UC-14 because both specify the same wording. <see cref="AuthMessageMap" />
+    ///     is keyed by the message string, so a second constant holding the same value could not be
+    ///     mapped to a status code at all.
+    /// </remarks>
+    public const string TokenInvalid = "Invalid token.";
+
+    /// <summary>
+    ///     AF-13a and AF-14a: the token was issued but its lifetime has run out (FR-PR-04, FR-EV-02).
+    /// </summary>
+    public const string TokenExpired = "Token expired.";
+
+    /// <summary>
+    ///     AF-13b and AF-14b: the token has already been spent — on a password reset (FR-PR-04) or an
+    ///     email verification (FR-EV-03) — and cannot be spent twice.
+    /// </summary>
+    public const string TokenAlreadyUsed = "Token already used.";
+
+    /// <summary>AF-13d, and UC-14's input validation (NFR-10): the token was not supplied.</summary>
+    public const string TokenRequired = "Token is required.";
+
+    /// <summary>
+    ///     AF-13d: the new password is shorter than the minimum. UC-11 deliberately has no such rule —
+    ///     a short password there is a wrong password — but UC-13 sets one, so the same floor that
+    ///     applies when a person is created (UC-06) applies when their password is replaced.
+    /// </summary>
+    public const string PasswordTooShort = "Password must be at least 8 characters.";
+
+    /// <summary>
+    ///     UC-14 success: the address was confirmed and the token consumed (FR-EV-03). Also the answer
+    ///     when the address was already verified — UC-14 defines no alternative flow for that, and the
+    ///     caller's link did exactly what it promised.
+    /// </summary>
+    public const string EmailVerifiedSuccessfully = "Email verified.";
+
+    /// <summary>
+    ///     UC-15 success: the outstanding verification links were retired and a fresh one issued and
+    ///     mailed (FR-EV-04). Says nothing about delivery — <c>MailgunSender</c> logs a failed send
+    ///     rather than propagating it, and the token is persisted either way.
+    /// </summary>
+    public const string VerificationEmailSent = "Verification email sent.";
+
+    /// <summary>
+    ///     AF-15a: the address is already verified, so there is nothing a new link could do when
+    ///     clicked. UC-15's only alternative flow, and the counterpart of UC-14's decision to verify an
+    ///     already-verified address idempotently — that is about spending a token, this is about asking
+    ///     for one.
+    /// </summary>
+    public const string EmailAlreadyVerified = "Email already verified.";
+
+    /// <summary>
+    ///     UC-15: the bearer token names a person who no longer exists. Reachable because
+    ///     authentication runs in <c>ClaimsOnly</c> mode — no database read per request — so a valid
+    ///     token outlives a hard deletion (UC-10).
+    /// </summary>
+    /// <remarks>
+    ///     Holds the same value as <see cref="PersonMessages.PersonNotFound" />, which answers the same
+    ///     fact for the person use cases. The two message maps are separate dictionaries, so unlike the
+    ///     token messages shared by UC-13 and UC-14 this costs no key collision.
+    /// </remarks>
+    public const string PersonNotFound = "Person not found.";
+
+    /// <summary>
+    ///     UC-25 success: the Google ID token was verified and an authentication token issued — for a
+    ///     Google User just created from the token's claims (sign-up, FR-GO-09) or one that already
+    ///     existed (sign-in, FR-GO-10). One message for both halves, since the use case makes no
+    ///     distinction to the caller and the response body is the same either way.
+    /// </summary>
+    public const string GoogleSignInSuccessful = "Google sign-in successful.";
+
+    /// <summary>
+    ///     UC-25 AF-25a and AF-25d, and UC-26 AF-26a: the caller was not authenticated. Deliberately
+    ///     one message for every condition — a token that fails verification (FR-GO-11), a Google User
+    ///     that has been logically deleted (FR-GO-12), and a sign-out whose token names no live Google
+    ///     User at all — for the reason UC-11 collapses its five rejections: a distinguishable answer
+    ///     would let a caller discover which accounts a scope has registered and which of them are
+    ///     deleted.
+    /// </summary>
+    public const string GoogleAuthenticationFailed = "Google authentication failed.";
+
+    /// <summary>
+    ///     UC-26 success (FR-GO-18): the caller held a live Google session and it is now over. Under
+    ///     this project's stateless token strategy nothing was revoked — the message is the
+    ///     instruction to discard the token, per UC-26 step 2.
+    /// </summary>
+    public const string GoogleSignOutSuccessful = "Google sign-out successful.";
+
+    /// <summary>
+    ///     UC-25 AF-25b: the target scope does not exist, is logically deleted, or has Google Sign-In
+    ///     switched off (FR-GO-03, FR-GO-13). Answered alike for all three, so the endpoint cannot be
+    ///     used to enumerate scopes or read their settings — a caller who may sign in learns that they
+    ///     may, and no one else learns anything.
+    /// </summary>
+    public const string GoogleSignInUnavailable = "Google sign-in is not available for this scope.";
+
+    /// <summary>
+    ///     UC-25 AF-25c: the address on the verified token is already used within the scope, by
+    ///     another Google User or by a <c>User</c> person (FR-GO-07). Unlike AF-25a/AF-25d this is
+    ///     named separately, and nothing is disclosed by that: the caller has proved to Google that
+    ///     the address is theirs, so being told it is taken tells them only about themselves.
+    /// </summary>
+    /// <remarks>
+    ///     Holds the same value as <see cref="PersonMessages.EmailAlreadyExists" /> — the same fact,
+    ///     answered by a different use case — which costs nothing because the two message maps are
+    ///     separate dictionaries. The same arrangement as <see cref="PersonNotFound" />.
+    /// </remarks>
+    public const string EmailAlreadyExists = "A person with this email already exists.";
+}

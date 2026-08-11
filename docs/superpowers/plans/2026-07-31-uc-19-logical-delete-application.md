@@ -1,7 +1,7 @@
 # UC-19: Logical Delete Application — Implementation Plan
 
 Design: [2026-07-31-uc-19-logical-delete-application-design.md](../specs/2026-07-31-uc-19-logical-delete-application-design.md)
-Issue: [#20](https://github.com/artur-rios/identity-manager-api/issues/20)
+Issue: [#20](https://github.com/artur-rios/heimdall-api/issues/20)
 Branch: `feature/uc-19-logical-delete-application`
 
 Sequenced test-first per the
@@ -55,7 +55,7 @@ Every refusal test also asserts the stored row's `IsDeleted` is unchanged.
 flip `IsDeleted` and stamp `UpdatedAt` → return. Each step commented with the UC/AF it implements,
 failures returned as errors on `DataOutput`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Unit"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` green.
 
 ## Step 5 — Endpoint and DI
 
@@ -88,7 +88,7 @@ failures returned as errors on `DataOutput`.
 Refusal tests assert the persisted row is still active; success tests assert `is_deleted` and a moved
 `updated_at`.
 
-- Verify: `dotnet test src/ArturRios.IdentityManager.sln --filter "Category=Functional"` green.
+- Verify: `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` green.
 
 ## Step 7 — Documentation
 
@@ -98,5 +98,5 @@ Refusal tests assert the persisted row is still active; success tests assert `is
 
 ## Step 8 — Full suite
 
-`dotnet test src/ArturRios.IdentityManager.sln` — both categories green before the pull request. The
+`dotnet test src/ArturRios.Heimdall.sln` — both categories green before the pull request. The
 pull request body references the use case and `Closes #20`.

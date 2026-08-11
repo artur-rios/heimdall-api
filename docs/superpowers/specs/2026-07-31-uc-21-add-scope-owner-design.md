@@ -194,5 +194,5 @@ still present; no token → 401. Refusals assert the database has no new `scope_
 ## Specification note
 
 The use case specification, the SRD endpoint table (§5.3), FR-SC-08/FR-SC-09, and GitHub issue
-[#22](https://github.com/artur-rios/identity-manager-api/issues/22) agree on every point of UC-21:
+[#22](https://github.com/artur-rios/heimdall-api/issues/22) agree on every point of UC-21:
 actor list, route, requirements, and the four alternative flows. Nothing needed correcting.
