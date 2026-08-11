@@ -13,6 +13,8 @@ internal static class AuditLogDbMap
 
         auditLog.Property(x => x.PublicId).IsRequired();
         auditLog.HasIndex(x => x.PublicId).IsUnique();
+        auditLog.HasIndex(x => x.CreatedAt);
+        auditLog.HasIndex(x => x.ActorPersonId);
 
         auditLog.Property(x => x.Action).IsRequired();
         auditLog.Property(x => x.CreatedAt).HasDefaultValueSql("now()");

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using ArturRios.Data.Relational.Core.Entities;
 
 namespace ArturRios.Heimdall.Domain.Entities;
@@ -19,6 +20,7 @@ public class AuditLog : Entity
     public int? ActorRole { get; set; }
 
     /// <summary>The command's CLR type name, e.g. <c>"CreateApplicationCommand"</c>.</summary>
+    [MaxLength(200)]
     public string Action { get; set; } = string.Empty;
 
     /// <summary>Best-effort public identifier of the entity the write affected; <c>null</c> if none could be resolved.</summary>
