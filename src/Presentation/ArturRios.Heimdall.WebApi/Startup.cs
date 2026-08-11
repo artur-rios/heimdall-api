@@ -280,9 +280,10 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>,
                 VerifyTwoFactorAuthCommandHandler>();
 
-        // Shared by VerifyTwoFactorAuthCommandHandler (UC-38) and DisableTwoFactorAuthCommandHandler
-        // (UC-39), and by UC-40's regeneration later — the "code against TOTP, or against the current
-        // email code, or against an unused recovery code" comparison lives in exactly one place.
+        // Shared by VerifyTwoFactorAuthCommandHandler (UC-38), DisableTwoFactorAuthCommandHandler
+        // (UC-39), and RegenerateRecoveryCodesCommandHandler (UC-40) — the "code against TOTP, or
+        // against the current email code, or against an unused recovery code" comparison lives in
+        // exactly one place.
         Builder.Services.AddScoped<ITwoFactorFactorVerifier, TwoFactorFactorVerifier>();
 
         // UC-39 (FR-2F-11): no validator — which shape of second factor (code vs. recoveryCode) is
@@ -291,6 +292,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>,
                 DisableTwoFactorAuthCommandHandler>();
+
+        // UC-40 (FR-2F-12): no validator either, same reason as UC-39 — reuses ITwoFactorFactorVerifier
+        // (registered above) rather than reimplementing the second-factor check.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>,
+                RegenerateRecoveryCodesCommandHandler>();
 
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 

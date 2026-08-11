@@ -2,8 +2,7 @@ namespace ArturRios.Heimdall.Shared.Messages;
 
 /// <summary>
 ///     Canonical messages produced by the two-factor authentication use cases (UC-36 – UC-40). Each
-///     is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />. UC-36 through UC-39's
-///     messages exist so far — UC-40 adds its own once implemented.
+///     is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />.
 /// </summary>
 public static class TwoFactorMessages
 {
@@ -86,4 +85,13 @@ public static class TwoFactorMessages
 
     /// <summary>AF-39b: the submitted password does not match the caller's current password.</summary>
     public const string PasswordMismatch = "The current password is incorrect.";
+
+    /// <summary>
+    ///     UC-40 main flow: the second factor checked out, so every existing recovery code was
+    ///     replaced and ten new ones were issued in plaintext (FR-2F-12). AF-40a and AF-40b reuse
+    ///     <see cref="NotActive" /> and <see cref="FactorInvalid" /> respectively — UC-40's own
+    ///     preconditions are exactly UC-39's "not active" check and UC-38's second-factor check, so no
+    ///     new refusal message is invented for either.
+    /// </summary>
+    public const string RecoveryCodesRegenerated = "Recovery codes have been regenerated.";
 }

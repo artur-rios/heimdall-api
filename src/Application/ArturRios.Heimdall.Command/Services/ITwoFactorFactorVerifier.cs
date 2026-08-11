@@ -30,7 +30,7 @@ public sealed record TwoFactorFactorVerificationResult(
 ///     <c>VerifyTwoFactorAuthCommandHandler</c> (UC-38) so the same "code against TOTP, or against
 ///     the current email code, or against an unused recovery code" comparison is written exactly
 ///     once and reused wherever else a second factor must be proven — <c>DisableTwoFactorAuthCommandHandler</c>
-///     (UC-39) today, and UC-40's regeneration later.
+///     (UC-39) and <c>RegenerateRecoveryCodesCommandHandler</c> (UC-40).
 /// </summary>
 public interface ITwoFactorFactorVerifier
 {
