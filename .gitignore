@@ -489,3 +489,6 @@ appsettings.api.Production.json
 .env.docker
 .env.staging
 .env.production
+
+# Git worktrees
+.worktrees/
