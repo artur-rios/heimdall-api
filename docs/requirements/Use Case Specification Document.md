@@ -86,6 +86,14 @@ graph LR
         UC35[UC-35: Hard Delete Scope Permission]
     end
 
+    subgraph "Two-Factor Authentication"
+        UC36[UC-36: Enable Two-Factor Authentication]
+        UC37[UC-37: Confirm Two-Factor Authentication Setup]
+        UC38[UC-38: Verify Second Factor]
+        UC39[UC-39: Disable Two-Factor Authentication]
+        UC40[UC-40: Regenerate Recovery Codes]
+    end
+
     SA --> UC01 & UC02 & UC03 & UC04 & UC05
     SA --> UC21 & UC22 & UC23
     SCA --> UC02 & UC21 & UC22 & UC23
@@ -108,6 +116,10 @@ graph LR
     UC25 -.-> GU
     SA --> UC31 & UC32 & UC33 & UC34 & UC35
     SCA --> UC31 & UC32 & UC33 & UC34
+    SA & SCA & U --> UC36 & UC37 & UC39 & UC40
+    AN --> UC38
+    UC36 --> ES
+    UC38 --> ES
 ```
 
 ---
@@ -671,7 +683,7 @@ sequenceDiagram
 3. The system hashes the provided password using the person's stored `Salt` and compares it to the stored `PasswordHash`.
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
-6. The system generates and returns an authentication token containing the person's `PublicId` and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires.
+6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId` and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
 
 **Alternative Flows:**
 
@@ -683,6 +695,7 @@ sequenceDiagram
 | AF-11d | User's scope is logically deleted | Return `401 Unauthorized` |
 | AF-11e | Scope Admin's owned scopes are all logically deleted | Return `401 Unauthorized` |
 | AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
+| AF-11g | Person has active two-factor authentication (FR-2F-07) | Return `200 OK` with a short-lived challenge token and the available second-factor methods, instead of the full authentication token; if the Email method is enabled, also send a fresh email code (FR-2F-08). See UC-38 for how the login is completed |
 
 > **On the single rejection.** AF-11a through AF-11e are five different conditions with one
 > indistinguishable response: the same `401` and the same message. Telling them apart would turn the
@@ -1521,6 +1534,236 @@ sequenceDiagram
 
 ---
 
+### UC-36: Enable Two-Factor Authentication
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-36 |
+| **Name** | Enable Two-Factor Authentication (Initiate Setup) |
+| **Actors** | User, Scope Admin, System Admin |
+| **Description** | Begin opting an authenticated person into two-factor authentication, selecting an authenticator-app method, an email method, or both. Setup is inactive until confirmed by UC-37 |
+| **Preconditions** | Actor is authenticated; the person has no active two-factor configuration (`TWO_FACTOR_AUTH.IsActive` is not already `true`) |
+| **Postconditions** | A `TWO_FACTOR_AUTH` row exists for the person with `IsActive = false`; for the App method, a TOTP secret has been generated and returned; for the Email method, a first code has been emailed |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor P as Person
+    participant API as Heimdall API
+    participant DB as Database
+    participant ES as Email Service
+
+    P->>API: POST /api/auth/2fa/enable { methods: ["App", "Email"] }
+    API->>DB: Find or create TWO_FACTOR_AUTH row for the person (IsActive = false)
+    API->>API: If App selected, generate TOTP secret and encrypt it
+    API->>DB: Store encrypted secret, AppEnabled = true
+    API->>ES: If Email selected, send first 6-digit code
+    ES-->>API: Email queued
+    API-->>P: 200 OK { otpAuthUri?, emailCodeSent? }
+```
+
+1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both.
+2. The system confirms the caller has no already-active two-factor configuration, then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
+4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
+5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
+| AF-36b | Caller is a Google User | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
+| AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
+| AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
+
+---
+
+### UC-37: Confirm Two-Factor Authentication Setup
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-37 |
+| **Name** | Confirm Two-Factor Authentication Setup |
+| **Actors** | User, Scope Admin, System Admin |
+| **Description** | Prove control of every method selected in UC-36 to activate two-factor authentication and receive the one-time set of recovery codes |
+| **Preconditions** | A pending (`IsActive = false`) `TWO_FACTOR_AUTH` row exists for the person, from UC-36 |
+| **Postconditions** | `TWO_FACTOR_AUTH.IsActive` is `true`; exactly ten recovery codes exist, hashed, and were returned to the caller in plaintext this one time |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor P as Person
+    participant API as Heimdall API
+    participant DB as Database
+
+    P->>API: POST /api/auth/2fa/confirm { appCode?, emailCode? }
+    API->>DB: Load the pending TWO_FACTOR_AUTH row
+    API->>API: Verify appCode against the TOTP secret, if AppEnabled
+    API->>API: Verify emailCode against the stored hash, if EmailEnabled
+    API->>DB: Set IsActive = true
+    API->>API: Generate 10 recovery codes; hash each
+    API->>DB: Store the 10 hashed recovery codes
+    API-->>P: 200 OK { enabled: true, recoveryCodes: [10 plaintext codes] }
+```
+
+1. Caller sends `POST /api/auth/2fa/confirm` with a code for every method they selected in UC-36 (an `appCode` if `AppEnabled`, an `emailCode` if `EmailEnabled` — both, if both).
+2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
+3. Only once every required code checks out, the system sets `IsActive = true`.
+4. The system generates ten random recovery codes, hashes each, and stores the hashes.
+5. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-37a | No pending setup exists for the person | Return `404 Not Found` |
+| AF-37b | `appCode` missing or incorrect, when `AppEnabled` | Return `400 Bad Request` |
+| AF-37c | `emailCode` missing, incorrect, expired, or already used, when `EmailEnabled` | Return `400 Bad Request` |
+| AF-37d | Setup is already active (repeated confirm) | Return `409 Conflict` |
+
+> **On requiring every selected method's code.** If both `App` and `Email` were chosen in UC-36, both codes are required in the same confirmation request. Confirming with only one channel would activate a method whose configuration was never actually exercised — for the app, that a QR code was scanned into a real authenticator; for email, that the address reliably receives mail — leaving a silently broken second factor discovered only at the next login.
+
+---
+
+### UC-38: Verify Second Factor (Login Challenge)
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-38 |
+| **Name** | Verify Second Factor |
+| **Actors** | Anonymous (holding a challenge token from UC-11) |
+| **Description** | Complete a login for a person with active two-factor authentication by exchanging a short-lived challenge token and a code — app, email, or a recovery code — for the real authentication token |
+| **Preconditions** | UC-11's password check succeeded for a person with `TWO_FACTOR_AUTH.IsActive = true`, and UC-11 issued a challenge token instead of a full authentication token |
+| **Postconditions** | A full authentication token is issued, exactly as FR-AU-03/FR-AU-04 describe for a direct login; if a recovery code was used, it is marked used |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor U as Anonymous
+    participant API as Heimdall API
+    participant DB as Database
+
+    U->>API: POST /api/auth/2fa/verify { challengeToken, code }
+    API->>API: Validate challengeToken (signature, not expired, MFA-pending claim)
+    API->>DB: Load the person's TWO_FACTOR_AUTH row
+    API->>API: Verify code as a current TOTP/email code, or as an unused recovery code
+    API->>DB: If a recovery code was used, mark it Used = true
+    API->>API: Generate full JWT token { personId, role, scopeId/ownedScopeIds? }
+    API-->>U: 200 OK { token, expiresAt }
+```
+
+1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
+2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token.
+3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes.
+4. If a recovery code was used, the system marks it consumed — it cannot be used again.
+5. The system generates and returns the full authentication token, identical in shape to a direct UC-11 success.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-38a | Challenge token expired or invalid | Return `401 Unauthorized` |
+| AF-38b | Code does not match any valid app code, email code, or unused recovery code | Return `401 Unauthorized` |
+| AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
+
+> **On the single rejection.** As with UC-11's own AF-11a..e, AF-38a through AF-38c collapse to one indistinguishable `401` — telling an unauthenticated caller which part of their guess was wrong would leak whether a challenge token is merely expired versus outright forged, or whether a recovery code was ever real.
+
+---
+
+### UC-39: Disable Two-Factor Authentication
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-39 |
+| **Name** | Disable Two-Factor Authentication |
+| **Actors** | User, Scope Admin, System Admin |
+| **Description** | Turn off two-factor authentication for the caller's own account |
+| **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
+| **Postconditions** | The person's `TWO_FACTOR_AUTH` row and all of its recovery codes are permanently removed |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor P as Person
+    participant API as Heimdall API
+    participant DB as Database
+
+    P->>API: POST /api/auth/2fa/disable { password, code }
+    API->>DB: Load person and TWO_FACTOR_AUTH row
+    API->>API: Verify password against PasswordHash/Salt
+    API->>API: Verify code as a current TOTP/email code, or as an unused recovery code
+    API->>DB: Delete TWO_FACTOR_AUTH row (cascades to recovery codes)
+    API-->>P: 200 OK
+```
+
+1. Caller sends their current password together with a valid second factor — an app/email code or a recovery code.
+2. The system verifies the password, exactly as UC-11 does.
+3. The system verifies the second factor, exactly as UC-38 does.
+4. Only when both check out, the system deletes the `TWO_FACTOR_AUTH` row, which cascades to its recovery codes.
+5. The system returns success. Two-factor authentication no longer applies to the next login.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-39a | Two-factor authentication is not active for the person | Return `404 Not Found` |
+| AF-39b | Password mismatch | Return `401 Unauthorized` |
+| AF-39c | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+
+> **On requiring both factors to disable.** Password alone is not enough: an attacker holding only a stolen session or a leaked password should not be able to strip two-factor protection off an account they don't fully control. Requiring the second factor too makes disabling exactly as hard as a login.
+
+---
+
+### UC-40: Regenerate Recovery Codes
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-40 |
+| **Name** | Regenerate Recovery Codes |
+| **Actors** | User, Scope Admin, System Admin |
+| **Description** | Invalidate the caller's current recovery codes and issue a fresh set of ten |
+| **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
+| **Postconditions** | The previous ten recovery codes no longer validate; ten new ones exist, hashed, and were returned to the caller in plaintext this one time |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor P as Person
+    participant API as Heimdall API
+    participant DB as Database
+
+    P->>API: POST /api/auth/2fa/recovery-codes/regenerate { code }
+    API->>DB: Load TWO_FACTOR_AUTH row
+    API->>API: Verify code as a current TOTP/email code, or as an unused recovery code
+    API->>DB: Delete all existing TWO_FACTOR_RECOVERY_CODE rows for the person
+    API->>API: Generate 10 new recovery codes; hash each
+    API->>DB: Store the 10 new hashed recovery codes
+    API-->>P: 200 OK { recoveryCodes: [10 plaintext codes] }
+```
+
+1. Caller sends a valid second factor — an app/email code, or one of their remaining recovery codes.
+2. The system verifies it, exactly as UC-38 does.
+3. The system deletes every existing recovery code row for the person, including any still unused.
+4. The system generates ten new codes, hashes each, and stores them.
+5. The system returns the ten new codes in plaintext — the only response that will ever contain them.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-40a | Two-factor authentication is not active for the person | Return `404 Not Found` |
+| AF-40b | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+
+> **On invalidating the whole set.** Regeneration replaces all ten codes at once rather than topping up the used ones back to ten: a partial refill would leave old, already-distributed codes valid alongside new ones, defeating the point of rotating them.
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -1535,7 +1778,7 @@ sequenceDiagram
 | UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
-| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07 |
+| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-2F-07 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
 | UC-13: Reset Password | FR-PR-03, FR-PR-04 |
 | UC-14: Email Verification | FR-EV-03 |
@@ -1559,6 +1802,11 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10 |
+| UC-39: Disable Two-Factor Authentication | FR-2F-11 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12 |
 
 ---
 
@@ -1632,3 +1880,17 @@ stateDiagram-v2
 ```
 
 Note: Logically deleting a scope (UC-04) does **not** cascade to its scope permissions — they keep whatever `IsDeleted` state they had. They become unreachable through the listing endpoint (which gates on the scope's deletion) and are excluded from the JWT-claim fold at login, but are not purged; a restored scope recovers its permission set unchanged. Hard-deleting a scope (UC-05) does purge its scope permissions, via the `scope_permission → scope` foreign key's `ON DELETE CASCADE`.
+
+### 4.6 Two-Factor Authentication Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: UC-36 Enable (Initiate)
+    Pending --> Pending: UC-36 Re-initiate (change method selection)
+    Pending --> Active: UC-37 Confirm Setup
+    Active --> Active: UC-40 Regenerate Recovery Codes
+    Pending --> [*]: UC-39 Disable (n/a — nothing to disable until Active)
+    Active --> [*]: UC-39 Disable
+```
+
+Note: There is no `Pending → [*]` transition through UC-39 in practice — UC-39's precondition requires `IsActive = true`, so an abandoned `Pending` configuration is only ever replaced (UC-36 re-initiation) or superseded by hard-deleting the person (UC-10), never explicitly disabled. UC-38 (Verify Second Factor) does not appear on this diagram — it acts on a login attempt, not on the two-factor configuration's own state.

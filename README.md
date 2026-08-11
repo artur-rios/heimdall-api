@@ -13,8 +13,9 @@ password recovery, email verification, and Google Sign-In for multiple client sy
   (applications, each owned by a Scope Admin who owns the application's scope).
 - **Scope-specific permissions.** Each scope can define its own permissions, and a permission
   flagged `IncludeAsJwtClaim` is folded into the JWT issued to identities acting within that scope.
-- **Authentication.** Password-based login (JWT), password recovery, email verification, and
-  optional Google Sign-In per scope.
+- **Authentication.** Password-based login (JWT), password recovery, email verification, optional
+  Google Sign-In per scope, and optional two-factor authentication (authenticator app and/or email,
+  with single-use recovery codes).
 - **Deletion strategies.** Both logical (soft) and hard deletion, with well-defined cascade rules.
 - **Layered (DDD) architecture.** Domain, Application (CQRS: Command/Query/Shared), Infrastructure
   (EF Core data layer), and Presentation (Web API).
@@ -101,6 +102,11 @@ request — see the
 | UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/heimdall-api/issues/14) |
 | UC-14: Verify Email | ✅ | [#15](https://github.com/artur-rios/heimdall-api/issues/15) |
 | UC-15: Resend Verification Email | ✅ | [#16](https://github.com/artur-rios/heimdall-api/issues/16) |
+| UC-36: Enable Two-Factor Authentication | ⬜ | — |
+| UC-37: Confirm Two-Factor Authentication Setup | ⬜ | — |
+| UC-38: Verify Second Factor | ⬜ | — |
+| UC-39: Disable Two-Factor Authentication | ⬜ | — |
+| UC-40: Regenerate Recovery Codes | ⬜ | — |
 
 ### Application Management
 

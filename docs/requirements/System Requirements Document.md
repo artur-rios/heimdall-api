@@ -10,7 +10,7 @@ The concrete technology stack — framework and language versions, first-party l
 
 ### 1.2 Scope
 
-The system encompasses person CRUD, application CRUD, scope CRUD, scope-specific permission CRUD (permissions that may be folded into the JWT at issue), role-based access control, authentication (including Google Sign-In), password recovery, email verification, and both logical and hard deletion strategies.
+The system encompasses person CRUD, application CRUD, scope CRUD, scope-specific permission CRUD (permissions that may be folded into the JWT at issue), role-based access control, authentication (including Google Sign-In and optional two-factor authentication), password recovery, email verification, and both logical and hard deletion strategies.
 
 ### 1.3 Definitions
 
@@ -23,6 +23,10 @@ The system encompasses person CRUD, application CRUD, scope CRUD, scope-specific
 | Scope User | A Person with the `User` role who belongs to exactly one scope (many-to-one relationship) |
 | Scope Permission | A scope-specific permission associated with exactly one scope, carrying a `Name`, an optional `Description`, and an `IncludeAsJwtClaim` flag. When the flag is set the permission's `Name` is added as a claim on the JWT issued to identities acting within that scope. A scope permission has no separate owner of its own — owning the scope is the whole of the authorization to manage it |
 | Google User | A registered identity authenticated via Google Sign-In rather than a password, stored in its own `GOOGLE_USER` table, belonging to exactly one scope, and always equivalent to the `User` role | 
+| Two-Factor Authentication (2FA) | An opt-in second authentication step for a `Person` (`User`, `ScopeAdmin`, or `SystemAdmin`; not available to Google Users, who are already subject to Google's own account security). Configured with an authenticator-app method, an email method, or both, and backed by a set of single-use recovery codes | 
+| TOTP Secret | A randomly generated shared secret used to compute time-based one-time codes (RFC 6238) for the authenticator-app 2FA method; stored encrypted at rest and never re-exposed once provisioning is confirmed |
+| Recovery Code | One of ten single-use codes issued when 2FA is confirmed (or regenerated); stored hashed, shown to the person exactly once, and consumable in place of a normal second-factor code to complete a login |
+| Challenge Token | A short-lived, narrowly-scoped token issued in place of a full authentication token when login succeeds for a person with active 2FA; valid only against the second-factor verification endpoint and rejected everywhere else |
 | Logical Deletion | Setting the `IsDeleted` flag to `true` without removing the record |
 | Hard Deletion | Permanently removing the record from the database |
 | Role | A named permission level (`User`, `ScopeAdmin`, or `SystemAdmin`) stored in the `Role` table and referenced by a person via `RoleId` |
@@ -52,6 +56,7 @@ graph LR
         EV[Email Verification]
         GS[Google Sign-In Module]
         SPM[Scope Permission Management]
+        TFA[Two-Factor Authentication Module]
     end
 
     subgraph Infrastructure
@@ -76,6 +81,9 @@ graph LR
     GS --> DB
     GS --> GOOGLE
     SPM --> DB
+    TFA --> DB
+    TFA --> EMAIL
+    AUTH --> TFA
 ```
 
 ---
@@ -209,6 +217,23 @@ graph LR
 | FR-SP-08 | The system shall allow **hard deletion** of a scope permission, permanently removing the record. Restricted to System Admins; nothing cascades | High |
 | FR-SP-09 | Logically deleted scope permissions shall not appear in default query results unless explicitly requested | Medium |
 
+### 3.10 Two-Factor Authentication
+
+| ID | Requirement | Priority |
+| ---- | ------------ | ---------- |
+| FR-2F-01 | The system shall allow an authenticated `User`, `ScopeAdmin`, or `SystemAdmin` to opt in to two-factor authentication by initiating setup with an authenticator-app method, an email method, or both. Google Users are not eligible — Google already governs their account security | High |
+| FR-2F-02 | The authenticator-app method shall use standard TOTP (RFC 6238): a per-person secret, 6-digit codes, 30-second time step, provisioned via an `otpauth://` URI for QR scanning. The secret is stored encrypted at rest and is shown to the person only at initiation | High |
+| FR-2F-03 | The email method shall deliver a random 6-digit numeric code through the existing email service (see FR-PR-02, FR-EV-02 for the established pattern), single-use and expiring 10 minutes after issue | High |
+| FR-2F-04 | Setup initiated under FR-2F-01 shall remain inactive until confirmed: the caller must submit a currently valid code for **every** method they selected (both, if both were selected) in one confirmation request | High |
+| FR-2F-05 | Confirming setup shall generate exactly ten recovery codes, returned in the confirmation response in plaintext exactly once, and stored thereafter only as hashes | High |
+| FR-2F-06 | Each recovery code shall be usable at most once. Consuming a recovery code to complete a login marks it used; a used or unknown recovery code shall be rejected | High |
+| FR-2F-07 | When a person with active two-factor authentication completes FR-AU-01/FR-AU-02's password check, the system shall not issue a full authentication token. Instead it shall issue a short-lived challenge token, scoped only to the second-factor verification endpoint, naming the methods available to that person | High |
+| FR-2F-08 | If the email method is enabled for the person, issuing a challenge token shall also send a fresh email code, per FR-2F-03 | High |
+| FR-2F-09 | The second-factor verification endpoint shall accept a valid, unexpired challenge token together with either a current app/email code or an unused recovery code, and on success issue the full authentication token exactly as FR-AU-03/FR-AU-04 describe | High |
+| FR-2F-10 | The system shall reject a challenge token at every endpoint other than second-factor verification, and shall reject an expired or already-redeemed challenge token at that endpoint too | High |
+| FR-2F-11 | Disabling two-factor authentication shall require both the person's current password and a valid second factor (an app/email code or a recovery code). On success the system shall remove the two-factor configuration and all of its recovery codes | High |
+| FR-2F-12 | Regenerating recovery codes shall require a valid second factor, shall invalidate every previously issued recovery code for the person, and shall return ten new codes in plaintext exactly once, per FR-2F-05 | High |
+
 ---
 
 ## 4. Data Model
@@ -220,7 +245,7 @@ Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`,
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
 - **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
 
-`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys.
+`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -237,6 +262,8 @@ erDiagram
     PERSON ||--o| SCOPE_USER : "belongs to"
     SCOPE ||--o{ GOOGLE_USER : "contains"
     SCOPE ||--o{ SCOPE_PERMISSION : "defines"
+    PERSON ||--o| TWO_FACTOR_AUTH : "configures"
+    TWO_FACTOR_AUTH ||--o{ TWO_FACTOR_RECOVERY_CODE : "issues"
 
     SCOPE {
         bigint Id PK "Internal auto-increment identifier"
@@ -335,6 +362,26 @@ erDiagram
 
     PERSON ||--o{ PASSWORD_RESET_TOKEN : "requests"
     PERSON ||--o{ EMAIL_VERIFICATION_TOKEN : "receives"
+
+    TWO_FACTOR_AUTH {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        bigint PersonId FK "Owning person (internal Id), unique — one configuration per person"
+        bool AppEnabled "Whether the authenticator-app method is configured"
+        bool EmailEnabled "Whether the email method is configured"
+        bytes TotpSecretEncrypted "Encrypted TOTP secret, present only when AppEnabled"
+        bool IsActive "True once every selected method has been confirmed (FR-2F-04)"
+        datetime CreatedAt "Creation timestamp"
+        datetime UpdatedAt "Last update timestamp"
+    }
+
+    TWO_FACTOR_RECOVERY_CODE {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        bigint TwoFactorAuthId FK "Owning two-factor configuration (internal Id)"
+        bytes CodeHash "Hashed recovery code — the plaintext is never stored"
+        bool Used "Whether the code has been consumed"
+        datetime UsedAt "Timestamp the code was consumed, null until then"
+        datetime CreatedAt "Creation timestamp"
+    }
 ```
 
 ### 4.2 Person Fields
@@ -433,6 +480,34 @@ A scope may have many rows (one or more owners); a person may have many rows (a 
 
 A scope permission belongs to exactly one scope, and unlike `APPLICATION` it has no separate owner — owning the scope is the whole of the authorization to manage it. The `IncludeAsJwtClaim` flag has no enforcement role of its own; it is read at login time by FR-AU-08, which folds every flagged, non-deleted permission name of the acting scope into the issued token as a `scopePermissions` claim.
 
+### 4.9 Two-Factor Auth Fields
+
+| Field | Type | Constraints |
+| ------- | ------ | ------------- |
+| Id | BigInt | Primary key, auto-increment, internal only |
+| PersonId | BigInt | Foreign key to Person.Id (internal), required and unique — one row per person |
+| AppEnabled | Boolean | Default: `false` |
+| EmailEnabled | Boolean | Default: `false`; at least one of `AppEnabled`/`EmailEnabled` must be `true` |
+| TotpSecretEncrypted | Byte array | Required when `AppEnabled = true`, otherwise null; encrypted at rest, never returned once FR-2F-04 confirmation succeeds |
+| IsActive | Boolean | Default: `false`; set `true` only once every selected method is confirmed (FR-2F-04) |
+| CreatedAt | DateTime | Auto-set on creation |
+| UpdatedAt | DateTime | Auto-set on update |
+
+A person has at most one `TWO_FACTOR_AUTH` row. Its absence means the person has never initiated setup; `IsActive = false` with a row present means setup was initiated but not yet confirmed.
+
+### 4.10 Two-Factor Recovery Code Fields
+
+| Field | Type | Constraints |
+| ------- | ------ | ------------- |
+| Id | BigInt | Primary key, auto-increment, internal only |
+| TwoFactorAuthId | BigInt | Foreign key to TwoFactorAuth.Id (internal), required; cascade-deleted when the two-factor configuration is removed |
+| CodeHash | Byte array | Required, hashed with the same approach as `Person.PasswordHash` (see NFR-02) — the plaintext code exists only in the FR-2F-05 response |
+| Used | Boolean | Default: `false` |
+| UsedAt | DateTime | Set when `Used` transitions to `true`; null until then |
+| CreatedAt | DateTime | Auto-set on creation |
+
+Exactly ten rows are created together at confirmation (FR-2F-05) or regeneration (FR-2F-12); regeneration deletes the previous ten and inserts ten new ones in the same operation.
+
 ---
 
 ## 5. API Endpoints Overview
@@ -488,6 +563,11 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/password-reset` | Reset password with token | No |
 | POST | `/api/auth/verify-email` | Verify email with token | No |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
+| POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
+| POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
+| POST | `/api/auth/2fa/verify` | Exchange a challenge token plus a code or recovery code for a full authentication token | No (holds a challenge token) |
+| POST | `/api/auth/2fa/disable` | Disable two-factor authentication (requires password + a valid second factor) | Authenticated |
+| POST | `/api/auth/2fa/recovery-codes/regenerate` | Invalidate the current recovery codes and issue ten new ones | Authenticated |
 
 ### 5.5 Google Sign-In Endpoints
 
@@ -532,6 +612,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-13 | Security | Google ID tokens must be verified (signature, issuer `accounts.google.com`/`https://accounts.google.com`, audience matching the configured OAuth client ID, and expiration) before their claims are trusted |
 | NFR-14 | Data Integrity | Hard deletion of a scope must also cascade to its Google Users |
 | NFR-15 | Security | Internal `bigint` primary/foreign keys must never appear in API responses, API paths, or token claims; only `PublicId` (GUID) values may be exposed to callers |
+| NFR-16 | Security | A TOTP secret shall be stored encrypted at rest, and a recovery code shall be stored only as a hash; neither is ever returned to a caller after the response that first generates it |
+| NFR-17 | Security | A two-factor challenge token shall carry a distinct claim marking it as MFA-pending, expire quickly (target: 5 minutes), and be rejected by every endpoint except second-factor verification |
 
 ---
 
@@ -594,6 +676,12 @@ block-beta
     block:row17:5
         Q1["Hard Delete Scope Permission"] Q2["✅"] Q3["❌"] Q4["❌"] Q5["❌"]
     end
+    block:row18:5
+        R1["Enable/Confirm/Disable/Regenerate 2FA"] R2["✅ (self)"] R3["✅ (self)"] R4["✅ (self)"] R5["❌"]
+    end
+    block:row19:5
+        S1["Verify 2FA Challenge"] S2["N/A"] S3["N/A"] S4["N/A"] S5["✅ (holds challenge token)"]
+    end
 ```
 
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
@@ -632,6 +720,8 @@ block-beta
 | Update Scope Permission | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Delete Scope Permission (logical) | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Delete Scope Permission (hard) | ✅ | ❌ | ❌ | ❌ |
+| Enable / Confirm / Disable / Regenerate 2FA | ✅ (self) | ✅ (self) | ✅ (self) | ❌ |
+| Verify 2FA Challenge | N/A | N/A | N/A | ✅ (holds a valid challenge token) |
 
 ---
 
@@ -650,7 +740,7 @@ flowchart TD
 
     B -->|Hard| F{Entity Type?}
     F -->|Person owned by no other scope| G[Permanently remove person record]
-    G --> K[Cascade: permanently remove applications owned by person, and their SCOPE_OWNER/SCOPE_USER rows]
+    G --> K[Cascade: permanently remove applications owned by person, their SCOPE_OWNER/SCOPE_USER rows, and their two-factor configuration and recovery codes]
     F -->|Google User| M[Permanently remove Google User record]
     F -->|Application| L[Permanently remove application record]
     F -->|Scope Permission| SP[Permanently remove scope permission record]
@@ -672,6 +762,7 @@ Notes on cascading behavior:
 - Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `ScopeAdmin` who owns the scope), so no further cascade is needed.
 - Hard deleting a scope permission simply removes its record. A scope permission is a leaf in the data model — no entity carries a foreign key to it — so nothing further cascades (FR-SP-08).
 - Logically deleting a scope permission flips only its own `IsDeleted` flag (FR-SP-07); nothing cascades, for the same leaf reason.
+- Hard deleting a person permanently removes their `TWO_FACTOR_AUTH` row and its `TWO_FACTOR_RECOVERY_CODE` rows, via the `two_factor_recovery_code → two_factor_auth → person` foreign keys' `ON DELETE CASCADE`. Logical deletion of a person does not touch two-factor state — a restored person keeps whatever 2FA configuration they had.
 
 > **On scope permissions and a logically deleted scope.** Unlike applications, scope permissions are **not** cascaded when their scope is logically deleted (UC-04): the scope's permissions are left with whatever `IsDeleted` state they already had. They become unreachable through the listing endpoint, which gates on the scope's `IsDeleted` (AF-31a reused), and they are excluded from the JWT-claim fold at login (FR-AU-08), which reads only permissions of non-deleted scopes. They are not purged, so a restored scope recovers its permission set unchanged; and a hard delete of the scope (UC-05) does purge them, via the cascade above.
 
@@ -692,3 +783,4 @@ Notes on cascading behavior:
 | Email Verification | FR-EV-01 through FR-EV-04 |
 | Google Sign-In | FR-GO-01 through FR-GO-18 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
+| Two-Factor Authentication | FR-2F-01 through FR-2F-12 |
