@@ -1,5 +1,6 @@
 using ArturRios.Data.PostgreSql;
 using ArturRios.Data.Relational.Core.DependencyInjection;
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
@@ -11,6 +12,7 @@ using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Email;
 using ArturRios.Heimdall.WebApi.Security;
@@ -102,118 +104,70 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddDataConfigFromEnvironment<AppDbContext>("HEIMDALL_DATA");
 
         Builder.Services.AddScoped<CommandMediator>();
+        Builder.Services.AddHttpContextAccessor();
+        Builder.Services.AddScoped<IActorAccessor, HttpContextActorAccessor>();
+        Builder.Services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         Builder.Services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>, CreateScopeCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateScopeCommand, CreateScopeCommandOutput, CreateScopeCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateScopeCommand>, UpdateScopeCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<UpdateScopeCommand, UpdateScopeCommandOutput>, UpdateScopeCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>, DeleteScopeCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>, HardDeleteScopeCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<UpdateScopeCommand, UpdateScopeCommandOutput, UpdateScopeCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeleteScopeCommand, DeleteScopeCommandOutput, DeleteScopeCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<HardDeleteScopeCommand, HardDeleteScopeCommandOutput, HardDeleteScopeCommandHandler>();
         // UC-24 does have a validator despite carrying a single field: Enabled is nullable so an
         // omitted value is refused (NFR-10) rather than binding to false and disabling the setting.
         Builder.Services.AddScoped<IValidator<SetGoogleSignInCommand>, SetGoogleSignInCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>,
-                SetGoogleSignInCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<SetGoogleSignInCommand, SetGoogleSignInCommandOutput, SetGoogleSignInCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateAdminCommand, CreatePersonCommandOutput>, CreateAdminCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateAdminCommand, CreatePersonCommandOutput, CreateAdminCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateUserCommand, CreatePersonCommandOutput>, CreateUserCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateUserCommand, CreatePersonCommandOutput, CreateUserCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateScopeOwnerCommand>, CreateScopeOwnerCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>, CreateScopeOwnerCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateScopeOwnerCommand, CreatePersonCommandOutput, CreateScopeOwnerCommandHandler>();
         // No validator: UC-21's request carries no body — both identifiers are route values already
         // constrained to GUIDs — so there is nothing left for NFR-10 to validate.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>,
-                AddScopeOwnerCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<AddScopeOwnerCommand, AddScopeOwnerCommandOutput, AddScopeOwnerCommandHandler>();
         // Likewise no validator for UC-22: both identifiers are route values.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>,
-                RemoveScopeOwnerCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput, RemoveScopeOwnerCommandHandler>();
         // Likewise no validator for UC-23: both identifiers are route values.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>,
-                PromoteScopeUserCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<PromoteScopeUserCommand, PromoteScopeUserCommandOutput, PromoteScopeUserCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdatePersonCommand>, UpdatePersonCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>, UpdatePersonCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>, DeletePersonCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>, HardDeletePersonCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<UpdatePersonCommand, UpdatePersonCommandOutput, UpdatePersonCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeletePersonCommand, DeletePersonCommandOutput, DeletePersonCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<HardDeletePersonCommand, HardDeletePersonCommandOutput, HardDeletePersonCommandHandler>();
         Builder.Services.AddScoped<IValidator<LoginCommand>, LoginCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<LoginCommand, LoginCommandOutput>, LoginCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<LoginCommand, LoginCommandOutput, LoginCommandHandler>();
         Builder.Services.AddScoped<IValidator<PasswordRecoveryCommand>, PasswordRecoveryCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>,
-                PasswordRecoveryCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<PasswordRecoveryCommand, PasswordRecoveryCommandOutput, PasswordRecoveryCommandHandler>();
         Builder.Services.AddScoped<IValidator<ResetPasswordCommand>, ResetPasswordCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<ResetPasswordCommand, ResetPasswordCommandOutput>,
-                ResetPasswordCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<ResetPasswordCommand, ResetPasswordCommandOutput, ResetPasswordCommandHandler>();
         Builder.Services.AddScoped<IValidator<VerifyEmailCommand>, VerifyEmailCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>,
-                VerifyEmailCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<VerifyEmailCommand, VerifyEmailCommandOutput, VerifyEmailCommandHandler>();
         // No validator: UC-15's request carries no caller-supplied input at all — the person comes
         // from the bearer token — so there is nothing for NFR-10 to validate.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>,
-                ResendVerificationEmailCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput, ResendVerificationEmailCommandHandler>();
         // Likewise no validator for UC-25, for a different reason: the use case defines no 400 flow
         // and needs none, since an absent ID token fails verification (AF-25a, 401) and an empty
         // scope identifier matches no scope (AF-25b, 403).
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>,
-                GoogleSignInCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<GoogleSignInCommand, GoogleSignInCommandOutput, GoogleSignInCommandHandler>();
         // No validator for UC-26 either, and for UC-15's reason: the sign-out request carries no
         // caller-supplied input — the Google User comes from the bearer token.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>,
-                GoogleSignOutCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<GoogleSignOutCommand, GoogleSignOutCommandOutput, GoogleSignOutCommandHandler>();
         // UC-28 needs no validator either: both fields are typed route parameters, so there is no
         // caller-supplied input NFR-10 could reject that the route would not have refused first.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>,
-                DeleteGoogleUserCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>,
-                HardDeleteGoogleUserCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput, DeleteGoogleUserCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput, HardDeleteGoogleUserCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateApplicationCommand>, CreateApplicationCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>,
-                CreateApplicationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateApplicationCommand, CreateApplicationCommandOutput, CreateApplicationCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateApplicationCommand>, UpdateApplicationCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>,
-                UpdateApplicationCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>,
-                DeleteApplicationCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>,
-                HardDeleteApplicationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<UpdateApplicationCommand, UpdateApplicationCommandOutput, UpdateApplicationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeleteApplicationCommand, DeleteApplicationCommandOutput, DeleteApplicationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput, HardDeleteApplicationCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateScopePermissionCommand>, CreateScopePermissionCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<CreateScopePermissionCommand, CreateScopePermissionCommandOutput>,
-                CreateScopePermissionCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<CreateScopePermissionCommand, CreateScopePermissionCommandOutput, CreateScopePermissionCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateScopePermissionCommand>, UpdateScopePermissionCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput>,
-                UpdateScopePermissionCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput>,
-                DeleteScopePermissionCommandHandler>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput>,
-                HardDeleteScopePermissionCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput, UpdateScopePermissionCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput, DeleteScopePermissionCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput, HardDeleteScopePermissionCommandHandler>();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -263,22 +217,16 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddDataProtection();
         Builder.Services.AddScoped<ITotpSecretProtector, TotpSecretProtector>();
         Builder.Services.AddScoped<IValidator<EnableTwoFactorAuthCommand>, EnableTwoFactorAuthCommandValidator>();
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>,
-                EnableTwoFactorAuthCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput, EnableTwoFactorAuthCommandHandler>();
 
         // UC-37 (FR-2F-04/05): no validator — which code(s) are required depends on the pending row's
         // AppEnabled/EmailEnabled, a database read the handler alone can make.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>,
-                ConfirmTwoFactorAuthCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput, ConfirmTwoFactorAuthCommandHandler>();
 
         // UC-38 (FR-2F-06…FR-2F-09): no validator either — same reason as UC-37, plus the challenge
         // token itself is validated inside the handler, the same "opaque token as a body value"
         // shape UC-13's ResetPasswordCommand uses.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>,
-                VerifyTwoFactorAuthCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput, VerifyTwoFactorAuthCommandHandler>();
 
         // Shared by VerifyTwoFactorAuthCommandHandler (UC-38), DisableTwoFactorAuthCommandHandler
         // (UC-39), and RegenerateRecoveryCodesCommandHandler (UC-40) — the "code against TOTP, or
@@ -289,15 +237,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         // UC-39 (FR-2F-11): no validator — which shape of second factor (code vs. recoveryCode) is
         // valid depends on a database read (the pending row's AppEnabled/EmailEnabled), the same
         // reason UC-37/UC-38 have none.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>,
-                DisableTwoFactorAuthCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput, DisableTwoFactorAuthCommandHandler>();
 
         // UC-40 (FR-2F-12): no validator either, same reason as UC-39 — reuses ITwoFactorFactorVerifier
         // (registered above) rather than reimplementing the second-factor check.
-        Builder.Services
-            .AddScoped<ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>,
-                RegenerateRecoveryCodesCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput, RegenerateRecoveryCodesCommandHandler>();
 
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
