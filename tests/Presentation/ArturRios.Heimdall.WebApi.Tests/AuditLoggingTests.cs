@@ -13,7 +13,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for NFR-09 (audit logging): proves a successful write produces one AuditLog row
-// carrying the acting caller, and that an anonymous write produces one with no actor.
+// carrying the acting caller's identity, and that a rejected write (one that never mutates anything)
+// produces no row at all.
 [Collection(nameof(FunctionalCollection))]
 public class AuditLoggingTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
