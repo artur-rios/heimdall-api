@@ -267,6 +267,12 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>,
                 EnableTwoFactorAuthCommandHandler>();
 
+        // UC-37 (FR-2F-04/05): no validator — which code(s) are required depends on the pending row's
+        // AppEnabled/EmailEnabled, a database read the handler alone can make.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>,
+                ConfirmTwoFactorAuthCommandHandler>();
+
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
         // UC-11 issues tokens through the same claims mapper the middleware validates them with,

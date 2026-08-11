@@ -47,4 +47,7 @@ public class TwoFactorAuth : Entity
 
     /// <summary>Outstanding email codes issued for this configuration (UC-36 step 4, UC-37 step 2).</summary>
     public ICollection<TwoFactorEmailCode> EmailCodes { get; set; } = new List<TwoFactorEmailCode>();
+
+    /// <summary>Recovery codes issued for this configuration (UC-37 step 4, UC-38, UC-40).</summary>
+    public ICollection<TwoFactorRecoveryCode> RecoveryCodes { get; set; } = new List<TwoFactorRecoveryCode>();
 }

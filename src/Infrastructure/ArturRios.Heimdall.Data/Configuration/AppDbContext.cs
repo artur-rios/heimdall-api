@@ -25,6 +25,7 @@ public class AppDbContext(
     public DbSet<EmailVerificationToken> EmailVerificationTokens { get; init; }
     public DbSet<TwoFactorAuth> TwoFactorAuths { get; init; }
     public DbSet<TwoFactorEmailCode> TwoFactorEmailCodes { get; init; }
+    public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes { get; init; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -51,5 +52,6 @@ public class AppDbContext(
         modelBuilder.Entity<EmailVerificationToken>().Configure();
         modelBuilder.Entity<TwoFactorAuth>().Configure();
         modelBuilder.Entity<TwoFactorEmailCode>().Configure();
+        modelBuilder.Entity<TwoFactorRecoveryCode>().Configure();
     }
 }
