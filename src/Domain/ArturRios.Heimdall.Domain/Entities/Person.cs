@@ -75,4 +75,10 @@ public class Person : Entity
 
     /// <summary>Email verification tokens issued for this person.</summary>
     public ICollection<EmailVerificationToken> EmailVerificationTokens { get; set; } = new List<EmailVerificationToken>();
+
+    /// <summary>
+    ///     This person's two-factor authentication configuration (UC-36 – UC-40). <c>null</c> until
+    ///     UC-36 initiates setup.
+    /// </summary>
+    public TwoFactorAuth? TwoFactorAuth { get; set; }
 }

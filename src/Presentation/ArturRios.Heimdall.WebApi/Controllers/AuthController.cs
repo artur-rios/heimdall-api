@@ -176,4 +176,30 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),
+    ///     selecting an authenticator-app method, an email method, or both. Setup stays inactive until
+    ///     confirmed by UC-37. The person acted on is always the caller themselves — read from the
+    ///     bearer token, the same as <see cref="ResendVerification" />.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>: the authorization matrix grants two-factor setup to all three
+    ///     person roles (<c>User</c>, <c>ScopeAdmin</c>, <c>SystemAdmin</c>) and withholds it from
+    ///     anonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,
+    ///     403) is not a role the attribute can see — a Google-issued token names a
+    ///     <c>GoogleUser</c>, not a <c>Person</c> — so the handler enforces it by resolving the caller
+    ///     against the <c>Person</c> table itself.
+    /// </remarks>
+    [HttpPost("2fa/enable")]
+    public async Task<ActionResult<DataOutput<EnableTwoFactorAuthCommandOutput?>>> EnableTwoFactorAuth(
+        [FromBody] EnableTwoFactorAuthCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
 }

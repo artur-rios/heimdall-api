@@ -23,6 +23,8 @@ public class AppDbContext(
     public DbSet<ScopePermission> ScopePermissions { get; init; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; init; }
     public DbSet<EmailVerificationToken> EmailVerificationTokens { get; init; }
+    public DbSet<TwoFactorAuth> TwoFactorAuths { get; init; }
+    public DbSet<TwoFactorEmailCode> TwoFactorEmailCodes { get; init; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -47,5 +49,7 @@ public class AppDbContext(
         modelBuilder.Entity<ScopeUser>().Configure();
         modelBuilder.Entity<PasswordResetToken>().Configure();
         modelBuilder.Entity<EmailVerificationToken>().Configure();
+        modelBuilder.Entity<TwoFactorAuth>().Configure();
+        modelBuilder.Entity<TwoFactorEmailCode>().Configure();
     }
 }
