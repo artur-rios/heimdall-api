@@ -2,8 +2,8 @@ namespace ArturRios.Heimdall.Shared.Messages;
 
 /// <summary>
 ///     Canonical messages produced by the two-factor authentication use cases (UC-36 – UC-40). Each
-///     is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />. UC-36 and UC-37's
-///     messages exist so far — UC-38 through UC-40 add their own as they are implemented.
+///     is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />. UC-36 through UC-39's
+///     messages exist so far — UC-40 adds its own once implemented.
 /// </summary>
 public static class TwoFactorMessages
 {
@@ -70,4 +70,20 @@ public static class TwoFactorMessages
     ///     never real — the same reasoning UC-11's AF-11a…AF-11e collapse into one message for.
     /// </summary>
     public const string FactorInvalid = "The code or recovery code is missing, incorrect, or already used.";
+
+    /// <summary>
+    ///     UC-39 main flow: both the password and the second factor checked out, so the
+    ///     <c>TWO_FACTOR_AUTH</c> row and its recovery codes were permanently removed (FR-2F-11).
+    /// </summary>
+    public const string Disabled = "Two-factor authentication has been disabled.";
+
+    /// <summary>
+    ///     AF-39a: two-factor authentication is not active for the caller — including the edge case
+    ///     where the caller cannot be resolved as a live person at all (a Google User, or a bearer
+    ///     token naming a person since hard deleted), which could never hold an active row either.
+    /// </summary>
+    public const string NotActive = "Two-factor authentication is not active for this account.";
+
+    /// <summary>AF-39b: the submitted password does not match the caller's current password.</summary>
+    public const string PasswordMismatch = "The current password is incorrect.";
 }
