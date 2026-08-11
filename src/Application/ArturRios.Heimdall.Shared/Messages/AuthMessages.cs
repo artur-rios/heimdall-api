@@ -10,6 +10,12 @@ public static class AuthMessages
     public const string LoginSuccessful = "Login successful.";
 
     /// <summary>
+    ///     AF-11g (FR-2F-07): the password check passed, but the person has active two-factor
+    ///     authentication, so a challenge token was issued instead of a full one — see UC-38.
+    /// </summary>
+    public const string TwoFactorRequired = "Two-factor verification required.";
+
+    /// <summary>
     ///     UC-11 AF-11a…AF-11e: the credentials were not accepted. Deliberately one message for all
     ///     five conditions — unknown person, wrong password, deleted person, deleted scope, and a
     ///     Scope Admin whose every owned scope is deleted — so a caller cannot use the login

@@ -273,11 +273,28 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>,
                 ConfirmTwoFactorAuthCommandHandler>();
 
+        // UC-38 (FR-2F-06…FR-2F-09): no validator either — same reason as UC-37, plus the challenge
+        // token itself is validated inside the handler, the same "opaque token as a body value"
+        // shape UC-13's ResetPasswordCommand uses.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>,
+                VerifyTwoFactorAuthCommandHandler>();
+
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
         // UC-11 issues tokens through the same claims mapper the middleware validates them with,
         // registered by AddTokenAuthentication in ConfigureSecurity.
         Builder.Services.AddScoped<IAuthTokenIssuer, JwtAuthTokenIssuer>();
+        // Shared by LoginCommandHandler (UC-11) and VerifyTwoFactorAuthCommandHandler (UC-38) so the
+        // scope-eligibility rules and the final token-issuing call live in one place.
+        Builder.Services.AddScoped<PersonAuthTokenService>();
+        // UC-38's challenge token (FR-2F-07…FR-2F-10, NFR-17): one class both issues and validates
+        // it, registered once and exposed through both of its interfaces.
+        Builder.Services.AddScoped<JwtTwoFactorChallengeTokenIssuer>();
+        Builder.Services.AddScoped<ITwoFactorChallengeTokenIssuer>(
+            provider => provider.GetRequiredService<JwtTwoFactorChallengeTokenIssuer>());
+        Builder.Services.AddScoped<ITwoFactorChallengeTokenValidator>(
+            provider => provider.GetRequiredService<JwtTwoFactorChallengeTokenIssuer>());
         Builder.Services.AddSingleton(MasterUserOptions.FromEnvironment());
         Builder.Services.AddScoped<DatabaseSeeder>();
     }
@@ -449,7 +466,11 @@ public class Startup(string[] args) : WebApiStartup(args)
 
     public override void ConfigureWebApi()
     {
-        Builder.Services.AddControllers();
+        // MfaPendingGuardFilter (FR-2F-10, NFR-17) runs as a global MVC authorization filter, on
+        // every controller action — added here rather than per-action, since a UC-38 challenge token
+        // must be rejected everywhere except POST /api/auth/2fa/verify, and that endpoint needs no
+        // opt-out: it never reads the challenge token as a bearer credential to begin with.
+        Builder.Services.AddControllers(options => options.Filters.Add<MfaPendingGuardFilter>());
         Builder.Services.AddEndpointsApiExplorer();
     }
 

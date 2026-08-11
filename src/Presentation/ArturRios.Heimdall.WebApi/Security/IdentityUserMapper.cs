@@ -27,6 +27,13 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
     /// <summary>The claim holding the flagged scope-permission names, as a JSON array.</summary>
     public const string ScopePermissionClaimsClaim = "scopePermissions";
 
+    /// <summary>
+    ///     The claim marking a token as a UC-38 challenge token rather than a full authentication
+    ///     token (FR-2F-07, NFR-17). Present and <c>"true"</c> only on a challenge token; omitted on
+    ///     every other token, the same way the scope claims are omitted when they do not apply.
+    /// </summary>
+    public const string MfaPendingClaim = "mfaPending";
+
     private const char OwnedScopeIdsSeparator = ',';
 
     public Dictionary<string, string> ToClaims(IAuthenticatedUser user)
@@ -65,6 +72,13 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
                 JsonSerializer.Serialize(identityUser.ScopePermissionClaims);
         }
 
+        // FR-2F-07/NFR-17: only a UC-38 challenge token carries this claim, and only when true —
+        // omitted rather than emitted "false", like every other optional claim here.
+        if (identityUser.MfaPending)
+        {
+            claims[MfaPendingClaim] = "true";
+        }
+
         return claims;
     }
 
@@ -88,7 +102,10 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
 
         return new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims))
         {
-            ScopePermissionClaims = ReadScopePermissionClaims(claims)
+            ScopePermissionClaims = ReadScopePermissionClaims(claims),
+            MfaPending = claims.TryGetValue(MfaPendingClaim, out var rawMfaPending) &&
+                         bool.TryParse(rawMfaPending, out var parsedMfaPending) &&
+                         parsedMfaPending
         };
     }
 
