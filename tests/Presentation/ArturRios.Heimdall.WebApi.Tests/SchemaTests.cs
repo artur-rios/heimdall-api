@@ -17,6 +17,7 @@ public class SchemaTests(PostgresFixture fixture)
         string[] expected =
         [
             "application",
+            "audit_log",
             "email_verification_token",
             "google_user",
             "password_reset_token",

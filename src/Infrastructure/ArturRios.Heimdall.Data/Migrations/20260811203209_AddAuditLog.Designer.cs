@@ -3,6 +3,7 @@ using System;
 using ArturRios.Heimdall.Data.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ArturRios.Heimdall.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811203209_AddAuditLog")]
+    partial class AddAuditLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -97,8 +100,7 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("text")
                         .HasColumnName("action");
 
                     b.Property<Guid?>("ActorPersonId")
@@ -125,12 +127,6 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_audit_log");
-
-                    b.HasIndex("ActorPersonId")
-                        .HasDatabaseName("ix_audit_log_actor_person_id");
-
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("ix_audit_log_created_at");
 
                     b.HasIndex("PublicId")
                         .IsUnique()
