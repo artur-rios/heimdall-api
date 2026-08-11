@@ -152,14 +152,8 @@ Not use cases, tracked separately.
 | --- | --- | --- |
 | Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
 | Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |
-| Audit logging for write operations (NFR-09) | ⬜ | — |
+| Audit logging for write operations (NFR-09) | ✅ | [#78](https://github.com/artur-rios/heimdall-api/issues/78) |
 | Real email delivery (Mailgun, via `ArturRios.Messaging`) | ✅ | — |
-
-One cross-cutting requirement is deliberately outstanding rather than forgotten:
-
-- **NFR-09 (audit logging).** Write handlers currently produce no audit entries; the Serilog setup
-  covers request/startup logging only. Every use case merged so far ships without it, so it is
-  tracked here as one platform item rather than being retro-fitted per use case.
 
 **Email delivery** closed with UC-12: both the verification and password reset emails now go through
 Mailgun (see [Email delivery](#email-delivery)). The logging senders survive as the fallback for
