@@ -31,14 +31,17 @@ public static class TwoFactorMessageMap
         // AF-38a — challenge token missing, invalid, or expired.
         [TwoFactorMessages.ChallengeTokenInvalid] = HttpStatusCodes.Unauthorized,
         // AF-38b and AF-38c — collapsed to the same 401 so a wrong code and a reused recovery code
-        // cannot be told apart. Also UC-39's AF-39c: the second factor submitted to disable was
-        // invalid.
+        // cannot be told apart. Also UC-39's AF-39c (the second factor submitted to disable was
+        // invalid) and UC-40's AF-40b (the second factor submitted to regenerate was invalid).
         [TwoFactorMessages.FactorInvalid] = HttpStatusCodes.Unauthorized,
         // UC-39 main flow — the configuration and its recovery codes were removed.
         [TwoFactorMessages.Disabled] = HttpStatusCodes.Ok,
-        // AF-39a — two-factor authentication is not active for the caller.
+        // AF-39a — two-factor authentication is not active for the caller. Also UC-40's AF-40a: the
+        // same "not active" refusal, reused rather than duplicated.
         [TwoFactorMessages.NotActive] = HttpStatusCodes.NotFound,
         // AF-39b — the submitted password did not match.
-        [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized
+        [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized,
+        // UC-40 main flow — every existing recovery code was replaced with ten new ones.
+        [TwoFactorMessages.RecoveryCodesRegenerated] = HttpStatusCodes.Ok
     };
 }

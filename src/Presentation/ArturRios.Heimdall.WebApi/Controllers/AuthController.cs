@@ -284,4 +284,32 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Invalidates the caller's current recovery codes and issues a fresh set of ten (UC-40,
+    ///     FR-2F-12), requiring a valid second factor — an app/email code or one of the caller's
+    ///     remaining recovery codes — verified exactly as <see cref="VerifyTwoFactorAuth" /> verifies
+    ///     one. On success, every existing <c>TWO_FACTOR_RECOVERY_CODE</c> row for the caller is
+    ///     removed, including any still unused, and replaced with ten new ones. The person acted on is
+    ///     always the caller themselves — read from the bearer token, the same as
+    ///     <see cref="EnableTwoFactorAuth" />.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
+    ///     the authorization matrix grants regenerating recovery codes to all three person roles and
+    ///     withholds it from anonymous callers, which authentication alone already enforces. AF-40a
+    ///     (404, not active) and AF-40b (401, second factor invalid) reuse UC-39's "not active" and
+    ///     UC-38's "factor invalid" messages rather than inventing new ones.
+    /// </remarks>
+    [HttpPost("2fa/recovery-codes/regenerate")]
+    public async Task<ActionResult<DataOutput<RegenerateRecoveryCodesCommandOutput?>>> RegenerateRecoveryCodes(
+        [FromBody] RegenerateRecoveryCodesCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
 }
