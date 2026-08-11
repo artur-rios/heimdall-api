@@ -255,4 +255,33 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Turns off the caller's own two-factor authentication (UC-39, FR-2F-11), requiring both the
+    ///     caller's current password and a valid second factor — an app/email code or a recovery
+    ///     code — exactly as hard to satisfy as a login. On success, permanently removes the
+    ///     <c>TWO_FACTOR_AUTH</c> row and its recovery codes. The person acted on is always the
+    ///     caller themselves — read from the bearer token, the same as <see cref="EnableTwoFactorAuth" />.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
+    ///     the authorization matrix grants disabling two-factor authentication to all three person
+    ///     roles and withholds it from anonymous callers, which authentication alone already enforces.
+    ///     AF-39a (404, not active) and AF-39b/AF-39c (401, wrong password / wrong second factor) are
+    ///     kept as the three separate flows the Use Case Specification Document defines them as —
+    ///     unlike UC-38's AF-38b/AF-38c, which the spec collapses into one message, UC-39 lists the
+    ///     password mismatch and the second-factor mismatch as distinct conditions, so they are not
+    ///     merged here.
+    /// </remarks>
+    [HttpPost("2fa/disable")]
+    public async Task<ActionResult<DataOutput<DisableTwoFactorAuthCommandOutput?>>> DisableTwoFactorAuth(
+        [FromBody] DisableTwoFactorAuthCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
 }

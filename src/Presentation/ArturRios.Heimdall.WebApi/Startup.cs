@@ -280,6 +280,18 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AddScoped<ICommandHandlerAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>,
                 VerifyTwoFactorAuthCommandHandler>();
 
+        // Shared by VerifyTwoFactorAuthCommandHandler (UC-38) and DisableTwoFactorAuthCommandHandler
+        // (UC-39), and by UC-40's regeneration later — the "code against TOTP, or against the current
+        // email code, or against an unused recovery code" comparison lives in exactly one place.
+        Builder.Services.AddScoped<ITwoFactorFactorVerifier, TwoFactorFactorVerifier>();
+
+        // UC-39 (FR-2F-11): no validator — which shape of second factor (code vs. recoveryCode) is
+        // valid depends on a database read (the pending row's AppEnabled/EmailEnabled), the same
+        // reason UC-37/UC-38 have none.
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>,
+                DisableTwoFactorAuthCommandHandler>();
+
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
         // UC-11 issues tokens through the same claims mapper the middleware validates them with,
