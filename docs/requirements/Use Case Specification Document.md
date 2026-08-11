@@ -289,18 +289,18 @@ sequenceDiagram
 | **ID** | UC-05 |
 | **Name** | Hard Delete Scope |
 | **Actors** | System Admin |
-| **Description** | Permanently remove a scope, its Users, and its applications |
+| **Description** | Permanently remove a scope, its Users, its applications, and its scope permissions |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role; scope exists |
-| **Postconditions** | Scope, its `SCOPE_OWNER`/`SCOPE_USER` rows, its Users, its Google Users, and its applications are permanently removed from the database. Scope Admin person records are not removed, since they may own other scopes |
+| **Postconditions** | Scope, its `SCOPE_OWNER`/`SCOPE_USER` rows, its Users, its Google Users, its applications, and its scope permissions are permanently removed from the database. Scope Admin person records are not removed, since they may own other scopes |
 
 **Main Flow:**
 
 1. System Admin sends a hard delete request.
 2. The system locates the scope.
 3. The system permanently deletes all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope.
-4. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope.
+4. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
 5. The system permanently deletes the scope record.
-6. The system returns success.
+6. The system returns success, including the count of scope permissions removed.
 
 **Alternative Flows:**
 

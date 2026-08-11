@@ -8,9 +8,10 @@ using ArturRios.Util.Test.Mock;
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for HardDeleteScopeCommandHandler (UC-05).
-// Cover the main flow, the explicit cascade to Users/Google Users/applications, and AF-05a (not
-// found). Authorization (403/401) and the SCOPE_OWNER/SCOPE_USER join-row cascade are functional
-// concerns (the fake repositories are not join-aware).
+// Cover the main flow, the explicit cascade to Users/Google Users/applications, the counted (but
+// DB-cascaded) scope permissions, and AF-05a (not found). Authorization (403/401) and the
+// SCOPE_OWNER/SCOPE_USER/ScopePermission cascades are functional concerns (the fake repositories
+// are not join-aware).
 public class HardDeleteScopeCommandHandlerTests
 {
     // One fake per aggregate; each is passed as BOTH the reader and the writer argument.
@@ -18,10 +19,12 @@ public class HardDeleteScopeCommandHandlerTests
         AsyncFakeRepository<Scope> Scopes,
         AsyncFakeRepository<Person> Persons,
         AsyncFakeRepository<GoogleUser> GoogleUsers,
-        AsyncFakeRepository<Application> Applications)
+        AsyncFakeRepository<Application> Applications,
+        AsyncFakeRepository<ScopePermission> ScopePermissions)
     {
         public HardDeleteScopeCommandHandler Handler() => new(
-            Scopes, Scopes, Persons, Persons, GoogleUsers, GoogleUsers, Applications, Applications);
+            Scopes, Scopes, Persons, Persons, GoogleUsers, GoogleUsers, Applications, Applications,
+            ScopePermissions);
     }
 
     private static async Task<Fakes> EmptyFakes()
@@ -31,7 +34,13 @@ public class HardDeleteScopeCommandHandlerTests
             new AsyncFakeRepository<Scope>(),
             new AsyncFakeRepository<Person>(),
             new AsyncFakeRepository<GoogleUser>(),
-            new AsyncFakeRepository<Application>());
+            new AsyncFakeRepository<Application>(),
+            new AsyncFakeRepository<ScopePermission>());
+    }
+
+    private static async Task SeedScopePermissionAsync(Fakes fakes, long scopeId, bool isDeleted = false)
+    {
+        await fakes.ScopePermissions.CreateAsync(new ScopePermission { PublicId = Guid.NewGuid(), ScopeId = scopeId, IsDeleted = isDeleted });
     }
 
     private static async Task<Scope> SeedScopeAsync(Fakes fakes, bool isDeleted = false)
@@ -81,6 +90,7 @@ public class HardDeleteScopeCommandHandlerTests
         Assert.Equal(0, output.Data.UserCount);
         Assert.Equal(0, output.Data.GoogleUserCount);
         Assert.Equal(0, output.Data.ApplicationCount);
+        Assert.Equal(0, output.Data.ScopePermissionCount);
         Assert.Contains(ScopeMessages.ScopeHardDeletedSuccessfully, output.Messages);
 
         // Then — the scope is gone from the store
@@ -90,13 +100,14 @@ public class HardDeleteScopeCommandHandlerTests
     [UnitFact]
     public async Task GivenScopeWithMembers_WhenHandlingHardDeleteScope_ThenMembersAreRemovedAndCounted()
     {
-        // Given a scope with two Users, one Google User, and one application
+        // Given a scope with two Users, one Google User, one application, and one scope permission
         var fakes = await EmptyFakes();
         var scope = await SeedScopeAsync(fakes);
         await SeedUserAsync(fakes, scope.Id);
         await SeedUserAsync(fakes, scope.Id);
         await SeedGoogleUserAsync(fakes, scope.Id);
         await SeedApplicationAsync(fakes, scope.Id);
+        await SeedScopePermissionAsync(fakes, scope.Id);
         var command = new HardDeleteScopeCommand { Id = scope.PublicId };
 
         // When
@@ -107,6 +118,7 @@ public class HardDeleteScopeCommandHandlerTests
         Assert.Equal(2, output.Data!.UserCount);
         Assert.Equal(1, output.Data.GoogleUserCount);
         Assert.Equal(1, output.Data.ApplicationCount);
+        Assert.Equal(1, output.Data.ScopePermissionCount);
 
         // Then — the scope and every member are removed from their stores
         Assert.Empty((await fakes.Scopes.GetAllAsync()).Data!);

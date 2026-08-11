@@ -61,8 +61,9 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
-    ///     Permanently (hard) deletes a scope, removing its Users, Google Users, applications, and
-    ///     ownership/membership join rows (UC-05). Restricted to System Admins.
+    ///     Permanently (hard) deletes a scope, removing its Users, Google Users, applications,
+    ///     scope permissions, and ownership/membership join rows (UC-05). Restricted to System
+    ///     Admins.
     /// </summary>
     [HttpDelete("{id:guid}/hard")]
     [RoleRequirement((int)Roles.SystemAdmin)]

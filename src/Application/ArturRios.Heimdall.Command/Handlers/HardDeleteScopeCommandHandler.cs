@@ -14,10 +14,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     Handles <see cref="HardDeleteScopeCommand" /> (UC-05): locates the scope (AF-05a), then
 ///     permanently deletes its Users (via <c>SCOPE_USER</c>), Google Users, and applications, and
 ///     finally the scope itself — whose <c>ON DELETE CASCADE</c> foreign keys remove the
-///     <c>SCOPE_OWNER</c>/<c>SCOPE_USER</c> join rows. Owner person records (<c>ScopeAdmin</c>s) are
-///     never removed. The response reports the totals of the scope's members, counted regardless of
-///     their individual deletion state. All failures are returned as errors on the
-///     <see cref="DataOutput{T}" /> rather than thrown.
+///     <c>SCOPE_OWNER</c>/<c>SCOPE_USER</c> join rows and any remaining scope permissions. Owner
+///     person records (<c>ScopeAdmin</c>s) are never removed. The response reports the totals of
+///     the scope's members and permissions, counted regardless of their individual deletion state.
+///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope> scopeReader,
@@ -27,7 +27,8 @@ public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
     IAsyncRepository<GoogleUser> googleUserWriter,
     IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter)
+    IAsyncRepository<Application> applicationWriter,
+    IAsyncReadOnlyRepository<ScopePermission> scopePermissionReader)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command)
@@ -53,6 +54,8 @@ public class HardDeleteScopeCommandHandler(
         var applications = await applicationReader.Query()
             .Where(a => a.ScopeId == scope.Id)
             .ToListAsync();
+        var scopePermissionCount = await scopePermissionReader.Query()
+            .CountAsync(p => p.ScopeId == scope.Id);
 
         // Step 4: delete the members explicitly, in an order that never violates a foreign key
         // (applications reference their owning person, so they go first).
@@ -67,7 +70,8 @@ public class HardDeleteScopeCommandHandler(
         }
 
         // Step 5: delete the scope; its ON DELETE CASCADE foreign keys clear the SCOPE_OWNER and any
-        // remaining SCOPE_USER join rows. Owner person records are untouched.
+        // remaining SCOPE_USER join rows, as well as any remaining scope permissions. Owner person
+        // records are untouched.
         var scopeDelete = await scopeWriter.DeleteAsync(scope);
 
         if (!scopeDelete.Success)
@@ -75,14 +79,15 @@ public class HardDeleteScopeCommandHandler(
             return output.WithErrors(scopeDelete.Errors);
         }
 
-        // Step 6: return the scope id and the member totals.
+        // Step 6: return the scope id and the member/permission totals.
         return output
             .WithData(new HardDeleteScopeCommandOutput
             {
                 Id = scope.PublicId,
                 UserCount = users.Count,
                 GoogleUserCount = googleUsers.Count,
-                ApplicationCount = applications.Count
+                ApplicationCount = applications.Count,
+                ScopePermissionCount = scopePermissionCount
             })
             .WithMessage(ScopeMessages.ScopeHardDeletedSuccessfully);
     }
