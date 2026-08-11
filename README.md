@@ -1,4 +1,4 @@
-# ArturRios.Heimdall
+# Heimdall API
 
 A centralized **identity management API** built with ASP.NET Core (.NET 10). It provides person
 management, application (non-human identity) management, authentication and authorization,
