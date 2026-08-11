@@ -104,7 +104,7 @@ request — see the
 | UC-15: Resend Verification Email | ✅ | [#16](https://github.com/artur-rios/heimdall-api/issues/16) |
 | UC-36: Enable Two-Factor Authentication | ✅ | [#68](https://github.com/artur-rios/heimdall-api/issues/68) |
 | UC-37: Confirm Two-Factor Authentication Setup | ✅ | [#69](https://github.com/artur-rios/heimdall-api/issues/69) |
-| UC-38: Verify Second Factor | ⬜ | — |
+| UC-38: Verify Second Factor | ✅ | [#70](https://github.com/artur-rios/heimdall-api/issues/70) |
 | UC-39: Disable Two-Factor Authentication | ⬜ | — |
 | UC-40: Regenerate Recovery Codes | ⬜ | — |
 
