@@ -31,7 +31,8 @@ public class AuditingCommandHandler<TCommand, TOutput>(
             catch (Exception exception)
             {
                 logger.LogWarning(
-                    exception, "Failed to write audit log entry for {Action}", typeof(TCommand).Name);
+                    exception, "Failed to write audit log entry for {Action} (target {TargetId})",
+                    typeof(TCommand).Name, ResolveTargetId(result.Data));
             }
         }
 
