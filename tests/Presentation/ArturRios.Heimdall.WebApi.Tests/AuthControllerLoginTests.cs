@@ -111,7 +111,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         Assert.Contains(AuthMessages.LoginSuccessful, response.Body.Messages);
 
         // Then — the token's claims (FR-AU-04)
-        var claims = ClaimsOf(response.Body.Data.Token);
+        var claims = ClaimsOf(response.Body.Data.Token!);
         Assert.Equal(person.PublicId, claims.Id);
         Assert.Equal((int)Roles.User, claims.RoleId);
         Assert.Equal(scope.PublicId, claims.ScopeId);
@@ -133,7 +133,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var claims = ClaimsOf(response.Body!.Data!.Token);
+        var claims = ClaimsOf(response.Body!.Data!.Token!);
         Assert.Equal(person.PublicId, claims.Id);
         Assert.Null(claims.ScopeId);
         Assert.Equal(new[] { first.PublicId, second.PublicId }.Order(), claims.OwnedScopeIds.Order());
@@ -149,7 +149,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var claims = ClaimsOf(response.Body!.Data!.Token);
+        var claims = ClaimsOf(response.Body!.Data!.Token!);
         Assert.Equal((int)Roles.SystemAdmin, claims.RoleId);
         Assert.Null(claims.ScopeId);
         Assert.Empty(claims.OwnedScopeIds);
@@ -165,7 +165,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
 
         var scope = await SeedScopeAsync();
         var person = await SeedUserAsync(scope, UniqueEmail("member"));
-        Authorize(login.Body!.Data!.Token);
+        Authorize(login.Body!.Data!.Token!);
 
         // When the token is used on an endpoint that requires authentication
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
@@ -306,7 +306,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
 
         // Then the login is admitted and the token claims only the surviving scope
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal([live.PublicId], ClaimsOf(response.Body!.Data!.Token).OwnedScopeIds);
+        Assert.Equal([live.PublicId], ClaimsOf(response.Body!.Data!.Token!).OwnedScopeIds);
     }
 
     [FunctionalTheory]

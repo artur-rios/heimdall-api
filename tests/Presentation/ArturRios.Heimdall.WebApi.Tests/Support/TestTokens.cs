@@ -33,6 +33,14 @@ public static class TestTokens
         Guid personId, int role, Guid? scopeId = null, params Guid[] ownedScopeIds) =>
         Create(new IdentityUser(personId, role, scopeId, ownedScopeIds));
 
+    /// <summary>
+    ///     Builds a UC-38 challenge-shaped bearer token — <c>MfaPending</c> set, no scope claims —
+    ///     for tests proving <see cref="MfaPendingGuardFilter" /> rejects one everywhere except
+    ///     <c>POST /api/auth/2fa/verify</c> (FR-2F-10).
+    /// </summary>
+    public static string ForMfaPending(Guid personId, int role) =>
+        Create(new IdentityUser(personId, role) { MfaPending = true });
+
     private static string Create(IdentityUser user)
     {
         var configuration = new JwtConfiguration(

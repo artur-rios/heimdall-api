@@ -126,7 +126,7 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
 
         // Then — the issued token carries only the flagged permission's name
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var claims = ClaimsOf(response.Body!.Data!.Token);
+        var claims = ClaimsOf(response.Body!.Data!.Token!);
         Assert.Contains(flagged, claims.ScopePermissionClaims);
         Assert.DoesNotContain(unflagged, claims.ScopePermissionClaims);
     }
@@ -149,7 +149,7 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
 
         // Then — the token carries the flagged names from every owned scope
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var claims = ClaimsOf(response.Body!.Data!.Token);
+        var claims = ClaimsOf(response.Body!.Data!.Token!);
         Assert.Contains(firstPermission, claims.ScopePermissionClaims);
         Assert.Contains(secondPermission, claims.ScopePermissionClaims);
     }
@@ -169,7 +169,7 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
 
         // Then — a deleted permission is not emitted, even when its flag is set
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.DoesNotContain(deleted, ClaimsOf(response.Body!.Data!.Token).ScopePermissionClaims);
+        Assert.DoesNotContain(deleted, ClaimsOf(response.Body!.Data!.Token!).ScopePermissionClaims);
     }
 
     [FunctionalFact]
@@ -181,6 +181,6 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
 
         // Then — a System Admin carries no scope-permission claim
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Empty(ClaimsOf(response.Body!.Data!.Token).ScopePermissionClaims);
+        Assert.Empty(ClaimsOf(response.Body!.Data!.Token!).ScopePermissionClaims);
     }
 }

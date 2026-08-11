@@ -12,6 +12,8 @@ public static class AuthMessageMap
     {
         // UC-11 main flow — authenticated, token issued.
         [AuthMessages.LoginSuccessful] = HttpStatusCodes.Ok,
+        // AF-11g — password check passed, a UC-38 challenge token was issued instead.
+        [AuthMessages.TwoFactorRequired] = HttpStatusCodes.Ok,
         // AF-11a…AF-11e — every rejection answers alike, so none of them is distinguishable.
         [AuthMessages.InvalidCredentials] = HttpStatusCodes.Unauthorized,
         // AF-11f — malformed request. UC-12's validator reuses the two email messages.

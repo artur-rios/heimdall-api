@@ -13,9 +13,10 @@ using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
-// Unit tests for LoginCommandHandler (UC-11): the main flow for each of the three roles, and
-// AF-11a…AF-11e — every one of which must answer with the same InvalidCredentials error and issue
-// no token. AF-11f is covered by LoginCommandValidatorTests; this class checks only that the
+// Unit tests for LoginCommandHandler (UC-11): the main flow for each of the three roles, AF-11a…
+// AF-11e — every one of which must answer with the same InvalidCredentials error and issue no token
+// — and AF-11g (a challenge token instead of a full one, for a person with active two-factor
+// authentication). AF-11f is covered by LoginCommandValidatorTests; this class checks only that the
 // handler stops when validation fails.
 public class LoginCommandHandlerTests
 {
@@ -97,9 +98,55 @@ public class LoginCommandHandlerTests
         }
     }
 
+    /// <summary>Records whether AF-11g's challenge token was issued, and for whom, without a real JWT.</summary>
+    private sealed class RecordingChallengeTokenIssuer : ITwoFactorChallengeTokenIssuer
+    {
+        public Guid? PersonId { get; private set; }
+        public int? RoleId { get; private set; }
+
+        public Task<AuthToken> IssueAsync(Guid personId, int roleId)
+        {
+            PersonId = personId;
+            RoleId = roleId;
+            return Task.FromResult(
+                new AuthToken("challenge-token", new DateTime(2026, 1, 1, 0, 5, 0, DateTimeKind.Utc)));
+        }
+    }
+
+    private sealed record Fixture(
+        AsyncFakeRepository<Person> Persons,
+        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
+        RecordingIssuer TokenIssuer,
+        RecordingChallengeTokenIssuer ChallengeTokenIssuer)
+    {
+        public LoginCommandHandler Handler() =>
+            new(
+                ValidValidator().Object,
+                Persons,
+                TwoFactorAuths,
+                EmailCodes,
+                EmailCodes,
+                Mock.Of<ITwoFactorEmailSender>(),
+                ChallengeTokenIssuer,
+                new PersonAuthTokenService(TokenIssuer));
+    }
+
+    private static Fixture FixtureFor(AsyncFakeRepository<Person> persons) =>
+        new(persons, new AsyncFakeRepository<TwoFactorAuth>(), new AsyncFakeRepository<TwoFactorEmailCode>(),
+            new RecordingIssuer(), new RecordingChallengeTokenIssuer());
+
     private static LoginCommandHandler HandlerFor(
         AsyncFakeRepository<Person> persons, IAuthTokenIssuer issuer) =>
-        new(ValidValidator().Object, persons, issuer);
+        new(
+            ValidValidator().Object,
+            persons,
+            new AsyncFakeRepository<TwoFactorAuth>(),
+            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            Mock.Of<ITwoFactorEmailSender>(),
+            new RecordingChallengeTokenIssuer(),
+            new PersonAuthTokenService(issuer));
 
     private static LoginCommand Command(string email, string password = Password, Guid? scopeId = null) =>
         new() { Email = email, Password = password, ScopeId = scopeId };
@@ -120,6 +167,7 @@ public class LoginCommandHandlerTests
         // Then — output
         Assert.True(output.Success);
         Assert.Equal("issued-token", output.Data!.Token);
+        Assert.False(output.Data.RequiresTwoFactor);
         Assert.Contains(AuthMessages.LoginSuccessful, output.Messages);
 
         // Then — claims: the person's and their scope's PublicIds, no owned scopes
@@ -334,7 +382,15 @@ public class LoginCommandHandlerTests
             .ReturnsAsync(new ValidationResult([
                 new ValidationFailure(nameof(LoginCommand.Email), AuthMessages.EmailRequired)
             ]));
-        var handler = new LoginCommandHandler(validator.Object, persons, issuer);
+        var handler = new LoginCommandHandler(
+            validator.Object,
+            persons,
+            new AsyncFakeRepository<TwoFactorAuth>(),
+            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            Mock.Of<ITwoFactorEmailSender>(),
+            new RecordingChallengeTokenIssuer(),
+            new PersonAuthTokenService(issuer));
 
         // When
         var output = await handler.HandleAsync(Command("admin@test.local"));
@@ -343,5 +399,127 @@ public class LoginCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.EmailRequired, output.Errors);
         Assert.Null(issuer.Subject);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithActiveTwoFactorAuth_WhenHandlingLogin_ThenChallengeTokenIsIssuedInsteadOfFullToken()
+    {
+        // Given — AF-11g (FR-2F-07): correct credentials, but active 2FA
+        var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+        await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = true, EmailEnabled = true
+        });
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("admin@test.local"));
+
+        // Then — a challenge token, not a full one
+        Assert.True(output.Success);
+        Assert.True(output.Data!.RequiresTwoFactor);
+        Assert.Equal("challenge-token", output.Data.ChallengeToken);
+        Assert.Null(output.Data.Token);
+        Assert.Null(output.Data.ExpiresAt);
+        Assert.Equal(["App", "Email"], output.Data.AvailableMethods);
+        Assert.Contains(AuthMessages.TwoFactorRequired, output.Messages);
+
+        // Then — no full token was ever built, and the challenge named the right person
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.Equal(person.PublicId, fixture.ChallengeTokenIssuer.PersonId);
+        Assert.Equal((int)Roles.SystemAdmin, fixture.ChallengeTokenIssuer.RoleId);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithOnlyAppTwoFactorEnabled_WhenHandlingLogin_ThenAvailableMethodsListsAppOnly()
+    {
+        // Given — AF-11g, App method only
+        var person = Person(10, "app-only@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+        await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = true, EmailEnabled = false
+        });
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("app-only@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(["App"], output.Data!.AvailableMethods);
+        Assert.Empty(fixture.EmailCodes.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithEmailTwoFactorEnabled_WhenHandlingLogin_ThenFreshEmailCodeIsIssued()
+    {
+        // Given — AF-11g/FR-2F-08: the Email method is enabled, so a fresh code must be mailed
+        var person = Person(10, "email-2fa@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+        var twoFactorAuth = new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+        };
+        await fixture.TwoFactorAuths.CreateAsync(twoFactorAuth);
+        var stale = new TwoFactorEmailCode
+        {
+            TwoFactorAuthId = twoFactorAuth.Id,
+            CodeHash = [9, 9, 9],
+            Salt = [1, 1, 1],
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            Used = false
+        };
+        await fixture.EmailCodes.CreateAsync(stale);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("email-2fa@test.local"));
+
+        // Then — the prior outstanding code was retired and a fresh one issued
+        Assert.True(output.Success);
+        Assert.True(stale.Used);
+        Assert.Equal(2, fixture.EmailCodes.Query().ToList().Count);
+        Assert.Single(fixture.EmailCodes.Query().ToList(), code => !code.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithNoTwoFactorAuthRow_WhenHandlingLogin_ThenFullTokenIsIssuedAsBefore()
+    {
+        // Given — regression: a person with no TwoFactorAuth row at all must log in exactly as before
+        // UC-38 existed.
+        var person = Person(10, "no-2fa@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("no-2fa@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.RequiresTwoFactor);
+        Assert.Equal("issued-token", output.Data.Token);
+        Assert.Null(output.Data.ChallengeToken);
+        Assert.Null(output.Data.AvailableMethods);
+        Assert.Contains(AuthMessages.LoginSuccessful, output.Messages);
+        Assert.Null(fixture.ChallengeTokenIssuer.PersonId);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithInactiveTwoFactorAuthRow_WhenHandlingLogin_ThenFullTokenIsIssued()
+    {
+        // Given — a pending (never confirmed) UC-36/UC-37 setup must not gate login: only
+        // IsActive == true does (FR-2F-07)
+        var person = Person(10, "pending-2fa@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+        await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = false, AppEnabled = true
+        });
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("pending-2fa@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.RequiresTwoFactor);
+        Assert.Equal("issued-token", output.Data.Token);
     }
 }

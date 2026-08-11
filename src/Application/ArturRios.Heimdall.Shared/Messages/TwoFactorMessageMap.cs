@@ -25,6 +25,13 @@ public static class TwoFactorMessageMap
         // AF-37b — appCode missing or incorrect.
         [TwoFactorMessages.AppCodeInvalid] = HttpStatusCodes.BadRequest,
         // AF-37c — emailCode missing, incorrect, expired, or already used.
-        [TwoFactorMessages.EmailCodeInvalid] = HttpStatusCodes.BadRequest
+        [TwoFactorMessages.EmailCodeInvalid] = HttpStatusCodes.BadRequest,
+        // UC-38 main flow — challenge redeemed, full token issued.
+        [TwoFactorMessages.VerificationSuccessful] = HttpStatusCodes.Ok,
+        // AF-38a — challenge token missing, invalid, or expired.
+        [TwoFactorMessages.ChallengeTokenInvalid] = HttpStatusCodes.Unauthorized,
+        // AF-38b and AF-38c — collapsed to the same 401 so a wrong code and a reused recovery code
+        // cannot be told apart.
+        [TwoFactorMessages.FactorInvalid] = HttpStatusCodes.Unauthorized
     };
 }

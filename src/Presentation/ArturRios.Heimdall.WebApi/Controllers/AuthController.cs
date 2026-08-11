@@ -229,4 +229,30 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Completes a 2FA-gated login (UC-38, FR-2F-09) by redeeming the challenge token AF-11g
+    ///     issued at login, together with an app/email code or a recovery code, for the full
+    ///     authentication token. Open to anonymous callers — the caller holds no bearer token yet,
+    ///     only the challenge token, which is submitted here as a plain request body field, exactly
+    ///     like <see cref="ResetPassword" />'s token, never as an <c>Authorization</c> header.
+    /// </summary>
+    /// <remarks>
+    ///     AF-38a (invalid/expired challenge token) and AF-38b/AF-38c (wrong code, or a reused
+    ///     recovery code) all answer the same 401 with the same message, so this endpoint cannot be
+    ///     used to distinguish a forged challenge from an expired one, or a wrong code from a
+    ///     recovery code that was already spent. <see cref="MfaPendingGuardFilter" /> is what keeps a
+    ///     challenge token from working anywhere else (FR-2F-10) — it never applies here, since this
+    ///     action never reads the challenge token as a bearer credential in the first place.
+    /// </remarks>
+    [HttpPost("2fa/verify")]
+    [AllowAnonymous]
+    public async Task<ActionResult<DataOutput<VerifyTwoFactorAuthCommandOutput?>>> VerifyTwoFactorAuth(
+        [FromBody] VerifyTwoFactorAuthCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
 }

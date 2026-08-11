@@ -35,4 +35,12 @@ public sealed record IdentityUser(
     public IdentityUser(Guid id, int roleId) : this(id, roleId, null, [])
     {
     }
+
+    /// <summary>
+    ///     Whether this identity comes from a UC-38 challenge token rather than a full authentication
+    ///     token (FR-2F-07, NFR-17) — set on the token by <c>JwtTwoFactorChallengeTokenIssuer</c> and
+    ///     read back here by <see cref="IdentityUserMapper" />. <see cref="MfaPendingGuardFilter" />
+    ///     rejects every request where this is <c>true</c>, per FR-2F-10.
+    /// </summary>
+    public bool MfaPending { get; init; }
 }

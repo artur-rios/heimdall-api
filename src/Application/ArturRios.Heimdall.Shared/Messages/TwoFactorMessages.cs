@@ -49,4 +49,25 @@ public static class TwoFactorMessages
     ///     incorrect, expired, or already used.
     /// </summary>
     public const string EmailCodeInvalid = "The email code is missing, incorrect, expired, or already used.";
+
+    /// <summary>
+    ///     UC-38 main flow: the challenge token was valid and a second factor checked out, so the
+    ///     full authentication token was issued (FR-2F-09).
+    /// </summary>
+    public const string VerificationSuccessful = "Two-factor verification successful.";
+
+    /// <summary>
+    ///     AF-38a: the challenge token is missing, malformed, not signed by this API, expired, or
+    ///     does not carry the MFA-pending claim (FR-2F-10) — including the edge case where the
+    ///     person or configuration it names no longer qualifies by the time UC-38 runs.
+    /// </summary>
+    public const string ChallengeTokenInvalid = "The two-factor challenge is invalid or has expired. Log in again.";
+
+    /// <summary>
+    ///     AF-38b and AF-38c: neither a valid app/email code nor an unused recovery code was
+    ///     submitted. Deliberately the same message for a wrong/missing code and an already-used
+    ///     recovery code (AF-38c), so a caller cannot tell a reused recovery code from one that was
+    ///     never real — the same reasoning UC-11's AF-11a…AF-11e collapse into one message for.
+    /// </summary>
+    public const string FactorInvalid = "The code or recovery code is missing, incorrect, or already used.";
 }
