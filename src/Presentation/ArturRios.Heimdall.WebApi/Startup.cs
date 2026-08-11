@@ -19,7 +19,6 @@ using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
 using ArturRios.Messaging.Email;
 using ArturRios.Mediator.Command;
-using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Mediator.Query;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
