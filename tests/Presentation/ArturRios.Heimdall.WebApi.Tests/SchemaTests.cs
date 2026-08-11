@@ -27,7 +27,8 @@ public class SchemaTests(PostgresFixture fixture)
             "scope_permission",
             "scope_user",
             "two_factor_auth",
-            "two_factor_email_code"
+            "two_factor_email_code",
+            "two_factor_recovery_code"
         ];
 
         var actual = await ReadTableNamesAsync();

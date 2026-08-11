@@ -202,4 +202,31 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving
+    ///     control of every method selected in UC-36 — an <c>appCode</c> if <c>AppEnabled</c>, an
+    ///     <c>emailCode</c> if <c>EmailEnabled</c>, both if both. On success, activates the
+    ///     configuration and returns ten recovery codes in plaintext, exactly once. The person acted on
+    ///     is always the caller themselves — read from the bearer token, the same as
+    ///     <see cref="EnableTwoFactorAuth" />.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
+    ///     the authorization matrix grants confirmation to all three person roles and withholds it from
+    ///     anonymous callers, which authentication alone already enforces. AF-37a's 404 covers both "no
+    ///     setup was ever initiated" and "the caller is a Google User" alike — a Google-issued token
+    ///     names a <c>GoogleUser</c>, never a row this lookup could find.
+    /// </remarks>
+    [HttpPost("2fa/confirm")]
+    public async Task<ActionResult<DataOutput<ConfirmTwoFactorAuthCommandOutput?>>> ConfirmTwoFactorAuth(
+        [FromBody] ConfirmTwoFactorAuthCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
 }
