@@ -258,6 +258,15 @@ public class Startup(string[] args) : WebApiStartup(args)
         AddEmailSenders();
         AddGoogleSignIn();
 
+        // UC-36 (FR-2F-02): the TOTP secret is encrypted at rest with ASP.NET Core's Data
+        // Protection API before it is persisted.
+        Builder.Services.AddDataProtection();
+        Builder.Services.AddScoped<ITotpSecretProtector, TotpSecretProtector>();
+        Builder.Services.AddScoped<IValidator<EnableTwoFactorAuthCommand>, EnableTwoFactorAuthCommandValidator>();
+        Builder.Services
+            .AddScoped<ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>,
+                EnableTwoFactorAuthCommandHandler>();
+
         Builder.Services.AddScoped<IScopeOwnershipChecker, ScopeOwnershipChecker>();
 
         // UC-11 issues tokens through the same claims mapper the middleware validates them with,
@@ -330,6 +339,7 @@ public class Startup(string[] args) : WebApiStartup(args)
 
             Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
             Builder.Services.AddScoped<IPasswordResetSender, LoggingPasswordResetSender>();
+            Builder.Services.AddScoped<ITwoFactorEmailSender, LoggingTwoFactorEmailSender>();
 
             return;
         }
@@ -339,6 +349,7 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddHttpClient<IEmailService, MailgunEmailService>();
         Builder.Services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
         Builder.Services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
+        Builder.Services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();
     }
 
     /// <summary>
