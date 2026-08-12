@@ -148,8 +148,9 @@ say the server assigns it.
 
 ### 4.4 Regenerate the document
 
-`python3 scripts/openapi.py` writes `docs/openapi/heimdall.json`; `docs/public/openapi/heimdall.json`
-is the docs-site copy and is refreshed by the same run. The `check-openapi` workflow fails the build
+`python3 scripts/openapi.py` writes `docs/openapi/heimdall.json`, the one committed copy.
+(`docs/public/openapi/heimdall.json` is Hugo build output under the gitignored `docs/public/` and
+needs no attention.) The `check-openapi` workflow fails the build
 if the committed document does not match what the code generates, so the regenerated file must be
 part of the same commit.
 
