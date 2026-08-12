@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
 
@@ -7,11 +8,14 @@ namespace ArturRios.Heimdall.Query.Input;
 ///     Request to list the <c>ScopeAdmin</c> owners of a scope, with pagination and optional
 ///     filtering (UC-07, FR-PE-04). <see cref="ScopeId" /> comes from the route;
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
-///     authenticated caller and are never taken from the request.
+///     authenticated caller and are never taken from the request. All three are
+///     <c>[JsonIgnore]</c>, which <c>ServerPopulatedBindingMetadataProvider</c> turns into
+///     "not bindable", so they never reach the public contract.
 /// </summary>
 public class ListScopeOwnersQuery : BaseQuery, IActorScoped
 {
-    /// <summary>Public identifier of the scope whose owners are listed.</summary>
+    /// <summary>Public identifier of the scope whose owners are listed (assigned from the route).</summary>
+    [JsonIgnore]
     public Guid ScopeId { get; set; }
 
     /// <summary>Optional case-insensitive substring filter on the owner's name.</summary>
@@ -23,7 +27,9 @@ public class ListScopeOwnersQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, logically deleted owners are included in the results (FR-PE-08).</summary>
     public bool IncludeDeleted { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }
