@@ -1,0 +1,222 @@
+<!doctype html><html itemscope itemtype=http://schema.org/WebPage lang=en class=no-js><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>Architecture | Heimdall API</title><meta name=description content="The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline."><meta property="og:url" content="https://artur-rios.github.io/heimdall-api/docs/architecture/"><meta property="og:site_name" content="Heimdall API"><meta property="og:title" content="Architecture"><meta property="og:description" content="The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="docs"><meta property="article:modified_time" content="2026-08-12T09:34:42-03:00"><meta itemprop=name content="Architecture"><meta itemprop=description content="The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline."><meta itemprop=dateModified content="2026-08-12T09:34:42-03:00"><meta itemprop=wordCount content="1129"><meta name=twitter:card content="summary"><meta name=twitter:title content="Architecture"><meta name=twitter:description content="The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline."><link rel=preload href=/heimdall-api/scss/main.min.550997bd630e34cadce28fffab3bdd879c0f8bd313125cf4fd08902328077df9.css as=style integrity="sha256-VQmXvWMONMrc4o//qzvdh5wPi9MTElz0/QiQIygHffk=" crossorigin=anonymous><link href=/heimdall-api/scss/main.min.550997bd630e34cadce28fffab3bdd879c0f8bd313125cf4fd08902328077df9.css rel=stylesheet integrity="sha256-VQmXvWMONMrc4o//qzvdh5wPi9MTElz0/QiQIygHffk=" crossorigin=anonymous><script src=https://code.jquery.com/jquery-3.7.1.min.js integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin=anonymous></script><script defer src=https://unpkg.com/lunr@2.3.9/lunr.min.js integrity=sha384-203J0SNzyqHby3iU6hzvzltrWi/M41wOP5Gu+BiJMz5nwKykbkUx8Kp7iti0Lpli crossorigin=anonymous></script></head><body class=td-page><header><nav class="td-navbar js-navbar-scroll"><div class="td-navbar-container container-fluid flex-column flex-md-row"><a class=navbar-brand href=/heimdall-api/><span class="navbar-brand__logo navbar-logo"></span><span class=navbar-brand__name>Heimdall API</span></a><div class="td-navbar__main td-navbar-nav-scroll td-navbar-nav-scroll--indicator" id=main_navbar><div class="scroll-indicator scroll-left"></div><ul class=navbar-nav><li class=nav-item><a class=nav-link href=/heimdall-api/docs/><span>Documentation</span></a></li><li class=nav-item><a class=nav-link href=/heimdall-api/docs/requirements/><span>Requirements</span></a></li><li class=nav-item><a class=nav-link href=https://github.com/artur-rios/heimdall-api target=_blank rel=noopener><span>GitHub</span></a></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.7ccbc43640cb901b3a19dc6fcfd2239d.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main data-bs-spy=scroll data-bs-target=.td-toc data-bs-root-margin="0px 0px -10%"><div class="row flex-xl-nowrap"><aside class="col-12 col-md-3 col-xl-2 td-sidebar d-print-none"><div id=td-sidebar-menu class=td-sidebar__inner><form class="td-sidebar__search d-flex align-items-center"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.7ccbc43640cb901b3a19dc6fcfd2239d.json data-offline-search-base-href=/ data-offline-search-max-results=10></div><button class="btn btn-link td-sidebar__toggle" type=button data-bs-toggle=collapse data-bs-target=#td-section-nav aria-controls=td-section-nav aria-expanded=false aria-label="Toggle section navigation"></button></form><nav class="td-sidebar-nav collapse" id=td-section-nav><ul class="td-sidebar-nav__section pe-md-3 ul-0"><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child active-path" id=m-heimdall-apidocs-li><a href=/heimdall-api/docs/ title=Documentation class="align-left ps-0 td-sidebar-link td-sidebar-link__section tree-root" id=m-heimdall-apidocs><span>Docs</span></a><ul class=ul-1><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsoverview-li><a href=/heimdall-api/docs/overview/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsoverview><span>Overview</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsgetting-started-li><a href=/heimdall-api/docs/getting-started/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsgetting-started><span>Getting started</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocstesting-li><a href=/heimdall-api/docs/testing/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocstesting><span>Testing</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child active-path" id=m-heimdall-apidocsarchitecture-li><a href=/heimdall-api/docs/architecture/ class="align-left ps-0 active td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsarchitecture><span class=td-sidebar-nav-active-item>Architecture</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsdomain-model-li><a href=/heimdall-api/docs/domain-model/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsdomain-model><span>Domain model</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsapi-reference-li><a href=/heimdall-api/docs/api-reference/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsapi-reference><span>API reference</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id=m-heimdall-apidocsflows-li><a href=/heimdall-api/docs/flows/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id=m-heimdall-apidocsflows><span>Flows</span></a><ul class="ul-2 foldable"><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowslogin-li><a href=/heimdall-api/docs/flows/login/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowslogin><span>Login</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowstwo-factor-li><a href=/heimdall-api/docs/flows/two-factor/ title="Two-factor authentication" class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowstwo-factor><span>Two-factor</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowsgoogle-sign-in-li><a href=/heimdall-api/docs/flows/google-sign-in/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowsgoogle-sign-in><span>Google Sign-In</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowsperson-onboarding-li><a href=/heimdall-api/docs/flows/person-onboarding/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowsperson-onboarding><span>Person onboarding</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowspassword-recovery-li><a href=/heimdall-api/docs/flows/password-recovery/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowspassword-recovery><span>Password recovery</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowsscope-permission-claims-li><a href=/heimdall-api/docs/flows/scope-permission-claims/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowsscope-permission-claims><span>Scope permission claims</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsflowsaudit-logging-li><a href=/heimdall-api/docs/flows/audit-logging/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsflowsaudit-logging><span>Audit logging</span></a></li></ul></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsoperations-li><a href=/heimdall-api/docs/operations/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsoperations><span>Operations</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section with-child" id=m-heimdall-apidocsrequirements-li><a href=/heimdall-api/docs/requirements/ class="align-left ps-0 td-sidebar-link td-sidebar-link__section" id=m-heimdall-apidocsrequirements><span>Requirements</span></a><ul class="ul-2 foldable"><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementsvision-document-li><a href=/heimdall-api/docs/requirements/vision-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementsvision-document><span>Vision Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementssystem-requirements-document-li><a href=/heimdall-api/docs/requirements/system-requirements-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementssystem-requirements-document><span>System Requirements Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementsuse-case-specification-document-li><a href=/heimdall-api/docs/requirements/use-case-specification-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementsuse-case-specification-document><span>Use Case Specification Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementstechnology-stack-document-li><a href=/heimdall-api/docs/requirements/technology-stack-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementstechnology-stack-document><span>Technology Stack Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementstesting-specification-document-li><a href=/heimdall-api/docs/requirements/testing-specification-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementstesting-specification-document><span>Testing Specification Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementsdevelopment-workflow-document-li><a href=/heimdall-api/docs/requirements/development-workflow-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementsdevelopment-workflow-document><span>Development Workflow Document</span></a></li><li class="td-sidebar-nav__section-title td-sidebar-nav__section without-child" id=m-heimdall-apidocsrequirementsoperations-infrastructure-document-li><a href=/heimdall-api/docs/requirements/operations-infrastructure-document/ class="align-left ps-0 td-sidebar-link td-sidebar-link__page" id=m-heimdall-apidocsrequirementsoperations-infrastructure-document><span>Operations & Infrastructure Document</span></a></li></ul></li></ul></li></ul></nav></div></aside><aside class=td-sidebar-toc><div class="td-page-meta ms-2 pb-1 pt-2 mb-0"><a href=https://github.com/artur-rios/heimdall-api/tree/main/docs/content/en/docs/architecture.md class="td-page-meta--view td-page-meta__view" target=_blank rel=noopener><i class="fa-solid fa-file-lines fa-fw"></i> View page source</a>
+<a href=https://github.com/artur-rios/heimdall-api/edit/main/docs/content/en/docs/architecture.md class="td-page-meta--edit td-page-meta__edit" target=_blank rel=noopener><i class="fa-solid fa-pen-to-square fa-fw"></i> Edit this page</a>
+<a href="https://github.com/artur-rios/heimdall-api/new/main/docs/content/en/docs?filename=change-me.md&amp;value=---%0Atitle%3A+%22Long+Page+Title%22%0AlinkTitle%3A+%22Short+Nav+Title%22%0Aweight%3A+100%0Adescription%3A+%3E-%0A+++++Page+description+for+heading+and+indexes.%0A---%0A%0A%23%23+Heading%0A%0AEdit+this+template+to+create+your+new+page.%0A%0A%2A+Give+it+a+good+name%2C+ending+in+%60.md%60+-+e.g.+%60get-started.md%60%0A%2A+Edit+the+%22front+matter%22+section+at+the+top+of+the+page+%28weight+controls+how+its+ordered+amongst+other+pages+in+the+same+directory%3B+lowest+number+first%29.%0A%2A+Add+a+good+commit+message+at+the+bottom+of+the+page+%28%3C80+characters%3B+use+the+extended+description+field+for+more+detail%29.%0A%2A+Create+a+new+branch+so+you+can+preview+your+new+file+and+request+a+review+via+Pull+Request.%0A" class="td-page-meta--child td-page-meta__child" target=_blank rel=noopener><i class="fa-solid fa-pen-to-square fa-fw"></i> Create child page</a>
+<a href="https://github.com/artur-rios/heimdall-api/issues/new?title=Architecture" class="td-page-meta--issue td-page-meta__issue" target=_blank rel=noopener><i class="fa-solid fa-list-check fa-fw"></i> Create documentation issue</a>
+<a id=print href=/heimdall-api/_print/docs/><i class="fa-solid fa-print fa-fw"></i> Print entire section</a></div><div class=td-toc data-proofer-ignore><div class=td-toc-title><span class=td-toc-title__text>On this page</span>
+<a class=td-toc-title__link title="Top of page" href=#></a></div><nav id=TableOfContents><ul><li><a href=#the-layers>The layers</a></li><li><a href=#cqrs-two-mediators-two-shapes>CQRS: two mediators, two shapes</a></li><li><a href=#auditing-by-decoration>Auditing by decoration</a></li><li><a href=#the-http-request-pipeline>The HTTP request pipeline</a></li><li><a href=#authorization>Authorization</a></li><li><a href=#validation>Validation</a></li><li><a href=#persistence>Persistence</a></li><li><a href=#where-to-go-next>Where to go next</a></li></ul></nav></div></aside><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><nav aria-label=breadcrumb class=td-breadcrumbs><ol class=breadcrumb><li class=breadcrumb-item><a href=/heimdall-api/docs/>Docs</a></li><li class="breadcrumb-item active" aria-current=page>Architecture</li></ol></nav><div class=td-content><h1>Architecture</h1><div class=lead>The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline.</div><header class=article-meta></header><p>Heimdall is a layered (DDD-flavoured) solution with <strong>CQRS</strong> in the application layer. Reads and
+writes travel different objects, through different mediators, into different handlers.</p><h2 id=the-layers>The layers<a class=td-heading-self-link href=#the-layers aria-label="Heading self-link"></a></h2><pre class=mermaid>graph TB
+    subgraph P[&#34;Presentation — ArturRios.Heimdall.WebApi&#34;]
+        CTRL[Controllers]
+        SEC[Security: token issuers, mappers, filters]
+        MAIL[Email senders]
+    end
+    subgraph A[&#34;Application&#34;]
+        subgraph CMD[&#34;ArturRios.Heimdall.Command&#34;]
+            CH[Command handlers]
+            CV[FluentValidation validators]
+            CS[Services: token, 2FA, email verification]
+            AUD[Auditing decorator]
+        end
+        subgraph QRY[&#34;ArturRios.Heimdall.Query&#34;]
+            QH[Query handlers]
+            HC[Health checks]
+        end
+        subgraph SHR[&#34;ArturRios.Heimdall.Shared&#34;]
+            MSG[Messages &#43; status-code maps]
+            OWN[IScopeOwnershipChecker, IActorAccessor]
+        end
+    end
+    subgraph D[&#34;Domain — ArturRios.Heimdall.Domain&#34;]
+        ENT[Entities &#43; Roles enum]
+    end
+    subgraph I[&#34;Infrastructure — ArturRios.Heimdall.Data&#34;]
+        CTX[AppDbContext]
+        MAPS[Entity maps]
+        MIG[Migrations]
+        SEED[DatabaseSeeder]
+    end
+
+    CTRL --&gt; CMD &amp; QRY
+    CTRL --&gt; MSG
+    CMD &amp; QRY --&gt; SHR
+    CMD &amp; QRY --&gt; ENT
+    CMD &amp; QRY --&gt;|repository interfaces| I
+    I --&gt; ENT
+    SEC -.implements.-&gt; CS
+    MAIL -.implements.-&gt; CS</pre><p>The arrows only ever point inwards or sideways: <strong>Domain depends on nothing</strong>, and Application
+depends on Infrastructure only through repository <em>interfaces</em> (<code>IAsyncRepository&lt;T></code>,
+<code>IAsyncReadOnlyRepository&lt;T></code>) that Infrastructure implements. Presentation supplies the concrete
+adapters for the abstractions the Application layer declares — <code>IAuthTokenIssuer</code>,
+<code>IEmailVerificationSender</code>, <code>IGoogleIdTokenVerifier</code> — which is why swapping Mailgun for logging, or
+the real Google verifier for the refusing one, is a start-up registration decision and nothing else.</p><table><thead><tr><th>Project</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>ArturRios.Heimdall.Domain</code></td><td>Entities and the <code>Roles</code> enum. No behaviour beyond data shape.</td></tr><tr><td><code>ArturRios.Heimdall.Command</code></td><td>Write side: commands, validators, handlers, application services, auditing.</td></tr><tr><td><code>ArturRios.Heimdall.Query</code></td><td>Read side: queries, validators, handlers, health checks, output DTOs.</td></tr><tr><td><code>ArturRios.Heimdall.Shared</code></td><td>Cross-cutting contracts and the message/status-code maps both sides use.</td></tr><tr><td><code>ArturRios.Heimdall.Data</code></td><td><code>AppDbContext</code>, entity maps, migrations, seeding.</td></tr><tr><td><code>ArturRios.Heimdall.WebApi</code></td><td>Controllers, JWT issuing and validation, filters, email and Google adapters, start-up.</td></tr></tbody></table><h2 id=cqrs-two-mediators-two-shapes>CQRS: two mediators, two shapes<a class=td-heading-self-link href=#cqrs-two-mediators-two-shapes aria-label="Heading self-link"></a></h2><pre class=mermaid>classDiagram
+    class Controller {
+        -CommandMediator commandMediator
+        -QueryMediator queryMediator
+    }
+    class CommandMediator {
+        &#43;ExecuteCommandAsync~TCommand, TOutput~(command) DataOutput~TOutput~
+    }
+    class QueryMediator {
+        &#43;ExecuteQueryAsync~TQuery, TOutput~(query) DataOutput~TOutput~
+        &#43;ExecutePaginatedQueryAsync~TQuery, TOutput~(query) PaginatedOutput~TOutput~
+    }
+    class ICommandHandlerAsync~TCommand, TOutput~ {
+        &lt;&lt;interface&gt;&gt;
+        &#43;HandleAsync(command) DataOutput~TOutput~
+    }
+    class IQueryHandlerAsync~TQuery, TOutput~ {
+        &lt;&lt;interface&gt;&gt;
+        &#43;HandleAsync(query) DataOutput~TOutput~
+    }
+    class IPaginatedQueryHandlerAsync~TQuery, TOutput~ {
+        &lt;&lt;interface&gt;&gt;
+        &#43;HandleAsync(query) PaginatedOutput~TOutput~
+    }
+    class AuditingCommandHandler~TCommand, TOutput~ {
+        -ICommandHandlerAsync inner
+        -IAuditLogWriter auditLogWriter
+        &#43;HandleAsync(command) DataOutput~TOutput~
+    }
+    class ConcreteCommandHandler {
+        -IValidator~TCommand~ validator
+        -IAsyncRepository~T~ repository
+        &#43;HandleAsync(command) DataOutput~TOutput~
+    }
+
+    Controller --&gt; CommandMediator
+    Controller --&gt; QueryMediator
+    CommandMediator --&gt; ICommandHandlerAsync
+    QueryMediator --&gt; IQueryHandlerAsync
+    QueryMediator --&gt; IPaginatedQueryHandlerAsync
+    ICommandHandlerAsync &lt;|.. AuditingCommandHandler
+    ICommandHandlerAsync &lt;|.. ConcreteCommandHandler
+    AuditingCommandHandler o-- ConcreteCommandHandler : decorates</pre><p>A controller action is deliberately thin — bind, dispatch, resolve:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=na>[HttpPost]</span>
+</span></span><span class=line><span class=cl><span class=na>[RoleRequirement((int)Roles.SystemAdmin)]</span>
+</span></span><span class=line><span class=cl><span class=kd>public</span> <span class=kd>async</span> <span class=n>Task</span><span class=p>&lt;</span><span class=n>ActionResult</span><span class=p>&lt;</span><span class=n>DataOutput</span><span class=p>&lt;</span><span class=n>CreateScopeCommandOutput</span><span class=p>?&gt;&gt;&gt;</span> <span class=n>Create</span><span class=p>(</span>
+</span></span><span class=line><span class=cl><span class=na>    [FromBody]</span> <span class=n>CreateScopeCommand</span> <span class=n>command</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>var</span> <span class=n>result</span> <span class=p>=</span> <span class=k>await</span> <span class=n>commandMediator</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ExecuteCommandAsync</span><span class=p>&lt;</span><span class=n>CreateScopeCommand</span><span class=p>,</span> <span class=n>CreateScopeCommandOutput</span><span class=p>&gt;(</span><span class=n>command</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>ResponseResolver</span><span class=p>.</span><span class=n>Resolve</span><span class=p>(</span><span class=n>result</span><span class=p>,</span> <span class=n>statusMap</span><span class=p>:</span> <span class=n>ScopeMessageMap</span><span class=p>.</span><span class=n>StatusCodes</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>No business rule lives in a controller. The handler returns a <code>DataOutput&lt;T></code> carrying data,
+messages, and errors; <code>ResponseResolver</code> turns that into an HTTP status using the per-area
+<strong>message map</strong> — a dictionary from message text to status code — so &ldquo;which error is a 404 and which
+is a 409&rdquo; is a single table per area rather than scattered <code>return NotFound()</code> calls.</p><h2 id=auditing-by-decoration>Auditing by decoration<a class=td-heading-self-link href=#auditing-by-decoration aria-label="Heading self-link"></a></h2><p>Every write handler is registered through <code>AddAuditedCommandHandler</code>, which registers the concrete
+handler and then registers the <em>interface</em> as an <code>AuditingCommandHandler</code> wrapping it (<strong>NFR-09</strong>):</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=n>services</span><span class=p>.</span><span class=n>AddScoped</span><span class=p>&lt;</span><span class=n>THandler</span><span class=p>&gt;();</span>
+</span></span><span class=line><span class=cl><span class=n>services</span><span class=p>.</span><span class=n>AddScoped</span><span class=p>&lt;</span><span class=n>ICommandHandlerAsync</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;&gt;(</span><span class=n>provider</span> <span class=p>=&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>new</span> <span class=n>AuditingCommandHandler</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;(</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>THandler</span><span class=p>&gt;(),</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>IAuditLogWriter</span><span class=p>&gt;(),</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>ILogger</span><span class=p>&lt;</span><span class=n>AuditingCommandHandler</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;&gt;&gt;()));</span>
+</span></span></code></pre></div><p>The decorator writes one <code>AuditLog</code> row per <strong>successful</strong> command, resolving the target from the
+output&rsquo;s <code>Id</code>/<code>PublicId</code> by reflection and the actor from <code>IActorAccessor</code> (the current request&rsquo;s
+identity). A failure to write the audit entry is logged as a warning and never fails the request the
+user already succeeded at.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>Depend on the interface</div><p>The concrete <code>THandler</code> registration exists only so the decorator factory can resolve it. Resolving
+<code>THandler</code> directly silently bypasses auditing — always depend on
+<code>ICommandHandlerAsync&lt;TCommand, TOutput></code>.</p></div><p>See <a href=../flows/audit-logging/>Audit logging</a>
+for the sequence.</p><h2 id=the-http-request-pipeline>The HTTP request pipeline<a class=td-heading-self-link href=#the-http-request-pipeline aria-label="Heading self-link"></a></h2><pre class=mermaid>graph LR
+    REQ([Request]) --&gt; EX[ExceptionMiddleware]
+    EX --&gt; CORS[CORS]
+    CORS --&gt; HTTPS[HTTPS redirect]
+    HTTPS --&gt; RL[Rate limiter&lt;br/&gt;auth endpoints only]
+    RL --&gt; AUTHN[Authentication &#43;&lt;br/&gt;AuthenticationMiddleware]
+    AUTHN --&gt; MFA[MfaPendingGuardFilter]
+    MFA --&gt; ROLE[&#34;RoleRequirement /&lt;br/&gt;AllowAnonymous&#34;]
+    ROLE --&gt; CTRL[Controller action]
+    CTRL --&gt; MED[Mediator]
+    MED --&gt; H[Handler]
+    H --&gt; DB[(PostgreSQL)]
+    H --&gt; RES[DataOutput]
+    RES --&gt; RR[&#34;ResponseResolver&lt;br/&gt;&#43; message map&#34;]
+    RR --&gt; RESP([HTTP response])</pre><p>Three things about this pipeline are worth knowing before reading any handler:</p><p><strong>Authentication reads no database.</strong> <code>AddTokenAuthentication&lt;IdentityUserMapper></code> is configured with
+<code>JwtValidationMode.ClaimsOnly</code> and <code>TokenSource.Header</code>: the <code>IdentityUser</code> is rebuilt from the
+token&rsquo;s claims alone. Nothing is looked up per request — which is fast, and which is why a token
+remains valid until it expires even if the account behind it was deleted.</p><p><strong>One class owns both directions of the claims.</strong> <code>IdentityUserMapper</code> writes the claims when a token
+is issued and reads them when one is validated, so the two cannot drift. Every claim value is a
+<code>PublicId</code>; an internal <code>bigint</code> never reaches a token (<strong>NFR-15</strong>).</p><p><strong>A challenge token is inert everywhere but one endpoint.</strong> <code>MfaPendingGuardFilter</code> is registered
+globally and rejects any request whose identity carries <code>MfaPending</code> with a 401 (<strong>FR-2F-10</strong>,
+<strong>NFR-17</strong>). The second-factor endpoint itself is unaffected because it is <code>[AllowAnonymous]</code> and
+takes the challenge token as a <em>body field</em>, never as a bearer credential.</p><h2 id=authorization>Authorization<a class=td-heading-self-link href=#authorization aria-label="Heading self-link"></a></h2><p>Role checks are declarative, via <code>[RoleRequirement]</code> on the action:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=na>[HttpDelete(&#34;{id:guid}/hard&#34;)]</span>
+</span></span><span class=line><span class=cl><span class=na>[RoleRequirement((int)Roles.SystemAdmin)]</span>
+</span></span></code></pre></div><p>Ownership checks — &ldquo;is this Scope Admin an owner of <em>this</em> scope?&rdquo; — cannot be expressed in an
+attribute, so they live behind <code>IScopeOwnershipChecker</code>, resolved inside the handler. A handful of
+endpoints carry <strong>no</strong> role attribute on purpose: <code>GET /api/scopes/{scopeId}/google-users/{id}</code>, for
+example, must admit the Google User themselves, whose token is <code>User</code>-role, so any attribute strong
+enough to exclude other users would exclude the actor the use case grants.</p><p>The complete matrix — every action against every role — is §7 of the
+<a href=../requirements/system-requirements-document/>System Requirements Document</a>
+, summarised per
+endpoint in the <a href=../api-reference/>API reference</a>
+.</p><h2 id=validation>Validation<a class=td-heading-self-link href=#validation aria-label="Heading self-link"></a></h2><p>Input validation is FluentValidation, one validator per command or query, registered alongside its
+handler (<strong>NFR-10</strong>). Where a command has no validator it is a documented decision, not an omission —
+the start-up registrations carry the reason inline. The two recurring reasons:</p><ul><li><strong>Nothing to validate.</strong> Every field is a typed route value already constrained by the route
+(<code>{id:guid}</code>), or the request carries no caller-supplied input at all because the subject comes
+from the bearer token.</li><li><strong>The rule needs the database.</strong> Which second factor is required depends on the stored
+<code>AppEnabled</code>/<code>EmailEnabled</code> of the person&rsquo;s configuration — a read only the handler can make.</li></ul><p>Every paginated list query <em>does</em> have a validator, so page size and filters are checked before a
+query reaches the database.</p><h2 id=persistence>Persistence<a class=td-heading-self-link href=#persistence aria-label="Heading self-link"></a></h2><p><code>AppDbContext</code> applies one <strong>entity map</strong> per entity (<code>PersonDbMap</code>, <code>ScopeDbMap</code>, …) rather than
+annotating the domain classes, keeping storage concerns out of the domain. Handlers never touch the
+context: they depend on <code>IAsyncRepository&lt;T></code> for writes and <code>IAsyncReadOnlyRepository&lt;T></code> for reads,
+the latter exposing <code>Query()</code> so a handler can compose an <code>IQueryable</code> and let the database do the
+filtering.</p><p>EF diagnostics — sensitive data logging and detailed errors — are enabled outside Production only;
+they would otherwise print parameter values including password hashes, salts, and email addresses.</p><h2 id=where-to-go-next>Where to go next<a class=td-heading-self-link href=#where-to-go-next aria-label="Heading self-link"></a></h2><ul><li><a href=../domain-model/>Domain model</a>
+— entities, relationships, and deletion cascades.</li><li><a href=../flows/>Flows</a>
+— the same pipeline traced end-to-end for specific use cases.</li><li><a href=../operations/>Operations</a>
+— migrations, health checks, logging, and rate limiting.</li></ul><div class=td-page-meta__lastmod>Last modified August 12, 2026: <a data-proofer-ignore href=https://github.com/artur-rios/heimdall-api/commit/1bcb974f158399a185f2e0511fdd03ef70824605>docs: add hugo documentation site (1bcb974)</a></div></div></main></div></div><footer class="td-footer row d-print-none"><div class=container-fluid><div class="row mx-md-2"><div class="td-footer__left col-6 col-sm-4 order-sm-1"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title="Artur Rios" aria-label="Artur Rios"><a href=https://github.com/artur-rios aria-label="Artur Rios" target=_blank rel=noopener><i class="fa fa-user"></i></a></li></ul></div><div class="td-footer__right col-6 col-sm-4 order-sm-3"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title=GitHub aria-label=GitHub><a href=https://github.com/artur-rios/heimdall-api aria-label=GitHub target=_blank rel=noopener><i class="fab fa-github"></i></a></li></ul></div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2"><span class=td-footer__copyright>&copy;
+2026
+<span class=td-footer__authors>Artur Rios</span></span><span class=td-footer__all_rights_reserved>All Rights Reserved</span></div></div></div></footer></div><script type=module async>
+  import mermaid from "https:\/\/cdn.jsdelivr.net\/npm\/mermaid@latest\/dist\/mermaid.esm.min.mjs";
+
+  (function ($) {
+    if ($('.mermaid').length == 0) {
+      mermaid.initialize({ startOnLoad: false });
+      return;
+    }
+
+    var params = {};
+
+    
+    
+    var norm = function (defaultConfig, params) {
+      var result = {};
+      for (const key in defaultConfig) {
+        const keyLower = key.toLowerCase();
+        if (defaultConfig.hasOwnProperty(key) && params.hasOwnProperty(keyLower)) {
+          if (typeof defaultConfig[key] === "object") {
+            result[key] = norm(defaultConfig[key], params[keyLower]);
+          } else {
+            result[key] = params[keyLower];
+          }
+        }
+      }
+      return result;
+    };
+
+    var settings = norm(mermaid.mermaidAPI.defaultConfig, params);
+    settings.startOnLoad = true;
+    if ($('html[data-bs-theme="dark"]').length) {
+      settings.theme = 'dark';
+    }
+    mermaid.initialize(settings);
+
+    
+    const lightDarkModeThemeChangeHandler = function (mutationsList, observer) {
+      for (const mutation of mutationsList) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-bs-theme') {
+          
+          
+          
+          location.reload();
+        }
+      }
+    };
+
+    const observer = new MutationObserver(lightDarkModeThemeChangeHandler);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-bs-theme']
+    });
+    
+
+  })(jQuery);
+</script><script src=/heimdall-api/js/main.min.a79219248190e5ca305868f1e0d29a218240acb447a9543ac7857c2b6b546946.js integrity="sha256-p5IZJIGQ5cowWGjx4NKaIYJArLRHqVQ6x4V8K2tUaUY=" crossorigin=anonymous></script><script defer src=/heimdall-api/js/click-to-copy.min.24576ff9fe9f85bb1948ecae52ce227cafce53757a3ad52301f2a79260f6b97d.js integrity="sha256-JFdv+f6fhbsZSOyuUs4ifK/OU3V6OtUjAfKnkmD2uX0=" crossorigin=anonymous></script><script src=/heimdall-api/js/tabpane-persist.js></script></body></html>

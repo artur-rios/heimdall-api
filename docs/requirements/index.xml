@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Requirements on Heimdall API</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/</link><description>Recent content in Requirements on Heimdall API</description><generator>Hugo</generator><language>en</language><atom:link href="https://artur-rios.github.io/heimdall-api/docs/requirements/index.xml" rel="self" type="application/rss+xml"/><item><title>Vision Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/vision-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/vision-document/</guid><description>&lt;h2 id="vision-document--heimdall-api"&gt;Vision Document — Heimdall API&lt;a class="td-heading-self-link" href="#vision-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-introduction"&gt;1. Introduction&lt;a class="td-heading-self-link" href="#1-introduction" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 id="11-purpose"&gt;1.1 Purpose&lt;a class="td-heading-self-link" href="#11-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;This document establishes the vision for the &lt;strong&gt;Heimdall API&lt;/strong&gt;, a .NET Web API responsible for centralized management of user identities, authentication, and authorization across multiple independent systems.&lt;/p&gt;
+&lt;h3 id="12-scope"&gt;1.2 Scope&lt;a class="td-heading-self-link" href="#12-scope" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;The Heimdall API will serve as a single source of truth for person management, application management, authentication, role-based access control, and multi-tenant scoping. It is designed to be consumed by multiple client systems, each operating within its own isolated scope. Beyond human persons, the system also registers &lt;strong&gt;Applications&lt;/strong&gt; — non-human identities representing other systems, each owned by a Scope Admin who owns the application&amp;rsquo;s scope.&lt;/p&gt;</description></item><item><title>System Requirements Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/system-requirements-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/system-requirements-document/</guid><description>&lt;h2 id="system-requirements-document--heimdall-api"&gt;System Requirements Document — Heimdall API&lt;a class="td-heading-self-link" href="#system-requirements-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-introduction"&gt;1. Introduction&lt;a class="td-heading-self-link" href="#1-introduction" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 id="11-purpose"&gt;1.1 Purpose&lt;a class="td-heading-self-link" href="#11-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;This document specifies the functional and non-functional requirements for the &lt;strong&gt;Heimdall API&lt;/strong&gt;, a .NET Web API that provides centralized person management, application management, authentication, and authorization for multiple client systems through scope-based tenancy.&lt;/p&gt;
+&lt;p&gt;The concrete technology stack — framework and language versions, first-party libraries, database, data-access, and tooling — is defined in the &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/technology-stack-document/"&gt;Technology Stack Document&lt;/a&gt;
+. This document states requirements and refers to that one for specific technologies and versions rather than restating them.&lt;/p&gt;</description></item><item><title>Use Case Specification Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/use-case-specification-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/use-case-specification-document/</guid><description>&lt;h2 id="use-case-specification-document--heimdall-api"&gt;Use Case Specification Document — Heimdall API&lt;a class="td-heading-self-link" href="#use-case-specification-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-introduction"&gt;1. Introduction&lt;a class="td-heading-self-link" href="#1-introduction" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 id="11-purpose"&gt;1.1 Purpose&lt;a class="td-heading-self-link" href="#11-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;This document specifies the use cases for the &lt;strong&gt;Heimdall API&lt;/strong&gt;. Each use case describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.&lt;/p&gt;
+&lt;p&gt;Note on identifiers: every &lt;code&gt;{id}&lt;/code&gt; / &lt;code&gt;{scopeId}&lt;/code&gt; / &lt;code&gt;{personId}&lt;/code&gt; referenced in these flows is the entity&amp;rsquo;s &lt;code&gt;PublicId&lt;/code&gt; (a GUID). Internally, each entity also has an auto-increment &lt;code&gt;bigint Id&lt;/code&gt; used only for storage and joins — it is never seen by any actor in these use cases (see the System Requirements Document, §4.0).&lt;/p&gt;</description></item><item><title>Technology Stack Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/technology-stack-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/technology-stack-document/</guid><description>&lt;h2 id="technology-stack-document--heimdall-api"&gt;Technology Stack Document — Heimdall API&lt;a class="td-heading-self-link" href="#technology-stack-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-purpose"&gt;1. Purpose&lt;a class="td-heading-self-link" href="#1-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;This document is the &lt;strong&gt;single source of truth for the technologies used to build the Heimdall API&lt;/strong&gt; — the runtime platform, language, first-party libraries, database, data-access stack, cross-cutting concerns, and testing tools, together with the version each is pinned to and the role it plays.&lt;/p&gt;
+&lt;p&gt;Every other document in this folder &lt;strong&gt;references this document&lt;/strong&gt; for technical choices instead of restating them, so that:&lt;/p&gt;</description></item><item><title>Testing Specification Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/testing-specification-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/testing-specification-document/</guid><description>&lt;h2 id="testing-specification-document--heimdall-api"&gt;Testing Specification Document — Heimdall API&lt;a class="td-heading-self-link" href="#testing-specification-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-purpose"&gt;1. Purpose&lt;a class="td-heading-self-link" href="#1-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;This document defines &lt;strong&gt;how a use case is tested once it has been implemented&lt;/strong&gt;. It is a standard
+to be followed by any human or agent that builds tests for this project. Following it guarantees
+that every use case (UC-01 … UC-35 in the &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/use-case-specification-document/"&gt;Use Case Specification Document&lt;/a&gt;
+)
+receives the same shape of testing, with the same tools, naming, and structure.&lt;/p&gt;</description></item><item><title>Development Workflow Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/development-workflow-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/development-workflow-document/</guid><description>&lt;h2 id="development-workflow-document--heimdall-api"&gt;Development Workflow Document — Heimdall API&lt;a class="td-heading-self-link" href="#development-workflow-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-purpose"&gt;1. Purpose&lt;a class="td-heading-self-link" href="#1-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;This document defines &lt;strong&gt;how a use case moves from backlog to merged&lt;/strong&gt; — the branch, the issue status
+transitions, the testing gate, and the pull request. It is the standard every contributor (human or
+agent) follows so that each use case (UC-01 … UC-29 in the
+&lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/use-case-specification-document/"&gt;Use Case Specification Document&lt;/a&gt;
+, plus later additions
+such as UC-30) is delivered the same way.&lt;/p&gt;</description></item><item><title>Operations &amp; Infrastructure Document</title><link>https://artur-rios.github.io/heimdall-api/docs/requirements/operations-infrastructure-document/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/requirements/operations-infrastructure-document/</guid><description>&lt;h2 id="operations--infrastructure-document--heimdall-api"&gt;Operations &amp;amp; Infrastructure Document — Heimdall API&lt;a class="td-heading-self-link" href="#operations--infrastructure-document--heimdall-api" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h2 id="1-introduction"&gt;1. Introduction&lt;a class="td-heading-self-link" href="#1-introduction" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 id="11-purpose"&gt;1.1 Purpose&lt;a class="td-heading-self-link" href="#11-purpose" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;This document captures &lt;strong&gt;cross-cutting platform concerns&lt;/strong&gt; for the &lt;strong&gt;Heimdall API&lt;/strong&gt; that fall outside the identity domain modeled in the &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/vision-document/"&gt;Vision Document&lt;/a&gt;
+, &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/system-requirements-document/"&gt;System Requirements Document&lt;/a&gt;
+, and &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/use-case-specification-document/"&gt;Use Case Specification Document&lt;/a&gt;
+.&lt;/p&gt;
+&lt;p&gt;It covers two areas:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The &lt;strong&gt;technical foundation&lt;/strong&gt; — the project scaffolding, solution architecture, and initial data infrastructure the domain features are built on.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Health &amp;amp; monitoring&lt;/strong&gt; — the operational endpoints used to observe that the API and its dependencies are up.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These are functional/operational capabilities of the &lt;em&gt;platform&lt;/em&gt; rather than the identity domain, so they are documented here to keep the domain documents focused while still tracking the work formally. The specific technologies and versions this platform is built on are defined once in the &lt;a href="https://artur-rios.github.io/heimdall-api/docs/requirements/technology-stack-document/"&gt;Technology Stack Document&lt;/a&gt;
+ and referenced from here rather than duplicated.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,458 @@
+<!doctype html><html itemscope itemtype=http://schema.org/WebPage lang=en class=no-js><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><link rel=canonical type=text/html href=https://artur-rios.github.io/heimdall-api/docs/flows/><link rel=alternate type=application/rss+xml href=https://artur-rios.github.io/heimdall-api/docs/flows/index.xml><meta name=robots content="noindex, nofollow"><title>Flows | Heimdall API</title><meta name=description content="Sequence diagrams for the paths that are worth tracing end to end."><meta property="og:url" content="https://artur-rios.github.io/heimdall-api/docs/flows/"><meta property="og:site_name" content="Heimdall API"><meta property="og:title" content="Flows"><meta property="og:description" content="Sequence diagrams for the paths that are worth tracing end to end."><meta property="og:locale" content="en"><meta property="og:type" content="website"><meta itemprop=name content="Flows"><meta itemprop=description content="Sequence diagrams for the paths that are worth tracing end to end."><meta itemprop=dateModified content="2026-08-12T09:34:42-03:00"><meta itemprop=wordCount content="172"><meta name=twitter:card content="summary"><meta name=twitter:title content="Flows"><meta name=twitter:description content="Sequence diagrams for the paths that are worth tracing end to end."><link rel=preload href=/heimdall-api/scss/main.min.550997bd630e34cadce28fffab3bdd879c0f8bd313125cf4fd08902328077df9.css as=style integrity="sha256-VQmXvWMONMrc4o//qzvdh5wPi9MTElz0/QiQIygHffk=" crossorigin=anonymous><link href=/heimdall-api/scss/main.min.550997bd630e34cadce28fffab3bdd879c0f8bd313125cf4fd08902328077df9.css rel=stylesheet integrity="sha256-VQmXvWMONMrc4o//qzvdh5wPi9MTElz0/QiQIygHffk=" crossorigin=anonymous><script src=https://code.jquery.com/jquery-3.7.1.min.js integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin=anonymous></script><script defer src=https://unpkg.com/lunr@2.3.9/lunr.min.js integrity=sha384-203J0SNzyqHby3iU6hzvzltrWi/M41wOP5Gu+BiJMz5nwKykbkUx8Kp7iti0Lpli crossorigin=anonymous></script></head><body class=td-section><header><nav class="td-navbar js-navbar-scroll"><div class="td-navbar-container container-fluid flex-column flex-md-row"><a class=navbar-brand href=/heimdall-api/><span class="navbar-brand__logo navbar-logo"></span><span class=navbar-brand__name>Heimdall API</span></a><div class="td-navbar__main td-navbar-nav-scroll td-navbar-nav-scroll--indicator" id=main_navbar><div class="scroll-indicator scroll-left"></div><ul class=navbar-nav><li class=nav-item><a class=nav-link href=/heimdall-api/docs/><span>Documentation</span></a></li><li class=nav-item><a class=nav-link href=/heimdall-api/docs/requirements/><span>Requirements</span></a></li><li class=nav-item><a class=nav-link href=https://github.com/artur-rios/heimdall-api target=_blank rel=noopener><span>GitHub</span></a></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.7ccbc43640cb901b3a19dc6fcfd2239d.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><div class=td-content><div class="pageinfo pageinfo-primary d-print-none"><p>This is the multi-page printable view of this section.
+<a href=# onclick="return print(),!1">Click here to print</a>.</p><p><a href=/heimdall-api/docs/flows/>Return to the regular view of this page</a>.</p></div><h1 class=title>Flows</h1><div class=lead>Sequence diagrams for the paths that are worth tracing end to end.</div><ul><li>1: <a href=#pg-94aee71b0a3d04d3ca9aeeab2d293e40>Login</a></li><li>2: <a href=#pg-65bcf283201edc503f290d206771aa6d>Two-factor authentication</a></li><li>3: <a href=#pg-0e60ae31ec4ff6e69af4d96dea8003e1>Google Sign-In</a></li><li>4: <a href=#pg-6c7fd6f1dba25ea29cf2d8d086832d27>Person onboarding</a></li><li>5: <a href=#pg-7beed924441b8b278bcc9607c9cec1c2>Password recovery</a></li><li>6: <a href=#pg-1e4d2a60edfaeaa182f469561228775e>Scope permission claims</a></li><li>7: <a href=#pg-371cc5e6a0a7743c509a176db5f11a6b>Audit logging</a></li></ul><div class=content><p>Most endpoints are a straight line: validate, read, write, respond. The flows collected here are the
+ones that are not — they cross services, branch on stored state, or deliberately answer the same way
+down several different paths.</p><table><thead><tr><th>Flow</th><th>Why it is worth tracing</th></tr></thead><tbody><tr><td><a href=login/>Login</a></td><td>Five distinct failure causes, one answer — and a sixth outcome that is not a token at all.</td></tr><tr><td><a href=two-factor/>Two-factor authentication</a></td><td>Setup, confirmation, and the challenge-token round trip that completes a gated login.</td></tr><tr><td><a href=google-sign-in/>Google Sign-In</a></td><td>Verification before anything else, then sign-up or sign-in down the same endpoint.</td></tr><tr><td><a href=person-onboarding/>Person onboarding</a></td><td>Creation, the verification email, and the resend path — including what happens with no mail credentials.</td></tr><tr><td><a href=password-recovery/>Password recovery</a></td><td>An endpoint whose whole design is about what it must <em>not</em> reveal.</td></tr><tr><td><a href=scope-permission-claims/>Scope permission claims</a></td><td>How a permission defined in a scope ends up inside a caller&rsquo;s JWT.</td></tr><tr><td><a href=audit-logging/>Audit logging</a></td><td>One decorator, every write, no handler changes.</td></tr></tbody></table><p>Each page cites the use case (<code>UC-…</code>) and alternative flows (<code>AF-…</code>) it implements. The authoritative
+descriptions live in the
+<a href=../requirements/use-case-specification-document/>Use Case Specification Document</a>
+.</p></div></div><div class=td-content style=page-break-before:always><h1 id=pg-94aee71b0a3d04d3ca9aeeab2d293e40>1 - Login</h1><div class=lead>UC-11 — password authentication, the uniform rejection, and the branch into a two-factor challenge.</div><p><code>POST /api/auth/login</code> — anonymous, rate-limited.</p><h2 id=the-sequence>The sequence<a class=td-heading-self-link href=#the-sequence aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor C as Client
+    participant AC as AuthController
+    participant M as CommandMediator
+    participant AH as AuditingCommandHandler
+    participant H as LoginCommandHandler
+    participant V as LoginCommandValidator
+    participant PR as Person repository
+    participant TS as PersonAuthTokenService
+    participant TI as JwtAuthTokenIssuer
+    participant DB as PostgreSQL
+
+    C-&gt;&gt;AC: POST /api/auth/login {email, password, scopeId?}
+    AC-&gt;&gt;M: ExecuteCommandAsync(LoginCommand)
+    M-&gt;&gt;AH: HandleAsync
+    AH-&gt;&gt;H: HandleAsync
+
+    H-&gt;&gt;V: ValidateAsync
+    alt invalid shape (AF-11f)
+        V--&gt;&gt;H: errors
+        H--&gt;&gt;C: 400 validation errors
+    end
+
+    H-&gt;&gt;PR: find by the lookup the role implies
+    PR-&gt;&gt;DB: SELECT person &#43; role &#43; scope navigations
+    DB--&gt;&gt;PR: person or null
+    Note over H: AF-11a unknown · AF-11b wrong password&lt;br/&gt;AF-11c deleted person · AF-11d/e scope not eligible&lt;br/&gt;→ all answer &#34;invalid credentials&#34;
+
+    H-&gt;&gt;H: Hash.TextMatches(password, hash, salt)
+    H-&gt;&gt;TS: TryBuildSubject(person)
+
+    H-&gt;&gt;DB: SELECT active TwoFactorAuth for person
+    alt 2FA active (AF-11g)
+        H-&gt;&gt;H: retire live email codes, issue &#43; mail a fresh one
+        H-&gt;&gt;H: issue challenge token (MfaPending, ~5 min)
+        H--&gt;&gt;C: 200 {requiresTwoFactor, challengeToken, availableMethods}
+    else no 2FA
+        H-&gt;&gt;TS: IssueAsync(subject)
+        TS-&gt;&gt;TI: IssueAsync
+        TI-&gt;&gt;DB: SELECT flagged scope permissions
+        TI--&gt;&gt;TS: signed JWT &#43; expiry
+        H--&gt;&gt;AH: DataOutput{token, expiresAt}
+        AH-&gt;&gt;DB: INSERT AuditLog(LoginCommand)
+        AH--&gt;&gt;C: 200 {token, expiresAt}
+    end</pre><h2 id=which-lookup-and-why>Which lookup, and why<a class=td-heading-self-link href=#which-lookup-and-why aria-label="Heading self-link"></a></h2><p><code>Person</code> has no scope column, so <em>how</em> the person is found depends on the role being sought:</p><table><thead><tr><th>Role</th><th>Found by</th></tr></thead><tbody><tr><td><code>User</code></td><td>Email <strong>within the scope named by the request</strong> — the same address may exist as a User in several scopes.</td></tr><tr><td><code>ScopeAdmin</code> / <code>SystemAdmin</code></td><td>Email alone — those addresses are unique system-wide.</td></tr></tbody></table><p>The lookup deliberately omits an <code>!IsDeleted</code> filter. AF-11c exists to <em>reject</em> a logically deleted
+person, so the person has to be found before they can be rejected.</p><h2 id=one-answer-for-five-causes>One answer for five causes<a class=td-heading-self-link href=#one-answer-for-five-causes aria-label="Heading self-link"></a></h2><p>AF-11a (unknown email), AF-11b (wrong password), AF-11c (deleted person), AF-11d (a <code>User</code> whose
+scope is logically deleted) and AF-11e (a <code>ScopeAdmin</code> with no live owned scope) all return the same
+<code>invalid credentials</code> error.</p><p>The checks still run in the specification&rsquo;s order, so the code reads against UC-11 line by line —
+only the <em>answer</em> is uniform. An anonymous endpoint that distinguished them would be a directory of
+which addresses are registered and which accounts still exist.</p><h2 id=scope-eligibility>Scope eligibility<a class=td-heading-self-link href=#scope-eligibility aria-label="Heading self-link"></a></h2><p><code>PersonAuthTokenService.TryBuildSubject</code> is the single place the eligibility rules live, shared with
+<a href=../two-factor/>two-factor verification</a>
+so a gated login ends exactly like a direct one:</p><pre class=mermaid>flowchart LR
+    P[Person] --&gt; R{Role}
+    R --&gt;|User| U{Their scope deleted?}
+    U --&gt;|Yes| X[Not eligible — AF-11d]
+    U --&gt;|No| T[&#34;Subject: personId, roleId,&lt;br/&gt;scopeId&#34;]
+    R --&gt;|ScopeAdmin| A{Any live owned scope?}
+    A --&gt;|No| X2[Not eligible — AF-11e]
+    A --&gt;|Yes| T2[&#34;Subject: personId, roleId,&lt;br/&gt;ownedScopeIds&#34;]
+    R --&gt;|SystemAdmin| T3[&#34;Subject: personId, roleId&lt;br/&gt;— no scope claims&#34;]</pre><h2 id=what-the-token-carries>What the token carries<a class=td-heading-self-link href=#what-the-token-carries aria-label="Heading self-link"></a></h2><p>Claims are written by <code>IdentityUserMapper</code>, the same class that reads them back on validation:</p><table><thead><tr><th>Claim</th><th>Present for</th></tr></thead><tbody><tr><td><code>id</code></td><td>Everyone — the person&rsquo;s <code>PublicId</code></td></tr><tr><td><code>roleId</code></td><td>Everyone</td></tr><tr><td><code>scopeId</code></td><td><code>User</code> only</td></tr><tr><td><code>ownedScopeIds</code></td><td><code>ScopeAdmin</code> only, comma-separated</td></tr><tr><td><code>scopePermissions</code></td><td>Anyone acting within a scope that has flagged permissions (<a href=../scope-permission-claims/>details</a>
+)</td></tr><tr><td><code>mfaPending</code></td><td><strong>Challenge tokens only</strong></td></tr></tbody></table><p>The claims are omitted rather than emitted empty, so a token never suggests a scope association the
+person does not have. Every value is a <code>PublicId</code> — an internal id never reaches a token (<strong>NFR-15</strong>).</p><h2 id=the-2fa-branch>The 2FA branch<a class=td-heading-self-link href=#the-2fa-branch aria-label="Heading self-link"></a></h2><p>When the person has an <strong>active</strong> two-factor configuration, login does not return an authentication
+token at all. It returns a short-lived <strong>challenge token</strong> carrying <code>mfaPending</code>, which
+<code>MfaPendingGuardFilter</code> rejects at every endpoint except <code>POST /api/auth/2fa/verify</code>.</p><p>If the Email method is enabled, login retires every live email code for that configuration and mails
+a fresh one first — so only the code mailed <em>for this attempt</em> can complete it.</p><p>Continue at <a href=../two-factor/>Two-factor authentication</a>
+.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-65bcf283201edc503f290d206771aa6d>2 - Two-factor authentication</h1><div class=lead>UC-36 to UC-40 — setup, confirmation, the challenge-token round trip, and recovery codes.</div><p>Two-factor authentication is opt-in, per person, and available to <code>User</code>, <code>ScopeAdmin</code>, and
+<code>SystemAdmin</code> alike. It is <strong>not</strong> available to Google Users, who are already subject to Google&rsquo;s own
+account security.</p><p>Every 2FA endpoint acts on the caller themselves — the person comes from the bearer token, never from
+a path or body — so no caller can reach another person&rsquo;s configuration.</p><h2 id=the-lifecycle>The lifecycle<a class=td-heading-self-link href=#the-lifecycle aria-label="Heading self-link"></a></h2><pre class=mermaid>stateDiagram-v2
+    [*] --&gt; None: no TwoFactorAuth row
+    None --&gt; Pending: UC-36 enable&lt;br/&gt;(row created, IsActive = false)
+    Pending --&gt; Pending: UC-36 again&lt;br/&gt;(AF-36d — selection overwritten)
+    Pending --&gt; Active: UC-37 confirm&lt;br/&gt;(every selected method proven)
+    Active --&gt; Active: UC-40 regenerate&lt;br/&gt;(ten fresh recovery codes)
+    Active --&gt; None: UC-39 disable
+    Active --&gt; Active: UC-38 verify&lt;br/&gt;(completes a gated login)</pre><h2 id=setup--uc-36-and-uc-37>Setup — UC-36 and UC-37<a class=td-heading-self-link href=#setup--uc-36-and-uc-37 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor P as Person (authenticated)
+    participant AC as AuthController
+    participant EH as EnableTwoFactorAuthCommandHandler
+    participant CH as ConfirmTwoFactorAuthCommandHandler
+    participant TP as ITotpSecretProtector
+    participant ES as ITwoFactorEmailSender
+    participant DB as PostgreSQL
+
+    P-&gt;&gt;AC: POST /api/auth/2fa/enable {app?, email?}
+    AC-&gt;&gt;EH: HandleAsync
+    EH-&gt;&gt;DB: SELECT TwoFactorAuth for caller
+    alt already active (AF-36a)
+        EH--&gt;&gt;P: rejected — configuration untouched
+    end
+    EH-&gt;&gt;DB: UPSERT pending row (IsActive = false)
+    Note over EH,DB: AF-36d — re-initiating overwrites&lt;br/&gt;the pending selection entirely
+
+    opt App selected
+        EH-&gt;&gt;TP: Protect(fresh TOTP secret)
+        TP--&gt;&gt;EH: encrypted secret
+        EH-&gt;&gt;DB: store TotpSecretEncrypted
+        EH--&gt;&gt;P: secret returned once, for enrolment
+    end
+    opt Email selected
+        EH-&gt;&gt;DB: retire outstanding codes, INSERT fresh 6-digit code (hash &#43; salt, 10 min)
+        EH-&gt;&gt;ES: SendAsync(email, code)
+    end
+
+    P-&gt;&gt;AC: POST /api/auth/2fa/confirm {appCode?, emailCode?}
+    AC-&gt;&gt;CH: HandleAsync
+    CH-&gt;&gt;DB: SELECT pending row
+    CH-&gt;&gt;CH: check appCode if AppEnabled (AF-37b)
+    CH-&gt;&gt;CH: check emailCode if EmailEnabled (AF-37c)
+    CH-&gt;&gt;DB: mark the confirming email code Used
+    CH-&gt;&gt;DB: INSERT 10 recovery codes (hashes only)
+    CH-&gt;&gt;DB: UPDATE IsActive = true
+    CH--&gt;&gt;P: 200 — ten recovery codes, shown exactly once</pre><p><code>IsActive</code> is what separates a <em>confirmed</em> configuration from one still pending. A row with
+<code>IsActive = false</code> means UC-36 created it and UC-37 has not yet activated it — and only an active
+configuration gates a login.</p><p>Confirmation requires proof of <strong>every</strong> method selected at setup: an <code>appCode</code> if <code>AppEnabled</code>, an
+<code>emailCode</code> if <code>EmailEnabled</code>, both if both.</p><h2 id=completing-a-gated-login--uc-38>Completing a gated login — UC-38<a class=td-heading-self-link href=#completing-a-gated-login--uc-38 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor C as Client
+    participant AC as AuthController
+    participant VH as VerifyTwoFactorAuthCommandHandler
+    participant CT as JwtTwoFactorChallengeTokenIssuer
+    participant FV as ITwoFactorFactorVerifier
+    participant TS as PersonAuthTokenService
+    participant DB as PostgreSQL
+
+    Note over C: login answered requiresTwoFactor&lt;br/&gt;with a challenge token
+    C-&gt;&gt;AC: POST /api/auth/2fa/verify {challengeToken, code | recoveryCode}
+    AC-&gt;&gt;VH: HandleAsync
+
+    VH-&gt;&gt;CT: validate signature, expiry, mfaPending claim
+    alt invalid (AF-38a)
+        CT--&gt;&gt;VH: rejected
+        VH--&gt;&gt;C: 401 challenge invalid
+    end
+
+    VH-&gt;&gt;DB: SELECT person &#43; active TwoFactorAuth
+    VH-&gt;&gt;FV: TOTP? live email code? unused recovery code?
+    alt none matches (AF-38b / AF-38c)
+        FV--&gt;&gt;VH: no
+        VH--&gt;&gt;C: 401 factor invalid
+    end
+
+    VH-&gt;&gt;TS: TryBuildSubject(person)
+    alt scope no longer eligible
+        VH--&gt;&gt;C: 401 scope no longer eligible
+    end
+
+    VH-&gt;&gt;DB: mark the redeemed recovery code Used &#43; UsedAt
+    VH-&gt;&gt;DB: mark the redeemed email code Used
+    VH-&gt;&gt;TS: IssueAsync(subject)
+    TS--&gt;&gt;VH: full authentication token
+    VH--&gt;&gt;C: 200 {token, expiresAt}</pre><p>Three details in that diagram carry real weight:</p><p><strong>AF-38b and AF-38c answer identically.</strong> A wrong code and an already-used recovery code both return
+<code>factor invalid</code>, 401 — the same reasoning that collapses UC-11&rsquo;s five rejections into one.</p><p><strong>Scope ineligibility gets its own message.</strong> If the challenge token and the second factor were both
+valid but the person&rsquo;s scope eligibility no longer holds, the answer is
+<code>scope no longer eligible</code>, not <code>challenge invalid</code>. Collapsing that case would misdescribe what
+actually happened — nothing the caller supplied was wrong.</p><p><strong>Nothing can be replayed.</strong> The redeemed recovery code and the redeemed email code are both marked
+used before the token is issued.</p><p>The final token is issued by <code>PersonAuthTokenService</code> — the same service a direct login uses — so a
+2FA-gated login ends with exactly the token a direct one would have produced.</p><h2 id=why-the-guard-filter-never-fires-here>Why the guard filter never fires here<a class=td-heading-self-link href=#why-the-guard-filter-never-fires-here aria-label="Heading self-link"></a></h2><p><code>MfaPendingGuardFilter</code> runs on every controller action and rejects any identity carrying
+<code>MfaPending</code>. It never trips on <code>POST /api/auth/2fa/verify</code> because that endpoint is
+<code>[AllowAnonymous]</code> and reads the challenge token as a <strong>body field</strong>, not as an
+<code>Authorization: Bearer</code> credential — so the pipeline never attaches an MFA-pending identity for that
+call. The filter only ever fires when a challenge token is misused as a bearer token somewhere
+else — exactly the case <strong>FR-2F-10</strong> wants blocked.</p><h2 id=disable-and-regenerate--uc-39-and-uc-40>Disable and regenerate — UC-39 and UC-40<a class=td-heading-self-link href=#disable-and-regenerate--uc-39-and-uc-40 aria-label="Heading self-link"></a></h2><p>Both require a valid second factor as well as authentication, and both reuse
+<code>ITwoFactorFactorVerifier</code>, so &ldquo;match against TOTP, or the current email code, or an unused recovery
+code&rdquo; is implemented in exactly one place.</p><table><thead><tr><th></th><th>UC-39 disable</th><th>UC-40 regenerate</th></tr></thead><tbody><tr><td>Requires</td><td>Bearer token + second factor</td><td>Bearer token + second factor</td></tr><tr><td>Effect</td><td>Removes the configuration</td><td>Replaces all ten recovery codes</td></tr><tr><td>Response</td><td>Confirmation</td><td>The ten new codes, shown once</td></tr></tbody></table><h2 id=storage-of-secrets>Storage of secrets<a class=td-heading-self-link href=#storage-of-secrets aria-label="Heading self-link"></a></h2><table><thead><tr><th></th><th>Stored as</th><th>Returned</th></tr></thead><tbody><tr><td>TOTP secret</td><td>Encrypted at rest via ASP.NET Core Data Protection</td><td>Once, at provisioning</td></tr><tr><td>Recovery codes</td><td>Hash only — high-entropy random text needs no per-code salt</td><td>Once, when generated</td></tr><tr><td>Email codes</td><td>Hash <strong>+ per-code salt</strong> — only 10⁶ possible values</td><td>Never; mailed</td></tr></tbody></table><p>That is <strong>NFR-16</strong>. See <a href=../../domain-model/#secrets-at-rest>Domain model</a>
+.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-0e60ae31ec4ff6e69af4d96dea8003e1>3 - Google Sign-In</h1><div class=lead>UC-24 to UC-29 — enabling the feature per scope, sign-up and sign-in down one endpoint, and administering Google Users.</div><p>Google Sign-In is <strong>off by default</strong> and enabled per scope. A Google identity is always
+<code>User</code>-equivalent — it can never create or authenticate a Scope Admin or System Admin, whatever the
+Google account is (<strong>FR-GO-04</strong>).</p><h2 id=enabling-it--two-independent-switches>Enabling it — two independent switches<a class=td-heading-self-link href=#enabling-it--two-independent-switches aria-label="Heading self-link"></a></h2><pre class=mermaid>flowchart LR
+    A[&#34;PUT /api/scopes/{id}/google-signin&lt;br/&gt;UC-24 — per scope&#34;] --&gt; C{Both true?}
+    B[&#34;HEIMDALL_GOOGLE_CLIENT_IDS&lt;br/&gt;— per deployment&#34;] --&gt; C
+    C --&gt;|Yes| D[Google sign-in works]
+    C --&gt;|Scope off| E[&#34;403 — sign-in unavailable&#34;]
+    C --&gt;|No client IDs| F[&#34;401 — every token refused&#34;]</pre><p>With no client IDs configured, the API registers a verifier that <strong>refuses every token</strong> and warns
+once at start-up. This is not a convenience fallback: verification needs an audience to check against
+(<strong>NFR-13</strong>), and a verifier with no configured client could only reject everything or trust
+everything — so it rejects. Every other endpoint keeps working.</p><h2 id=sign-up-and-sign-in--uc-25>Sign-up and sign-in — UC-25<a class=td-heading-self-link href=#sign-up-and-sign-in--uc-25 aria-label="Heading self-link"></a></h2><p>One endpoint, <code>POST /api/auth/google</code>, does both. The first call for a given Google account in a
+given scope creates the Google User; every later one authenticates it.</p><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor C as Client
+    participant AC as AuthController
+    participant H as GoogleSignInCommandHandler
+    participant GV as IGoogleIdTokenVerifier
+    participant G as Google
+    participant TI as JwtAuthTokenIssuer
+    participant DB as PostgreSQL
+
+    C-&gt;&gt;AC: POST /api/auth/google {idToken, scopeId}
+    AC-&gt;&gt;H: HandleAsync
+
+    H-&gt;&gt;GV: VerifyAsync(idToken)
+    GV-&gt;&gt;G: signature, issuer, audience, expiry (NFR-13)
+    alt unverifiable or absent (AF-25a)
+        GV--&gt;&gt;H: null
+        H--&gt;&gt;C: 401 google authentication failed
+    end
+    G--&gt;&gt;GV: payload {sub, email, email_verified, name, picture}
+
+    H-&gt;&gt;DB: SELECT scope WHERE PublicId = scopeId&lt;br/&gt;AND NOT IsDeleted AND GoogleSignInEnabled
+    alt missing, deleted, or disabled (AF-25b)
+        H--&gt;&gt;C: 403 google sign-in unavailable
+    end
+
+    H-&gt;&gt;DB: SELECT GoogleUser WHERE ScopeId AND GoogleId = sub
+    alt not found — sign-up (FR-GO-09)
+        H-&gt;&gt;DB: is the email free among the scope&#39;s Google Users AND Users?
+        alt taken (AF-25c)
+            H--&gt;&gt;C: 409 email already registered
+        end
+        H-&gt;&gt;DB: INSERT GoogleUser from the verified claims
+    else found but deleted (AF-25d)
+        H--&gt;&gt;C: 401 google authentication failed
+    end
+
+    H-&gt;&gt;TI: IssueAsync(googleUser.PublicId, User role, scope.PublicId)
+    TI-&gt;&gt;DB: SELECT flagged scope permissions
+    TI--&gt;&gt;H: signed JWT &#43; expiry
+    H--&gt;&gt;C: 200 {token, expiresAt}</pre><p><strong>Verification comes first, before the scope is even read.</strong> An unverified caller learns nothing
+about which scopes exist. It is also what answers a request that omitted the token entirely — which
+is why UC-25 needs no 400 flow at all.</p><p><strong>AF-25b answers alike for three different situations</strong> — the scope is missing, logically deleted, or
+has the feature switched off. The alternative flow names all three as one outcome, so one filter
+answers for all three.</p><p><strong>AF-25c is named separately, on purpose.</strong> Being told the address is already registered reveals
+something — but the caller has just proved to Google that the address is theirs, so it tells them
+only about themselves. Uniqueness is checked jointly against the scope&rsquo;s Google Users <strong>and</strong> its
+password Users.</p><h2 id=signing-out--uc-26>Signing out — UC-26<a class=td-heading-self-link href=#signing-out--uc-26 aria-label="Heading self-link"></a></h2><p><code>POST /api/auth/google/sign-out</code> revokes nothing: tokens are stateless signed JWTs with an expiry.
+What the endpoint does is <em>check</em> — it confirms the caller still holds a live Google session and then
+answers the success that tells the client to drop the token.</p><p>That check is the substance. Authentication reads no database per request, so a token outlives the
+account it names; one naming a deleted or unknown Google User is refused here.</p><h2 id=administering-google-users--uc-27-to-uc-29>Administering Google Users — UC-27 to UC-29<a class=td-heading-self-link href=#administering-google-users--uc-27-to-uc-29 aria-label="Heading self-link"></a></h2><p>All four endpoints are nested under the scope the Google User belongs to (<strong>FR-GO-06</strong>), and each
+refuses a Google User reached through the wrong scope.</p><table><thead><tr><th>Endpoint</th><th>Use case</th><th>Who</th></tr></thead><tbody><tr><td><code>GET /api/scopes/{scopeId}/google-users</code></td><td>UC-27</td><td>System Admin, or an owner of the scope</td></tr><tr><td><code>GET /api/scopes/{scopeId}/google-users/{id}</code></td><td>UC-27</td><td>The above, <strong>or the Google User themselves</strong></td></tr><tr><td><code>DELETE /api/scopes/{scopeId}/google-users/{id}</code></td><td>UC-28</td><td>System Admin, or an owner of the scope</td></tr><tr><td><code>DELETE /api/scopes/{scopeId}/google-users/{id}/hard</code></td><td>UC-29</td><td>System Admin only</td></tr></tbody></table><p>The by-id read is the one that admits a Google User, and it is why that endpoint carries no
+<code>[RoleRequirement]</code>: a Google User&rsquo;s token is <code>User</code>-role, so anything strong enough to keep other
+Users out would lock out the actor UC-27 grants. The listing admits none of them.</p><p>The logical delete is <strong>idempotent</strong> — repeating it answers 200 with <code>alreadyDeleted: true</code> and
+writes nothing — and it is honoured everywhere it matters: a deleted account cannot sign in, cannot
+sign out, and is absent from reads unless <code>includeDeleted=true</code>. The hard delete has no idempotent
+path; a second call is a 404. Neither cascades, because a Google User owns nothing.</p><h2 id=testing-without-google>Testing without Google<a class=td-heading-self-link href=#testing-without-google aria-label="Heading self-link"></a></h2><p>A third verifier exists for the functional suite, which cannot override a DI registration and must
+still reach the flows behind verification. It is guarded twice — never in Production, and never
+without an explicitly set signing secret — and is checked <em>before</em> the real verifier so a test
+environment cannot accidentally run both.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-6c7fd6f1dba25ea29cf2d8d086832d27>4 - Person onboarding</h1><div class=lead>UC-06, UC-14 and UC-15 — creating a person, the verification email, and replacing a lost link.</div><p>Creating a person is one use case (UC-06) with <strong>three paths</strong>, decided by which endpoint is called
+rather than by a field in the body.</p><table><thead><tr><th>Endpoint</th><th>Path</th><th>Creates</th></tr></thead><tbody><tr><td><code>POST /api/persons</code></td><td>b</td><td>A <code>ScopeAdmin</code> or <code>SystemAdmin</code> with no scope</td></tr><tr><td><code>POST /api/scopes/{scopeId}/persons</code></td><td>a</td><td>A <code>User</code> in that scope, with a <code>SCOPE_USER</code> row</td></tr><tr><td><code>POST /api/scopes/{scopeId}/owners</code></td><td>c</td><td>A brand-new <code>ScopeAdmin</code> directly as a co-owner, with a <code>SCOPE_OWNER</code> row</td></tr></tbody></table><h2 id=creating-a-user--uc-06-path-a>Creating a User — UC-06 path a<a class=td-heading-self-link href=#creating-a-user--uc-06-path-a aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor A as Actor (SystemAdmin or ScopeAdmin)
+    participant PC as PersonController
+    participant AH as AuditingCommandHandler
+    participant H as CreateUserCommandHandler
+    participant OC as IScopeOwnershipChecker
+    participant EV as IEmailVerificationService
+    participant ES as IEmailVerificationSender
+    participant DB as PostgreSQL
+
+    A-&gt;&gt;PC: POST /api/scopes/{scopeId}/persons {name, email, password}
+    PC-&gt;&gt;AH: ExecuteCommandAsync
+    AH-&gt;&gt;H: HandleAsync
+
+    H-&gt;&gt;H: validate input (AF-06d)
+    H-&gt;&gt;DB: SELECT scope — must exist and not be deleted (AF-06b)
+    H-&gt;&gt;OC: does the actor own this scope? (AF-06e)
+    Note over OC: a SystemAdmin bypasses this check
+    H-&gt;&gt;DB: is the email free among the scope&#39;s Users? (AF-06a, case-insensitive)
+    H-&gt;&gt;DB: INSERT person (Argon2id hash &#43; salt) &#43; SCOPE_USER row
+
+    H-&gt;&gt;EV: IssueAndSendAsync(person)
+    EV-&gt;&gt;DB: INSERT EmailVerificationToken (48 chars, time-limited)
+    EV-&gt;&gt;ES: SendAsync(email, token)
+    Note over EV,ES: a send failure does not undo the person —&lt;br/&gt;the token is persisted and can be re-sent (UC-15)
+
+    H--&gt;&gt;AH: DataOutput{person}
+    AH-&gt;&gt;DB: INSERT AuditLog(CreateUserCommand)
+    AH--&gt;&gt;A: 201 person created</pre><p>Email uniqueness is scoped to the role: a <code>User</code>&rsquo;s address must be unique <strong>within their scope</strong>
+(compared case-insensitively, <code>LOWER()</code> in SQL), while a <code>ScopeAdmin</code>&rsquo;s or <code>SystemAdmin</code>&rsquo;s is unique
+system-wide. The same address can therefore be a User in several different scopes — which is exactly
+why login needs a scope identifier to find a User.</p><h2 id=verifying-the-address--uc-14>Verifying the address — UC-14<a class=td-heading-self-link href=#verifying-the-address--uc-14 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor P as Person
+    participant FE as Front-end verification page
+    participant AC as AuthController
+    participant H as VerifyEmailCommandHandler
+    participant DB as PostgreSQL
+
+    Note over P: opens the emailed link&lt;br/&gt;?token=…
+    P-&gt;&gt;FE: click link
+    FE-&gt;&gt;AC: POST /api/auth/verify-email {token}
+    AC-&gt;&gt;H: HandleAsync
+    H-&gt;&gt;DB: SELECT token
+    alt unknown (AF-14c) / expired (AF-14a) / spent (AF-14b)
+        H--&gt;&gt;FE: 400 — each rejection named distinctly
+    end
+    H-&gt;&gt;DB: UPDATE person.EmailVerified = true
+    H-&gt;&gt;DB: mark every live token for this person Used
+    H--&gt;&gt;FE: 200</pre><p>The endpoint is <strong>anonymous</strong> — someone arriving from a link in their mail client holds no token of
+any other kind.</p><p>Spending a token retires every other live token the person holds of that kind, so a verification link
+left in an inbox stops working once the address is verified. An address that was <strong>already</strong> verified
+answers 200 rather than an error: UC-14 defines no alternative flow for it, and the caller&rsquo;s intent
+has been satisfied either way.</p><h2 id=replacing-a-lost-link--uc-15>Replacing a lost link — UC-15<a class=td-heading-self-link href=#replacing-a-lost-link--uc-15 aria-label="Heading self-link"></a></h2><p><code>POST /api/auth/resend-verification</code> is <strong>authenticated and takes no body</strong>. The person is read from
+the bearer token, so a caller can only ever ask for their own link.</p><pre class=mermaid>flowchart TD
+    A[POST /api/auth/resend-verification&lt;br/&gt;bearer token only] --&gt; B{Already verified?}
+    B --&gt;|Yes| C[&#34;400 — AF-15a&lt;br/&gt;a link mailed to it could do nothing&#34;]
+    B --&gt;|No| D[Retire outstanding tokens]
+    D --&gt; E[Issue &#43; mail a fresh one]
+    E --&gt; F[200 — only the newest link works]</pre><p>Note the asymmetry with UC-14: verifying an already-verified address answers <strong>200</strong>, but <em>resending</em>
+to one answers <strong>400</strong>. Verification&rsquo;s job is done either way; a resend would mail a link that could
+do nothing when clicked.</p><h2 id=without-mail-credentials>Without mail credentials<a class=td-heading-self-link href=#without-mail-credentials aria-label="Heading self-link"></a></h2><p>With Mailgun unconfigured, the API registers logging senders instead: each token is <strong>written to the
+log</strong> rather than emailed, with a single warning at start-up. That keeps local runs and the functional
+suite working without credentials and off the network.</p><p>It is a supported mode, not a broken one — outside Production. An unconfigured <strong>Production</strong>
+deployment refuses to start outright, because the fallback would print verification tokens, password
+reset tokens, and 2FA codes in plaintext to the logs, which is an account-takeover primitive for
+anyone who can read them.</p><p>Both emails carry a link built from <code>HEIMDALL_EMAIL_VERIFICATION_URL</code> /
+<code>HEIMDALL_PASSWORD_RESET_URL</code>, with the token appended as a <code>token</code> query parameter. If no link is
+configured the email carries the bare token instead, which still works — the link is only a
+convenience wrapper around it.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-7beed924441b8b278bcc9607c9cec1c2>5 - Password recovery</h1><div class=lead>UC-12 and UC-13 — an endpoint whose whole design is about what it must not reveal.</div><p>Two anonymous, rate-limited endpoints: one asks for a link, the other spends it.</p><h2 id=requesting-a-link--uc-12>Requesting a link — UC-12<a class=td-heading-self-link href=#requesting-a-link--uc-12 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor C as Anonymous caller
+    participant AC as AuthController
+    participant H as PasswordRecoveryCommandHandler
+    participant PS as IPasswordResetService
+    participant S as IPasswordResetSender
+    participant DB as PostgreSQL
+
+    C-&gt;&gt;AC: POST /api/auth/password-recovery {email, scopeId?}
+    AC-&gt;&gt;H: HandleAsync
+    H-&gt;&gt;H: validate input shape (NFR-10)
+    Note right of H: the only rejection this endpoint ever issues
+
+    H-&gt;&gt;DB: find by the lookup the role implies
+    alt person found and eligible
+        H-&gt;&gt;PS: issue token
+        PS-&gt;&gt;DB: INSERT PasswordResetToken (time-limited)
+        PS-&gt;&gt;S: SendAsync(email, token)
+    else nobody, deleted person, or deleted scope (AF-12a)
+        Note over H,DB: no row written, no email sent
+    end
+    H--&gt;&gt;C: 200 — identical response either way</pre><p><strong>Every path returns the same success output.</strong> AF-12a — the address belongs to nobody — is not an
+error flow but the <em>absence</em> of one: the handler issues no token and answers exactly as it would
+have. A logically deleted person, and a <code>User</code> whose scope is deleted, are treated the same way.</p><p>The only thing that distinguishes the two paths is a row that does not get written and an email that
+consequently never arrives — neither of which is visible to the caller.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>An outage must not become an oracle</div><p>A Mailgun failure here is <strong>logged, never surfaced</strong>. If a delivery error turned into a 500, the
+difference between &ldquo;your guess was a real account&rdquo; and &ldquo;it wasn&rsquo;t&rdquo; would be an HTTP status code.</p></div><h2 id=setting-the-new-password--uc-13>Setting the new password — UC-13<a class=td-heading-self-link href=#setting-the-new-password--uc-13 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor P as Person
+    participant FE as Front-end reset page
+    participant AC as AuthController
+    participant H as ResetPasswordCommandHandler
+    participant DB as PostgreSQL
+
+    P-&gt;&gt;FE: opens the emailed link ?token=…
+    FE-&gt;&gt;AC: POST /api/auth/password-reset {token, newPassword}
+    AC-&gt;&gt;H: HandleAsync
+    H-&gt;&gt;H: validate the new password&#39;s shape
+    H-&gt;&gt;DB: SELECT token
+    alt unknown / expired / already spent
+        H--&gt;&gt;FE: 400 — each rejection named
+    end
+    H-&gt;&gt;DB: UPDATE person — fresh Argon2id hash &#43; new salt
+    H-&gt;&gt;DB: mark every live reset token for this person Used
+    H--&gt;&gt;FE: 200</pre><p>Both endpoints are <strong>anonymous</strong> because someone arriving from a link in their mail client holds no
+token of any other kind.</p><p>Spending a reset token retires every other live reset token the person holds. A second &ldquo;forgot
+password&rdquo; click cannot be replayed after the first has already changed the password.</p><h2 id=why-login-costs-what-it-costs>Why login costs what it costs<a class=td-heading-self-link href=#why-login-costs-what-it-costs aria-label="Heading self-link"></a></h2><p>Password verification is Argon2id — by this codebase&rsquo;s hashing library defaults, 600 MB and 16
+threads per verification. That is deliberate for a stored credential, and it is also precisely why
+these endpoints are rate-limited: an unthrottled burst against <code>/login</code> is a memory and CPU
+exhaustion vector before it is a brute-force one. See
+<a href=../../operations/#rate-limiting>Operations</a>
+.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-1e4d2a60edfaeaa182f469561228775e>6 - Scope permission claims</h1><div class=lead>UC-31 to UC-35 and FR-AU-08 — how a permission defined in a scope ends up inside a caller JWT.</div><p>A <strong>scope permission</strong> is a named permission defined inside one scope. It has no owner of its own —
+owning the scope is the whole of the authorization to manage it — and it is a leaf in the data model:
+nothing carries a foreign key to it.</p><p>Its one moving part is the <code>IncludeAsJwtClaim</code> flag.</p><h2 id=from-definition-to-claim>From definition to claim<a class=td-heading-self-link href=#from-definition-to-claim aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    actor SA as Scope Admin
+    participant SPC as ScopePermissionController
+    participant CH as CreateScopePermissionCommandHandler
+    participant DB as PostgreSQL
+    actor U as User in that scope
+    participant AC as AuthController
+    participant LH as LoginCommandHandler
+    participant TI as JwtAuthTokenIssuer
+
+    SA-&gt;&gt;SPC: POST /api/scopes/{scopeId}/permissions&lt;br/&gt;{name, description, includeAsJwtClaim: true}
+    SPC-&gt;&gt;CH: HandleAsync
+    CH-&gt;&gt;DB: is the actor an owner of this scope?
+    CH-&gt;&gt;DB: INSERT ScopePermission
+    CH--&gt;&gt;SA: 201
+
+    Note over U: later — an ordinary login
+    U-&gt;&gt;AC: POST /api/auth/login
+    AC-&gt;&gt;LH: HandleAsync
+    LH-&gt;&gt;TI: IssueAsync(subject)
+    TI-&gt;&gt;DB: SELECT DISTINCT name&lt;br/&gt;WHERE scope in subject&#39;s scopes&lt;br/&gt;AND NOT scope.IsDeleted&lt;br/&gt;AND NOT permission.IsDeleted&lt;br/&gt;AND IncludeAsJwtClaim
+    DB--&gt;&gt;TI: permission names
+    TI-&gt;&gt;TI: fold into the scopePermissions claim
+    TI--&gt;&gt;U: JWT carrying the permission names</pre><h2 id=which-permissions-a-caller-claims>Which permissions a caller claims<a class=td-heading-self-link href=#which-permissions-a-caller-claims aria-label="Heading self-link"></a></h2><pre class=mermaid>flowchart TD
+    S[Subject being issued a token] --&gt; R{Role}
+    R --&gt;|User| A[&#34;The permissions of&lt;br/&gt;the one scope they belong to&#34;]
+    R --&gt;|ScopeAdmin| B[&#34;The union over&lt;br/&gt;every scope they own&#34;]
+    R --&gt;|SystemAdmin| C[&#34;None — they belong&lt;br/&gt;to no scope&#34;]
+    A &amp; B --&gt; F[&#34;Filtered: scope not deleted,&lt;br/&gt;permission not deleted,&lt;br/&gt;IncludeAsJwtClaim set&#34;]
+    F --&gt; G[&#34;Distinct names →&lt;br/&gt;scopePermissions claim (JSON array)&#34;]</pre><p>The fold happens <strong>at issuance</strong>, reading the database once. A permission created, flagged, or
+deleted after a token was issued does not change that token — the holder picks up the change on their
+next login. This is the same trade the rest of the authentication design makes: no database read per
+request, in exchange for claims that are a snapshot rather than a live view.</p><p>A System Admin carries no <code>scopePermissions</code> claim at all. They belong to no scope, so there is
+nothing to fold — and nothing they need it for, since their authority is not scope-derived.</p><h2 id=managing-them--uc-31-to-uc-35>Managing them — UC-31 to UC-35<a class=td-heading-self-link href=#managing-them--uc-31-to-uc-35 aria-label="Heading self-link"></a></h2><table><thead><tr><th>Endpoint</th><th>Use case</th><th>Who</th></tr></thead><tbody><tr><td><code>POST /api/scopes/{scopeId}/permissions</code></td><td>UC-31</td><td>System Admin, or an owner of the scope</td></tr><tr><td><code>GET /api/scopes/{scopeId}/permissions/{id}</code></td><td>UC-32</td><td>Same</td></tr><tr><td><code>GET /api/scopes/{scopeId}/permissions</code></td><td>UC-32</td><td>Same</td></tr><tr><td><code>PUT /api/scopes/{scopeId}/permissions/{id}</code></td><td>UC-33</td><td>Same</td></tr><tr><td><code>DELETE /api/scopes/{scopeId}/permissions/{id}</code></td><td>UC-34</td><td>Same</td></tr><tr><td><code>DELETE /api/scopes/{scopeId}/permissions/{id}/hard</code></td><td>UC-35</td><td>System Admin only</td></tr></tbody></table><p>The hard delete is System-Admin-only for the same reason it is on applications and Google Users: a
+Scope Admin may retire a permission in a scope they own, but never purge it.</p><h2 id=deletion-behaviour>Deletion behaviour<a class=td-heading-self-link href=#deletion-behaviour aria-label="Heading self-link"></a></h2><p>Both deletions are simple, because a permission is a leaf:</p><ul><li><strong>Logical delete (UC-34)</strong> flips only its own <code>IsDeleted</code> flag. Nothing cascades. It stops being
+folded into new tokens immediately.</li><li><strong>Hard delete (UC-35)</strong> removes the row. Nothing cascades.</li></ul><p>The interesting case is the <em>scope&rsquo;s</em> deletion:</p><table><thead><tr><th>Scope operation</th><th>Effect on its permissions</th></tr></thead><tbody><tr><td><strong>Logical delete (UC-04)</strong></td><td><strong>None.</strong> They keep whatever <code>IsDeleted</code> state they had.</td></tr><tr><td><strong>Hard delete (UC-05)</strong></td><td>Purged, via the <code>scope_permission → scope</code> foreign key&rsquo;s <code>ON DELETE CASCADE</code>.</td></tr></tbody></table><p>Not cascading the logical delete is deliberate. The permissions become unreachable anyway — the
+listing endpoint gates on the scope&rsquo;s <code>IsDeleted</code>, and the claim fold above excludes permissions of
+deleted scopes — so nothing is exposed. Leaving them untouched means a restored scope recovers its
+permission set unchanged, which cascading would have destroyed.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-371cc5e6a0a7743c509a176db5f11a6b>7 - Audit logging</h1><div class=lead>NFR-09 — one decorator, every write, no handler changes.</div><p><strong>NFR-09</strong>: all write operations shall produce audit log entries.</p><p>Rather than a line in every handler — forgettable, and duplicated forty times — this is a decorator
+applied at registration.</p><h2 id=how-a-handler-gets-audited>How a handler gets audited<a class=td-heading-self-link href=#how-a-handler-gets-audited aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
+    autonumber
+    participant DI as DI container
+    participant M as CommandMediator
+    participant A as AuditingCommandHandler
+    participant H as Concrete handler
+    participant W as AuditLogWriter
+    participant AA as IActorAccessor
+    participant DB as PostgreSQL
+
+    M-&gt;&gt;DI: resolve ICommandHandlerAsync&lt;TCommand, TOutput&gt;
+    DI--&gt;&gt;M: AuditingCommandHandler wrapping the concrete handler
+    M-&gt;&gt;A: HandleAsync(command)
+    A-&gt;&gt;H: HandleAsync(command)
+    H-&gt;&gt;DB: the actual write
+    H--&gt;&gt;A: DataOutput{success, data}
+
+    alt success
+        A-&gt;&gt;A: resolve target from output.Id / output.PublicId
+        A-&gt;&gt;W: WriteAsync(commandTypeName, targetId)
+        W-&gt;&gt;AA: ActorPersonId, ActorRole
+        AA--&gt;&gt;W: from the current request&#39;s IdentityUser
+        W-&gt;&gt;DB: INSERT AuditLog
+        alt the insert fails
+            W--xA: exception
+            A-&gt;&gt;A: log a warning — the request still succeeds
+        end
+    else failure
+        Note over A: nothing written — only successful writes are audited
+    end
+
+    A--&gt;&gt;M: the unchanged DataOutput</pre><p>Registration is the whole mechanism:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=n>services</span><span class=p>.</span><span class=n>AddScoped</span><span class=p>&lt;</span><span class=n>THandler</span><span class=p>&gt;();</span>
+</span></span><span class=line><span class=cl><span class=n>services</span><span class=p>.</span><span class=n>AddScoped</span><span class=p>&lt;</span><span class=n>ICommandHandlerAsync</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;&gt;(</span><span class=n>provider</span> <span class=p>=&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=k>new</span> <span class=n>AuditingCommandHandler</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;(</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>THandler</span><span class=p>&gt;(),</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>IAuditLogWriter</span><span class=p>&gt;(),</span>
+</span></span><span class=line><span class=cl>        <span class=n>provider</span><span class=p>.</span><span class=n>GetRequiredService</span><span class=p>&lt;</span><span class=n>ILogger</span><span class=p>&lt;</span><span class=n>AuditingCommandHandler</span><span class=p>&lt;</span><span class=n>TCommand</span><span class=p>,</span> <span class=n>TOutput</span><span class=p>&gt;&gt;&gt;()));</span>
+</span></span></code></pre></div><p>Every write handler in <code>Startup.AddDependencies</code> is registered with <code>AddAuditedCommandHandler</code>, so
+adding a new command means adding one registration line and inheriting the audit trail.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>Depend on the interface</div><p>The concrete <code>THandler</code> registration exists only so the decorator factory can resolve it. Resolving
+<code>THandler</code> directly — in a handler, a service, or a test that then asserts on production wiring —
+<strong>silently bypasses auditing</strong>. Always depend on <code>ICommandHandlerAsync&lt;TCommand, TOutput></code>.</p></div><h2 id=what-an-entry-records>What an entry records<a class=td-heading-self-link href=#what-an-entry-records aria-label="Heading self-link"></a></h2><table><thead><tr><th>Column</th><th>Value</th></tr></thead><tbody><tr><td><code>PublicId</code></td><td>The entry&rsquo;s own GUID</td></tr><tr><td><code>ActorPersonId</code></td><td>The acting person&rsquo;s <code>PublicId</code>, or <code>null</code> for an anonymous write</td></tr><tr><td><code>ActorRole</code></td><td>The acting person&rsquo;s role value, or <code>null</code> for an anonymous write</td></tr><tr><td><code>Action</code></td><td>The command&rsquo;s CLR type name, e.g. <code>"CreateApplicationCommand"</code></td></tr><tr><td><code>TargetId</code></td><td>Best-effort <code>PublicId</code> of the affected entity, or <code>null</code> if none could be resolved</td></tr><tr><td><code>CreatedAt</code></td><td>UTC timestamp</td></tr></tbody></table><p>Three design choices are worth calling out.</p><p><strong><code>ActorPersonId</code> is not a foreign key.</strong> It is a bare <code>PublicId</code>, so an entry survives the <em>hard</em>
+deletion of the person who made the write — which is exactly the case an audit trail exists for.</p><p><strong>The table is append-only.</strong> Entries are never updated and never logically deleted.</p><p><strong>The target is resolved reflectively</strong>, from the output&rsquo;s <code>Id</code> or <code>PublicId</code> property. Commands
+whose output carries neither record a <code>null</code> target rather than failing.</p><h2 id=failures-never-fail-the-request>Failures never fail the request<a class=td-heading-self-link href=#failures-never-fail-the-request aria-label="Heading self-link"></a></h2><p>If writing the entry throws, the decorator logs a warning and returns the original result. The user&rsquo;s
+write already succeeded and committed; turning that into a 500 would misreport what happened and
+invite a retry of an operation that already took effect.</p><p>The trade is explicit: audit-trail completeness is best-effort against a database failure, and the
+warning in the log is the record that a gap exists.</p><h2 id=anonymous-writes>Anonymous writes<a class=td-heading-self-link href=#anonymous-writes aria-label="Heading self-link"></a></h2><p><code>IActorAccessor</code> reads the current request&rsquo;s <code>IdentityUser</code>, which is <code>null</code> on an anonymous request.
+The anonymous write endpoints — login, password recovery, password reset, email verification, Google
+sign-in, second-factor verification — therefore produce entries with a <code>null</code> actor. The <code>Action</code>
+still names the command, so the entry records <em>what</em> happened even when it cannot record <em>who</em>.</p></div></main></div></div><footer class="td-footer row d-print-none"><div class=container-fluid><div class="row mx-md-2"><div class="td-footer__left col-6 col-sm-4 order-sm-1"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title="Artur Rios" aria-label="Artur Rios"><a href=https://github.com/artur-rios aria-label="Artur Rios" target=_blank rel=noopener><i class="fa fa-user"></i></a></li></ul></div><div class="td-footer__right col-6 col-sm-4 order-sm-3"><ul class=td-footer__links-list><li class=td-footer__links-item data-bs-toggle=tooltip title=GitHub aria-label=GitHub><a href=https://github.com/artur-rios/heimdall-api aria-label=GitHub target=_blank rel=noopener><i class="fab fa-github"></i></a></li></ul></div><div class="td-footer__center col-12 col-sm-4 py-2 order-sm-2"><span class=td-footer__copyright>&copy;
+2026
+<span class=td-footer__authors>Artur Rios</span></span><span class=td-footer__all_rights_reserved>All Rights Reserved</span></div></div></div></footer></div><script src=/heimdall-api/js/main.min.a79219248190e5ca305868f1e0d29a218240acb447a9543ac7857c2b6b546946.js integrity="sha256-p5IZJIGQ5cowWGjx4NKaIYJArLRHqVQ6x4V8K2tUaUY=" crossorigin=anonymous></script><script defer src=/heimdall-api/js/click-to-copy.min.24576ff9fe9f85bb1948ecae52ce227cafce53757a3ad52301f2a79260f6b97d.js integrity="sha256-JFdv+f6fhbsZSOyuUs4ifK/OU3V6OtUjAfKnkmD2uX0=" crossorigin=anonymous></script><script src=/heimdall-api/js/tabpane-persist.js></script></body></html>

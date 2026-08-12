@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Flows on Heimdall API</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/</link><description>Recent content in Flows on Heimdall API</description><generator>Hugo</generator><language>en</language><atom:link href="https://artur-rios.github.io/heimdall-api/docs/flows/index.xml" rel="self" type="application/rss+xml"/><item><title>Login</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/login/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/login/</guid><description>&lt;p&gt;&lt;code&gt;POST /api/auth/login&lt;/code&gt; — anonymous, rate-limited.&lt;/p&gt;
+&lt;h2 id="the-sequence"&gt;The sequence&lt;a class="td-heading-self-link" href="#the-sequence" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ actor C as Client
+ participant AC as AuthController
+ participant M as CommandMediator
+ participant AH as AuditingCommandHandler
+ participant H as LoginCommandHandler
+ participant V as LoginCommandValidator
+ participant PR as Person repository
+ participant TS as PersonAuthTokenService
+ participant TI as JwtAuthTokenIssuer
+ participant DB as PostgreSQL
+
+ C-&amp;gt;&amp;gt;AC: POST /api/auth/login {email, password, scopeId?}
+ AC-&amp;gt;&amp;gt;M: ExecuteCommandAsync(LoginCommand)
+ M-&amp;gt;&amp;gt;AH: HandleAsync
+ AH-&amp;gt;&amp;gt;H: HandleAsync
+
+ H-&amp;gt;&amp;gt;V: ValidateAsync
+ alt invalid shape (AF-11f)
+ V--&amp;gt;&amp;gt;H: errors
+ H--&amp;gt;&amp;gt;C: 400 validation errors
+ end
+
+ H-&amp;gt;&amp;gt;PR: find by the lookup the role implies
+ PR-&amp;gt;&amp;gt;DB: SELECT person &amp;#43; role &amp;#43; scope navigations
+ DB--&amp;gt;&amp;gt;PR: person or null
+ Note over H: AF-11a unknown · AF-11b wrong password&amp;lt;br/&amp;gt;AF-11c deleted person · AF-11d/e scope not eligible&amp;lt;br/&amp;gt;→ all answer &amp;#34;invalid credentials&amp;#34;
+
+ H-&amp;gt;&amp;gt;H: Hash.TextMatches(password, hash, salt)
+ H-&amp;gt;&amp;gt;TS: TryBuildSubject(person)
+
+ H-&amp;gt;&amp;gt;DB: SELECT active TwoFactorAuth for person
+ alt 2FA active (AF-11g)
+ H-&amp;gt;&amp;gt;H: retire live email codes, issue &amp;#43; mail a fresh one
+ H-&amp;gt;&amp;gt;H: issue challenge token (MfaPending, ~5 min)
+ H--&amp;gt;&amp;gt;C: 200 {requiresTwoFactor, challengeToken, availableMethods}
+ else no 2FA
+ H-&amp;gt;&amp;gt;TS: IssueAsync(subject)
+ TS-&amp;gt;&amp;gt;TI: IssueAsync
+ TI-&amp;gt;&amp;gt;DB: SELECT flagged scope permissions
+ TI--&amp;gt;&amp;gt;TS: signed JWT &amp;#43; expiry
+ H--&amp;gt;&amp;gt;AH: DataOutput{token, expiresAt}
+ AH-&amp;gt;&amp;gt;DB: INSERT AuditLog(LoginCommand)
+ AH--&amp;gt;&amp;gt;C: 200 {token, expiresAt}
+ end&lt;/pre&gt;
+&lt;h2 id="which-lookup-and-why"&gt;Which lookup, and why&lt;a class="td-heading-self-link" href="#which-lookup-and-why" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;Person&lt;/code&gt; has no scope column, so &lt;em&gt;how&lt;/em&gt; the person is found depends on the role being sought:&lt;/p&gt;</description></item><item><title>Two-factor authentication</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/two-factor/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/two-factor/</guid><description>&lt;p&gt;Two-factor authentication is opt-in, per person, and available to &lt;code&gt;User&lt;/code&gt;, &lt;code&gt;ScopeAdmin&lt;/code&gt;, and
+&lt;code&gt;SystemAdmin&lt;/code&gt; alike. It is &lt;strong&gt;not&lt;/strong&gt; available to Google Users, who are already subject to Google&amp;rsquo;s own
+account security.&lt;/p&gt;
+&lt;p&gt;Every 2FA endpoint acts on the caller themselves — the person comes from the bearer token, never from
+a path or body — so no caller can reach another person&amp;rsquo;s configuration.&lt;/p&gt;
+&lt;h2 id="the-lifecycle"&gt;The lifecycle&lt;a class="td-heading-self-link" href="#the-lifecycle" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;stateDiagram-v2
+ [*] --&amp;gt; None: no TwoFactorAuth row
+ None --&amp;gt; Pending: UC-36 enable&amp;lt;br/&amp;gt;(row created, IsActive = false)
+ Pending --&amp;gt; Pending: UC-36 again&amp;lt;br/&amp;gt;(AF-36d — selection overwritten)
+ Pending --&amp;gt; Active: UC-37 confirm&amp;lt;br/&amp;gt;(every selected method proven)
+ Active --&amp;gt; Active: UC-40 regenerate&amp;lt;br/&amp;gt;(ten fresh recovery codes)
+ Active --&amp;gt; None: UC-39 disable
+ Active --&amp;gt; Active: UC-38 verify&amp;lt;br/&amp;gt;(completes a gated login)&lt;/pre&gt;
+&lt;h2 id="setup--uc-36-and-uc-37"&gt;Setup — UC-36 and UC-37&lt;a class="td-heading-self-link" href="#setup--uc-36-and-uc-37" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ actor P as Person (authenticated)
+ participant AC as AuthController
+ participant EH as EnableTwoFactorAuthCommandHandler
+ participant CH as ConfirmTwoFactorAuthCommandHandler
+ participant TP as ITotpSecretProtector
+ participant ES as ITwoFactorEmailSender
+ participant DB as PostgreSQL
+
+ P-&amp;gt;&amp;gt;AC: POST /api/auth/2fa/enable {app?, email?}
+ AC-&amp;gt;&amp;gt;EH: HandleAsync
+ EH-&amp;gt;&amp;gt;DB: SELECT TwoFactorAuth for caller
+ alt already active (AF-36a)
+ EH--&amp;gt;&amp;gt;P: rejected — configuration untouched
+ end
+ EH-&amp;gt;&amp;gt;DB: UPSERT pending row (IsActive = false)
+ Note over EH,DB: AF-36d — re-initiating overwrites&amp;lt;br/&amp;gt;the pending selection entirely
+
+ opt App selected
+ EH-&amp;gt;&amp;gt;TP: Protect(fresh TOTP secret)
+ TP--&amp;gt;&amp;gt;EH: encrypted secret
+ EH-&amp;gt;&amp;gt;DB: store TotpSecretEncrypted
+ EH--&amp;gt;&amp;gt;P: secret returned once, for enrolment
+ end
+ opt Email selected
+ EH-&amp;gt;&amp;gt;DB: retire outstanding codes, INSERT fresh 6-digit code (hash &amp;#43; salt, 10 min)
+ EH-&amp;gt;&amp;gt;ES: SendAsync(email, code)
+ end
+
+ P-&amp;gt;&amp;gt;AC: POST /api/auth/2fa/confirm {appCode?, emailCode?}
+ AC-&amp;gt;&amp;gt;CH: HandleAsync
+ CH-&amp;gt;&amp;gt;DB: SELECT pending row
+ CH-&amp;gt;&amp;gt;CH: check appCode if AppEnabled (AF-37b)
+ CH-&amp;gt;&amp;gt;CH: check emailCode if EmailEnabled (AF-37c)
+ CH-&amp;gt;&amp;gt;DB: mark the confirming email code Used
+ CH-&amp;gt;&amp;gt;DB: INSERT 10 recovery codes (hashes only)
+ CH-&amp;gt;&amp;gt;DB: UPDATE IsActive = true
+ CH--&amp;gt;&amp;gt;P: 200 — ten recovery codes, shown exactly once&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;IsActive&lt;/code&gt; is what separates a &lt;em&gt;confirmed&lt;/em&gt; configuration from one still pending. A row with
+&lt;code&gt;IsActive = false&lt;/code&gt; means UC-36 created it and UC-37 has not yet activated it — and only an active
+configuration gates a login.&lt;/p&gt;</description></item><item><title>Google Sign-In</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/google-sign-in/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/google-sign-in/</guid><description>&lt;p&gt;Google Sign-In is &lt;strong&gt;off by default&lt;/strong&gt; and enabled per scope. A Google identity is always
+&lt;code&gt;User&lt;/code&gt;-equivalent — it can never create or authenticate a Scope Admin or System Admin, whatever the
+Google account is (&lt;strong&gt;FR-GO-04&lt;/strong&gt;).&lt;/p&gt;
+&lt;h2 id="enabling-it--two-independent-switches"&gt;Enabling it — two independent switches&lt;a class="td-heading-self-link" href="#enabling-it--two-independent-switches" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;flowchart LR
+ A[&amp;#34;PUT /api/scopes/{id}/google-signin&amp;lt;br/&amp;gt;UC-24 — per scope&amp;#34;] --&amp;gt; C{Both true?}
+ B[&amp;#34;HEIMDALL_GOOGLE_CLIENT_IDS&amp;lt;br/&amp;gt;— per deployment&amp;#34;] --&amp;gt; C
+ C --&amp;gt;|Yes| D[Google sign-in works]
+ C --&amp;gt;|Scope off| E[&amp;#34;403 — sign-in unavailable&amp;#34;]
+ C --&amp;gt;|No client IDs| F[&amp;#34;401 — every token refused&amp;#34;]&lt;/pre&gt;
+&lt;p&gt;With no client IDs configured, the API registers a verifier that &lt;strong&gt;refuses every token&lt;/strong&gt; and warns
+once at start-up. This is not a convenience fallback: verification needs an audience to check against
+(&lt;strong&gt;NFR-13&lt;/strong&gt;), and a verifier with no configured client could only reject everything or trust
+everything — so it rejects. Every other endpoint keeps working.&lt;/p&gt;</description></item><item><title>Person onboarding</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/person-onboarding/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/person-onboarding/</guid><description>&lt;p&gt;Creating a person is one use case (UC-06) with &lt;strong&gt;three paths&lt;/strong&gt;, decided by which endpoint is called
+rather than by a field in the body.&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Endpoint&lt;/th&gt;
+					&lt;th&gt;Path&lt;/th&gt;
+					&lt;th&gt;Creates&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;POST /api/persons&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;b&lt;/td&gt;
+					&lt;td&gt;A &lt;code&gt;ScopeAdmin&lt;/code&gt; or &lt;code&gt;SystemAdmin&lt;/code&gt; with no scope&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;POST /api/scopes/{scopeId}/persons&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;a&lt;/td&gt;
+					&lt;td&gt;A &lt;code&gt;User&lt;/code&gt; in that scope, with a &lt;code&gt;SCOPE_USER&lt;/code&gt; row&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;POST /api/scopes/{scopeId}/owners&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;c&lt;/td&gt;
+					&lt;td&gt;A brand-new &lt;code&gt;ScopeAdmin&lt;/code&gt; directly as a co-owner, with a &lt;code&gt;SCOPE_OWNER&lt;/code&gt; row&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="creating-a-user--uc-06-path-a"&gt;Creating a User — UC-06 path a&lt;a class="td-heading-self-link" href="#creating-a-user--uc-06-path-a" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ actor A as Actor (SystemAdmin or ScopeAdmin)
+ participant PC as PersonController
+ participant AH as AuditingCommandHandler
+ participant H as CreateUserCommandHandler
+ participant OC as IScopeOwnershipChecker
+ participant EV as IEmailVerificationService
+ participant ES as IEmailVerificationSender
+ participant DB as PostgreSQL
+
+ A-&amp;gt;&amp;gt;PC: POST /api/scopes/{scopeId}/persons {name, email, password}
+ PC-&amp;gt;&amp;gt;AH: ExecuteCommandAsync
+ AH-&amp;gt;&amp;gt;H: HandleAsync
+
+ H-&amp;gt;&amp;gt;H: validate input (AF-06d)
+ H-&amp;gt;&amp;gt;DB: SELECT scope — must exist and not be deleted (AF-06b)
+ H-&amp;gt;&amp;gt;OC: does the actor own this scope? (AF-06e)
+ Note over OC: a SystemAdmin bypasses this check
+ H-&amp;gt;&amp;gt;DB: is the email free among the scope&amp;#39;s Users? (AF-06a, case-insensitive)
+ H-&amp;gt;&amp;gt;DB: INSERT person (Argon2id hash &amp;#43; salt) &amp;#43; SCOPE_USER row
+
+ H-&amp;gt;&amp;gt;EV: IssueAndSendAsync(person)
+ EV-&amp;gt;&amp;gt;DB: INSERT EmailVerificationToken (48 chars, time-limited)
+ EV-&amp;gt;&amp;gt;ES: SendAsync(email, token)
+ Note over EV,ES: a send failure does not undo the person —&amp;lt;br/&amp;gt;the token is persisted and can be re-sent (UC-15)
+
+ H--&amp;gt;&amp;gt;AH: DataOutput{person}
+ AH-&amp;gt;&amp;gt;DB: INSERT AuditLog(CreateUserCommand)
+ AH--&amp;gt;&amp;gt;A: 201 person created&lt;/pre&gt;
+&lt;p&gt;Email uniqueness is scoped to the role: a &lt;code&gt;User&lt;/code&gt;&amp;rsquo;s address must be unique &lt;strong&gt;within their scope&lt;/strong&gt;
+(compared case-insensitively, &lt;code&gt;LOWER()&lt;/code&gt; in SQL), while a &lt;code&gt;ScopeAdmin&lt;/code&gt;&amp;rsquo;s or &lt;code&gt;SystemAdmin&lt;/code&gt;&amp;rsquo;s is unique
+system-wide. The same address can therefore be a User in several different scopes — which is exactly
+why login needs a scope identifier to find a User.&lt;/p&gt;</description></item><item><title>Password recovery</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/password-recovery/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/password-recovery/</guid><description>&lt;p&gt;Two anonymous, rate-limited endpoints: one asks for a link, the other spends it.&lt;/p&gt;
+&lt;h2 id="requesting-a-link--uc-12"&gt;Requesting a link — UC-12&lt;a class="td-heading-self-link" href="#requesting-a-link--uc-12" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ actor C as Anonymous caller
+ participant AC as AuthController
+ participant H as PasswordRecoveryCommandHandler
+ participant PS as IPasswordResetService
+ participant S as IPasswordResetSender
+ participant DB as PostgreSQL
+
+ C-&amp;gt;&amp;gt;AC: POST /api/auth/password-recovery {email, scopeId?}
+ AC-&amp;gt;&amp;gt;H: HandleAsync
+ H-&amp;gt;&amp;gt;H: validate input shape (NFR-10)
+ Note right of H: the only rejection this endpoint ever issues
+
+ H-&amp;gt;&amp;gt;DB: find by the lookup the role implies
+ alt person found and eligible
+ H-&amp;gt;&amp;gt;PS: issue token
+ PS-&amp;gt;&amp;gt;DB: INSERT PasswordResetToken (time-limited)
+ PS-&amp;gt;&amp;gt;S: SendAsync(email, token)
+ else nobody, deleted person, or deleted scope (AF-12a)
+ Note over H,DB: no row written, no email sent
+ end
+ H--&amp;gt;&amp;gt;C: 200 — identical response either way&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;Every path returns the same success output.&lt;/strong&gt; AF-12a — the address belongs to nobody — is not an
+error flow but the &lt;em&gt;absence&lt;/em&gt; of one: the handler issues no token and answers exactly as it would
+have. A logically deleted person, and a &lt;code&gt;User&lt;/code&gt; whose scope is deleted, are treated the same way.&lt;/p&gt;</description></item><item><title>Scope permission claims</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/scope-permission-claims/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/scope-permission-claims/</guid><description>&lt;p&gt;A &lt;strong&gt;scope permission&lt;/strong&gt; is a named permission defined inside one scope. It has no owner of its own —
+owning the scope is the whole of the authorization to manage it — and it is a leaf in the data model:
+nothing carries a foreign key to it.&lt;/p&gt;
+&lt;p&gt;Its one moving part is the &lt;code&gt;IncludeAsJwtClaim&lt;/code&gt; flag.&lt;/p&gt;
+&lt;h2 id="from-definition-to-claim"&gt;From definition to claim&lt;a class="td-heading-self-link" href="#from-definition-to-claim" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ actor SA as Scope Admin
+ participant SPC as ScopePermissionController
+ participant CH as CreateScopePermissionCommandHandler
+ participant DB as PostgreSQL
+ actor U as User in that scope
+ participant AC as AuthController
+ participant LH as LoginCommandHandler
+ participant TI as JwtAuthTokenIssuer
+
+ SA-&amp;gt;&amp;gt;SPC: POST /api/scopes/{scopeId}/permissions&amp;lt;br/&amp;gt;{name, description, includeAsJwtClaim: true}
+ SPC-&amp;gt;&amp;gt;CH: HandleAsync
+ CH-&amp;gt;&amp;gt;DB: is the actor an owner of this scope?
+ CH-&amp;gt;&amp;gt;DB: INSERT ScopePermission
+ CH--&amp;gt;&amp;gt;SA: 201
+
+ Note over U: later — an ordinary login
+ U-&amp;gt;&amp;gt;AC: POST /api/auth/login
+ AC-&amp;gt;&amp;gt;LH: HandleAsync
+ LH-&amp;gt;&amp;gt;TI: IssueAsync(subject)
+ TI-&amp;gt;&amp;gt;DB: SELECT DISTINCT name&amp;lt;br/&amp;gt;WHERE scope in subject&amp;#39;s scopes&amp;lt;br/&amp;gt;AND NOT scope.IsDeleted&amp;lt;br/&amp;gt;AND NOT permission.IsDeleted&amp;lt;br/&amp;gt;AND IncludeAsJwtClaim
+ DB--&amp;gt;&amp;gt;TI: permission names
+ TI-&amp;gt;&amp;gt;TI: fold into the scopePermissions claim
+ TI--&amp;gt;&amp;gt;U: JWT carrying the permission names&lt;/pre&gt;
+&lt;h2 id="which-permissions-a-caller-claims"&gt;Which permissions a caller claims&lt;a class="td-heading-self-link" href="#which-permissions-a-caller-claims" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;flowchart TD
+ S[Subject being issued a token] --&amp;gt; R{Role}
+ R --&amp;gt;|User| A[&amp;#34;The permissions of&amp;lt;br/&amp;gt;the one scope they belong to&amp;#34;]
+ R --&amp;gt;|ScopeAdmin| B[&amp;#34;The union over&amp;lt;br/&amp;gt;every scope they own&amp;#34;]
+ R --&amp;gt;|SystemAdmin| C[&amp;#34;None — they belong&amp;lt;br/&amp;gt;to no scope&amp;#34;]
+ A &amp;amp; B --&amp;gt; F[&amp;#34;Filtered: scope not deleted,&amp;lt;br/&amp;gt;permission not deleted,&amp;lt;br/&amp;gt;IncludeAsJwtClaim set&amp;#34;]
+ F --&amp;gt; G[&amp;#34;Distinct names →&amp;lt;br/&amp;gt;scopePermissions claim (JSON array)&amp;#34;]&lt;/pre&gt;
+&lt;p&gt;The fold happens &lt;strong&gt;at issuance&lt;/strong&gt;, reading the database once. A permission created, flagged, or
+deleted after a token was issued does not change that token — the holder picks up the change on their
+next login. This is the same trade the rest of the authentication design makes: no database read per
+request, in exchange for claims that are a snapshot rather than a live view.&lt;/p&gt;</description></item><item><title>Audit logging</title><link>https://artur-rios.github.io/heimdall-api/docs/flows/audit-logging/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/flows/audit-logging/</guid><description>&lt;p&gt;&lt;strong&gt;NFR-09&lt;/strong&gt;: all write operations shall produce audit log entries.&lt;/p&gt;
+&lt;p&gt;Rather than a line in every handler — forgettable, and duplicated forty times — this is a decorator
+applied at registration.&lt;/p&gt;
+&lt;h2 id="how-a-handler-gets-audited"&gt;How a handler gets audited&lt;a class="td-heading-self-link" href="#how-a-handler-gets-audited" aria-label="Heading self-link"&gt;&lt;/a&gt;
+&lt;/h2&gt;
+&lt;pre class="mermaid"&gt;sequenceDiagram
+ autonumber
+ participant DI as DI container
+ participant M as CommandMediator
+ participant A as AuditingCommandHandler
+ participant H as Concrete handler
+ participant W as AuditLogWriter
+ participant AA as IActorAccessor
+ participant DB as PostgreSQL
+
+ M-&amp;gt;&amp;gt;DI: resolve ICommandHandlerAsync&amp;lt;TCommand, TOutput&amp;gt;
+ DI--&amp;gt;&amp;gt;M: AuditingCommandHandler wrapping the concrete handler
+ M-&amp;gt;&amp;gt;A: HandleAsync(command)
+ A-&amp;gt;&amp;gt;H: HandleAsync(command)
+ H-&amp;gt;&amp;gt;DB: the actual write
+ H--&amp;gt;&amp;gt;A: DataOutput{success, data}
+
+ alt success
+ A-&amp;gt;&amp;gt;A: resolve target from output.Id / output.PublicId
+ A-&amp;gt;&amp;gt;W: WriteAsync(commandTypeName, targetId)
+ W-&amp;gt;&amp;gt;AA: ActorPersonId, ActorRole
+ AA--&amp;gt;&amp;gt;W: from the current request&amp;#39;s IdentityUser
+ W-&amp;gt;&amp;gt;DB: INSERT AuditLog
+ alt the insert fails
+ W--xA: exception
+ A-&amp;gt;&amp;gt;A: log a warning — the request still succeeds
+ end
+ else failure
+ Note over A: nothing written — only successful writes are audited
+ end
+
+ A--&amp;gt;&amp;gt;M: the unchanged DataOutput&lt;/pre&gt;
+&lt;p&gt;Registration is the whole mechanism:&lt;/p&gt;</description></item></channel></rss>
