@@ -68,39 +68,77 @@ controller's overwrite line.
 
 ## 3. Mechanism
 
-Two binding paths need two attributes. This is not an inconsistency to be smoothed over; the two
-paths genuinely differ in what excludes a property.
+**One marker on the DTOs: `[JsonIgnore]`.** `System.Text.Json.Serialization.JsonIgnoreAttribute` is
+a BCL attribute, so it compiles in the Application-layer projects where these DTOs live. It reads
+as what it means here: *this property is not part of the wire representation*.
 
-**Query-bound → `[BindNever]`.** `Microsoft.AspNetCore.Mvc.ModelBinding.BindNeverAttribute` sets
-`ModelMetadata.IsBindingAllowed` to `false`. The model binder then skips the property, and
-`ApiExplorer` — which is what Swashbuckle reflects over to build the parameter list — omits
-non-bindable properties from the operation. One attribute closes both halves.
+**Body-bound properties are then already closed.** The `[FromBody]` binder hands the payload to
+`System.Text.Json`, which skips the property, and Swashbuckle builds body schemas from the JSON
+contract, so the property leaves the schema at the same time.
 
-**Body-bound → `[JsonIgnore]`.** `[BindNever]` does not reach a `[FromBody]` payload: the body model
-binder hands the whole payload to `System.Text.Json`, which knows nothing of MVC metadata.
-`System.Text.Json.Serialization.JsonIgnoreAttribute` stops deserialization into the property, and
-Swashbuckle builds body schemas from the JSON contract, so the property leaves the schema at the
-same time.
+**Query-bound properties need one more piece.** MVC's model binder knows nothing of
+`System.Text.Json` attributes, so `[JsonIgnore]` alone would leave the query parameters bound and
+documented. A small `IBindingMetadataProvider` in the Web API layer closes that:
+
+```csharp
+public class ServerPopulatedBindingMetadataProvider : IBindingMetadataProvider
+{
+    public void CreateBindingMetadata(BindingMetadataProviderContext context)
+    {
+        if (context.Attributes.OfType<JsonIgnoreAttribute>().Any())
+        {
+            context.BindingMetadata.IsBindingAllowed = false;
+        }
+    }
+}
+```
+
+`IsBindingAllowed = false` is exactly what `[BindNever]` sets. The model binder then skips the
+property, and `ApiExplorer` — which Swashbuckle reflects over to build the parameter list — omits
+non-bindable properties from the operation. One attribute, both halves, on both paths.
+
+### 3.1 Why not `[BindNever]` directly
+
+`Microsoft.AspNetCore.Mvc.ModelBinding.BindNeverAttribute` would do the query half in one line, but
+it lives in the ASP.NET Core shared framework, reachable only through
+`<FrameworkReference Include="Microsoft.AspNetCore.App" />`. `ArturRios.Heimdall.Query.csproj` is a
+plain `Microsoft.NET.Sdk` class library referencing only Domain and Shared, and a `FrameworkReference`
+does not flow backwards from the Web SDK project that consumes it. Using it would mean giving an
+Application-layer project a dependency on the entire ASP.NET Core framework — which no project under
+`src/Application` currently has. The metadata provider keeps that dependency in the layer that
+already owns HTTP concerns.
+
+### 3.2 The provider must be registered twice
+
+`tools/ArturRios.Heimdall.OpenApiGen/Program.cs` deliberately does not use the API's `Startup` — it
+calls its own `AddControllers().AddApplicationPart(...)` so it can generate the document without a
+database or a port. It already shares `SwaggerConfiguration.Configure` with the running API so that
+both produce the same document; model-binding configuration now has to be shared the same way, or
+the running API would unbind the properties while the generated document still advertised them.
+
+The registration therefore lives in one place both call — a `ModelBindingConfiguration.Configure`
+that takes `MvcOptions` — invoked from `Startup.ConfigureWebApi` and from the generator's
+`AddControllers`.
 
 Controllers need no change. Every affected controller action already assigns each of these fields
 after binding.
 
-### 3.1 Verify the mechanism before applying it in bulk
+### 3.3 Verify the mechanism before applying it in bulk
 
-I have not confirmed that Swashbuckle 10.2.3 in this generator setup honours both attributes
-end-to-end. **First implementation step:** apply the attributes to `ListScopeApplicationsQuery` and
-`UpdateApplicationCommand` only, run `python3 scripts/openapi.py`, and diff the document. Expect
+That Swashbuckle 10.2.3 honours this end-to-end in this generator setup is a prediction, not a
+confirmed fact. **First implementation step:** build the provider, wire it into both registration
+sites, apply `[JsonIgnore]` to `ListScopeApplicationsQuery` and `UpdateApplicationCommand` only, run
+`python3 scripts/openapi.py`, and read the document. Expect
 `GET /api/scopes/{scopeId}/applications` to lose three query parameters and
 `UpdateApplicationCommand` to lose four properties.
 
-If an attribute does not take, fall back for that half only to a Swashbuckle filter
-(`IOperationFilter` for parameters, `ISchemaFilter` for schemas) keyed off the attribute, keeping
-the attribute for the binding half. Do not proceed to the remaining DTOs until the two-file diff is
+If the query half does not take, the fallback is a Swashbuckle `IOperationFilter` for the document
+plus the provider for the binding. Do not proceed to the remaining DTOs until the two-file result is
 confirmed.
 
 ## 4. The change
 
-### 4.1 Queries — `[BindNever]` on `ScopeId`, `ActingPersonId`, `ActingRole`
+### 4.1 Queries — `[JsonIgnore]` on `ScopeId`, `ActingPersonId`, `ActingRole`
 
 `src/Application/ArturRios.Heimdall.Query/Input/`:
 
@@ -199,7 +237,7 @@ asserting that the server ignores a forged actor arriving on the wire. The asser
 **Three query-string forgery tests need no change and gain value.**
 `ApplicationControllerListTests`, `ScopePermissionControllerListTests` and
 `PersonControllerListScopePersonsTests` already build the forged request as a raw URL string, so
-they exercise the new `[BindNever]` path unmodified.
+they exercise the new binding-metadata path unmodified.
 
 **Everything else.** No functional test sets a route- or token-supplied property on a posted body
 (verified by grep across `tests/Presentation`), so the remaining suites are unaffected. Handler unit

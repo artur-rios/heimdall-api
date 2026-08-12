@@ -6,11 +6,14 @@
 client inputs, and make those fields non-bindable so the contract and the behaviour agree.
 
 **Architecture:** The mediator's input DTOs double as the wire DTOs, so fields the server fills in
-are indistinguishable from fields a client sends. Mark the server-populated properties with the
-attribute that excludes them from their binding path — `[BindNever]` for `[FromQuery]`-bound list
-queries, `[JsonIgnore]` for `[FromBody]`-bound commands — which removes them from the generated
-document and from binding at the same time. Controllers are unchanged; every one already assigns
-these fields after binding. A document-level test then guards the contract against regression.
+are indistinguishable from fields a client sends. Mark every server-populated property `[JsonIgnore]`
+— a BCL attribute, so it compiles in the Application-layer projects where these DTOs live. That
+closes the `[FromBody]` path outright (System.Text.Json skips the property, and Swashbuckle builds
+body schemas from the JSON contract). For the `[FromQuery]` path, a small `IBindingMetadataProvider`
+in the Web API layer sets `IsBindingAllowed = false` for any `[JsonIgnore]` property, which is
+exactly what `[BindNever]` does — the model binder skips it and ApiExplorer drops it from the
+document. Controllers are unchanged; every one already assigns these fields after binding. A
+document-level test then guards the contract against regression.
 
 **Tech Stack:** .NET 10, ASP.NET Core MVC controllers, Swashbuckle.AspNetCore 10.2.3, xUnit,
 `ArturRios.Util.Test`, `scripts/openapi.py` (Python 3) for document generation.
@@ -39,9 +42,15 @@ these fields after binding. A document-level test then guards the contract again
 
 ## File Structure
 
+**Created — the binding seam** (`src/Presentation/ArturRios.Heimdall.WebApi/Binding/`):
+`ModelBindingConfiguration.cs`, holding the `IBindingMetadataProvider` and the `Configure(MvcOptions)`
+entry point. **Modified:** `Startup.cs:ConfigureWebApi` and
+`tools/ArturRios.Heimdall.OpenApiGen/Program.cs` both call it — the generator does not use `Startup`,
+so registering in only one place would leave the document and the running API disagreeing.
+
 **Modified — queries** (`src/Application/ArturRios.Heimdall.Query/Input/`): `ListScopeApplicationsQuery.cs`,
 `ListScopeGoogleUsersQuery.cs`, `ListScopePersonsQuery.cs`, `ListScopeOwnersQuery.cs`,
-`ListScopePermissionsQuery.cs` — add `[BindNever]` to `ScopeId`, `ActingPersonId`, `ActingRole`.
+`ListScopePermissionsQuery.cs` — add `[JsonIgnore]` to `ScopeId`, `ActingPersonId`, `ActingRole`.
 
 **Modified — commands** (`src/Application/ArturRios.Heimdall.Command/Input/`): 13 files, listed in
 Tasks 1 and 3 — add `[JsonIgnore]` to the route- and token-supplied properties.
@@ -58,14 +67,17 @@ regression guard, reading the committed document.
 
 ---
 
-### Task 1: Pilot — prove the two attributes work
+### Task 1: Pilot — build the seam and prove it reaches the document
 
-The spec deliberately does not assume Swashbuckle 10.2.3 honours `[BindNever]` and `[JsonIgnore]`
-end-to-end in this generator setup. This task applies each attribute to exactly one DTO and reads
-the regenerated document. **If the document does not change as described in Step 3, stop and report
-before touching the other 16 files.**
+That Swashbuckle 10.2.3 honours this end-to-end in this generator setup is a prediction, not a
+confirmed fact. This task builds the binding seam, applies `[JsonIgnore]` to exactly one query and
+one command, and reads the regenerated document. **If the document does not change as described in
+Step 4, stop and report before touching the other 16 files.**
 
 **Files:**
+- Create: `src/Presentation/ArturRios.Heimdall.WebApi/Binding/ModelBindingConfiguration.cs`
+- Modify: `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs` (`ConfigureWebApi`, ~line 526)
+- Modify: `tools/ArturRios.Heimdall.OpenApiGen/Program.cs` (the `AddControllers()` call, ~line 39)
 - Modify: `src/Application/ArturRios.Heimdall.Query/Input/ListScopeApplicationsQuery.cs`
 - Modify: `src/Application/ArturRios.Heimdall.Command/Input/UpdateApplicationCommand.cs`
 - Modify: `tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ApplicationControllerUpdateTests.cs:347-368`
@@ -73,19 +85,116 @@ before touching the other 16 files.**
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the attribute pattern Tasks 2 and 3 repeat verbatim — `[BindNever]` from
-  `Microsoft.AspNetCore.Mvc.ModelBinding` on query properties, `[JsonIgnore]` from
-  `System.Text.Json.Serialization` on command properties.
+- Produces: `ModelBindingConfiguration.Configure(MvcOptions)`, registered at both sites, and the
+  `[JsonIgnore]` marker pattern that Tasks 2 and 3 repeat verbatim on the remaining 16 DTOs. After
+  this task, adding `[JsonIgnore]` to a property is all a later task needs to do.
 
-- [ ] **Step 1: Add `[BindNever]` to the pilot query**
+**Why not `[BindNever]`:** it lives in the ASP.NET Core shared framework, and
+`ArturRios.Heimdall.Query.csproj` is a plain `Microsoft.NET.Sdk` class library with no
+`FrameworkReference`. Using it would give an Application-layer project a dependency on the whole
+ASP.NET Core framework, which no project under `src/Application` has. Do not add one.
+
+- [ ] **Step 1: Create the binding seam**
+
+Create `src/Presentation/ArturRios.Heimdall.WebApi/Binding/ModelBindingConfiguration.cs`:
+
+```csharp
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+
+namespace ArturRios.Heimdall.WebApi.Binding;
+
+/// <summary>
+///     Model-binding configuration shared by the running API and the OpenAPI document generator.
+///
+///     Both call <see cref="Configure" /> for the same reason they both call
+///     <c>SwaggerConfiguration.Configure</c>: tools/ArturRios.Heimdall.OpenApiGen builds its own
+///     <c>AddControllers()</c> rather than using <c>Startup</c>, so configuration registered in only
+///     one of the two would let the published document disagree with the API it documents.
+/// </summary>
+public static class ModelBindingConfiguration
+{
+    public static void Configure(MvcOptions options) =>
+        options.ModelMetadataDetailsProviders.Add(new ServerPopulatedBindingMetadataProvider());
+}
+
+/// <summary>
+///     Makes a <c>[JsonIgnore]</c> property non-bindable, so a value arriving in the query string
+///     cannot reach it and ApiExplorer does not publish it as a parameter.
+///
+///     The commands and queries the mediator takes as input double as the wire DTOs, so a property
+///     the controller assigns from the route or the authenticated caller looks, to the framework,
+///     exactly like one the client sends. <c>[JsonIgnore]</c> marks the difference: it already
+///     excludes the property from a <c>[FromBody]</c> payload and its schema, and this provider
+///     extends the same statement to the <c>[FromQuery]</c> path, where System.Text.Json attributes
+///     otherwise mean nothing. <c>IsBindingAllowed = false</c> is what <c>[BindNever]</c> sets;
+///     <c>[BindNever]</c> itself is unavailable to the Application-layer projects these DTOs live
+///     in, which have no reference to the ASP.NET Core shared framework.
+/// </summary>
+public class ServerPopulatedBindingMetadataProvider : IBindingMetadataProvider
+{
+    public void CreateBindingMetadata(BindingMetadataProviderContext context)
+    {
+        if (context.Attributes.OfType<JsonIgnoreAttribute>().Any())
+        {
+            context.BindingMetadata.IsBindingAllowed = false;
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Register it at both sites**
+
+In `src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs`, `ConfigureWebApi` currently reads:
+
+```csharp
+        Builder.Services.AddControllers(options => options.Filters.Add<MfaPendingGuardFilter>());
+```
+
+Change it to also configure model binding, keeping the existing comment above it intact:
+
+```csharp
+        Builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<MfaPendingGuardFilter>();
+            ModelBindingConfiguration.Configure(options);
+        });
+```
+
+Add `using ArturRios.Heimdall.WebApi.Binding;` if the file's usings need it.
+
+In `tools/ArturRios.Heimdall.OpenApiGen/Program.cs`, the generator's registration currently reads:
+
+```csharp
+        builder.Services
+            .AddControllers()
+            .AddApplicationPart(typeof(AuthController).Assembly);
+```
+
+Change it to:
+
+```csharp
+        builder.Services
+            .AddControllers(ModelBindingConfiguration.Configure)
+            .AddApplicationPart(typeof(AuthController).Assembly);
+```
+
+and add `using ArturRios.Heimdall.WebApi.Binding;` to its usings.
+
+**This second registration is the one that makes the document change.** The generator never runs
+`Startup`, so without it the API would unbind the properties while the published document went on
+advertising them.
+
+- [ ] **Step 3: Mark the pilot DTOs**
 
 In `ListScopeApplicationsQuery.cs`, add the using and attribute the three server-populated
 properties. `Name`, `OwnerId` and `IncludeDeleted` are real filters and stay untouched.
 
 ```csharp
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ArturRios.Heimdall.Query.Input;
 
@@ -95,12 +204,13 @@ namespace ArturRios.Heimdall.Query.Input;
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
 ///     authenticated caller and are never taken from the request — a Scope Admin sees only the
 ///     applications they own, so a forged acting id would be a forged answer. All three are
-///     <c>[BindNever]</c>, so the model binder skips them and they never reach the public contract.
+///     <c>[JsonIgnore]</c>, which <c>ServerPopulatedBindingMetadataProvider</c> turns into
+///     "not bindable", so they never reach the public contract.
 /// </summary>
 public class ListScopeApplicationsQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the scope whose applications are listed (assigned from the route).</summary>
-    [BindNever]
+    [JsonIgnore]
     public Guid ScopeId { get; set; }
 
     /// <summary>Optional case-insensitive substring filter on the application's name.</summary>
@@ -115,15 +225,15 @@ public class ListScopeApplicationsQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, logically deleted applications are included (FR-AP-09).</summary>
     public bool IncludeDeleted { get; set; }
 
-    [BindNever]
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
-    [BindNever]
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }
 ```
 
-- [ ] **Step 2: Add `[JsonIgnore]` to the pilot command**
+- [ ] **Step 4: Mark the pilot command**
 
 In `UpdateApplicationCommand.cs`, attribute the four server-populated properties. `Name` and
 `OwnerId` are the real body.
@@ -172,7 +282,7 @@ public class UpdateApplicationCommand : BaseCommand, IActorScoped
 }
 ```
 
-- [ ] **Step 3: Regenerate the document and verify the mechanism**
+- [ ] **Step 5: Regenerate the document and verify the mechanism**
 
 Run:
 
@@ -196,12 +306,15 @@ Expected output, exactly:
 The first list keeps only the path `scopeId` and the real filters; `ScopeId`, `ActingPersonId` and
 `ActingRole` are gone as query parameters. The second keeps only the client-supplied body.
 
-**If either list still contains the server-populated names, the attribute did not take. Stop here
-and report which one failed** — the spec's fallback is a Swashbuckle `IOperationFilter` (parameters)
-or `ISchemaFilter` (schemas) keyed off the attribute, for that half only, and that is a change worth
-discussing before making.
+**If either list still contains the server-populated names, stop here and report which one failed,
+with the actual output.** Do not improvise a fix. The likely causes differ by half: a query
+parameter surviving means ApiExplorer did not see the provider — check that the generator's
+`AddControllers(ModelBindingConfiguration.Configure)` from Step 2 is really in place, since the
+generator is the process that writes this file. A body property surviving means Swashbuckle is not
+building the schema from the JSON contract, which the spec's fallback (an `ISchemaFilter`) would
+address. Either way the fallback is the controller's call, not the implementer's.
 
-- [ ] **Step 4: Rewrite the body-forgery test so it still forges**
+- [ ] **Step 6: Rewrite the body-forgery test so it still forges**
 
 `ApplicationControllerUpdateTests.GivenForgedActingRoleInBody_WhenPutApplication_ThenItIsIgnored`
 currently forges by setting properties on a typed `UpdateApplicationCommand` and letting the gateway
@@ -246,7 +359,7 @@ The forged `scopeId`/`id` are new to this test and are the point: they prove the
 addresses the application even when the body contradicts it. If they were honoured, the request
 would target a nonexistent application and return 404 rather than 403.
 
-- [ ] **Step 5: Run the affected functional tests**
+- [ ] **Step 7: Run the affected functional tests**
 
 Run:
 
@@ -256,9 +369,9 @@ dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional&FullyQualif
 
 Expected: PASS, including `GivenForgedActingRoleInBody_WhenPutApplication_ThenItIsIgnored` and the
 already-raw-URL `GivenForgedActingRoleInQueryString_WhenGetApplications_ThenItIsIgnored`, which now
-exercises the `[BindNever]` path unchanged.
+exercises the new binding-metadata path unchanged.
 
-- [ ] **Step 6: Run the unit suite**
+- [ ] **Step 8: Run the unit suite**
 
 Run:
 
@@ -266,13 +379,13 @@ Run:
 dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
 ```
 
-Expected: PASS. Handler unit tests construct commands and queries in code, so neither attribute
-affects them.
+Expected: PASS. Handler unit tests construct commands and queries in code, so the marker does not
+affect them.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/Application/ArturRios.Heimdall.Query/Input/ListScopeApplicationsQuery.cs src/Application/ArturRios.Heimdall.Command/Input/UpdateApplicationCommand.cs tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ApplicationControllerUpdateTests.cs docs/openapi/heimdall.json
+git add src/Presentation/ArturRios.Heimdall.WebApi/Binding/ModelBindingConfiguration.cs src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs tools/ArturRios.Heimdall.OpenApiGen/Program.cs src/Application/ArturRios.Heimdall.Query/Input/ListScopeApplicationsQuery.cs src/Application/ArturRios.Heimdall.Command/Input/UpdateApplicationCommand.cs tests/Presentation/ArturRios.Heimdall.WebApi.Tests/ApplicationControllerUpdateTests.cs docs/openapi/heimdall.json
 git commit -m "fix: stop publishing server-populated fields on the application endpoints"
 ```
 
@@ -288,30 +401,31 @@ git commit -m "fix: stop publishing server-populated fields on the application e
 - Regenerate: `docs/openapi/heimdall.json`
 
 **Interfaces:**
-- Consumes: the `[BindNever]` pattern verified in Task 1.
+- Consumes: `ModelBindingConfiguration` and the `[JsonIgnore]` marker pattern, both verified in
+  Task 1. No new wiring — the provider already applies to every controller action.
 - Produces: nothing new.
 
-- [ ] **Step 1: Apply `[BindNever]` to all four**
+- [ ] **Step 1: Apply `[JsonIgnore]` to all four**
 
-In each file: add `using Microsoft.AspNetCore.Mvc.ModelBinding;` to the using block, and put
-`[BindNever]` on `ScopeId`, `ActingPersonId` and `ActingRole`. Leave `Name`, `Email`,
-`IncludeDeleted` and the inherited `PageNumber`/`PageSize` alone — they are real filters.
+In each file: add `using System.Text.Json.Serialization;` to the using block, and put `[JsonIgnore]`
+on `ScopeId`, `ActingPersonId` and `ActingRole`. Leave `Name`, `Email`, `IncludeDeleted` and the
+inherited `PageNumber`/`PageSize` alone — they are real filters.
 
 Three of the four — `ListScopeGoogleUsersQuery`, `ListScopePersonsQuery`, `ListScopeOwnersQuery` —
 declare `ScopeId`, `Name`, `Email`, `IncludeDeleted`, `ActingPersonId`, `ActingRole`.
 `ListScopePermissionsQuery` is the same minus `Email`. Apply this shape to each:
 
 ```csharp
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace ArturRios.Heimdall.Query.Input;
 
 public class ListScopeGoogleUsersQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the scope whose Google Users are listed (assigned from the route).</summary>
-    [BindNever]
+    [JsonIgnore]
     public Guid ScopeId { get; set; }
 
     /// <summary>Optional case-insensitive substring filter on the Google User's name.</summary>
@@ -323,18 +437,19 @@ public class ListScopeGoogleUsersQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, logically deleted Google Users are included (FR-GO-17).</summary>
     public bool IncludeDeleted { get; set; }
 
-    [BindNever]
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
-    [BindNever]
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }
 ```
 
 Each of these four classes already carries a class-level `<summary>` saying `ScopeId` comes from the
 route and the acting fields are set by the controller. Extend that sentence in each with: *"All
-three are `[BindNever]`, so the model binder skips them and they never reach the public contract."*
-Keep the rest of each summary verbatim — the UC/FR references differ per file.
+three are `[JsonIgnore]`, which `ServerPopulatedBindingMetadataProvider` turns into "not bindable",
+so they never reach the public contract."* Keep the rest of each summary verbatim — the UC/FR
+references differ per file.
 
 - [ ] **Step 2: Regenerate and verify all five list operations are clean**
 
@@ -798,5 +913,7 @@ git commit -m "test: guard the published contract against server-populated field
 - [ ] `python3 scripts/openapi.py --check` exits 0.
 - [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"` passes.
 - [ ] `dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"` passes.
-- [ ] `git diff main --stat` touches only the 17 DTOs, 3 test files and `docs/openapi/heimdall.json`
-      — no controller, no handler.
+- [ ] `git diff main --stat` touches only: the 17 DTOs; the new
+      `Binding/ModelBindingConfiguration.cs` plus its two registration sites (`Startup.cs`,
+      `tools/ArturRios.Heimdall.OpenApiGen/Program.cs`); 3 test files; and
+      `docs/openapi/heimdall.json`. No controller, no handler, and no `.csproj`.
