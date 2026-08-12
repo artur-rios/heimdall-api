@@ -4,3 +4,8 @@
 # checked out as CRLF wherever core.autocrlf is on and every check would report drift that is not
 # there. Pinning the working copy to LF keeps the comparison meaningful on Windows and in CI alike.
 docs/openapi/heimdall.json text eol=lf
+
+# The container entrypoint is read by /bin/sh inside a Linux image. Checked out with CRLF on Windows
+# it fails at the shebang ("no such file or directory"), so it is pinned to LF regardless of
+# core.autocrlf.
+*.sh text eol=lf

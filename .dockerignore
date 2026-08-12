@@ -1,0 +1,25 @@
+# Keeping the build context to the sources the image is built from: everything else only slows the
+# build and, for bin/obj, risks host artifacts (Windows paths, a different RID) leaking into it.
+**/bin/
+**/obj/
+.git/
+.github/
+.idea/
+.vs/
+.vscode/
+.worktrees/
+docs/
+tests/
+tools/
+api-client/
+logs/
+**/*.user
+**/*.DotSettings.user
+# Every environment file: the Web API's own Environments folder (the container is configured from its
+# environment, and a file copied into the image would be loaded ahead of nothing useful -- at best
+# placeholders, at worst values from another machine) and the per-environment Compose files, which
+# hold this deployment's real secrets and have no business inside a built image.
+**/.env
+**/.env.*
+docker/*.env
+!.config/dotnet-tools.json

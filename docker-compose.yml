@@ -1,0 +1,100 @@
+# One file for the three environments -- Local (Docker Desktop on Windows), Development (Docker in a
+# WSL Ubuntu) and Production (the VPC server). What differs between them is configuration, not
+# topology, so each environment supplies its own env file instead of its own Compose file:
+#
+#     docker compose --env-file docker/local.env up -d --build
+#     docker compose --env-file docker/development.env up -d --build
+#     docker compose --env-file docker/production.env up -d --build
+#
+# Postgres is not a service here: every environment already runs one instance, shared with other
+# services, each owning its own database. The API reaches it over DB_HOST -- see docker/*.env.example
+# and the README's "Deploy with Docker" section for what that has to be per environment.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${API_IMAGE:-heimdall-api}:${API_IMAGE_TAG:-latest}
+    restart: unless-stopped
+
+    # host.docker.internal is defined by Docker Desktop already, but not by the plain Docker engine a
+    # WSL Ubuntu or the server runs -- there it is only what this line makes it: the gateway address
+    # of the container's bridge network, which is the host itself. Declaring it here is what lets the
+    # same DB_HOST value work on all three. It is inert when DB_HOST names a real host instead.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # Local and Development run as Development: Swagger is served, the developer exception page is
+      # on, EF logs parameter values, and verification/reset e-mails are logged instead of sent.
+      # Production turns all of that off and requires the Mailgun variables below.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+
+      # The API resolves its whole configuration from the environment (Startup, and
+      # AddDataConfigFromEnvironment("HEIMDALL_DATA")). The Environments/.env files are for running
+      # from source; none is copied into the image.
+      #
+      # The connection string is assembled from parts so an environment only has to state what
+      # actually differs -- host, database, credentials. DB_CONNECTION_EXTRA appends anything Npgsql
+      # accepts and this file should not assume, e.g. "SSL Mode=Require;Trust Server Certificate=true".
+      #
+      # Search Path is pinned, and it is not cosmetic. EF names the migrations history table
+      # unqualified ("__EFMigrationsHistory"), so Postgres resolves it through the search path, whose
+      # default is "$user", public. The entities live in a schema called heimdall; the moment the
+      # login is also called heimdall -- the obvious name for this service's own role -- "$user"
+      # starts resolving to that schema. The first run then records its history in public and every
+      # run after it reads an empty history table in heimdall, concludes nothing was ever applied,
+      # and dies on `relation "role" already exists`. Pinning the path keeps every run reading the
+      # table the first one wrote.
+      HEIMDALL_DATA_CONNECTIONSTRING: "Host=${DB_HOST:-host.docker.internal};Port=${DB_PORT:-5432};Database=${DB_NAME:-heimdall};Username=${DB_USER:?set DB_USER in the env file};Password=${DB_PASSWORD:?set DB_PASSWORD in the env file};Search Path=${DB_SEARCH_PATH:-public};${DB_CONNECTION_EXTRA:-}"
+      HEIMDALL_DATA_DATABASETYPE: PostgreSql
+
+      HEIMDALL_AUTH_TOKEN_SECRET: ${HEIMDALL_AUTH_TOKEN_SECRET:?set HEIMDALL_AUTH_TOKEN_SECRET in the env file}
+      HEIMDALL_AUTH_TOKEN_ISSUER: ${HEIMDALL_AUTH_TOKEN_ISSUER:-heimdall}
+      HEIMDALL_AUTH_TOKEN_AUDIENCE: ${HEIMDALL_AUTH_TOKEN_AUDIENCE:-heimdall}
+      HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS: ${HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS:-3600}
+
+      # Seeded on first start, and only while the database holds no system administrator.
+      HEIMDALL_MASTER_USER_NAME: ${HEIMDALL_MASTER_USER_NAME:?set HEIMDALL_MASTER_USER_NAME in the env file}
+      HEIMDALL_MASTER_USER_EMAIL: ${HEIMDALL_MASTER_USER_EMAIL:?set HEIMDALL_MASTER_USER_EMAIL in the env file}
+      HEIMDALL_MASTER_USER_PASSWORD: ${HEIMDALL_MASTER_USER_PASSWORD:?set HEIMDALL_MASTER_USER_PASSWORD in the env file}
+
+      HEIMDALL_EMAIL_VERIFICATION_URL: ${HEIMDALL_EMAIL_VERIFICATION_URL:-}
+      HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS: ${HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS:-}
+      HEIMDALL_PASSWORD_RESET_URL: ${HEIMDALL_PASSWORD_RESET_URL:-}
+      HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS: ${HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS:-}
+
+      # Unset outside Production and both e-mails are logged instead of sent; in Production the API
+      # refuses to start without them (AddEmailSenders).
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
+      MAILGUN_API_VERSION: ${MAILGUN_API_VERSION:-}
+
+      # Comma-separated Google OAuth client IDs accepted as an ID token's audience. Unset, Google
+      # sign-in refuses every token rather than trusting an unverified one.
+      HEIMDALL_GOOGLE_CLIENT_IDS: ${HEIMDALL_GOOGLE_CLIENT_IDS:-}
+
+      # The entrypoint applies pending EF Core migrations before starting the API. false when they
+      # are applied out of band -- scripts/migrations.py, or a deploy step of its own.
+      HEIMDALL_RUN_MIGRATIONS: ${HEIMDALL_RUN_MIGRATIONS:-true}
+
+    volumes:
+      - logs:/app/logs
+
+    # Host side of the mapping, so an environment can pick the interface as well as the port:
+    # "8080" publishes on every interface, "127.0.0.1:8080" only to the host -- which is what a
+    # server with a reverse proxy in front of the API wants.
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# A named volume rather than a bind mount, so the same file works unchanged on Windows and Linux --
+# a host path would need a different form on each.
+volumes:
+  logs:

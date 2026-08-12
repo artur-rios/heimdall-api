@@ -509,3 +509,10 @@ api-client/bruno/.env
 # unpacks it here before Hugo runs — so the repository does not carry hundreds of generated pages
 # whose diffs nobody reads. Run scripts/coverage.py to rebuild it locally for previewing.
 docs/coverage-report/
+
+# Compose configuration.
+#
+# docker-compose.yml resolves every secret it passes to the API — database password, token signing
+# secret, master user credentials — from the env file the environment is deployed with. The tracked
+# docker/*.env.example files are their templates.
+/docker/*.env

@@ -227,6 +227,7 @@ environments without credentials, which is what keeps the functional suite off t
 - **.NET 10 SDK**
 - **PostgreSQL** (the API's relational database; functional tests spin up their own via Testcontainers)
 - **Python 3** (only to run the migration menu script)
+- **Docker** (only to deploy with Compose — see [Deploy with Docker](#deploy-with-docker))
 - The pinned EF Core CLI tool — restore it once after cloning:
 
   ```bash
@@ -424,6 +425,82 @@ token, and call any endpoint. It is built from the same `SwaggerConfiguration` t
 `python scripts/openapi.py` writes to `docs/openapi/heimdall.json`, so the
 [API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/) publishes byte-for-byte
 what a running instance serves.
+
+## Deploy with Docker
+
+[`docker-compose.yml`](docker-compose.yml) runs the API in a container against a **PostgreSQL
+instance that is already installed on the host** — the same instance other services share, this one
+owning a single database of its own. Postgres is deliberately not a service in the file.
+
+Three environments, one Compose file, one env file each:
+
+| Environment | Where | Env file | Postgres |
+| --- | --- | --- | --- |
+| Local | Docker Desktop on Windows | `docker/local.env` | Installed on the Windows host |
+| Development | Docker in the WSL Ubuntu distro | `docker/development.env` | Installed in that distro |
+| Production | The VPC server | `docker/production.env` | Installed on the server |
+
+Copy the template for the environment you are deploying and fill it in — each one documents what it
+expects, including which `DB_HOST` value applies:
+
+```bash
+cp docker/local.env.example docker/local.env
+```
+
+Then, from the repository root:
+
+```bash
+docker compose --env-file docker/local.env up -d --build
+```
+
+The real env files are gitignored: they hold the database password, the token signing secret and the
+master user's credentials.
+
+### What the container does at start-up
+
+The image carries an **EF Core migrations bundle** built from
+`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. The entrypoint applies pending migrations
+and only then starts the API, which is what lets a container be pointed at an empty database — the
+API itself never migrates, and refuses to start while migrations are pending. Set
+`HEIMDALL_RUN_MIGRATIONS=false` to apply them out of band instead (`python scripts/migrations.py`),
+which is required if the environment ever runs more than one replica.
+
+### What the host's Postgres needs
+
+The container reaches Postgres over the bridge network, not over the loopback interface the host's
+own processes use, so an installation that only listens on `localhost` is unreachable from it:
+
+- `listen_addresses` must include the address the container connects to (`*` binds all interfaces —
+  pair it with a firewall that does not expose 5432 publicly).
+- `pg_hba.conf` needs a line for the Docker bridge range, e.g.
+  `host <database> <user> 172.16.0.0/12 scram-sha-256`.
+- The database and its login must exist; each service on the shared instance gets its own:
+
+  ```bash
+  sudo -u postgres createuser --pwprompt heimdall_svc && sudo -u postgres createdb --owner heimdall_svc heimdall
+  ```
+
+- On Windows, allow inbound 5432 from the Docker/WSL virtual adapter in Windows Firewall.
+
+Check reachability before the first deploy:
+
+```bash
+docker run --rm --add-host host.docker.internal:host-gateway alpine sh -c 'nc -z -w 3 host.docker.internal 5432 && echo reachable || echo unreachable'
+```
+
+### Naming the login
+
+Compose pins `Search Path=public` in the connection string, and the reason is worth knowing before
+anyone changes it. EF names the migrations history table unqualified, so Postgres resolves it through
+the search path — whose default, `"$user", public`, makes the *login's* name a schema lookup. The
+entities live in a schema called `heimdall`, so a login also named `heimdall` sends the second run
+looking for its history in that schema, where the first run wrote none: it concludes nothing was ever
+applied and dies on `relation "role" already exists`. The pin makes every run read the table the
+first one wrote, whatever the login is called.
+
+The same trap applies when running from source — `Environments/.env.local` and
+`scripts/migrations.py` share the connection string, not this file — so either keep `Search
+Path=public` in those connection strings too, or do not name the login `heimdall`.
 
 ## Legal
 
