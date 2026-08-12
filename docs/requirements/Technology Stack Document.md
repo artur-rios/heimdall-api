@@ -1,3 +1,10 @@
+---
+title: "Technology Stack Document"
+linkTitle: "Technology Stack Document"
+weight: 40
+description: "The technologies, libraries, and pinned versions the project is built on."
+---
+
 # Technology Stack Document — Heimdall API
 
 ## 1. Purpose

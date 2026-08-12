@@ -1,3 +1,10 @@
+---
+title: "Vision Document"
+linkTitle: "Vision Document"
+weight: 10
+description: "Why Heimdall exists, who it serves, its stakeholders, goals, and what success looks like."
+---
+
 # Vision Document — Heimdall API
 
 ## 1. Introduction

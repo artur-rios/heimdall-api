@@ -1,0 +1,48 @@
+{{- /*
+  Link render hook.
+
+  The requirements documents under docs/requirements/ are rendered by this site *in place* —
+  they are the same files the repository and GitHub serve, not copies. Their links are therefore
+  written for GitHub, and two kinds need translating for the web:
+
+    1. A sibling document link — "Technology%20Stack%20Document.md" — becomes that page's
+       permalink in this section.
+    2. A source-file link — "../src/...", "../tests/...", "../scripts/..." — has no page on this
+       site at all, so it becomes a GitHub blob URL.
+
+  Everything else (absolute URLs, in-page anchors, and the relative links written by this site's
+  own pages) is passed through untouched.
+*/ -}}
+{{- $dest := .Destination -}}
+{{- $u := urls.Parse $dest -}}
+{{- $external := false -}}
+
+{{- if not $u.IsAbs -}}
+  {{- $path := $u.Path -}}
+  {{- if and $path (strings.HasSuffix (lower $path) ".md") (not (strings.Contains $path "/")) -}}
+    {{- /*
+      Sibling document in the same section. Resolved by matching the source file name rather
+      than by urlizing it, so a page that overrides its slug still resolves correctly.
+    */ -}}
+    {{- $base := $path | strings.TrimSuffix ".md" | strings.TrimSuffix ".MD" -}}
+    {{- with .Page.Parent -}}
+      {{- range .Pages -}}
+        {{- if and .File (eq .File.BaseFileName $base) -}}
+          {{- $dest = .RelPermalink -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    {{- with $u.Fragment -}}
+      {{- $dest = printf "%s#%s" $dest . -}}
+    {{- end -}}
+  {{- else if or (hasPrefix $path "../src/") (hasPrefix $path "../tests/") (hasPrefix $path "../scripts/") -}}
+    {{- /* A file in the repository, with no page here. */ -}}
+    {{- $repo := site.Params.github_repo | default "https://github.com/artur-rios/heimdall-api" -}}
+    {{- $branch := site.Params.github_branch | default "main" -}}
+    {{- $dest = printf "%s/blob/%s/%s" $repo $branch (strings.TrimPrefix "../" $path) -}}
+    {{- $external = true -}}
+  {{- end -}}
+{{- else if not (hasPrefix $dest (printf "%s" site.BaseURL)) -}}
+  {{- $external = true -}}
+{{- end -}}
+<a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if $external }} target="_blank" rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>

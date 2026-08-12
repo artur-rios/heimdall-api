@@ -1,0 +1,88 @@
+baseURL = 'https://artur-rios.github.io/heimdall-api/'
+title = 'Heimdall API'
+# Docsy ships the theme in a `theme/` subdirectory of its repository (v0.16.0+), so the
+# submodule root is not itself the theme.
+theme = 'docsy/theme'
+
+enableRobotsTXT = true
+enableGitInfo = true
+
+contentDir = 'content/en'
+defaultContentLanguage = 'en'
+
+# Docsy needs these output formats for its section pages and print view
+[outputs]
+home = ['HTML']
+page = ['HTML']
+section = ['HTML', 'print', 'RSS']
+
+# Docsy renders HTML inside markdown (shortcodes, alerts) — required
+[markup]
+[markup.goldmark.renderer]
+unsafe = true
+[markup.highlight]
+noClasses = false
+style = 'tango'
+[markup.tableOfContents]
+startLevel = 2
+endLevel = 3
+
+# The requirements documents stay where they are — docs/requirements/ — so every existing
+# link to them (README, plans, specs) keeps working, and the site renders those same files
+# rather than a copy that could drift.
+[module]
+[[module.mounts]]
+source = 'content/en'
+target = 'content'
+[[module.mounts]]
+source = 'requirements'
+target = 'content/docs/requirements'
+
+[languages]
+[languages.en]
+label = 'English'
+title = 'Heimdall API'
+[languages.en.params]
+description = 'A centralized identity management API with scope-based multi-tenancy, built on ASP.NET Core.'
+
+[params]
+copyright = 'Artur Rios'
+github_repo = 'https://github.com/artur-rios/heimdall-api'
+github_branch = 'main'
+# points "Edit this page" at the right folder, since the site lives in docs/
+github_subdir = 'docs'
+offlineSearch = true
+
+[params.ui]
+sidebar_menu_compact = false
+sidebar_search_disable = false
+breadcrumb_disable = false
+navbar_logo = false
+
+[params.links]
+[[params.links.user]]
+name = 'Artur Rios'
+url = 'https://github.com/artur-rios'
+icon = 'fa fa-user'
+[[params.links.developer]]
+name = 'GitHub'
+url = 'https://github.com/artur-rios/heimdall-api'
+icon = 'fab fa-github'
+
+# Top navbar. Docsy builds the sidebar from the page tree — do NOT list docs pages here.
+[menu]
+[[menu.main]]
+identifier = 'docs'
+name = 'Documentation'
+url = '/docs/'
+weight = 10
+[[menu.main]]
+identifier = 'requirements'
+name = 'Requirements'
+url = '/docs/requirements/'
+weight = 20
+[[menu.main]]
+identifier = 'github'
+name = 'GitHub'
+url = 'https://github.com/artur-rios/heimdall-api'
+weight = 100

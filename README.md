@@ -1,5 +1,12 @@
 # Heimdall API
 
+[![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/heimdall-api/)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](./LICENSE)
+
+📖 **[Read the documentation website](https://artur-rios.github.io/heimdall-api/)** — overview,
+run and test instructions, architecture and class diagrams, sequence diagrams for the main flows,
+the API reference, and the full requirements specification.
+
 A centralized **identity management API** built with ASP.NET Core (.NET 10). It provides person
 management, application (non-human identity) management, authentication and authorization,
 password recovery, email verification, and Google Sign-In for multiple client systems through
@@ -26,7 +33,10 @@ see [Documentation](#documentation).
 ## Project structure
 
 ```
-docs/requirements/                             Vision, requirements, use cases, tech stack, testing
+docs/                                           Hugo (Docsy) documentation site — see Documentation
+  requirements/                                 Vision, requirements, use cases, tech stack, testing
+  content/en/                                   The site's own pages (overview, architecture, flows…)
+  themes/docsy/                                 The site theme, as a git submodule
 scripts/                                        Tooling (EF Core migration menu)
 src/
   Domain/ArturRios.Heimdall.Domain/      Domain entities & enums
@@ -44,7 +54,43 @@ LICENSE
 
 ## Documentation
 
-Detailed documentation lives under [`docs/requirements`](docs/requirements):
+The full documentation is published as a website:
+**<https://artur-rios.github.io/heimdall-api/>**
+
+| Section | What it covers |
+| --- | --- |
+| [Overview](https://artur-rios.github.io/heimdall-api/docs/overview/) | The domain vocabulary — scopes, persons, roles, applications, permissions — and the rules that bind them |
+| [Getting started](https://artur-rios.github.io/heimdall-api/docs/getting-started/) | Prerequisites, configuration, migrations, and running the API |
+| [Testing](https://artur-rios.github.io/heimdall-api/docs/testing/) | The unit and functional suites, conventions, and the flake hunter |
+| [Architecture](https://artur-rios.github.io/heimdall-api/docs/architecture/) | Layers, CQRS, the auditing decorator, and the request pipeline — with class diagrams |
+| [Domain model](https://artur-rios.github.io/heimdall-api/docs/domain-model/) | Entities, relationships, and deletion cascades — with a class diagram |
+| [API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/) | Every endpoint, who may call it, and the use case it implements |
+| [Flows](https://artur-rios.github.io/heimdall-api/docs/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
+| [Operations](https://artur-rios.github.io/heimdall-api/docs/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
+
+The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme from
+`docs/`, and deployed to GitHub Pages by
+[`build-docs.yml`](.github/workflows/build-docs.yml) on every push to `main` that touches `docs/`.
+
+To preview it locally — Hugo Extended and Node.js 24+ required:
+
+```bash
+git submodule update --init --recursive
+```
+
+```bash
+npm install --prefix docs/themes/docsy
+```
+
+```bash
+hugo -s docs server
+```
+
+### Requirements documents
+
+These are the specification, and they remain plain Markdown under
+[`docs/requirements`](docs/requirements) — the website renders those same files rather than a copy,
+so either place is authoritative:
 
 - [Vision Document](docs/requirements/Vision%20Document.md) — product vision, stakeholders, and goals.
 - [System Requirements Document](docs/requirements/System%20Requirements%20Document.md) — functional

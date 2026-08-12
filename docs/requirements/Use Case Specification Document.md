@@ -1,3 +1,10 @@
+---
+title: "Use Case Specification Document"
+linkTitle: "Use Case Specification Document"
+weight: 30
+description: "Every use case with its main flow and numbered alternative flows."
+---
+
 # Use Case Specification Document — Heimdall API
 
 ## 1. Introduction
@@ -1394,7 +1401,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>DB: Verify scope exists and is not logically deleted
     DB-->>API: Scope found
-    API->>API: Verify actor may manage the scope (System Admin bypasses; Scope Admin must own it)
+    API->>API: Verify actor may manage the scope (System Admin bypasses, Scope Admin must own it)
     API->>DB: Insert scope permission record { Name, Description, IncludeAsJwtClaim, ScopeId, IsDeleted = false }
     DB-->>API: Permission created
     API-->>Caller: 201 Created { permission }
@@ -1611,7 +1618,7 @@ sequenceDiagram
     API->>API: Verify appCode against the TOTP secret, if AppEnabled
     API->>API: Verify emailCode against the stored hash, if EmailEnabled
     API->>DB: Set IsActive = true
-    API->>API: Generate 10 recovery codes; hash each
+    API->>API: Generate 10 recovery codes, hashing each
     API->>DB: Store the 10 hashed recovery codes
     API-->>P: 200 OK { enabled: true, recoveryCodes: [10 plaintext codes] }
 ```
@@ -1752,7 +1759,7 @@ sequenceDiagram
     API->>DB: Load TWO_FACTOR_AUTH row
     API->>API: Verify code as a current TOTP/email code, or as an unused recovery code
     API->>DB: Delete all existing TWO_FACTOR_RECOVERY_CODE rows for the person
-    API->>API: Generate 10 new recovery codes; hash each
+    API->>API: Generate 10 new recovery codes, hashing each
     API->>DB: Store the 10 new hashed recovery codes
     API-->>P: 200 OK { recoveryCodes: [10 plaintext codes] }
 ```

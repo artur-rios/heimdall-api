@@ -1,3 +1,11 @@
+---
+title: "Operations & Infrastructure Document"
+linkTitle: "Operations & Infrastructure Document"
+weight: 70
+slug: "operations-infrastructure-document"
+description: "The technical foundation and the health-check feature."
+---
+
 # Operations & Infrastructure Document — Heimdall API
 
 ## 1. Introduction

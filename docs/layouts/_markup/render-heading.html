@@ -1,0 +1,27 @@
+{{- /*
+  Heading render hook. Mirrors Docsy's own (`_partials/td/render-heading.html`) — same markup, same
+  self-link — with one change.
+
+  Docsy already renders the page title as the page's `<h1>`. The requirements documents under
+  docs/requirements/ are rendered by this site *in place* — they are the same files GitHub serves —
+  and each opens with its own `# Title` heading, which GitHub needs and which would otherwise appear
+  as a second `<h1>` directly beneath Docsy's.
+
+  A level-1 heading in page content is therefore demoted to `<h2>` rather than dropped: no text is
+  lost and the document outline stays valid. It is excluded from the table of contents either way,
+  since markup.tableOfContents.startLevel is 2.
+*/ -}}
+{{- /*
+  The home page is the exception: Docsy's home layout renders no title heading of its own, so the
+  landing page's `# Heimdall API` is that page's only h1 and must stay one.
+*/ -}}
+{{- $demote := and (eq .Level 1) (ne .Page.Kind "home") -}}
+{{- $level := cond $demote 2 .Level -}}
+<h{{ $level }}
+  {{- range $key, $value := .Attributes -}}
+    {{ printf " %s=%q" $key (string $value) | safeHTMLAttr -}}
+  {{ end -}}
+>
+  {{- .Text | safeHTML -}}
+  <a class="td-heading-self-link" href="#{{ .Anchor | safeURL }}" aria-label="Heading self-link"></a>
+</h{{ $level }}>

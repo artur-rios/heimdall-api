@@ -1,3 +1,10 @@
+---
+title: "Development Workflow Document"
+linkTitle: "Development Workflow Document"
+weight: 60
+description: "How a use case goes from backlog to merged: branch, issue status, testing gate, pull request."
+---
+
 # Development Workflow Document — Heimdall API
 
 ## 1. Purpose

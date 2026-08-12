@@ -1,3 +1,10 @@
+---
+title: "System Requirements Document"
+linkTitle: "System Requirements Document"
+weight: 20
+description: "Functional and non-functional requirements, the data model, endpoints, authorization matrix, and deletion strategy."
+---
+
 # System Requirements Document — Heimdall API
 
 ## 1. Introduction
