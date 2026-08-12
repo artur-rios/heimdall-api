@@ -1,0 +1,54 @@
+name: Check OpenAPI Document
+
+# The published OpenAPI document (docs/openapi/heimdall.json) is a generated file that is committed,
+# so it can go stale: a change to a controller, a command, a query output or the Roles enum changes
+# what the document should say, and nothing forces the author to regenerate it. Worse, the docs site
+# only rebuilds on changes under docs/ — so a stale document would not merely be wrong, it would keep
+# being published as if it were right.
+#
+# This job regenerates it and compares the bytes. It is the reason scripts/openapi.py has --check.
+#
+# The two path filters are duplicated rather than shared through a YAML anchor: GitHub Actions does
+# not support anchors in workflow files. Keep them in step.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'scripts/openapi.py'
+      - 'docs/openapi/**'
+      - '.github/workflows/check-openapi.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'scripts/openapi.py'
+      - 'docs/openapi/**'
+      - '.github/workflows/check-openapi.yml'
+
+concurrency:
+  group: check-openapi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        # No submodules: the only one is the documentation site's theme, which this job never builds.
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Check the committed document is up to date
+        # Builds the generator (and so the Web API it reflects over), regenerates the document into a
+        # temporary file, and compares. Needs no database and no running API — that is the whole
+        # reason generation goes through tools/ArturRios.Heimdall.OpenApiGen rather than
+        # `dotnet swagger tofile`, which boots the real host and would need PostgreSQL here.
+        run: python3 scripts/openapi.py --check

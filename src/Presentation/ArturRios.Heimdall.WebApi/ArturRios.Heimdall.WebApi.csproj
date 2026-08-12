@@ -4,12 +4,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The controllers carry the per-endpoint documentation the published OpenAPI page is built
+         from (tools/ArturRios.Heimdall.OpenApiGen); without the XML file those summaries never leave
+         the source. CS1591 is off because the target is the controllers, which are documented — not
+         every public member in the assembly. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
     <PackageReference Include="ArturRios.Messaging" Version="1.1.0" />
-    <PackageReference Include="ArturRios.Util.WebApi" Version="3.0.0" />
+    <PackageReference Include="ArturRios.Util.WebApi" Version="3.1.0" />
     <!-- UC-25 verifies Google ID tokens itself (GoogleIdTokenVerifier) rather than through the
          library's IGoogleTokenVerifier, whose payload carries no name or picture claim and so cannot
          populate a Google User (FR-GO-05). Both packages arrive transitively via ArturRios.Util.WebApi;

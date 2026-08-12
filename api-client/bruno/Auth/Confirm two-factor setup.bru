@@ -1,0 +1,27 @@
+meta {
+  name: Confirm two-factor setup
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{host}}/api/auth/2fa/confirm
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "appCode": "000000"
+  }
+}
+
+docs {
+  UC-37. Authenticated.
+
+  Prove control of every method selected when enabling: appCode if App was selected, emailCode if Email was, both if both. Answers ten recovery codes in plaintext, exactly once — they are not retrievable afterwards.
+}

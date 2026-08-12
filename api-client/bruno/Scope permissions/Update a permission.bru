@@ -1,0 +1,29 @@
+meta {
+  name: Update a permission
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "reports.read",
+    "description": "May read reports, updated",
+    "includeAsJwtClaim": false
+  }
+}
+
+docs {
+  UC-33. System Admin, or the Scope Admin who owns the scope.
+
+  Clearing includeAsJwtClaim stops the name being folded into tokens issued from then on; tokens already issued keep it until they expire.
+}

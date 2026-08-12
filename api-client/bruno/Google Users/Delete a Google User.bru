@@ -1,0 +1,17 @@
+meta {
+  name: Delete a Google User
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-28. System Admin, or the Scope Admin who owns the scope.
+
+  Idempotent: repeating it answers 200 with alreadyDeleted set, not an error.
+}

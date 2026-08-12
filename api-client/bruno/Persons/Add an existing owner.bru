@@ -1,0 +1,17 @@
+meta {
+  name: Add an existing owner
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/owners/{{personId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-21. System Admin, or the Scope Admin who owns the scope.
+
+  No body: both identifiers are in the path. The person must already be a ScopeAdmin.
+}

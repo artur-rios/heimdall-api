@@ -1,0 +1,34 @@
+meta {
+  name: Google sign-up / sign-in
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{host}}/api/auth/google
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "scopeId": "{{scopeId}}",
+    "idToken": "paste-the-google-id-token-here"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.token) {
+    bru.setEnvVar("googleToken", res.body.data.token);
+  }
+}
+
+docs {
+  UC-25. Anonymous.
+
+  idToken is the ID token the client application obtained from Google, not anything this API issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403. The first call for a given Google account in a given scope creates the Google User; every later one authenticates it.
+}

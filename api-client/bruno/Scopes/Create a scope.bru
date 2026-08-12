@@ -1,0 +1,37 @@
+meta {
+  name: Create a scope
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/api/scopes
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Scope",
+    "description": "Created from the Bruno collection",
+    "ownerIds": [
+      "{{personId}}"
+    ]
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.id) {
+    bru.setEnvVar("scopeId", res.body.data.id);
+  }
+}
+
+docs {
+  UC-01. System Admin.
+
+  ownerIds must name at least one existing ScopeAdmin — create one with Persons > Create an administrator first. The new scope's id is stored as scopeId, which every scoped request in this collection then uses.
+}

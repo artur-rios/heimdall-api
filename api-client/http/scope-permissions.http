@@ -1,0 +1,54 @@
+### Scope permissions — /api/scopes/{scopeId}/permissions
+#
+# Run auth.http's "Login" first, then scopes.http's "Create a scope" so {{scopeId}} is set.
+#
+# Owning the scope is the whole of the authorization to manage its permissions — a permission has no
+# owner of its own. A permission created with includeAsJwtClaim has its name folded into the JWT of
+# identities acting within the scope.
+
+### Create a permission (UC-31) — System Admin or owning Scope Admin.
+POST {{host}}/api/scopes/{{scopeId}}/permissions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "reports.read",
+  "description": "May read reports",
+  "includeAsJwtClaim": true
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("permissionId", response.body.data.id);
+        client.log("Stored permissionId " + response.body.data.id);
+    }
+%}
+
+### Read one permission (UC-32) — System Admin or owning Scope Admin.
+GET {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}?includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's permissions (UC-32) — System Admin or owning Scope Admin.
+GET {{host}}/api/scopes/{{scopeId}}/permissions?pageNumber=1&pageSize=20&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### Update a permission (UC-33) — System Admin or owning Scope Admin.
+# Clearing includeAsJwtClaim stops the name being folded into tokens issued from then on; tokens
+# already issued keep it until they expire.
+PUT {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "reports.read",
+  "description": "May read reports, updated",
+  "includeAsJwtClaim": false
+}
+
+### Logically delete a permission (UC-34) — System Admin or owning Scope Admin.
+DELETE {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}
+Authorization: Bearer {{token}}
+
+### Hard delete a permission (UC-35) — System Admin.
+DELETE {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}/hard
+Authorization: Bearer {{token}}

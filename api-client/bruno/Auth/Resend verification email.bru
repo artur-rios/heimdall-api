@@ -1,0 +1,17 @@
+meta {
+  name: Resend verification email
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{host}}/api/auth/resend-verification
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-15. Authenticated.
+
+  No body: the person is read from the bearer token, so a caller can only ever ask for their own link. An address that is already verified answers 400.
+}

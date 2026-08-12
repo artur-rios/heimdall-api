@@ -1,0 +1,106 @@
+### Persons — /api/persons and /api/scopes/{scopeId}/…
+#
+# Run auth.http's "Login" first. A person is created through one of three endpoints depending on
+# what they are: an administrator with no scope, a User inside a scope, or a new ScopeAdmin created
+# directly as one of the scope's owners.
+#
+# "Create an administrator" stores the new person's id, which is what "Create a scope" in scopes.http
+# uses as its initial owner. On a fresh database, run these two first, in that order.
+
+### Create an administrator (UC-06 path b) — System Admin.
+# No scope: role is 1 (SystemAdmin) or 2 (ScopeAdmin). A ScopeAdmin created here owns nothing yet.
+POST {{host}}/api/persons
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Scope Admin",
+  "email": "scope.admin@example.com",
+  "password": "ChangeMe1!",
+  "role": 2
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("personId", response.body.data.id);
+        client.log("Stored personId " + response.body.data.id);
+    }
+%}
+
+### Create a User in a scope (UC-06 path a) — System Admin or the owning Scope Admin.
+# The role is implied: a person created here is always a User of this scope.
+POST {{host}}/api/scopes/{{scopeId}}/persons
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example User",
+  "email": "user@example.com",
+  "password": "ChangeMe1!"
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("scopeUserId", response.body.data.id);
+    }
+%}
+
+### Create a new Scope Admin directly as a co-owner (UC-06 path c) — System Admin or owning Scope Admin.
+POST {{host}}/api/scopes/{{scopeId}}/owners
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Co-owner",
+  "email": "co.owner@example.com",
+  "password": "ChangeMe1!"
+}
+
+### Add an existing Scope Admin as an owner (UC-21) — System Admin or owning Scope Admin.
+# No body: both identifiers are in the path. The person must already be a ScopeAdmin.
+POST {{host}}/api/scopes/{{scopeId}}/owners/{{personId}}
+Authorization: Bearer {{token}}
+
+### Promote a scope's User to owner (UC-23) — System Admin or owning Scope Admin.
+# The person must be a User of this scope; the promotion makes them a ScopeAdmin who owns it.
+POST {{host}}/api/scopes/{{scopeId}}/users/{{scopeUserId}}/promote
+Authorization: Bearer {{token}}
+
+### Read one person (UC-07) — any authenticated caller; a person may always read themselves.
+GET {{host}}/api/persons/{{personId}}?includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's Users (UC-07) — System Admin or owning Scope Admin.
+# Owners are not Users and do not appear here — use the listing below for those.
+GET {{host}}/api/scopes/{{scopeId}}/persons?pageNumber=1&pageSize=20&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's owners (UC-07) — System Admin or owning Scope Admin.
+GET {{host}}/api/scopes/{{scopeId}}/owners?pageNumber=1&pageSize=20&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### Update a person (UC-08) — any authenticated caller, subject to the handler's rules.
+# roleId may only be changed by a System Admin; omit it entirely for a self-service name/email edit.
+PUT {{host}}/api/persons/{{personId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Scope Admin, renamed",
+  "email": "scope.admin@example.com"
+}
+
+### Remove an owner from a scope (UC-22) — System Admin or owning Scope Admin.
+# Refused if it would leave the scope with no owner.
+DELETE {{host}}/api/scopes/{{scopeId}}/owners/{{personId}}
+Authorization: Bearer {{token}}
+
+### Logically delete a person (UC-09) — System Admin or owning Scope Admin.
+DELETE {{host}}/api/persons/{{personId}}
+Authorization: Bearer {{token}}
+
+### Hard delete a person (UC-10) — System Admin.
+# Irreversible, and cascades to the applications they own, their tokens, their 2FA configuration and
+# their join rows.
+DELETE {{host}}/api/persons/{{personId}}/hard
+Authorization: Bearer {{token}}

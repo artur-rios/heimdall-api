@@ -493,3 +493,11 @@ appsettings.api.Production.json
 
 # Git worktrees
 .worktrees/
+
+# API client collections (api-client/) — private credential overlays.
+#
+# The tracked environment files hold placeholders. Both clients read an untracked overlay for real
+# values: JetBrains merges http-client.private.env.json over http-client.env.json per key, and Bruno
+# exposes bruno/.env as {{process.env.NAME}}.
+api-client/http/http-client.private.env.json
+api-client/bruno/.env

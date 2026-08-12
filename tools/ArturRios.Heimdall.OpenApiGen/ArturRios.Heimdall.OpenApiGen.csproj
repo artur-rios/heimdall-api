@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Deliberately outside src/ArturRios.Heimdall.sln: this is a developer tool that writes a
+         documentation artefact, not part of the product, and keeping it out of the solution keeps it
+         out of the build and coverage runs that the solution drives. Run it through scripts/openapi.py. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Swashbuckle arrives transitively via the Web API's ArturRios.Util.WebApi, which is where the
+         version is chosen; it is declared here because this project uses SwaggerGen's types directly.
+         Microsoft.OpenApi needs no entry of its own — Util.WebApi 3.1.0 aligns it with the version
+         Swashbuckle was built against, which is what makes generating a document possible at all. -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Presentation\ArturRios.Heimdall.WebApi\ArturRios.Heimdall.WebApi.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+meta {
+  name: List Google Users
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/google-users?pageNumber=1&pageSize=20&includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-27. System Admin, or the Scope Admin who owns the scope.
+
+  Admits no Google Users at all, deliberately — unlike the by-id read below. Also filterable by name and email.
+
+  A Google User is never created here: the first successful Auth > Google sign-up / sign-in creates one.
+}

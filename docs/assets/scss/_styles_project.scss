@@ -89,3 +89,40 @@
   overflow-x: auto;
   max-width: 100%;
 }
+
+// --- Swagger UI on the API explorer page -----------------------------------
+//
+// Swagger UI is a self-contained widget with its own light-only stylesheet, embedded in
+// content/en/docs/api-explorer.md. Two things have to be reconciled with the page around it.
+//
+// Width: the widget assumes a full-width page and lays out at Docsy's text column, which leaves the
+// operation rows cramped. Let it use the space the column does not need, and scroll rather than push
+// the page sideways when it still cannot fit.
+.heimdall-swagger {
+  overflow-x: auto;
+
+  .swagger-ui .wrapper {
+    padding: 0;
+    max-width: none;
+  }
+
+  // The widget renders its own title, version and description block, which duplicates the page's
+  // front matter and the paragraph above it.
+  .swagger-ui .information-container {
+    display: none;
+  }
+}
+
+// Colour: Swagger UI ships no dark theme, and restyling several hundred of its selectors would be a
+// standing maintenance cost for one embedded widget. Inverting it and rotating the hues back gives a
+// dark widget whose colours (the green POST, the red DELETE) survive, at the price of a second
+// inversion on anything already dark -- so images and syntax-highlighted bodies are inverted again
+// to come out as authored.
+[data-bs-theme='dark'] .heimdall-swagger {
+  filter: invert(1) hue-rotate(180deg);
+
+  img,
+  .swagger-ui .microlight {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}

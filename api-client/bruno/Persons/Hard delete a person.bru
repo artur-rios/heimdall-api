@@ -1,0 +1,17 @@
+meta {
+  name: Hard delete a person
+  type: http
+  seq: 12
+}
+
+delete {
+  url: {{host}}/api/persons/{{personId}}/hard
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-10. System Admin.
+
+  Irreversible, and cascades to the applications they own, their tokens, their two-factor configuration and their join rows.
+}

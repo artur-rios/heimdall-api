@@ -15,6 +15,7 @@ using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
+using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
@@ -81,13 +82,32 @@ public class Startup(string[] args) : WebApiStartup(args)
         AddCustomInvalidModelStateResponse();
         UseSwaggerGen(jwtAuthentication: true);
 
+        // Layered over the SwaggerGen the call above registers, so Swagger UI shows the controllers'
+        // own summaries and marks which endpoints need a token. The same method produces
+        // docs/openapi/heimdall.json, which is what keeps the published page and this one identical.
+        Builder.Services.ConfigureSwaggerGen(SwaggerConfiguration.Configure);
+
         BuildApp();
 
         Log.Information("App built successfully");
 
         ConfigureApp();
-        AddMiddlewares([typeof(ExceptionMiddleware), typeof(AuthenticationMiddleware)]);
+
+        // The two middlewares are registered around UseSwagger rather than before it, and the order
+        // is the whole point.
+        //
+        // ExceptionMiddleware stays first, so a failure inside Swagger still answers the same JSON
+        // envelope as every other error rather than a bare 500. AuthenticationMiddleware goes after,
+        // because it does not exempt the Swagger routes: registered ahead of them it answered 401 to
+        // every request for /swagger, index.html included, which no browser can satisfy — it has no
+        // way to send a bearer token for a document request. Swagger UI was therefore unreachable.
+        //
+        // This does not expose the document in production: Util.WebApi registers Swagger only in the
+        // environments it allows, and in Production it registers nothing at all — the generator is
+        // what publishes the document for readers who are not running the API (scripts/openapi.py).
+        AddMiddlewares([typeof(ExceptionMiddleware)]);
         UseSwagger();
+        AddMiddlewares([typeof(AuthenticationMiddleware)]);
 
         Log.Information("App configured successfully");
 

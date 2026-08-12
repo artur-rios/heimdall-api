@@ -1,0 +1,29 @@
+meta {
+  name: Create a scope owner
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/owners
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Co-owner",
+    "email": "co.owner@example.com",
+    "password": "ChangeMe1!"
+  }
+}
+
+docs {
+  UC-06 path c. System Admin, or the Scope Admin who owns the scope.
+
+  Creates a new ScopeAdmin and makes them a co-owner in one step, for the case where the person does not exist yet.
+}

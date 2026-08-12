@@ -1,0 +1,33 @@
+meta {
+  name: Login as a scope User
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{host}}/api/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{userEmail}}",
+    "password": "{{userPassword}}",
+    "scopeId": "{{scopeId}}"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.token) {
+    bru.setEnvVar("token", res.body.data.token);
+  }
+}
+
+docs {
+  UC-11. Anonymous. A User must also name the scope they are entering — the same address may exist as a User in more than one scope.
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Confirm an email address
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{host}}/api/auth/verify-email
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "paste-the-verification-token-here"
+  }
+}
+
+docs {
+  UC-14. Anonymous.
+
+  The token is mailed at person creation. An address that was already verified answers 200: the link did what it promised.
+}

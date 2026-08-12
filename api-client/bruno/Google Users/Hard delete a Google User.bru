@@ -1,0 +1,17 @@
+meta {
+  name: Hard delete a Google User
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}/hard
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-29. System Admin.
+
+  Not idempotent, unlike the logical delete: a second call answers 404.
+}

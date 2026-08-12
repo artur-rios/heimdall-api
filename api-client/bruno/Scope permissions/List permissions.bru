@@ -1,0 +1,15 @@
+meta {
+  name: List permissions
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/permissions?pageNumber=1&pageSize=20&includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-32. System Admin, or the Scope Admin who owns the scope. Also filterable by name.
+}

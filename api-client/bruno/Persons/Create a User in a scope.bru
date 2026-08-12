@@ -1,0 +1,35 @@
+meta {
+  name: Create a User in a scope
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/persons
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example User",
+    "email": "user@example.com",
+    "password": "ChangeMe1!"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.id) {
+    bru.setEnvVar("scopeUserId", res.body.data.id);
+  }
+}
+
+docs {
+  UC-06 path a. System Admin, or the Scope Admin who owns the scope.
+
+  The role is implied by the endpoint: a person created here is always a User of this scope.
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Read one scope
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}?includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-02. Any authenticated caller.
+}

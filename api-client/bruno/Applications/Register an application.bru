@@ -1,0 +1,34 @@
+meta {
+  name: Register an application
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/applications
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Application",
+    "ownerId": "{{personId}}"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.id) {
+    bru.setEnvVar("applicationId", res.body.data.id);
+  }
+}
+
+docs {
+  UC-16. System Admin, or the Scope Admin who owns the scope.
+
+  ownerId must be a ScopeAdmin who owns this scope — a User may never own an application.
+}
