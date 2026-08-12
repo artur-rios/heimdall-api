@@ -532,6 +532,15 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddControllers(options =>
         {
             options.Filters.Add<MfaPendingGuardFilter>();
+
+            // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
+            // AddControllers() rather than running this Startup, so that call site cannot catch a
+            // removal here. Without it, [FromQuery] list-query properties marked server-populated
+            // would become bindable from the query string again on the running API — the controllers
+            // still overwrite them before use, so the query-string forgery tests would keep passing,
+            // and the published document (generated from the other call site) would look unchanged.
+            // The guarantee that these properties are non-bindable, not merely undocumented, would
+            // silently revert with no test catching it.
             ModelBindingConfiguration.Configure(options);
         });
         Builder.Services.AddEndpointsApiExplorer();

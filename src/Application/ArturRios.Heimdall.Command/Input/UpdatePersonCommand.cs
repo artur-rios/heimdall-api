@@ -6,16 +6,16 @@ namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to update a person's name, email, and — for a System Admin — role (UC-08). The person
-///     is addressed by <see cref="Id" />, bound from the route. PUT semantics: <see cref="Name" />
+///     is addressed by <see cref="Id" />, assigned from the route. PUT semantics: <see cref="Name" />
 ///     and <see cref="Email" /> are replaced. <see cref="RoleId" /> is optional; <c>null</c> leaves
 ///     the role unchanged, which is what every non-System-Admin caller sends.
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
-///     authenticated caller and are never bound from the body. They are <c>[JsonIgnore]</c>, so they
-///     are not deserialized from the body and do not appear in the request schema.
+///     authenticated caller and are never bound from the body. All three are <c>[JsonIgnore]</c>, so
+///     they are not deserialized from the body and do not appear in the request schema.
 /// </summary>
 public class UpdatePersonCommand : BaseCommand, IActorScoped
 {
-    /// <summary>Public identifier of the person to update (bound from the route).</summary>
+    /// <summary>Public identifier of the person to update (assigned from the route).</summary>
     [JsonIgnore]
     public Guid Id { get; set; }
 

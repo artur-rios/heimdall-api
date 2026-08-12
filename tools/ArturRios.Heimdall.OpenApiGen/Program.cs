@@ -12,13 +12,16 @@ namespace ArturRios.Heimdall.OpenApiGen;
 ///     The document is produced by reflecting over the Web API's controllers — the same ApiExplorer
 ///     metadata a running instance exposes — without starting the Web API itself. Nothing here
 ///     connects to a database, reads an environment file, or needs a port: the API's own
-///     <c>Startup</c> is never used, only its controller assembly and its
-///     <see cref="SwaggerConfiguration" />. That is what makes this runnable in CI and on a clean
+///     <c>Startup</c> is never used, only its controller assembly and the two pieces of API
+///     configuration that shape the document: <see cref="SwaggerConfiguration" />, which drives the
+///     document's shape, and <see cref="ModelBindingConfiguration" />, which decides which properties
+///     are bindable in the first place. That is what makes this runnable in CI and on a clean
 ///     checkout, where <c>dotnet swagger tofile</c> — which boots the real host, and so needs a
 ///     migrated database to get past the seeder — is not.
 ///
-///     Because it applies the very same <see cref="SwaggerConfiguration.Configure" /> the running API
-///     applies, the published document and the one at /swagger/v1/swagger.json are the same document.
+///     Because it applies the very same <see cref="SwaggerConfiguration.Configure" /> and
+///     <see cref="ModelBindingConfiguration.Configure" /> the running API applies, the published
+///     document and the one at /swagger/v1/swagger.json are the same document.
 ///
 ///     Run it through scripts/openapi.py rather than directly, so the output always lands where the
 ///     site expects it.
@@ -36,6 +39,12 @@ public static class Program
         // The controllers live in the Web API assembly, not this one, so ApiExplorer has to be
         // pointed at it explicitly. Controllers are only reflected over, never constructed, so none
         // of their dependencies (the mediators, the DbContext) need to be registered.
+        //
+        // ModelBindingConfiguration.Configure is also applied by Startup.ConfigureWebApi for the
+        // running API. This generator builds its own AddControllers() and never runs Startup, so the
+        // two call sites are independent — drop this one and the published document regains the
+        // server-populated query parameters Startup still keeps unbindable at runtime (caught by
+        // OpenApiContractTests and scripts/openapi.py --check, unlike dropping the Startup site).
         builder.Services
             .AddControllers(ModelBindingConfiguration.Configure)
             .AddApplicationPart(typeof(AuthController).Assembly);
