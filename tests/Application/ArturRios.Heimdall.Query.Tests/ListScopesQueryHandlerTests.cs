@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -36,7 +37,7 @@ public class ListScopesQueryHandlerTests
     {
         // Given
         var repository = await RepositoryWith(NamedScope("Alpha"), NamedScope("Beta"));
-        var handler = new ListScopesQueryHandler(repository);
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 10 });
@@ -53,7 +54,7 @@ public class ListScopesQueryHandlerTests
     {
         // Given
         var repository = await RepositoryWith(NamedScope("Alpha"), NamedScope("Beta"), NamedScope("Alphabet"));
-        var handler = new ListScopesQueryHandler(repository);
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopesQuery { Name = "Alpha", PageNumber = 1, PageSize = 10 });
@@ -69,7 +70,7 @@ public class ListScopesQueryHandlerTests
         // Given scopes whose names differ from the filter only by case (the filter is
         // case-insensitive, as the person listings are)
         var repository = await RepositoryWith(NamedScope("Alpha"), NamedScope("Beta"), NamedScope("Alphabet"));
-        var handler = new ListScopesQueryHandler(repository);
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopesQuery { Name = "aLpHa", PageNumber = 1, PageSize = 10 });
@@ -84,7 +85,7 @@ public class ListScopesQueryHandlerTests
     {
         // Given one active and one deleted scope
         var repository = await RepositoryWith(NamedScope("Active"), NamedScope("Gone", isDeleted: true));
-        var handler = new ListScopesQueryHandler(repository);
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 10 });
@@ -99,12 +100,59 @@ public class ListScopesQueryHandlerTests
     {
         // Given one active and one deleted scope
         var repository = await RepositoryWith(NamedScope("Active"), NamedScope("Gone", isDeleted: true));
-        var handler = new ListScopesQueryHandler(repository);
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopesQuery { IncludeDeleted = true, PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.Equal(2, output.TotalItems);
+    }
+
+    [UnitFact]
+    public async Task GivenPageNumberBelowOne_WhenHandlingList_ThenReturnsInvalidPageNumberError()
+    {
+        // Given — NFR-10: page number must be at least 1
+        var repository = await RepositoryWith(NamedScope("Alpha"));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 0, PageSize = 10 });
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PaginationMessages.InvalidPageNumber, output.Errors);
+        Assert.Null(output.Data);
+    }
+
+    [UnitFact]
+    public async Task GivenPageSizeAboveMaximum_WhenHandlingList_ThenReturnsInvalidPageSizeError()
+    {
+        // Given — NFR-10: page size is bounded so a caller cannot force an unbounded query
+        var repository = await RepositoryWith(NamedScope("Alpha"));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 101 });
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PaginationMessages.InvalidPageSize, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenNameFilterLongerThanColumn_WhenHandlingList_ThenReturnsFilterTooLongError()
+    {
+        // Given — NFR-10: a filter longer than Scope.Name's own 200-char column could never match
+        var repository = await RepositoryWith(NamedScope("Alpha"));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(
+            new ListScopesQuery { Name = new string('a', 201), PageNumber = 1, PageSize = 10 });
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PaginationMessages.FilterTooLong, output.Errors);
     }
 }

@@ -11,6 +11,7 @@ using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
@@ -197,6 +198,17 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>,
                 ListScopeGoogleUsersQueryHandler>();
+
+        // NFR-10: pagination/filter validation for every paginated list query.
+        Builder.Services.AddScoped<IValidator<ListScopesQuery>, ListScopesQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
+        Builder.Services
+            .AddScoped<IValidator<ListScopeApplicationsQuery>, ListScopeApplicationsQueryValidator>();
+        Builder.Services
+            .AddScoped<IValidator<ListScopePermissionsQuery>, ListScopePermissionsQueryValidator>();
+        Builder.Services
+            .AddScoped<IValidator<ListScopeGoogleUsersQuery>, ListScopeGoogleUsersQueryValidator>();
 
         // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
         // handler resolves them all as IEnumerable, so new checks are added by registering another.

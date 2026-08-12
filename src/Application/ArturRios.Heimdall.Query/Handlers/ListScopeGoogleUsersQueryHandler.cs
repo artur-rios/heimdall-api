@@ -6,6 +6,7 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Query.Handlers;
@@ -26,12 +27,21 @@ namespace ArturRios.Heimdall.Query.Handlers;
 public class ListScopeGoogleUsersQueryHandler(
     IAsyncReadOnlyRepository<Scope> scopeReader,
     IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IValidator<ListScopeGoogleUsersQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>
 {
     public async Task<PaginatedOutput<GoogleUserOutput>> HandleAsync(ListScopeGoogleUsersQuery query)
     {
         var output = PaginatedOutput<GoogleUserOutput>.New;
+
+        // NFR-10: page number/size bounds and filter length, validated before any query runs.
+        var validation = await validator.ValidateAsync(query);
+
+        if (!validation.IsValid)
+        {
+            return output.WithErrors(validation.Errors.Select(failure => failure.ErrorMessage));
+        }
 
         // AF-27a: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()

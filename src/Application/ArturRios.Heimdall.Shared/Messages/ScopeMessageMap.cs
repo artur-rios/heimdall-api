@@ -38,6 +38,10 @@ public static class ScopeMessageMap
         // AF-24b — actor is not an owner of the target scope.
         [ScopeMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
         // UC-24 (NFR-10) — the request omitted the value to set.
-        [ScopeMessages.EnabledRequired] = HttpStatusCodes.BadRequest
+        [ScopeMessages.EnabledRequired] = HttpStatusCodes.BadRequest,
+        // UC-02 read b (NFR-10) — invalid pagination or an over-length name filter.
+        [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
     };
 }

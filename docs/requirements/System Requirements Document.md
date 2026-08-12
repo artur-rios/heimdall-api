@@ -615,6 +615,18 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-16 | Security | A TOTP secret shall be stored encrypted at rest, and a recovery code shall be stored only as a hash; neither is ever returned to a caller after the response that first generates it |
 | NFR-17 | Security | A two-factor challenge token shall carry a distinct claim marking it as MFA-pending, expire quickly (target: 5 minutes), and be rejected by every endpoint except second-factor verification |
 
+**Accepted exception to NFR-15: `Person.RoleId`.** `RoleId` is an internal `bigint` foreign key into
+the `Role` table, and is exposed as `Role` in `PersonOutput`/`CreatePersonCommandOutput`/
+`UpdatePersonCommandOutput` and as a `roleId` JWT claim, rather than `Role.PublicId` or a symbolic
+name. This is accepted rather than fixed: `Role` is not an addressable resource — there is no
+endpoint that looks a role up by ID, nothing to enumerate, and no per-tenant data behind it — it is a
+closed, fixed set of three rows (`SystemAdmin=1`, `ScopeAdmin=2`, `User=3`) that already correspond
+1:1 to the public `Roles` enum every caller of this API already knows. NFR-15 exists to keep an
+attacker from inferring the existence or count of *other tenants' rows* (scopes, persons,
+applications) from a sequential ID; a fixed three-value role lookup carries none of that
+information, so threading a second identifier through every response and claim for it would add
+surface area without closing a real gap.
+
 ---
 
 ## 7. Authorization Matrix

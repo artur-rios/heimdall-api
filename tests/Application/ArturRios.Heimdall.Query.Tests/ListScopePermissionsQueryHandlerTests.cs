@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -88,7 +89,7 @@ public class ListScopePermissionsQueryHandlerTests
         var first = Permission(100, scope, "Alpha");
         var second = Permission(101, scope, "Beta");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(first, second), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(first, second), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -110,7 +111,7 @@ public class ListScopePermissionsQueryHandlerTests
         var first = Permission(100, scope, "Alpha");
         var second = Permission(101, scope, "Beta");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(first, second), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(first, second), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.ScopeAdmin, Guid.NewGuid()));
@@ -131,7 +132,7 @@ public class ListScopePermissionsQueryHandlerTests
         var outside = Permission(200, otherScope, "Beta");
         var handler = new ListScopePermissionsQueryHandler(
             await ScopesWith(scope, otherScope), await PermissionsWith(inside, outside),
-            Ownership(allowed: true));
+            Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -147,7 +148,7 @@ public class ListScopePermissionsQueryHandlerTests
         // Given an empty scope store (AF-31a reused)
         var scope = Scope(1);
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(), await PermissionsWith(), Ownership(allowed: true));
+            await ScopesWith(), await PermissionsWith(), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -163,7 +164,7 @@ public class ListScopePermissionsQueryHandlerTests
         // Given a logically deleted scope (AF-31a reused)
         var scope = Scope(1, isDeleted: true);
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -181,7 +182,7 @@ public class ListScopePermissionsQueryHandlerTests
         var scope = Scope(1);
         var permission = Permission(100, scope, "Alpha");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(permission), Ownership(allowed: false));
+            await ScopesWith(scope), await PermissionsWith(permission), Ownership(allowed: false), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.ScopeAdmin, Guid.NewGuid()));
@@ -199,7 +200,7 @@ public class ListScopePermissionsQueryHandlerTests
         var active = Permission(100, scope, "Alpha");
         var deleted = Permission(101, scope, "Beta", isDeleted: true);
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(active, deleted), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(active, deleted), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -217,7 +218,7 @@ public class ListScopePermissionsQueryHandlerTests
         var active = Permission(100, scope, "Alpha");
         var deleted = Permission(101, scope, "Beta", isDeleted: true);
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(active, deleted), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(active, deleted), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         var query = QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid());
         query.IncludeDeleted = true;
@@ -237,7 +238,7 @@ public class ListScopePermissionsQueryHandlerTests
         var billing = Permission(100, scope, "billing:read");
         var reporting = Permission(101, scope, "reporting:read");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(billing, reporting), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(billing, reporting), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         var query = QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid());
         query.Name = "BILLING";
@@ -259,7 +260,7 @@ public class ListScopePermissionsQueryHandlerTests
         var alpha = Permission(101, scope, "Alpha");
         var bravo = Permission(102, scope, "Bravo");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(charlie, alpha, bravo), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(charlie, alpha, bravo), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(
@@ -277,7 +278,7 @@ public class ListScopePermissionsQueryHandlerTests
         var scope = Scope(1);
         var permission = Permission(100, scope, "billing:read", includeAsJwtClaim: true, description: "Read billing records.");
         var handler = new ListScopePermissionsQueryHandler(
-            await ScopesWith(scope), await PermissionsWith(permission), Ownership(allowed: true));
+            await ScopesWith(scope), await PermissionsWith(permission), Ownership(allowed: true), new ListScopePermissionsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));

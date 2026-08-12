@@ -38,6 +38,10 @@ public static class ScopePermissionMessageMap
         // UC-35 main flow — scope permission hard deleted. AF-35a reuses ScopePermissionNotFound, and
         // UC-35's only other refusals are the framework's: 403 from [RoleRequirement], 401
         // unauthenticated.
-        [ScopePermissionMessages.ScopePermissionHardDeletedSuccessfully] = HttpStatusCodes.Ok
+        [ScopePermissionMessages.ScopePermissionHardDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-32 read b (NFR-10) — invalid pagination or an over-length name filter.
+        [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
     };
 }

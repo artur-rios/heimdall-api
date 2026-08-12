@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
+using FluentValidation;
 
 namespace ArturRios.Heimdall.Query.Handlers;
 
@@ -13,11 +14,22 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     optional name filter, excluding logically deleted scopes unless explicitly requested
 ///     (FR-SC-07).
 /// </summary>
-public class ListScopesQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReader)
+public class ListScopesQueryHandler(
+    IAsyncReadOnlyRepository<Scope> scopeReader,
+    IValidator<ListScopesQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>
 {
     public async Task<PaginatedOutput<ScopeOutput>> HandleAsync(ListScopesQuery query)
     {
+        // NFR-10: page number/size bounds and filter length, validated before any query runs.
+        var validation = await validator.ValidateAsync(query);
+
+        if (!validation.IsValid)
+        {
+            return PaginatedOutput<ScopeOutput>.New
+                .WithErrors(validation.Errors.Select(failure => failure.ErrorMessage));
+        }
+
         var scopes = scopeReader.Query();
 
         if (!query.IncludeDeleted)

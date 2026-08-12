@@ -43,6 +43,10 @@ public static class ApplicationMessageMap
         [ApplicationMessages.NotAuthorizedToDeleteApplication] = HttpStatusCodes.Forbidden,
         // UC-20 main flow — application hard deleted. AF-20a reuses ApplicationNotFound above, and
         // UC-20's only other refusals are the framework's: 403 from [RoleRequirement], 401 unauthenticated.
-        [ApplicationMessages.ApplicationHardDeletedSuccessfully] = HttpStatusCodes.Ok
+        [ApplicationMessages.ApplicationHardDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-17 listing (NFR-10) — invalid pagination or an over-length name filter.
+        [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
     };
 }

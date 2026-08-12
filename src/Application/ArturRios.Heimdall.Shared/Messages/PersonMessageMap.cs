@@ -68,6 +68,10 @@ public static class PersonMessageMap
         // AF-23b — the named person is not a usable User of the target scope.
         [PersonMessages.PersonNotScopeUser] = HttpStatusCodes.BadRequest,
         // AF-23d — the person is already a ScopeAdmin.
-        [PersonMessages.AlreadyScopeAdmin] = HttpStatusCodes.Conflict
+        [PersonMessages.AlreadyScopeAdmin] = HttpStatusCodes.Conflict,
+        // UC-07 reads b/c (NFR-10) — invalid pagination or an over-length name/email filter.
+        [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
     };
 }

@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -99,7 +100,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var first = App(100, scope, owner, "Alpha");
         var second = App(101, scope, coOwner, "Beta");
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(first, second), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(first, second), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -121,7 +122,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var mine = App(100, scope, owner, "Alpha");
         var theirs = App(101, scope, coOwner, "Beta");
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(mine, theirs), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(mine, theirs), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.ScopeAdmin, owner.PublicId));
@@ -144,7 +145,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var outside = App(200, otherScope, outsideOwner);
         var handler = new ListScopeApplicationsQueryHandler(
             await ScopesWith(scope, otherScope), await ApplicationsWith(inside, outside),
-            Ownership(allowed: true));
+            Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -160,7 +161,7 @@ public class ListScopeApplicationsQueryHandlerTests
         // Given an empty scope store (AF-17a)
         var scope = Scope(1);
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(), await ApplicationsWith(), Ownership(allowed: true));
+            await ScopesWith(), await ApplicationsWith(), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -176,7 +177,7 @@ public class ListScopeApplicationsQueryHandlerTests
         // Given a logically deleted scope (AF-17a)
         var scope = Scope(1, isDeleted: true);
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -195,7 +196,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var owner = Owner(10, scope);
         var application = App(100, scope, owner);
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(application), Ownership(allowed: false));
+            await ScopesWith(scope), await ApplicationsWith(application), Ownership(allowed: false), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.ScopeAdmin, Guid.NewGuid()));
@@ -214,7 +215,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var active = App(100, scope, owner, "Alpha");
         var deleted = App(101, scope, owner, "Beta", isDeleted: true);
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(active, deleted), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(active, deleted), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid()));
@@ -233,7 +234,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var active = App(100, scope, owner, "Alpha");
         var deleted = App(101, scope, owner, "Beta", isDeleted: true);
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(active, deleted), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(active, deleted), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         var query = QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid());
         query.IncludeDeleted = true;
@@ -254,7 +255,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var billing = App(100, scope, owner, "Billing Service");
         var reporting = App(101, scope, owner, "Reporting Service");
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(billing, reporting), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(billing, reporting), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         var query = QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid());
         query.Name = "BILLING";
@@ -277,7 +278,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var theirs = App(100, scope, coOwner, "Alpha");
         var wanted = App(101, scope, owner, "Beta");
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(theirs, wanted), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(theirs, wanted), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         var query = QueryFor(scope, (int)Roles.SystemAdmin, Guid.NewGuid());
         query.OwnerId = owner.PublicId;
@@ -300,7 +301,7 @@ public class ListScopeApplicationsQueryHandlerTests
         var alpha = App(101, scope, owner, "Alpha");
         var bravo = App(102, scope, owner, "Bravo");
         var handler = new ListScopeApplicationsQueryHandler(
-            await ScopesWith(scope), await ApplicationsWith(charlie, alpha, bravo), Ownership(allowed: true));
+            await ScopesWith(scope), await ApplicationsWith(charlie, alpha, bravo), Ownership(allowed: true), new ListScopeApplicationsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(

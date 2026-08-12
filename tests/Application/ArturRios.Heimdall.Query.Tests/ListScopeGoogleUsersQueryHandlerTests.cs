@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -95,7 +96,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
             GoogleUser(2, scope, "Bob", "bob@gmail.test"),
             GoogleUser(3, scope, "Deleted", "deleted@gmail.test", isDeleted: true),
             GoogleUser(4, other, "Elsewhere", "elsewhere@gmail.test"));
-        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true));
+        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope));
@@ -116,7 +117,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var googleUsers = await GoogleUsersWith(
             GoogleUser(1, scope, "Alice", "alice@gmail.test"),
             GoogleUser(2, scope, "Deleted", "deleted@gmail.test", isDeleted: true));
-        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true));
+        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope, includeDeleted: true));
@@ -135,7 +136,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var googleUsers = await GoogleUsersWith(
             GoogleUser(1, scope, "Alice Anderson", "alice@gmail.test"),
             GoogleUser(2, scope, "Bob Brown", "bob@gmail.test"));
-        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true));
+        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope, name: "ANDERSON"));
@@ -154,7 +155,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var googleUsers = await GoogleUsersWith(
             GoogleUser(1, scope, "Alice", "alice@gmail.test"),
             GoogleUser(2, scope, "Bob", "bob@outlook.test"));
-        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true));
+        var handler = new ListScopeGoogleUsersQueryHandler(scopes, googleUsers, Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope, email: "GMAIL"));
@@ -171,7 +172,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var scope = Scope(1);
         var scopes = await ScopesWith();
         var handler = new ListScopeGoogleUsersQueryHandler(
-            scopes, await GoogleUsersWith(), Ownership(true));
+            scopes, await GoogleUsersWith(), Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope));
@@ -189,7 +190,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var scopes = await ScopesWith(scope);
         var handler = new ListScopeGoogleUsersQueryHandler(
             scopes, await GoogleUsersWith(GoogleUser(1, scope, "Alice", "alice@gmail.test")),
-            Ownership(true));
+            Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope));
@@ -207,7 +208,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var scopes = await ScopesWith(scope);
         var handler = new ListScopeGoogleUsersQueryHandler(
             scopes, await GoogleUsersWith(GoogleUser(1, scope, "Alice", "alice@gmail.test")),
-            Ownership(false));
+            Ownership(false), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope, Roles.ScopeAdmin));
@@ -224,7 +225,7 @@ public class ListScopeGoogleUsersQueryHandlerTests
         var scope = Scope(1);
         var scopes = await ScopesWith(scope);
         var handler = new ListScopeGoogleUsersQueryHandler(
-            scopes, await GoogleUsersWith(), Ownership(true));
+            scopes, await GoogleUsersWith(), Ownership(true), new ListScopeGoogleUsersQueryValidator());
 
         // When
         var output = await handler.HandleAsync(Query(scope));

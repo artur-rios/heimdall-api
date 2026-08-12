@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -94,7 +95,7 @@ public class ListScopePersonsQueryHandlerTests
         var outsider = User(13, otherScope, "Carla", "carla@test.local");
         var scopes = await ScopesWith(scope, otherScope);
         var persons = await PersonsWith(member, otherMember, owner, outsider);
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope));
@@ -112,7 +113,7 @@ public class ListScopePersonsQueryHandlerTests
         // Given an empty scope store (AF-07a)
         var scopes = await ScopesWith();
         var persons = await PersonsWith();
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(new ListScopePersonsQuery
@@ -133,7 +134,7 @@ public class ListScopePersonsQueryHandlerTests
         var scope = Scope(1, isDeleted: true);
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith();
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope));
@@ -150,7 +151,7 @@ public class ListScopePersonsQueryHandlerTests
         var scope = Scope(1);
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith(User(10, scope, "Ana", "ana@test.local"));
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: false));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: false), new ListScopePersonsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope));
@@ -169,7 +170,7 @@ public class ListScopePersonsQueryHandlerTests
         var deleted = User(11, scope, "Bruno", "bruno@test.local", isDeleted: true);
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith(active, deleted);
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
 
         // When
         var output = await handler.HandleAsync(QueryFor(scope));
@@ -188,7 +189,7 @@ public class ListScopePersonsQueryHandlerTests
         var deleted = User(11, scope, "Bruno", "bruno@test.local", isDeleted: true);
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith(active, deleted);
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
         var query = QueryFor(scope);
         query.IncludeDeleted = true;
 
@@ -208,7 +209,7 @@ public class ListScopePersonsQueryHandlerTests
         var bruno = User(11, scope, "Bruno", "bruno@test.local");
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith(ana, bruno);
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
         var query = QueryFor(scope);
         query.Name = "an";
 
@@ -229,7 +230,7 @@ public class ListScopePersonsQueryHandlerTests
         var bruno = User(11, scope, "Bruno", "bruno@test.local");
         var scopes = await ScopesWith(scope);
         var persons = await PersonsWith(ana, bruno);
-        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true));
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
         var query = QueryFor(scope);
         query.Email = "BRUNO@";
 

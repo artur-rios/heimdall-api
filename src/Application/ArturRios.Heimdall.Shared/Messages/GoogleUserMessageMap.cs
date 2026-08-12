@@ -31,6 +31,10 @@ public static class GoogleUserMessageMap
         // UC-29 main flow — Google User hard deleted. AF-29a reuses GoogleUserNotFound above, and
         // UC-29's only other refusals are the framework's: 403 from [RoleRequirement], 401
         // unauthenticated.
-        [GoogleUserMessages.GoogleUserHardDeletedSuccessfully] = HttpStatusCodes.Ok
+        [GoogleUserMessages.GoogleUserHardDeletedSuccessfully] = HttpStatusCodes.Ok,
+        // UC-27 listing (NFR-10) — invalid pagination or an over-length name/email filter.
+        [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
+        [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
     };
 }
