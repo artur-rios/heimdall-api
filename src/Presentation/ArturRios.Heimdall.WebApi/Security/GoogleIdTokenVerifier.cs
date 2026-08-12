@@ -5,7 +5,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
 ///     Verifies UC-25's Google ID tokens against Google (FR-GO-11, NFR-13).
-///     <see cref="GoogleJsonWebSignature.ValidateAsync" /> checks the signature against Google's
+///     <see cref="GoogleJsonWebSignature.ValidateAsync(string, GoogleJsonWebSignature.ValidationSettings)" />
+///     checks the signature against Google's
 ///     published keys, the issuer against <c>accounts.google.com</c>, and the expiry; the configured
 ///     client IDs constrain the audience, so a token minted for someone else's application is
 ///     refused even though Google signed it.

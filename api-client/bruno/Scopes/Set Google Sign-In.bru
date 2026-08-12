@@ -1,0 +1,27 @@
+meta {
+  name: Set Google Sign-In
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{host}}/api/scopes/{{scopeId}}/google-signin
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "enabled": true
+  }
+}
+
+docs {
+  UC-24. System Admin, or the Scope Admin who owns the scope.
+
+  enabled is deliberately required rather than defaulted: an omitted value is refused, so a malformed request can never silently disable the setting.
+}

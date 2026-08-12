@@ -1,0 +1,27 @@
+meta {
+  name: Regenerate recovery codes
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{host}}/api/auth/2fa/recovery-codes/regenerate
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "code": "000000"
+  }
+}
+
+docs {
+  UC-40. Authenticated.
+
+  Invalidates every existing recovery code, including unused ones, and issues ten new ones. Send either code or recoveryCode.
+}

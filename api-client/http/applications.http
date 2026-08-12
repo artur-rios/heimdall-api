@@ -1,0 +1,54 @@
+### Applications — /api/scopes/{scopeId}/applications
+#
+# Run auth.http's "Login" first, then scopes.http's "Create a scope" so {{scopeId}} is set.
+#
+# An application's owner must be a ScopeAdmin who owns the addressed scope. A User may never own one,
+# so ownerId here is a person from persons.http's "Create an administrator", added as an owner.
+
+### Register an application in a scope (UC-16) — System Admin or owning Scope Admin.
+POST {{host}}/api/scopes/{{scopeId}}/applications
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Application",
+  "ownerId": "{{personId}}"
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("applicationId", response.body.data.id);
+        client.log("Stored applicationId " + response.body.data.id);
+    }
+%}
+
+### Read one application (UC-17) — System Admin or owning Scope Admin.
+GET {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}?includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's applications (UC-17) — System Admin or owning Scope Admin.
+GET {{host}}/api/scopes/{{scopeId}}/applications?pageNumber=1&pageSize=20&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's applications filtered by owner (UC-17).
+GET {{host}}/api/scopes/{{scopeId}}/applications?pageNumber=1&pageSize=20&ownerId={{personId}}
+Authorization: Bearer {{token}}
+
+### Update an application's name and owner (UC-18) — System Admin or owning Scope Admin.
+# The new owner must also be a ScopeAdmin who owns this scope.
+PUT {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Application, renamed",
+  "ownerId": "{{personId}}"
+}
+
+### Logically delete an application (UC-19) — System Admin or owning Scope Admin.
+DELETE {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}
+Authorization: Bearer {{token}}
+
+### Hard delete an application (UC-20) — System Admin.
+DELETE {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/hard
+Authorization: Bearer {{token}}

@@ -1,0 +1,17 @@
+meta {
+  name: Remove an owner
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/owners/{{personId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-22. System Admin, or the Scope Admin who owns the scope.
+
+  Refused if it would leave the scope with no owner.
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Google sign-out
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{host}}/api/auth/google/sign-out
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{googleToken}}
+}
+
+docs {
+  UC-26. Authenticated as a Google User.
+
+  Sends googleToken rather than the collection's token: only a live Google User may call this, and a password-login token is not one.
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Delete an application
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-19. System Admin, or the Scope Admin who owns the scope. Logical delete.
+}

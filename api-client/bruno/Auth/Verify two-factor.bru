@@ -1,0 +1,34 @@
+meta {
+  name: Verify two-factor
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{host}}/api/auth/2fa/verify
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "challengeToken": "{{challengeToken}}",
+    "code": "000000"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.token) {
+    bru.setEnvVar("token", res.body.data.token);
+  }
+}
+
+docs {
+  UC-38. Anonymous.
+
+  Redeems the challenge token stored by Login for a full token. Send either code or recoveryCode, not both. The challenge token travels in the body, never as an Authorization header — it is rejected as a bearer credential everywhere.
+}

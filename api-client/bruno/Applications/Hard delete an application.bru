@@ -1,0 +1,15 @@
+meta {
+  name: Hard delete an application
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/hard
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-20. System Admin. Irreversible.
+}

@@ -1,0 +1,36 @@
+meta {
+  name: Create an administrator
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/api/persons
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Scope Admin",
+    "email": "scope.admin@example.com",
+    "password": "ChangeMe1!",
+    "role": 2
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.id) {
+    bru.setEnvVar("personId", res.body.data.id);
+  }
+}
+
+docs {
+  UC-06 path b. System Admin.
+
+  An administrator has no scope. role is 1 (SystemAdmin) or 2 (ScopeAdmin); a ScopeAdmin created here owns nothing until a scope names them. On a fresh database run this before Scopes > Create a scope, which needs an owner to exist.
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Detailed health
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/healthcheck/detailed
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-30. System Admin. Names each dependency and its status.
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Delete a person
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{host}}/api/persons/{{personId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-09. System Admin, or the Scope Admin who owns the scope. Logical delete.
+}

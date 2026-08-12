@@ -1,0 +1,26 @@
+meta {
+  name: Update a scope
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{host}}/api/scopes/{{scopeId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Scope, renamed",
+    "description": "Updated from the Bruno collection"
+  }
+}
+
+docs {
+  UC-03. System Admin. Updates the name and description; ownership is managed through Persons.
+}

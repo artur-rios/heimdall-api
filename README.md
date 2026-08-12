@@ -33,11 +33,16 @@ see [Documentation](#documentation).
 ## Project structure
 
 ```
+api-client/                                     Ready-to-send requests for every endpoint
+  http/                                         JetBrains HTTP Client (.http) files
+  bruno/                                        Bruno collection
 docs/                                           Hugo (Docsy) documentation site — see Documentation
   requirements/                                 Vision, requirements, use cases, tech stack, testing
   content/en/                                   The site's own pages (overview, architecture, flows…)
+  openapi/                                      Generated OpenAPI document, published by the site
   themes/docsy/                                 The site theme, as a git submodule
-scripts/                                        Tooling (EF Core migration menu)
+scripts/                                        Tooling (EF Core migrations, coverage, OpenAPI)
+tools/ArturRios.Heimdall.OpenApiGen/            Writes docs/openapi/heimdall.json (not in the solution)
 src/
   Domain/ArturRios.Heimdall.Domain/      Domain entities & enums
   Application/
@@ -65,6 +70,7 @@ The full documentation is published as a website:
 | [Architecture](https://artur-rios.github.io/heimdall-api/docs/architecture/) | Layers, CQRS, the auditing decorator, and the request pipeline — with class diagrams |
 | [Domain model](https://artur-rios.github.io/heimdall-api/docs/domain-model/) | Entities, relationships, and deletion cascades — with a class diagram |
 | [API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/) | Every endpoint, who may call it, and the use case it implements |
+| [API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/) | Swagger UI over the generated OpenAPI document — parameters, schemas, and responses |
 | [Flows](https://artur-rios.github.io/heimdall-api/docs/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
 | [Operations](https://artur-rios.github.io/heimdall-api/docs/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
 
@@ -394,6 +400,19 @@ to have been run once.
 ```bash
 dotnet run --project src/Presentation/ArturRios.Heimdall.WebApi
 ```
+
+Serves on `http://localhost:5177` (the `http` launch profile); the `https` profile adds
+`https://localhost:7235`.
+
+To call it, [`api-client/`](api-client) holds ready-to-send requests for all 49 endpoints as both
+`.http` files and a Bruno collection, chained so no identifier has to be copied by hand — see
+[`api-client/README.md`](api-client/README.md).
+
+Swagger UI is at <http://localhost:5177/swagger>, with JWT wired in — press **Authorize**, paste a
+token, and call any endpoint. It is built from the same `SwaggerConfiguration` that
+`python scripts/openapi.py` writes to `docs/openapi/heimdall.json`, so the
+[API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/) publishes byte-for-byte
+what a running instance serves.
 
 ## Legal
 

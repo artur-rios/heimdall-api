@@ -1,0 +1,17 @@
+meta {
+  name: Read one Google User
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}?includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-27. Any authenticated caller, including the Google User themselves.
+
+  This carries no role requirement for a concrete reason: a Google User's token is User-role, so any role strong enough to keep other Users out would lock out the actor the use case explicitly grants.
+}

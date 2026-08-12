@@ -1,0 +1,17 @@
+meta {
+  name: Delete a scope
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-04. System Admin.
+
+  Logical delete. Cascades to the scope's Users, Google Users and applications, which remain readable with includeDeleted=true.
+}

@@ -1,0 +1,32 @@
+### Google Users — /api/scopes/{scopeId}/google-users
+#
+# Run auth.http's "Login" first. A Google User is never created through these endpoints — the first
+# successful "Google sign-up / sign-in" in auth.http creates one. What is here is the reading and
+# deleting of them.
+#
+# Every path takes the scope's PublicId, and a Google User reached through the wrong scope is
+# refused even when the id exists.
+
+### List a scope's Google Users (UC-27) — System Admin or owning Scope Admin.
+# Admits no Google Users, deliberately: a Google User's token is User-role.
+GET {{host}}/api/scopes/{{scopeId}}/google-users?pageNumber=1&pageSize=20&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### List a scope's Google Users filtered by email (UC-27).
+GET {{host}}/api/scopes/{{scopeId}}/google-users?pageNumber=1&pageSize=20&email=someone@gmail.com
+Authorization: Bearer {{token}}
+
+### Read one Google User (UC-27) — any authenticated caller, including the Google User themselves.
+# This is the one endpoint here a Google User may call, and only about themselves.
+GET {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}?includeDeleted=false
+Authorization: Bearer {{token}}
+
+### Logically delete a Google User (UC-28) — System Admin or owning Scope Admin.
+# Idempotent: repeating it answers 200 with alreadyDeleted set, not an error.
+DELETE {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}
+Authorization: Bearer {{token}}
+
+### Hard delete a Google User (UC-29) — System Admin.
+# Not idempotent, unlike the logical delete above: a second call answers 404.
+DELETE {{host}}/api/scopes/{{scopeId}}/google-users/{{googleUserId}}/hard
+Authorization: Bearer {{token}}

@@ -91,21 +91,41 @@ On the first run against an empty database, the seeder creates the roles and the
 administrator from `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD`. On later runs, an existing
 system admin means those variables are read but unused.
 
-Swagger UI is generated with JWT authentication wired in, so you can paste a bearer token and call
-the endpoints from the browser.
+The `http` launch profile serves on `http://localhost:5177`; the `https` profile adds
+`https://localhost:7235`.
+
+**Swagger UI** is at <http://localhost:5177/swagger>, with JWT wired in: press **Authorize**, paste
+the token from a login, and call any endpoint from the browser. It shows each controller's own
+summary and marks which endpoints need a token, because `SwaggerConfiguration` is applied over it.
+
+That same class produces the document behind the [API explorer](../api-explorer/), so the two are the
+same document — literally: `python scripts/openapi.py` writes byte-for-byte what a running instance
+serves at `/swagger/v1/swagger.json`. Read the API without running it through the explorer; call it
+through Swagger UI or `api-client/`.
+
+{{% alert title="Why Swagger sits between the two middlewares" color="info" %}}
+`Startup.Build()` registers `ExceptionMiddleware`, then `UseSwagger()`, then
+`AuthenticationMiddleware` — not both middlewares before Swagger. Authentication does not exempt the
+Swagger routes, so registering it first answered 401 to every request for `/swagger`, `index.html`
+included, which no browser can satisfy. Keeping the exception middleware ahead means a failure inside
+Swagger still answers the usual JSON envelope.
+
+Swagger is registered only in the environments the library allows, and in Production it registers
+nothing at all — so this does not publish the document from a production instance.
+{{% /alert %}}
 
 ## First calls
 
 Liveness — anonymous, no database:
 
 ```bash
-curl http://localhost:5000/healthcheck
+curl http://localhost:5177/healthcheck
 ```
 
 Log in as the master system administrator:
 
 ```bash
-curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d '{"email":"<master-email>","password":"<master-password>"}'
+curl -X POST http://localhost:5177/api/auth/login -H "Content-Type: application/json" -d '{"email":"<master-email>","password":"<master-password>"}'
 ```
 
 The response carries `token` and `expiresAt`. Send it as `Authorization: Bearer <token>` on every
@@ -116,6 +136,32 @@ If the person has active 2FA, login answers `requiresTwoFactor: true` with a sho
 `challengeToken` instead of a full token. Finish the login at `POST /api/auth/2fa/verify` — see the
 [two-factor flow](../flows/two-factor/).
 {{% /alert %}}
+
+## Calling the API
+
+`api-client/` holds ready-to-send requests for all 49 endpoints, in two formats — pick whichever your
+editor already opens:
+
+| Directory | Format | Opens in |
+| --- | --- | --- |
+| `api-client/http/` | JetBrains HTTP Client (`.http`) | Rider, IntelliJ IDEA, VS Code with the REST Client extension |
+| `api-client/bruno/` | [Bruno](https://www.usebruno.com) collection | The Bruno app, or `bru run` on the command line |
+
+Neither asks you to copy a GUID by hand: a response handler stores the token that login returns, and
+each request that creates something stores the new id for the requests that need it. Point the
+environment file at your master user's credentials first — `http/http-client.env.json` or
+`bruno/environments/Local.bru`.
+
+On an empty database four requests have to run in order before anything else will find its subject:
+**Login**, then **Create an administrator**, then **Create a scope**, then **Create a User in a
+scope**. See [`api-client/README.md`](https://github.com/artur-rios/heimdall-api/blob/main/api-client/README.md)
+for the whole story, including how to keep real credentials out of git.
+
+To run the Bruno collection without installing anything:
+
+```bash
+npx @usebruno/cli run Auth --env Local
+```
 
 ## Next
 

@@ -1,0 +1,178 @@
+### Authentication — /api/auth
+#
+# Run "Login" first: its response handler stores the token, and every authenticated request in every
+# file here sends {{token}}. Requests that produce an identifier store that too, so the files can be
+# run top to bottom without copying GUIDs by hand.
+#
+# Every request in this file except the four authenticated ones is rate-limited to 10 requests per
+# minute per IP (Startup.AuthEndpointRateLimitPolicy). Re-running them in a tight loop answers 429.
+
+### Login (UC-11) — anonymous. A ScopeAdmin or SystemAdmin sends credentials alone.
+# Answers either a token, or a challenge token when the account has 2FA active — in which case
+# continue with "Verify two-factor" below rather than expecting a usable token here.
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+> {%
+    if (response.body.data && response.body.data.token) {
+        client.global.set("token", response.body.data.token);
+        client.log("Stored token, expires " + response.body.data.expiresAt);
+    } else if (response.body.data && response.body.data.challengeToken) {
+        client.global.set("challengeToken", response.body.data.challengeToken);
+        client.log("2FA required. Stored challengeToken; available methods: " +
+            response.body.data.availableMethods);
+    }
+%}
+
+### Login as a scope User (UC-11) — anonymous. A User must also name their scope.
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "scopeId": "{{scopeId}}"
+}
+
+> {%
+    if (response.body.data && response.body.data.token) {
+        client.global.set("token", response.body.data.token);
+    }
+%}
+
+### Request a password reset link (UC-12) — anonymous.
+# Always answers 200, whether or not the address belongs to anyone, so it cannot be used to
+# enumerate accounts. A User sends scopeId as well; an administrator sends the email alone.
+POST {{host}}/api/auth/password-recovery
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}"
+}
+
+### Set a new password from the mailed token (UC-13) — anonymous.
+# The token arrives by email. With the logging sender configured (EMAIL_DELIVERY=Logging) it is
+# written to the API's log instead of being sent, which is where to copy it from locally.
+POST {{host}}/api/auth/password-reset
+Content-Type: application/json
+
+{
+  "token": "paste-the-reset-token-here",
+  "newPassword": "ChangeMe2!"
+}
+
+### Confirm an email address (UC-14) — anonymous.
+# The token is mailed at person creation. Already-verified addresses answer 200: the link did what
+# it promised.
+POST {{host}}/api/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "paste-the-verification-token-here"
+}
+
+### Resend the caller's own verification email (UC-15) — authenticated.
+# No body: the person is read from the token, so a caller can only ever ask for their own link.
+POST {{host}}/api/auth/resend-verification
+Authorization: Bearer {{token}}
+
+### Google sign-up / sign-in against a scope (UC-25) — anonymous.
+# idToken is the ID token obtained from Google by the client application, not anything this API
+# issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403.
+POST {{host}}/api/auth/google
+Content-Type: application/json
+
+{
+  "scopeId": "{{scopeId}}",
+  "idToken": "paste-the-google-id-token-here"
+}
+
+> {%
+    if (response.body.data && response.body.data.token) {
+        client.global.set("googleToken", response.body.data.token);
+    }
+%}
+
+### End a Google-authenticated session (UC-26) — authenticated as a Google User.
+# Sends the token stored by the request above, not the password-login token: only a live Google User
+# may call this.
+POST {{host}}/api/auth/google/sign-out
+Authorization: Bearer {{googleToken}}
+
+### Begin two-factor setup (UC-36) — authenticated, always on the caller themselves.
+# methods is any of "App", "Email", or both. Setup stays inactive until confirmed below.
+POST {{host}}/api/auth/2fa/enable
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "methods": ["App"]
+}
+
+> {%
+    if (response.body.data && response.body.data.otpAuthUri) {
+        client.log("Enrol this URI in an authenticator app: " + response.body.data.otpAuthUri);
+    }
+%}
+
+### Confirm two-factor setup (UC-37) — authenticated.
+# Prove control of every method selected above: appCode if App was selected, emailCode if Email was,
+# both if both. Answers ten recovery codes in plaintext, exactly once.
+POST {{host}}/api/auth/2fa/confirm
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "appCode": "000000"
+}
+
+> {%
+    if (response.body.data && response.body.data.recoveryCodes) {
+        client.log("Recovery codes (shown once): " + response.body.data.recoveryCodes.join(" "));
+    }
+%}
+
+### Complete a 2FA-gated login (UC-38) — anonymous.
+# Redeems the challenge token stored by "Login" for a full token. Send either code or recoveryCode,
+# not both. The challenge token travels in the body, never as an Authorization header — it is
+# rejected everywhere else.
+POST {{host}}/api/auth/2fa/verify
+Content-Type: application/json
+
+{
+  "challengeToken": "{{challengeToken}}",
+  "code": "000000"
+}
+
+> {%
+    if (response.body.data && response.body.data.token) {
+        client.global.set("token", response.body.data.token);
+    }
+%}
+
+### Turn two-factor authentication off (UC-39) — authenticated.
+# Requires the current password *and* a second factor — as hard to satisfy as a login. Send either
+# code or recoveryCode.
+POST {{host}}/api/auth/2fa/disable
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "password": "{{adminPassword}}",
+  "code": "000000"
+}
+
+### Issue a fresh set of ten recovery codes (UC-40) — authenticated.
+# Invalidates every existing code, including unused ones. Send either code or recoveryCode.
+POST {{host}}/api/auth/2fa/recovery-codes/regenerate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "code": "000000"
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Read one application
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}?includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-17. System Admin, or the Scope Admin who owns the scope.
+}

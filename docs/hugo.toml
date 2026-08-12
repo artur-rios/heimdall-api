@@ -46,6 +46,15 @@ target = 'content/docs/requirements'
 [[module.mounts]]
 source = 'coverage-report'
 target = 'static/coverage-report'
+# The OpenAPI document, served as-is at /openapi/heimdall.json and fetched by the Swagger UI on
+# content/en/docs/api-explorer.md. Regenerate it with scripts/openapi.py.
+#
+# Declaring any mount replaces Hugo's defaults, so `static/` is not mounted here and a plain
+# docs/static/ directory would be ignored. Every served-as-is directory is therefore mounted
+# explicitly, the same way the coverage report is.
+[[module.mounts]]
+source = 'openapi'
+target = 'static/openapi'
 
 [languages]
 [languages.en]
@@ -112,10 +121,15 @@ name = 'Requirements'
 url = '/docs/requirements/'
 weight = 20
 [[menu.main]]
+identifier = 'api-explorer'
+name = 'API Explorer'
+url = '/docs/api-explorer/'
+weight = 30
+[[menu.main]]
 identifier = 'test-coverage'
 name = 'Test Coverage'
 url = '/coverage-report/'
-weight = 30
+weight = 40
 [[menu.main]]
 identifier = 'github'
 name = 'GitHub'

@@ -1,0 +1,15 @@
+meta {
+  name: List a scope's owners
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/owners?pageNumber=1&pageSize=20&includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-07. System Admin, or the Scope Admin who owns the scope.
+}

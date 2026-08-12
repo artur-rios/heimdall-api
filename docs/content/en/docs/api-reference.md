@@ -5,8 +5,10 @@ weight = 60
 description = 'Every endpoint, the role that may call it, and the use case it implements.'
 +++
 
-Interactive documentation is generated at runtime: run the API and open **Swagger UI**, which is
-wired for JWT so a bearer token can be pasted in and the endpoints called from the browser.
+Schema-level documentation — every parameter, every request and response body — is published as an
+OpenAPI document and rendered by the [API explorer](../api-explorer/), which is the same document a
+running instance serves through its own Swagger UI at `/swagger`. To *call* the endpoints, use that,
+or the [`.http` files or Bruno collection](../getting-started/#calling-the-api) in `api-client/`.
 
 This page is the map — what exists, who may call it, and which use case it implements.
 

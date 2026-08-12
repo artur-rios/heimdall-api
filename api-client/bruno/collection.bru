@@ -1,0 +1,33 @@
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Every request that needs a caller inherits this bearer token, so authorization is
+  configured in one place. Auth > Login fills it in.
+
+  Requests that are open to anonymous callers set their auth to none individually, rather
+  than sending a token the API would ignore — sending one to POST /api/auth/2fa/verify would
+  actively mislead, since that endpoint takes its challenge token in the body and rejects
+  challenge tokens presented as bearer credentials.
+
+  ## Order on an empty database
+
+  Requests that create something store its id, and the rest of the collection reads those
+  ids — so on a database with nothing in it, four requests have to run in this order before
+  any other will find its subject:
+
+    1. Auth > Login
+    2. Persons > Create an administrator   (a ScopeAdmin, owning nothing yet)
+    3. Scopes > Create a scope             (owned by the person from step 2)
+    4. Persons > Create a User in a scope  (a member of the scope from step 3)
+
+  The folders are ordered by subject rather than by that sequence, because a scope is the
+  thing the API is organised around and reading the collection top to bottom should say so.
+  Running it end to end with `bru run -r` therefore answers 404 for everything scoped until
+  the four above have been run — that is the collection being a reference, not a test suite.
+}

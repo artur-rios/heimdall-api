@@ -1,0 +1,17 @@
+meta {
+  name: Promote a User to owner
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/users/{{scopeUserId}}/promote
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-23. System Admin, or the Scope Admin who owns the scope.
+
+  The person must be a User of this scope; promoting them makes them a ScopeAdmin who owns it.
+}

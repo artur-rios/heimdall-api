@@ -1,0 +1,35 @@
+meta {
+  name: Create a permission
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/api/scopes/{{scopeId}}/permissions
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "reports.read",
+    "description": "May read reports",
+    "includeAsJwtClaim": true
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.id) {
+    bru.setEnvVar("permissionId", res.body.data.id);
+  }
+}
+
+docs {
+  UC-31. System Admin, or the Scope Admin who owns the scope.
+
+  Owning the scope is the whole of the authorization — a permission has no owner of its own. With includeAsJwtClaim set, the name is folded into the JWT of identities acting within this scope.
+}

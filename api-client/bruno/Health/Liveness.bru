@@ -1,0 +1,17 @@
+meta {
+  name: Liveness
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{host}}/healthcheck
+  body: none
+  auth: none
+}
+
+docs {
+  UC-30. Anonymous.
+
+  Answers as long as the process is serving, and reads no dependency — so it stays 200 even when the database is unreachable. The quickest way to confirm the API is up before running anything else.
+}

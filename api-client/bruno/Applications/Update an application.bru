@@ -1,0 +1,28 @@
+meta {
+  name: Update an application
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Application, renamed",
+    "ownerId": "{{personId}}"
+  }
+}
+
+docs {
+  UC-18. System Admin, or the Scope Admin who owns the scope.
+
+  The new owner must also be a ScopeAdmin who owns this scope.
+}

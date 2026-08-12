@@ -1,0 +1,29 @@
+meta {
+  name: Begin two-factor setup
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{host}}/api/auth/2fa/enable
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "methods": [
+      "App"
+    ]
+  }
+}
+
+docs {
+  UC-36. Authenticated, always on the caller themselves.
+
+  methods is any of "App", "Email", or both. Setup stays inactive until confirmed. When App is selected the answer carries an otpauth:// URI to enrol in an authenticator app.
+}

@@ -1,0 +1,17 @@
+meta {
+  name: Hard delete a scope
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/hard
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-05. System Admin.
+
+  Irreversible, and also purges the scope's permissions and join rows. Run it last.
+}

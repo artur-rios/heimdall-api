@@ -1,0 +1,66 @@
+### Scopes — /api/scopes
+#
+# Run auth.http's "Login" first, as a SystemAdmin: every request here but one requires that role.
+# "Create a scope" stores the new scope's id, which the rest of this file and every scoped file
+# (persons, applications, permissions, google-users) then use.
+
+### Create a scope (UC-01) — System Admin.
+# ownerIds must name at least one existing ScopeAdmin. To create a scope and its first owner in one
+# go instead, create the scope with an owner you already have, then use persons.http's
+# "Create a scope owner".
+POST {{host}}/api/scopes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Scope",
+  "description": "Created from api-client/http/scopes.http",
+  "ownerIds": ["{{personId}}"]
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("scopeId", response.body.data.id);
+        client.log("Stored scopeId " + response.body.data.id);
+    }
+%}
+
+### List scopes (UC-02) — System Admin.
+# pageSize is capped at 100; pageNumber starts at 1. Both are validated, so 0 or 101 answers 400.
+GET {{host}}/api/scopes?pageNumber=1&pageSize=20&name=Example&includeDeleted=false
+Authorization: Bearer {{token}}
+
+### Read one scope (UC-02) — any authenticated caller.
+GET {{host}}/api/scopes/{{scopeId}}?includeDeleted=false
+Authorization: Bearer {{token}}
+
+### Update a scope's name and description (UC-03) — System Admin.
+PUT {{host}}/api/scopes/{{scopeId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Example Scope, renamed",
+  "description": "Updated from api-client/http/scopes.http"
+}
+
+### Turn Google Sign-In on or off for a scope (UC-24) — System Admin or the owning Scope Admin.
+# enabled is deliberately required: an omitted value is refused rather than read as false.
+PUT {{host}}/api/scopes/{{scopeId}}/google-signin
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+
+### Logically delete a scope (UC-04) — System Admin.
+# Cascades to the scope's Users, Google Users and applications. They remain readable with
+# includeDeleted=true.
+DELETE {{host}}/api/scopes/{{scopeId}}
+Authorization: Bearer {{token}}
+
+### Hard delete a scope (UC-05) — System Admin.
+# Irreversible, and also purges the scope's permissions and join rows. Run this last.
+DELETE {{host}}/api/scopes/{{scopeId}}/hard
+Authorization: Bearer {{token}}

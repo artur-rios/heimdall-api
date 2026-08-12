@@ -1,0 +1,15 @@
+meta {
+  name: Delete a permission
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/permissions/{{permissionId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-34. System Admin, or the Scope Admin who owns the scope. Logical delete.
+}

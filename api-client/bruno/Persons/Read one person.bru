@@ -1,0 +1,15 @@
+meta {
+  name: Read one person
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{host}}/api/persons/{{personId}}?includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-07. Any authenticated caller — a person may always read themselves.
+}

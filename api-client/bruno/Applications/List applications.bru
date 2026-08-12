@@ -1,0 +1,17 @@
+meta {
+  name: List applications
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/api/scopes/{{scopeId}}/applications?pageNumber=1&pageSize=20&includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-17. System Admin, or the Scope Admin who owns the scope.
+
+  Also filterable by name and ownerId.
+}

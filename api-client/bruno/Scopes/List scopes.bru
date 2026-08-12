@@ -1,0 +1,17 @@
+meta {
+  name: List scopes
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/api/scopes?pageNumber=1&pageSize=20&name=Example&includeDeleted=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-02. System Admin.
+
+  pageNumber starts at 1 and pageSize is capped at 100; both are validated, so 0 or 101 answers 400 rather than being silently clamped.
+}

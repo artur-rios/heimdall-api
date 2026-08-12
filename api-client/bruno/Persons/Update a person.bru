@@ -1,0 +1,28 @@
+meta {
+  name: Update a person
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{host}}/api/persons/{{personId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Example Scope Admin, renamed",
+    "email": "scope.admin@example.com"
+  }
+}
+
+docs {
+  UC-08. Any authenticated caller, subject to the handler's rules.
+
+  roleId may only be changed by a System Admin; omit it entirely for a self-service name and email edit, which is what this body does.
+}
