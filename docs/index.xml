@@ -142,38 +142,27 @@ collections. Decisions live in the command and query handlers, so the diagrams b
 &lt;h2 id="the-core-model"&gt;The core model&lt;a class="td-heading-self-link" href="#the-core-model" aria-label="Heading self-link"&gt;&lt;/a&gt;
 &lt;/h2&gt;
 &lt;p&gt;The entities every request touches: a scope, the persons related to it through the two join tables,
-the applications and Google Users it contains, and the permissions it defines.&lt;/p&gt;</description></item><item><title>API reference</title><link>https://artur-rios.github.io/heimdall-api/docs/api-reference/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/api-reference/</guid><description>&lt;p&gt;Interactive documentation is generated at runtime: run the API and open &lt;strong&gt;Swagger UI&lt;/strong&gt;, which is
-wired for JWT so a bearer token can be pasted in and the endpoints called from the browser.&lt;/p&gt;
-&lt;p&gt;This page is the map — what exists, who may call it, and which use case it implements.&lt;/p&gt;
-&lt;h2 id="reading-the-who-column"&gt;Reading the &amp;ldquo;Who&amp;rdquo; column&lt;a class="td-heading-self-link" href="#reading-the-who-column" aria-label="Heading self-link"&gt;&lt;/a&gt;
-&lt;/h2&gt;
-&lt;table&gt;
-	&lt;thead&gt;
-			&lt;tr&gt;
-					&lt;th&gt;Notation&lt;/th&gt;
-					&lt;th&gt;Meaning&lt;/th&gt;
-			&lt;/tr&gt;
-	&lt;/thead&gt;
-	&lt;tbody&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;strong&gt;Anonymous&lt;/strong&gt;&lt;/td&gt;
-					&lt;td&gt;&lt;code&gt;[AllowAnonymous]&lt;/code&gt; — no bearer token required.&lt;/td&gt;
-			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;strong&gt;System Admin&lt;/strong&gt;&lt;/td&gt;
-					&lt;td&gt;&lt;code&gt;[RoleRequirement(SystemAdmin)]&lt;/code&gt;.&lt;/td&gt;
-			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;strong&gt;+ Scope Admin&lt;/strong&gt;&lt;/td&gt;
-					&lt;td&gt;The attribute admits Scope Admins too; the handler then confirms they own the addressed scope.&lt;/td&gt;
-			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;strong&gt;Any authenticated&lt;/strong&gt;&lt;/td&gt;
-					&lt;td&gt;No role attribute &lt;em&gt;on purpose&lt;/em&gt; — the actor set the use case grants includes a &lt;code&gt;User&lt;/code&gt;, so the attribute would have to admit them and the handler settles it.&lt;/td&gt;
-			&lt;/tr&gt;
-	&lt;/tbody&gt;
-&lt;/table&gt;
-&lt;p&gt;Two rules apply everywhere and are not repeated per row:&lt;/p&gt;</description></item><item><title>Operations</title><link>https://artur-rios.github.io/heimdall-api/docs/operations/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/operations/</guid><description>&lt;h2 id="migrations"&gt;Migrations&lt;a class="td-heading-self-link" href="#migrations" aria-label="Heading self-link"&gt;&lt;/a&gt;
+the applications and Google Users it contains, and the permissions it defines.&lt;/p&gt;</description></item><item><title>API reference</title><link>https://artur-rios.github.io/heimdall-api/docs/api-reference/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/api-reference/</guid><description>&lt;p&gt;Schema-level documentation — every parameter, every request and response body — is published as an
+OpenAPI document and rendered by the &lt;a href="../api-explorer/"&gt;API explorer&lt;/a&gt;
+, which is the same document a
+running instance serves through its own Swagger UI at &lt;code&gt;/swagger&lt;/code&gt;. To &lt;em&gt;call&lt;/em&gt; the endpoints, use that,
+or the &lt;a href="../getting-started/#calling-the-api"&gt;&lt;code&gt;.http&lt;/code&gt; files or Bruno collection&lt;/a&gt;
+ in &lt;code&gt;api-client/&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;This page is the map — what exists, who may call it, and which use case it implements.&lt;/p&gt;</description></item><item><title>API explorer</title><link>https://artur-rios.github.io/heimdall-api/docs/api-explorer/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/api-explorer/</guid><description>&lt;p&gt;Every endpoint the API exposes, rendered from
+&lt;a href="https://artur-rios.github.io/heimdall-api/openapi/heimdall.json"&gt;the published OpenAPI document&lt;/a&gt;
+. The document is generated from
+the controllers themselves — the summaries below are the ones in the source — and regenerated with
+&lt;code&gt;python scripts/openapi.py&lt;/code&gt;. It is byte-for-byte what a running instance serves at
+&lt;code&gt;/swagger/v1/swagger.json&lt;/code&gt;: both come from the same &lt;code&gt;SwaggerConfiguration&lt;/code&gt;.&lt;/p&gt;
+&lt;div class="alert alert-info" role="alert"&gt;&lt;div class="h4 alert-heading" role="heading"&gt;This explorer does not call anything&lt;/div&gt;
+&lt;p&gt;The page has no server behind it, so &lt;strong&gt;Try it out&lt;/strong&gt; is switched off. To call the endpoints, run the
+API and use its own Swagger UI at &lt;code&gt;/swagger&lt;/code&gt; — same document, with &lt;strong&gt;Authorize&lt;/strong&gt; and &lt;strong&gt;Try it out&lt;/strong&gt;
+working — or the
+&lt;a href="https://artur-rios.github.io/heimdall-api/docs/getting-started/#calling-the-api"&gt;&lt;code&gt;.http&lt;/code&gt; files or Bruno collection&lt;/a&gt;
+ in
+&lt;code&gt;api-client/&lt;/code&gt;. For what each endpoint means and who may call it in prose, see the
+&lt;a href="../api-reference/"&gt;API reference&lt;/a&gt;
+.&lt;/p&gt;</description></item><item><title>Operations</title><link>https://artur-rios.github.io/heimdall-api/docs/operations/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://artur-rios.github.io/heimdall-api/docs/operations/</guid><description>&lt;h2 id="migrations"&gt;Migrations&lt;a class="td-heading-self-link" href="#migrations" aria-label="Heading self-link"&gt;&lt;/a&gt;
 &lt;/h2&gt;
 &lt;p&gt;The schema is managed with &lt;strong&gt;EF Core migrations, applied explicitly&lt;/strong&gt;:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;python scripts/migrations.py
