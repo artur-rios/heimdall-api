@@ -111,6 +111,14 @@
   .swagger-ui .information-container {
     display: none;
   }
+
+  // Swagger UI always renders the scheme container, which houses the Authorize button and the
+  // servers dropdown. This page has neither — Authorize is removed, and the document declares no
+  // servers — so what is left is an empty bordered bar, 60px of nothing. In dark mode the inversion
+  // below turned it into a solid black slab, which is how it got noticed.
+  .swagger-ui .scheme-container {
+    display: none;
+  }
 }
 
 // Colour: Swagger UI ships no dark theme, and restyling several hundred of its selectors would be a
@@ -124,6 +132,18 @@
   img,
   .swagger-ui .microlight {
     filter: invert(1) hue-rotate(180deg);
+  }
+
+  // The tag filter is the one white surface left that is worth keeping, and inverting #fff gives
+  // #000 — a pure black box against a page whose background is a much softer grey. Cancelling the
+  // inversion on it lets it be styled in the page's own tokens instead: authored dark, inverted to
+  // light by this rule, inverted back to dark by the parent. Its border is what makes it legible as
+  // a field once it is no longer a bright rectangle.
+  .swagger-ui .operation-filter-input {
+    filter: invert(1) hue-rotate(180deg);
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border: 1px solid var(--bs-border-color);
   }
 }
 
