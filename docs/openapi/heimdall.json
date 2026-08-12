@@ -3296,14 +3296,6 @@
           "emailCode": {
             "type": "string",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -3380,10 +3372,6 @@
       "CreateApplicationCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -3391,14 +3379,6 @@
           "ownerId": {
             "type": "string",
             "format": "uuid"
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -3614,10 +3594,6 @@
       "CreateScopeOwnerCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -3629,14 +3605,6 @@
           "password": {
             "type": "string",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -3644,10 +3612,6 @@
       "CreateScopePermissionCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -3658,14 +3622,6 @@
           },
           "includeAsJwtClaim": {
             "type": "boolean"
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -3733,10 +3689,6 @@
       "CreateUserCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -3748,14 +3700,6 @@
           "password": {
             "type": "string",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -4003,14 +3947,6 @@
           "recoveryCode": {
             "type": "string",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -4064,14 +4000,6 @@
               "type": "string"
             },
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -4962,14 +4890,6 @@
           "recoveryCode": {
             "type": "string",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -5406,21 +5326,9 @@
       "SetGoogleSignInCommand": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "enabled": {
             "type": "boolean",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -5603,10 +5511,6 @@
       "UpdatePersonCommand": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -5619,14 +5523,6 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -5711,10 +5607,6 @@
       "UpdateScopeCommand": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -5797,14 +5689,6 @@
       "UpdateScopePermissionCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -5815,14 +5699,6 @@
           },
           "includeAsJwtClaim": {
             "type": "boolean"
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false

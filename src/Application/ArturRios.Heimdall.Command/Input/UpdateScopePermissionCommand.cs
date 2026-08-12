@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
@@ -11,13 +12,17 @@ namespace ArturRios.Heimdall.Command.Input;
 ///     current values of the others. The scope is a route qualifier, never a field to write — a
 ///     permission's scope is fixed at creation time. <see cref="ActingPersonId" />/<see cref="ActingRole" />
 ///     are set by the controller from the authenticated caller and are never bound from the body.
+///     They are <c>[JsonIgnore]</c>, so they are not deserialized from the body and do not appear in
+///     the request schema.
 /// </summary>
 public class UpdateScopePermissionCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the scope the permission belongs to (bound from the route).</summary>
+    [JsonIgnore]
     public Guid ScopeId { get; set; }
 
     /// <summary>Public identifier of the permission to update (bound from the route).</summary>
+    [JsonIgnore]
     public Guid Id { get; set; }
 
     /// <summary>New permission display name. Required, max 200 characters.</summary>
@@ -32,7 +37,9 @@ public class UpdateScopePermissionCommand : BaseCommand, IActorScoped
     /// </summary>
     public bool IncludeAsJwtClaim { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }
