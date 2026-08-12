@@ -21,6 +21,10 @@ section = ['HTML', 'print', 'RSS']
 [markup.goldmark.renderer]
 unsafe = true
 [markup.highlight]
+# Class-based highlighting, so the palette can follow the reader's light/dark choice. The colours
+# come from Docsy's per-mode Chroma stylesheets, imported in assets/scss/_styles_project.scss —
+# `style` below is therefore unused, and is only what Hugo would fall back to if noClasses were
+# ever set to true (which would bake one fixed palette into inline styles).
 noClasses = false
 style = 'tango'
 [markup.tableOfContents]
@@ -81,6 +85,9 @@ sidebar_menu_compact = false
 sidebar_search_disable = false
 breadcrumb_disable = false
 navbar_logo = false
+# Adds the Light / Dark / Auto menu to the navbar. "Auto" follows the reader's OS setting, which is
+# the default until they choose otherwise. Mermaid re-renders in the matching theme on a change.
+showLightDarkModeMenu = true
 
 [params.links]
 [[params.links.user]]

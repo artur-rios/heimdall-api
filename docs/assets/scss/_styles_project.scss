@@ -2,21 +2,42 @@
 // Project styles, imported by Docsy's td/_main.scss.
 //
 
+// Two stylesheets Docsy ships but deliberately does not import itself — its own site pulls them in
+// from here, and so must every project that wants them. Both need params.ui.showLightDarkModeMenu
+// set in hugo.toml to have any effect.
+
+// Syntax highlighting. hugo.toml uses class-based highlighting (noClasses = false), so Hugo emits
+// Chroma classes and the stylesheet supplies the colours. This is the stylesheet — one palette per
+// colour mode, scoped to [data-bs-theme]. Without it, Chroma classes are emitted and nothing styles
+// them, so every code block renders as flat body text in both modes.
+@import 'td/code-dark';
+
+// Contrast adjustments for dark mode.
+@import 'td/color-adjustments-dark';
+
 // --- Diagrams -------------------------------------------------------------
 //
 // Mermaid is configured with useMaxWidth = false (see hugo.toml), so a diagram is drawn at its
 // natural size rather than scaled to fit the text column. That keeps its labels at full size —
 // fitting the domain-model class diagram to the column rendered its 16px text at roughly 4px —
 // at the cost of some diagrams being wider than the column, so the container scrolls.
-.td-content .mermaid {
+// Selector note: Docsy styles these as `.td-content pre.mermaid` (it sets background-color,
+// font-size and padding there). A plain `.td-content .mermaid` loses to that on specificity, so the
+// element is named here too — otherwise the padding below is silently reset to 0 and the diagram
+// sits flush against its border.
+//
+// The frame follows the reader's colour mode: Bootstrap 5.3 redefines --bs-border-color and
+// --bs-body-bg per mode, so no dark-mode override is needed here. Mermaid itself is switched to its
+// own dark theme by Docsy when data-bs-theme="dark".
+.td-content pre.mermaid {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
   margin: 1.5rem 0;
   padding: 1rem;
-  border: 1px solid var(--bs-border-color, #dee2e6);
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
-  background-color: var(--bs-body-bg, #fff);
+  background-color: var(--bs-body-bg);
 
   // Bootstrap's `svg { max-width: 100% }` would undo the natural sizing above.
   svg {
@@ -30,11 +51,31 @@
 // is not otherwise using, so there is less to scroll.
 @include media-breakpoint-up(xl) {
   .td-content {
-    .mermaid,
+    pre.mermaid,
     .table-responsive,
     .highlight {
       width: calc(100% + 8rem);
       max-width: calc(100vw - 30rem);
+    }
+  }
+}
+
+// --- Landing page bands in dark mode ---------------------------------------
+//
+// Docsy special-cases only `td-box--white` to follow the colour mode (it maps to --bs-body-bg);
+// every other box colour, `light` included, is a literal value from the palette. The landing page
+// alternates bands to separate its sections, so in dark mode that left one glaring white band with
+// black text in the middle of an otherwise dark page.
+//
+// Give `light` the mode's own "slightly raised surface" colour instead. The alternation survives in
+// both modes, and no band fights the reader's choice.
+[data-bs-theme='dark'] {
+  .td-box--light {
+    color: var(--bs-body-color);
+    background-color: var(--bs-tertiary-bg);
+
+    .td-arrow-down::before {
+      border-color: var(--bs-tertiary-bg) transparent transparent transparent;
     }
   }
 }
