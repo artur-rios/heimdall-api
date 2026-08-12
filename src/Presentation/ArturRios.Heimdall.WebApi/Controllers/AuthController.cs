@@ -7,6 +7,7 @@ using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
@@ -22,6 +23,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<LoginCommandOutput?>>> Login(
         [FromBody] LoginCommand command)
     {
@@ -44,6 +46,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </remarks>
     [HttpPost("password-recovery")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<PasswordRecoveryCommandOutput?>>> PasswordRecovery(
         [FromBody] PasswordRecoveryCommand command)
     {
@@ -66,6 +69,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </remarks>
     [HttpPost("password-reset")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResetPasswordCommandOutput?>>> ResetPassword(
         [FromBody] ResetPasswordCommand command)
     {
@@ -89,6 +93,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </remarks>
     [HttpPost("verify-email")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<VerifyEmailCommandOutput?>>> VerifyEmail(
         [FromBody] VerifyEmailCommand command)
     {
@@ -142,6 +147,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </remarks>
     [HttpPost("google")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<GoogleSignInCommandOutput?>>> GoogleSignIn(
         [FromBody] GoogleSignInCommand command)
     {
@@ -247,6 +253,7 @@ public class AuthController(CommandMediator commandMediator) : Controller
     /// </remarks>
     [HttpPost("2fa/verify")]
     [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<VerifyTwoFactorAuthCommandOutput?>>> VerifyTwoFactorAuth(
         [FromBody] VerifyTwoFactorAuthCommand command)
     {

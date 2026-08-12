@@ -28,8 +28,10 @@ using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Middleware;
+using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 using Serilog.Formatting.Json;
+using System.Threading.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi;
 
@@ -43,6 +45,13 @@ public class Startup(string[] args) : WebApiStartup(args)
     private const string TokenIssuerEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const double DefaultTokenExpirationInSeconds = 3600;
+
+    /// <summary>
+    ///     Rate-limiting policy name applied via <c>[EnableRateLimiting(AuthEndpointRateLimitPolicy)]</c>
+    ///     to <c>AuthController</c>'s anonymous, credential-checking endpoints. Public so the
+    ///     controller and this configuration stay in sync without duplicating the literal.
+    /// </summary>
+    public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
 
     public override void Build()
     {
@@ -280,12 +289,17 @@ public class Startup(string[] args) : WebApiStartup(args)
             .AllowAnyMethod()
             .AllowAnyHeader());
 
+        if (Builder.Environment.IsDevelopment())
+        {
+            App.UseDeveloperExceptionPage();
+        }
+
         App.UseHttpsRedirection();
         App.UseRouting();
+        App.UseRateLimiter();
         App.UseAuthentication();
         App.UseAuthorization();
         App.MapControllers();
-        App.UseDeveloperExceptionPage();
     }
 
     public override void ConfigureSecurity()
@@ -308,6 +322,44 @@ public class Startup(string[] args) : WebApiStartup(args)
             options.EnableGoogle = false;
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
+
+        AddAuthEndpointRateLimiting();
+    }
+
+    /// <summary>
+    ///     Throttles the anonymous, credential-checking endpoints (login, password recovery/reset,
+    ///     email verification, Google sign-in, 2FA challenge verification) per calling IP address.
+    ///     None of these require a bearer token, so nothing else stops a caller from firing an
+    ///     unbounded burst of requests at them — each login attempt alone costs a full Argon2id
+    ///     verification (600 MB / 16 threads by this codebase's hashing library default), and a 2FA
+    ///     email code has only 1,000,000 possible values, so an unthrottled brute force or memory/CPU
+    ///     exhaustion attempt is realistic without this. Policy name matches the
+    ///     <see cref="Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute" /> applied to
+    ///     each endpoint in <c>AuthController</c>.
+    /// </summary>
+    /// <remarks>
+    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP. Behind a reverse proxy or
+    ///     load balancer that doesn't forward the real client IP (e.g. via <c>X-Forwarded-For</c> with
+    ///     <c>ForwardedHeadersMiddleware</c> configured), every caller would share one partition — this
+    ///     is a per-instance, defense-in-depth throttle, not a substitute for a WAF or an API gateway's
+    ///     own rate limiting in front of a real deployment.
+    /// </remarks>
+    private void AddAuthEndpointRateLimiting()
+    {
+        Builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            options.AddPolicy(AuthEndpointRateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
+        });
     }
 
     /// <summary>
@@ -319,7 +371,10 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///     The fallback is deliberate rather than a failure: a developer running the API locally,
     ///     and the functional suite, both need person creation and password recovery to work without
     ///     credentials and without reaching the network. Failing startup instead would make Mailgun
-    ///     a prerequisite for running the tests.
+    ///     a prerequisite for running the tests. In Production, though, the fallback logs a
+    ///     verification token, a password reset token, or a 2FA code in plaintext on every send — an
+    ///     account-takeover primitive for anyone who can read the logs — so an unconfigured Production
+    ///     deployment fails startup outright instead of silently degrading into that.
     /// </remarks>
     private void AddEmailSenders()
     {
@@ -329,6 +384,15 @@ public class Startup(string[] args) : WebApiStartup(args)
 
         if (!options.MailgunConfigured)
         {
+            if (Builder.Environment.IsProduction())
+            {
+                throw new InvalidOperationException(
+                    $"Mailgun is not configured ({MailgunEmailService.ApiKeyVariable} / " +
+                    $"{MailgunEmailService.DomainVariable}) in Production. Refusing to start: the " +
+                    "fallback sender logs verification tokens, password reset tokens, and 2FA codes " +
+                    "in plaintext, which must never happen outside local development and tests.");
+            }
+
             Log.Warning(
                 "Mailgun is not configured ({ApiKeyVariable} / {DomainVariable}); verification and " +
                 "password reset tokens will be logged instead of emailed",
