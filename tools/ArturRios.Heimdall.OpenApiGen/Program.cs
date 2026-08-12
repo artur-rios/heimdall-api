@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Controllers;
 using ArturRios.Heimdall.WebApi.Documentation;
 using Microsoft.OpenApi;
@@ -36,7 +37,7 @@ public static class Program
         // pointed at it explicitly. Controllers are only reflected over, never constructed, so none
         // of their dependencies (the mediators, the DbContext) need to be registered.
         builder.Services
-            .AddControllers()
+            .AddControllers(ModelBindingConfiguration.Configure)
             .AddApplicationPart(typeof(AuthController).Assembly);
 
         builder.Services.AddEndpointsApiExplorer();

@@ -104,14 +104,6 @@
             }
           },
           {
-            "name": "ScopeId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
             "name": "Name",
             "in": "query",
             "schema": {
@@ -131,22 +123,6 @@
             "in": "query",
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "name": "ActingPersonId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "ActingRole",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
             }
           },
           {
@@ -5648,14 +5624,6 @@
       "UpdateApplicationCommand": {
         "type": "object",
         "properties": {
-          "scopeId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "name": {
             "type": "string",
             "nullable": true
@@ -5663,14 +5631,6 @@
           "ownerId": {
             "type": "string",
             "format": "uuid"
-          },
-          "actingPersonId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actingRole": {
-            "type": "integer",
-            "format": "int32"
           }
         },
         "additionalProperties": false

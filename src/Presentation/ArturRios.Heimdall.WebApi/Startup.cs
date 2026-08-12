@@ -15,6 +15,7 @@ using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
+using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
 using ArturRios.Heimdall.WebApi.Security;
@@ -528,7 +529,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         // every controller action — added here rather than per-action, since a UC-38 challenge token
         // must be rejected everywhere except POST /api/auth/2fa/verify, and that endpoint needs no
         // opt-out: it never reads the challenge token as a bearer credential to begin with.
-        Builder.Services.AddControllers(options => options.Filters.Add<MfaPendingGuardFilter>());
+        Builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<MfaPendingGuardFilter>();
+            ModelBindingConfiguration.Configure(options);
+        });
         Builder.Services.AddEndpointsApiExplorer();
     }
 
