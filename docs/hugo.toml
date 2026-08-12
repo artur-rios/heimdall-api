@@ -42,7 +42,8 @@ target = 'content'
 source = 'requirements'
 target = 'content/docs/requirements'
 # The ReportGenerator coverage report is served as-is, not as Hugo content — it is a
-# self-contained static site of its own. Regenerate it with scripts/coverage.py.
+# self-contained static site of its own. The directory is generated, not committed: CI unpacks the
+# Tests workflow's artifact here before building, and scripts/coverage.py writes it locally.
 [[module.mounts]]
 source = 'coverage-report'
 target = 'static/coverage-report'

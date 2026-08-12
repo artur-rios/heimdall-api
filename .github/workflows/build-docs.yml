@@ -1,5 +1,10 @@
 name: Build Docs
 
+# The published coverage report is not committed. This workflow downloads it from the latest
+# successful Tests run on main and unpacks it into docs/coverage-report, which hugo.toml mounts at
+# static/coverage-report. That is why Tests completing is a trigger here: a change under src/ moves
+# the coverage numbers without touching docs/, and the push trigger below would never notice.
+
 on:
   push:
     branches:
@@ -7,6 +12,12 @@ on:
     paths:
       - 'docs/**'
       - '.github/workflows/build-docs.yml'
+  workflow_run:
+    workflows: ['Tests']
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       reason:
@@ -18,6 +29,8 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  # Reading another workflow's runs and downloading its artifact.
+  actions: read
 
 concurrency:
   group: "pages"
@@ -26,6 +39,10 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # A workflow_run trigger fires on completion, failed runs included. A failed Tests run has no
+    # coverage artifact and nothing worth publishing, so only a successful one continues. The other
+    # triggers set no workflow_run context and pass on the first clause.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,6 +68,40 @@ jobs:
         with:
           hugo-version: 'latest'
           extended: true
+
+      - name: Download coverage report
+        # Always the latest successful Tests run on main, whatever triggered this build: on a
+        # workflow_run that is the run that just finished, and on a docs-only push it is whichever
+        # run last covered main. A docs change must not republish the site without the report.
+        #
+        # The job fails rather than deploying without it. The alternative — warn and continue —
+        # publishes a site whose "Test Coverage" nav link 404s, with nobody forced to notice. If
+        # this fails because the artifact aged out of its retention window, re-run Tests on main.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          run_id=$(gh run list \
+            --workflow tests.yml \
+            --branch main \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')
+
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful Tests run on main to take the coverage report from. Run the Tests workflow on main, then re-run this build." >&2
+            exit 1
+          fi
+
+          echo "Taking the coverage report from Tests run $run_id"
+          gh run download "$run_id" --name coverage-report --dir docs/coverage-report
+
+          if [ ! -f docs/coverage-report/index.html ]; then
+            echo "::error::The coverage-report artifact from run $run_id has no index.html; the report would publish broken." >&2
+            exit 1
+          fi
 
       - name: Build Hugo site
         run: hugo -s docs --environment production --minify --cleanDestinationDir --gc --baseURL "https://artur-rios.github.io/heimdall-api/"

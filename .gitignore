@@ -501,3 +501,11 @@ appsettings.api.Production.json
 # exposes bruno/.env as {{process.env.NAME}}.
 api-client/http/http-client.private.env.json
 api-client/bruno/.env
+
+# Generated coverage report.
+#
+# ReportGenerator's HTML output, mounted by hugo.toml at static/coverage-report and published at
+# /coverage-report/. It is built in CI — the Tests workflow uploads it as an artifact and Build Docs
+# unpacks it here before Hugo runs — so the repository does not carry hundreds of generated pages
+# whose diffs nobody reads. Run scripts/coverage.py to rebuild it locally for previewing.
+docs/coverage-report/

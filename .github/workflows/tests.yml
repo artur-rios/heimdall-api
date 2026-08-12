@@ -44,11 +44,16 @@ jobs:
       - name: Run unit tests
         # The Category trait comes from the [UnitFact] / [UnitTheory] attributes in
         # ArturRios.Util.Test, so this filter needs no per-project configuration.
+        #
+        # The collector writes a coverage.cobertura.xml per project under TestResults/. Both suites
+        # collect, and the report step merges every file, so the published report covers the same
+        # ground as a local full-solution run — without either suite running twice.
         run: >-
           dotnet test src/ArturRios.Heimdall.sln
           --configuration Release
           --no-build
           --filter "Category=Unit"
+          --collect:"XPlat Code Coverage"
 
       - name: Run functional tests
         # These start a real PostgreSQL container per run through Testcontainers. The
@@ -59,6 +64,35 @@ jobs:
           --configuration Release
           --no-build
           --filter "Category=Functional"
+          --collect:"XPlat Code Coverage"
+
+      - name: Install ReportGenerator
+        # scripts/coverage.py calls the global tool by name, so the tools directory must be on PATH
+        # — setup-dotnet does not add it.
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Generate coverage report
+        # --report-only builds the HTML from the coverage files the two steps above already wrote,
+        # reusing the script's own safeguards (it empties the directory first, so a page for a
+        # deleted class cannot survive). Runs on pull requests too, so a change that breaks report
+        # generation fails there rather than on main, where the docs site consumes the result.
+        env:
+          # Absent on pull requests from forks, where GitHub withholds secrets: the script then
+          # generates with the free version instead of failing. Pushes to main — the only runs the
+          # docs site publishes from — always have it.
+          REPORTGENERATOR_LICENSE: ${{ secrets.REPORTGENERATOR_LICENSE }}
+        run: python3 scripts/coverage.py --report-only
+
+      - name: Upload coverage report
+        # build-docs.yml downloads this artifact by name from the latest successful run on main and
+        # unpacks it into docs/coverage-report before Hugo builds. Renaming it breaks that job.
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: docs/coverage-report
+          if-no-files-found: error
 
       - name: Upload test results
         # Every project writes a .trx (tests/default.runsettings enables the trx logger). Keeping

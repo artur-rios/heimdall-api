@@ -71,7 +71,7 @@ flows, the testing standard, and the development workflow.
 
 {{% blocks/section color="dark" type="row" %}}
 
-{{% blocks/feature icon="fa-vial" title="1,064 tests, 97% line coverage" url="/coverage-report/" url_text="Browse the report" %}}
+{{% blocks/feature icon="fa-vial" title="Tested at two layers" url="/coverage-report/" url_text="Browse the coverage report" %}}
 Unit tests for every handler and validator, functional tests driving the real API over HTTP against a
 PostgreSQL database provisioned by Testcontainers.
 {{% /blocks/feature %}}
