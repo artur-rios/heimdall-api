@@ -37,6 +37,11 @@ target = 'content'
 [[module.mounts]]
 source = 'requirements'
 target = 'content/docs/requirements'
+# The ReportGenerator coverage report is served as-is, not as Hugo content — it is a
+# self-contained static site of its own. Regenerate it with scripts/coverage.py.
+[[module.mounts]]
+source = 'coverage-report'
+target = 'static/coverage-report'
 
 [languages]
 [languages.en]
@@ -52,6 +57,24 @@ github_branch = 'main'
 # points "Edit this page" at the right folder, since the site lives in docs/
 github_subdir = 'docs'
 offlineSearch = true
+
+# Render diagrams at their natural size instead of scaling them down to the text column.
+# Several diagrams here are far wider than that column — the domain-model class diagram is
+# ~2570px — and fitting them to it shrank their 16px labels to about 4px. They now overflow and
+# their container scrolls (see assets/scss/_styles_project.scss), which keeps the text readable.
+[params.mermaid]
+[params.mermaid.flowchart]
+useMaxWidth = false
+[params.mermaid.sequence]
+useMaxWidth = false
+[params.mermaid.class]
+useMaxWidth = false
+[params.mermaid.er]
+useMaxWidth = false
+[params.mermaid.state]
+useMaxWidth = false
+[params.mermaid.block]
+useMaxWidth = false
 
 [params.ui]
 sidebar_menu_compact = false
@@ -81,6 +104,11 @@ identifier = 'requirements'
 name = 'Requirements'
 url = '/docs/requirements/'
 weight = 20
+[[menu.main]]
+identifier = 'test-coverage'
+name = 'Test Coverage'
+url = '/coverage-report/'
+weight = 30
 [[menu.main]]
 identifier = 'github'
 name = 'GitHub'

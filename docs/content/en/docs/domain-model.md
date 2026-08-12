@@ -2,21 +2,21 @@
 title = 'Domain model'
 linkTitle = 'Domain model'
 weight = 50
-description = 'The entities, their relationships, and the deletion cascade rules — as a class diagram.'
+description = 'The entities, their relationships, and the deletion cascade rules — as class diagrams.'
 +++
 
 The domain layer is intentionally anemic: entities are data holders with properties and navigation
-collections. Decisions live in the command and query handlers, so the entity diagram below is a map
-of *shape and relationship*, not of behaviour.
+collections. Decisions live in the command and query handlers, so the diagrams below are a map of
+*shape and relationship*, not of behaviour.
 
-## Class diagram
+## The core model
+
+The entities every request touches: a scope, the persons related to it through the two join tables,
+the applications and Google Users it contains, and the permissions it defines.
 
 ```mermaid
 classDiagram
-    class Entity {
-        <<abstract>>
-        +long Id
-    }
+    direction LR
 
     class Scope {
         +Guid PublicId
@@ -24,10 +24,7 @@ classDiagram
         +string? Description
         +bool IsDeleted
         +bool GoogleSignInEnabled
-        +DateTime CreatedAt
-        +DateTime UpdatedAt
     }
-
     class Person {
         +Guid PublicId
         +string Name
@@ -37,26 +34,27 @@ classDiagram
         +bool IsDeleted
         +bool EmailVerified
         +long RoleId
-        +DateTime CreatedAt
-        +DateTime UpdatedAt
     }
-
     class Role {
         +Guid PublicId
         +string Name
         +string? Description
     }
-
+    class ScopeOwner {
+        +long ScopeId
+        +long PersonId
+    }
+    class ScopeUser {
+        +long ScopeId
+        +long PersonId
+    }
     class Application {
         +Guid PublicId
         +string Name
         +bool IsDeleted
         +long ScopeId
         +long OwnerId
-        +DateTime CreatedAt
-        +DateTime UpdatedAt
     }
-
     class GoogleUser {
         +Guid PublicId
         +string GoogleId
@@ -67,7 +65,6 @@ classDiagram
         +bool IsDeleted
         +long ScopeId
     }
-
     class ScopePermission {
         +Guid PublicId
         +string Name
@@ -76,75 +73,6 @@ classDiagram
         +bool IsDeleted
         +long ScopeId
     }
-
-    class ScopeOwner {
-        +long ScopeId
-        +long PersonId
-    }
-
-    class ScopeUser {
-        +long ScopeId
-        +long PersonId
-    }
-
-    class TwoFactorAuth {
-        +long PersonId
-        +bool AppEnabled
-        +bool EmailEnabled
-        +byte[]? TotpSecretEncrypted
-        +bool IsActive
-    }
-
-    class TwoFactorEmailCode {
-        +long TwoFactorAuthId
-        +byte[] CodeHash
-        +byte[] Salt
-        +DateTime ExpiresAt
-        +bool Used
-    }
-
-    class TwoFactorRecoveryCode {
-        +long TwoFactorAuthId
-        +byte[] CodeHash
-        +bool Used
-        +DateTime? UsedAt
-    }
-
-    class EmailVerificationToken {
-        +long PersonId
-        +string Token
-        +DateTime ExpiresAt
-        +bool Used
-    }
-
-    class PasswordResetToken {
-        +long PersonId
-        +string Token
-        +DateTime ExpiresAt
-        +bool Used
-    }
-
-    class AuditLog {
-        +Guid PublicId
-        +Guid? ActorPersonId
-        +int? ActorRole
-        +string Action
-        +Guid? TargetId
-        +DateTime CreatedAt
-    }
-
-    Entity <|-- Scope
-    Entity <|-- Person
-    Entity <|-- Role
-    Entity <|-- Application
-    Entity <|-- GoogleUser
-    Entity <|-- ScopePermission
-    Entity <|-- TwoFactorAuth
-    Entity <|-- TwoFactorEmailCode
-    Entity <|-- TwoFactorRecoveryCode
-    Entity <|-- EmailVerificationToken
-    Entity <|-- PasswordResetToken
-    Entity <|-- AuditLog
 
     Role "1" o-- "0..*" Person : classifies
     Scope "1" o-- "0..*" ScopeOwner : has
@@ -155,6 +83,63 @@ classDiagram
     Person "1" o-- "0..*" Application : owns
     Scope "1" o-- "0..*" GoogleUser : contains
     Scope "1" o-- "0..*" ScopePermission : defines
+```
+
+## Credentials, tokens and the audit trail
+
+The entities hanging off a person: their two-factor configuration with its codes, the two kinds of
+single-use token, and the append-only audit log.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Person {
+        +Guid PublicId
+        +string Email
+        +bool EmailVerified
+    }
+    class TwoFactorAuth {
+        +long PersonId
+        +bool AppEnabled
+        +bool EmailEnabled
+        +byte[]? TotpSecretEncrypted
+        +bool IsActive
+    }
+    class TwoFactorEmailCode {
+        +long TwoFactorAuthId
+        +byte[] CodeHash
+        +byte[] Salt
+        +DateTime ExpiresAt
+        +bool Used
+    }
+    class TwoFactorRecoveryCode {
+        +long TwoFactorAuthId
+        +byte[] CodeHash
+        +bool Used
+        +DateTime? UsedAt
+    }
+    class EmailVerificationToken {
+        +long PersonId
+        +string Token
+        +DateTime ExpiresAt
+        +bool Used
+    }
+    class PasswordResetToken {
+        +long PersonId
+        +string Token
+        +DateTime ExpiresAt
+        +bool Used
+    }
+    class AuditLog {
+        +Guid PublicId
+        +Guid? ActorPersonId
+        +int? ActorRole
+        +string Action
+        +Guid? TargetId
+        +DateTime CreatedAt
+    }
+
     Person "1" o-- "0..1" TwoFactorAuth : configures
     TwoFactorAuth "1" o-- "0..*" TwoFactorEmailCode : issues
     TwoFactorAuth "1" o-- "0..*" TwoFactorRecoveryCode : issues
@@ -164,6 +149,31 @@ classDiagram
 
 `AuditLog` is deliberately unconnected. Its `ActorPersonId` is a bare `PublicId`, **not** a foreign
 key, so an entry survives the hard deletion of the person who made the write.
+
+## Common shape
+
+Every entity above derives from `Entity`, which contributes the internal key, and each one that is
+addressable from outside also carries timestamps:
+
+```mermaid
+classDiagram
+    direction LR
+    class Entity {
+        <<abstract>>
+        +long Id
+    }
+    class AddressableEntity {
+        <<pattern>>
+        +Guid PublicId
+        +DateTime CreatedAt
+        +DateTime UpdatedAt
+    }
+    Entity <|-- AddressableEntity
+```
+
+`Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission` and `AuditLog` follow the
+addressable pattern. The join rows, token rows and two-factor rows carry only the internal `Id` —
+see the table below for why.
 
 ## Which entities carry a `PublicId`
 

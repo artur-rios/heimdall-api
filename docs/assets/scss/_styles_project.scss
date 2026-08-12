@@ -1,0 +1,50 @@
+//
+// Project styles, imported by Docsy's td/_main.scss.
+//
+
+// --- Diagrams -------------------------------------------------------------
+//
+// Mermaid is configured with useMaxWidth = false (see hugo.toml), so a diagram is drawn at its
+// natural size rather than scaled to fit the text column. That keeps its labels at full size —
+// fitting the domain-model class diagram to the column rendered its 16px text at roughly 4px —
+// at the cost of some diagrams being wider than the column, so the container scrolls.
+.td-content .mermaid {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.375rem;
+  background-color: var(--bs-body-bg, #fff);
+
+  // Bootstrap's `svg { max-width: 100% }` would undo the natural sizing above.
+  svg {
+    max-width: none;
+    height: auto;
+  }
+}
+
+// The text column is comfortable for prose but tight for a wide diagram. On large screens let
+// diagrams, wide tables and code blocks use the space to the right of the column that the page
+// is not otherwise using, so there is less to scroll.
+@include media-breakpoint-up(xl) {
+  .td-content {
+    .mermaid,
+    .table-responsive,
+    .highlight {
+      width: calc(100% + 8rem);
+      max-width: calc(100vw - 30rem);
+    }
+  }
+}
+
+// --- Wide tables ----------------------------------------------------------
+//
+// Several reference tables (the endpoint listings, the environment-variable table) are wider than
+// the column on small screens. Scroll them rather than letting them force the page sideways.
+.td-content > table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
