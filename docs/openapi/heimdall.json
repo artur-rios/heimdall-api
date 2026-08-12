@@ -19,7 +19,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Registers an application within a scope (UC-16, FR-AP-01/02/03). Only a System Admin or a\r\nScope Admin may call it: FR-AP-03 restricts ownership to a `ScopeAdmin` who owns the\r\nscope, so a `User` has nothing to create here and the attribute refuses them. The\r\nremaining rules depend on data the attribute cannot see and are enforced by the handler —\r\nthe acting Scope Admin must own the scope (AF-16e) and may only name themself (AF-16c),\r\nand the named owner must satisfy FR-AP-03 (AF-16b).",
+        "summary": "Registers an application within a scope (UC-16, FR-AP-01/02/03). Only a System Admin or a\nScope Admin may call it: FR-AP-03 restricts ownership to a `ScopeAdmin` who owns the\nscope, so a `User` has nothing to create here and the attribute refuses them. The\nremaining rules depend on data the attribute cannot see and are enforced by the handler —\nthe acting Scope Admin must own the scope (AF-16e) and may only name themself (AF-16c),\nand the named owner must satisfy FR-AP-03 (AF-16b).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Application_Create",
         "parameters": [
@@ -90,7 +90,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Lists the applications of a scope (UC-17, FR-AP-05/09). A System Admin sees every\r\napplication in the scope; a Scope Admin must own the scope (AF-17b) and sees only the\r\napplications they own. Both narrowings are enforced by the handler from the acting user.",
+        "summary": "Lists the applications of a scope (UC-17, FR-AP-05/09). A System Admin sees every\napplication in the scope; a Scope Admin must own the scope (AF-17b) and sees only the\napplications they own. Both narrowings are enforced by the handler from the acting user.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Application_List",
         "parameters": [
@@ -206,7 +206,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Retrieves a single application by its public identifier within the scope (UC-17,\r\nFR-AP-04/09). A `User` can own no application (FR-AP-03) and so is refused by the\r\nattribute; among the remaining actors the rule is data-dependent and lives in the handler —\r\na System Admin sees any application, a Scope Admin only the ones they own (AF-17b).",
+        "summary": "Retrieves a single application by its public identifier within the scope (UC-17,\nFR-AP-04/09). A `User` can own no application (FR-AP-03) and so is refused by the\nattribute; among the remaining actors the rule is data-dependent and lives in the handler —\na System Admin sees any application, a Scope Admin only the ones they own (AF-17b).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Application_GetById",
         "parameters": [
@@ -275,7 +275,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Updates an application's name and owner (UC-18, FR-AP-06). A `User` can own no\r\napplication (FR-AP-03) and so is refused by the attribute; among the remaining actors the\r\nrule is data-dependent and lives in the handler — a System Admin updates any application, a\r\nScope Admin only the ones they own (AF-18c). The handler also resolves the application\r\ninside the addressed scope (AF-18a) and, when the owner changes, checks the new owner\r\nagainst FR-AP-03 (AF-18b).",
+        "summary": "Updates an application's name and owner (UC-18, FR-AP-06). A `User` can own no\napplication (FR-AP-03) and so is refused by the attribute; among the remaining actors the\nrule is data-dependent and lives in the handler — a System Admin updates any application, a\nScope Admin only the ones they own (AF-18c). The handler also resolves the application\ninside the addressed scope (AF-18a) and, when the owner changes, checks the new owner\nagainst FR-AP-03 (AF-18b).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Application_Update",
         "parameters": [
@@ -355,7 +355,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Logically deletes an application by setting `IsDeleted = true` (UC-19, FR-AP-07). A\r\n`User` can own no application (FR-AP-03) and so is refused by the attribute; among the\r\nremaining actors the rule is data-dependent and lives in the handler — a System Admin\r\ndeletes any application, a Scope Admin only the ones they own (AF-19c). The handler also\r\nresolves the application inside the addressed scope (AF-19a) and answers an already-deleted\r\napplication idempotently (AF-19b).",
+        "summary": "Logically deletes an application by setting `IsDeleted = true` (UC-19, FR-AP-07). A\n`User` can own no application (FR-AP-03) and so is refused by the attribute; among the\nremaining actors the rule is data-dependent and lives in the handler — a System Admin\ndeletes any application, a Scope Admin only the ones they own (AF-19c). The handler also\nresolves the application inside the addressed scope (AF-19a) and answers an already-deleted\napplication idempotently (AF-19b).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Application_Delete",
         "parameters": [
@@ -418,7 +418,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Permanently (hard) deletes an application, removing the record from the database (UC-20,\r\nFR-AP-08). Restricted to System Admins: a Scope Admin may logically delete an application\r\nthey own (UC-19), but never purge it, so the attribute settles authorization on its own and\r\nthe handler applies no further rule. The handler resolves the application inside the\r\naddressed scope in any deletion state and reports AF-20a when it does not exist — which\r\nincludes a repeated call, as the removal leaves nothing to find. Nothing cascades: the\r\napplication's scope and owner are untouched.",
+        "summary": "Permanently (hard) deletes an application, removing the record from the database (UC-20,\nFR-AP-08). Restricted to System Admins: a Scope Admin may logically delete an application\nthey own (UC-19), but never purge it, so the attribute settles authorization on its own and\nthe handler applies no further rule. The handler resolves the application inside the\naddressed scope in any deletion state and reports AF-20a when it does not exist — which\nincludes a repeated call, as the removal leaves nothing to find. Nothing cascades: the\napplication's scope and owner are untouched.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Application_HardDelete",
         "parameters": [
@@ -481,7 +481,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Authenticates a person by email and password and returns a token (UC-11, FR-AU-01…07). A\r\n`User` also sends the `PublicId` of their scope; a `ScopeAdmin` or\r\n`SystemAdmin` sends credentials only. Open to anonymous callers — this is where a\r\ncaller gets the token every other endpoint requires. Every rejection (AF-11a…AF-11e)\r\nanswers 401 alike, so the endpoint cannot be used to enumerate accounts.",
+        "summary": "Authenticates a person by email and password and returns a token (UC-11, FR-AU-01…07). A\n`User` also sends the `PublicId` of their scope; a `ScopeAdmin` or\n`SystemAdmin` sends credentials only. Open to anonymous callers — this is where a\ncaller gets the token every other endpoint requires. Every rejection (AF-11a…AF-11e)\nanswers 401 alike, so the endpoint cannot be used to enumerate accounts.",
         "description": "**Anonymous** — no bearer token required.",
         "operationId": "Auth_Login",
         "requestBody": {
@@ -533,8 +533,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Requests a password reset link (UC-12, FR-PR-01/02). A `User` also sends the\r\n`PublicId` of their scope; a `ScopeAdmin` or `SystemAdmin` sends the email\r\nalone. Open to anonymous callers — someone who has lost their password cannot hold a\r\ntoken.",
-        "description": "Answers 200 with the same message whether or not the address belongs to anyone (AF-12a),\r\nso the endpoint cannot be used to enumerate accounts. The only rejection is a malformed\r\nrequest (400, NFR-10), which says nothing about who is registered.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Requests a password reset link (UC-12, FR-PR-01/02). A `User` also sends the\n`PublicId` of their scope; a `ScopeAdmin` or `SystemAdmin` sends the email\nalone. Open to anonymous callers — someone who has lost their password cannot hold a\ntoken.",
+        "description": "Answers 200 with the same message whether or not the address belongs to anyone (AF-12a),\nso the endpoint cannot be used to enumerate accounts. The only rejection is a malformed\nrequest (400, NFR-10), which says nothing about who is registered.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_PasswordRecovery",
         "requestBody": {
           "content": {
@@ -585,8 +585,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Sets a new password from the reset token mailed by UC-12 (UC-13, FR-PR-03/04). Open to\r\nanonymous callers for the same reason: the token is the only credential someone who has\r\nlost their password can present.",
-        "description": "Unlike the two endpoints above, each rejection is named — unknown (AF-13c), expired\r\n(AF-13a), and spent (AF-13b) tokens all answer 400 with their own message, as does a\r\nmalformed request (AF-13d). Nothing is disclosed by the distinction: the token identifies\r\nno account to a caller who does not already hold it.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Sets a new password from the reset token mailed by UC-12 (UC-13, FR-PR-03/04). Open to\nanonymous callers for the same reason: the token is the only credential someone who has\nlost their password can present.",
+        "description": "Unlike the two endpoints above, each rejection is named — unknown (AF-13c), expired\n(AF-13a), and spent (AF-13b) tokens all answer 400 with their own message, as does a\nmalformed request (AF-13d). Nothing is disclosed by the distinction: the token identifies\nno account to a caller who does not already hold it.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_ResetPassword",
         "requestBody": {
           "content": {
@@ -637,8 +637,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Confirms an email address from the verification token mailed at person creation (UC-14,\r\nFR-EV-03). Open to anonymous callers: the person reaches this from a link in their mail\r\nclient, where they hold no bearer token — and the point of the link is that they have not\r\nproved anything yet.",
-        "description": "Each rejection is named, as UC-13's are — unknown (AF-14c), expired (AF-14a), and spent\r\n(AF-14b) tokens all answer 400 with their own message, as does a request carrying no token\r\nat all. An address that was already verified answers 200: UC-14 defines no alternative flow\r\nfor it, and the link did what it promised.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Confirms an email address from the verification token mailed at person creation (UC-14,\nFR-EV-03). Open to anonymous callers: the person reaches this from a link in their mail\nclient, where they hold no bearer token — and the point of the link is that they have not\nproved anything yet.",
+        "description": "Each rejection is named, as UC-13's are — unknown (AF-14c), expired (AF-14a), and spent\n(AF-14b) tokens all answer 400 with their own message, as does a request carrying no token\nat all. An address that was already verified answers 200: UC-14 defines no alternative flow\nfor it, and the link did what it promised.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_VerifyEmail",
         "requestBody": {
           "content": {
@@ -689,8 +689,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Retires the caller's outstanding verification links and mails a fresh one (UC-15,\r\nFR-EV-04), for someone whose first link expired, was lost, or never arrived. The one\r\nauthenticated endpoint on this controller — and the reason it takes no request body: the\r\nperson is read from the bearer token, so a caller can only ever ask for their own link.",
-        "description": "No `RoleRequirement`: the authorization matrix grants email verification to all three\r\nroles and withholds it from anonymous callers, which is exactly what authentication alone\r\nenforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's\r\nidempotent success, since a link mailed to a verified address could do nothing when clicked.\r\nA token naming a person who no longer exists answers 404: it was validated, but there is no\r\naddress left to send to.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Retires the caller's outstanding verification links and mails a fresh one (UC-15,\nFR-EV-04), for someone whose first link expired, was lost, or never arrived. The one\nauthenticated endpoint on this controller — and the reason it takes no request body: the\nperson is read from the bearer token, so a caller can only ever ask for their own link.",
+        "description": "No `RoleRequirement`: the authorization matrix grants email verification to all three\nroles and withholds it from anonymous callers, which is exactly what authentication alone\nenforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's\nidempotent success, since a link mailed to a verified address could do nothing when clicked.\nA token naming a person who no longer exists answers 404: it was validated, but there is no\naddress left to send to.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_ResendVerification",
         "responses": {
           "200": {
@@ -729,8 +729,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Signs a Google account up or in against a scope and returns a token (UC-25,\r\nFR-GO-03…FR-GO-13). The caller sends the ID token they obtained from Google and the\r\n`PublicId` of the scope they are entering; the first call for a given Google account\r\nin a given scope creates the Google User, every later one authenticates it. Open to\r\nanonymous callers for the same reason `login` is — this is where a Google User gets\r\nthe token every other endpoint requires.",
-        "description": "Both 401 flows answer alike (AF-25a, AF-25d), as UC-11's do, so an anonymous caller cannot\r\nuse the endpoint to learn which Google accounts a scope has registered or which were\r\ndeleted. AF-25b answers 403 for a missing, deleted, and disabled scope alike — a scope is\r\nnot enumerable through here either. Only AF-25c (409) is named, and it discloses nothing:\r\nthe caller has already proved the address is theirs.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Signs a Google account up or in against a scope and returns a token (UC-25,\nFR-GO-03…FR-GO-13). The caller sends the ID token they obtained from Google and the\n`PublicId` of the scope they are entering; the first call for a given Google account\nin a given scope creates the Google User, every later one authenticates it. Open to\nanonymous callers for the same reason `login` is — this is where a Google User gets\nthe token every other endpoint requires.",
+        "description": "Both 401 flows answer alike (AF-25a, AF-25d), as UC-11's do, so an anonymous caller cannot\nuse the endpoint to learn which Google accounts a scope has registered or which were\ndeleted. AF-25b answers 403 for a missing, deleted, and disabled scope alike — a scope is\nnot enumerable through here either. Only AF-25c (409) is named, and it discloses nothing:\nthe caller has already proved the address is theirs.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_GoogleSignIn",
         "requestBody": {
           "content": {
@@ -781,8 +781,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Ends the caller's Google-authenticated session (UC-26, FR-GO-18). Takes no request body for\r\nthe reason `resend-verification` does not: the Google User is read from the bearer\r\ntoken, so a caller can only ever sign themselves out.",
-        "description": "No `RoleRequirement`, deliberately. The authorization matrix grants Google sign-out to\r\na Google User acting on themselves and marks it not-applicable for both administrator roles\r\n— who can never be Google Users (FR-GO-04) — so the rule is \"the caller is a live Google\r\nUser\", which is data the attribute cannot see and the handler checks. It also keeps the\r\nendpoint to the two answers UC-26 defines: 200, or 401 for every rejection. A missing or\r\nmalformed token is the other half of AF-26a and never reaches here — authentication answers\r\nit with the same 401.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Ends the caller's Google-authenticated session (UC-26, FR-GO-18). Takes no request body for\nthe reason `resend-verification` does not: the Google User is read from the bearer\ntoken, so a caller can only ever sign themselves out.",
+        "description": "No `RoleRequirement`, deliberately. The authorization matrix grants Google sign-out to\na Google User acting on themselves and marks it not-applicable for both administrator roles\n— who can never be Google Users (FR-GO-04) — so the rule is \"the caller is a live Google\nUser\", which is data the attribute cannot see and the handler checks. It also keeps the\nendpoint to the two answers UC-26 defines: 200, or 401 for every rejection. A missing or\nmalformed token is the other half of AF-26a and never reaches here — authentication answers\nit with the same 401.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_GoogleSignOut",
         "responses": {
           "200": {
@@ -821,8 +821,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),\r\nselecting an authenticator-app method, an email method, or both. Setup stays inactive until\r\nconfirmed by UC-37. The person acted on is always the caller themselves — read from the\r\nbearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResendVerification.",
-        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\r\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\r\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\r\n403) is not a role the attribute can see — a Google-issued token names a\r\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\r\nagainst the `Person` table itself.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),\nselecting an authenticator-app method, an email method, or both. Setup stays inactive until\nconfirmed by UC-37. The person acted on is always the caller themselves — read from the\nbearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResendVerification.",
+        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_EnableTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -880,8 +880,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving\r\ncontrol of every method selected in UC-36 — an `appCode` if `AppEnabled`, an\r\n`emailCode` if `EmailEnabled`, both if both. On success, activates the\r\nconfiguration and returns ten recovery codes in plaintext, exactly once. The person acted on\r\nis always the caller themselves — read from the bearer token, the same as\r\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
-        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\r\nthe authorization matrix grants confirmation to all three person roles and withholds it from\r\nanonymous callers, which authentication alone already enforces. AF-37a's 404 covers both \"no\r\nsetup was ever initiated\" and \"the caller is a Google User\" alike — a Google-issued token\r\nnames a `GoogleUser`, never a row this lookup could find.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving\ncontrol of every method selected in UC-36 — an `appCode` if `AppEnabled`, an\n`emailCode` if `EmailEnabled`, both if both. On success, activates the\nconfiguration and returns ten recovery codes in plaintext, exactly once. The person acted on\nis always the caller themselves — read from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
+        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\nthe authorization matrix grants confirmation to all three person roles and withholds it from\nanonymous callers, which authentication alone already enforces. AF-37a's 404 covers both \"no\nsetup was ever initiated\" and \"the caller is a Google User\" alike — a Google-issued token\nnames a `GoogleUser`, never a row this lookup could find.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_ConfirmTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -939,8 +939,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Completes a 2FA-gated login (UC-38, FR-2F-09) by redeeming the challenge token AF-11g\r\nissued at login, together with an app/email code or a recovery code, for the full\r\nauthentication token. Open to anonymous callers — the caller holds no bearer token yet,\r\nonly the challenge token, which is submitted here as a plain request body field, exactly\r\nlike M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResetPassword(ArturRios.Heimdall.Command.Input.ResetPasswordCommand)'s token, never as an `Authorization` header.",
-        "description": "AF-38a (invalid/expired challenge token) and AF-38b/AF-38c (wrong code, or a reused\r\nrecovery code) all answer the same 401 with the same message, so this endpoint cannot be\r\nused to distinguish a forged challenge from an expired one, or a wrong code from a\r\nrecovery code that was already spent. ArturRios.Heimdall.WebApi.Security.MfaPendingGuardFilter is what keeps a\r\nchallenge token from working anywhere else (FR-2F-10) — it never applies here, since this\r\naction never reads the challenge token as a bearer credential in the first place.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Completes a 2FA-gated login (UC-38, FR-2F-09) by redeeming the challenge token AF-11g\nissued at login, together with an app/email code or a recovery code, for the full\nauthentication token. Open to anonymous callers — the caller holds no bearer token yet,\nonly the challenge token, which is submitted here as a plain request body field, exactly\nlike M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResetPassword(ArturRios.Heimdall.Command.Input.ResetPasswordCommand)'s token, never as an `Authorization` header.",
+        "description": "AF-38a (invalid/expired challenge token) and AF-38b/AF-38c (wrong code, or a reused\nrecovery code) all answer the same 401 with the same message, so this endpoint cannot be\nused to distinguish a forged challenge from an expired one, or a wrong code from a\nrecovery code that was already spent. ArturRios.Heimdall.WebApi.Security.MfaPendingGuardFilter is what keeps a\nchallenge token from working anywhere else (FR-2F-10) — it never applies here, since this\naction never reads the challenge token as a bearer credential in the first place.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_VerifyTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -991,8 +991,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Turns off the caller's own two-factor authentication (UC-39, FR-2F-11), requiring both the\r\ncaller's current password and a valid second factor — an app/email code or a recovery\r\ncode — exactly as hard to satisfy as a login. On success, permanently removes the\r\n`TWO_FACTOR_AUTH` row and its recovery codes. The person acted on is always the\r\ncaller themselves — read from the bearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
-        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\r\nthe authorization matrix grants disabling two-factor authentication to all three person\r\nroles and withholds it from anonymous callers, which authentication alone already enforces.\r\nAF-39a (404, not active) and AF-39b/AF-39c (401, wrong password / wrong second factor) are\r\nkept as the three separate flows the Use Case Specification Document defines them as —\r\nunlike UC-38's AF-38b/AF-38c, which the spec collapses into one message, UC-39 lists the\r\npassword mismatch and the second-factor mismatch as distinct conditions, so they are not\r\nmerged here.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Turns off the caller's own two-factor authentication (UC-39, FR-2F-11), requiring both the\ncaller's current password and a valid second factor — an app/email code or a recovery\ncode — exactly as hard to satisfy as a login. On success, permanently removes the\n`TWO_FACTOR_AUTH` row and its recovery codes. The person acted on is always the\ncaller themselves — read from the bearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
+        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\nthe authorization matrix grants disabling two-factor authentication to all three person\nroles and withholds it from anonymous callers, which authentication alone already enforces.\nAF-39a (404, not active) and AF-39b/AF-39c (401, wrong password / wrong second factor) are\nkept as the three separate flows the Use Case Specification Document defines them as —\nunlike UC-38's AF-38b/AF-38c, which the spec collapses into one message, UC-39 lists the\npassword mismatch and the second-factor mismatch as distinct conditions, so they are not\nmerged here.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_DisableTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -1050,8 +1050,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Invalidates the caller's current recovery codes and issues a fresh set of ten (UC-40,\r\nFR-2F-12), requiring a valid second factor — an app/email code or one of the caller's\r\nremaining recovery codes — verified exactly as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.VerifyTwoFactorAuth(ArturRios.Heimdall.Command.Input.VerifyTwoFactorAuthCommand) verifies\r\none. On success, every existing `TWO_FACTOR_RECOVERY_CODE` row for the caller is\r\nremoved, including any still unused, and replaced with ten new ones. The person acted on is\r\nalways the caller themselves — read from the bearer token, the same as\r\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
-        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\r\nthe authorization matrix grants regenerating recovery codes to all three person roles and\r\nwithholds it from anonymous callers, which authentication alone already enforces. AF-40a\r\n(404, not active) and AF-40b (401, second factor invalid) reuse UC-39's \"not active\" and\r\nUC-38's \"factor invalid\" messages rather than inventing new ones.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Invalidates the caller's current recovery codes and issues a fresh set of ten (UC-40,\nFR-2F-12), requiring a valid second factor — an app/email code or one of the caller's\nremaining recovery codes — verified exactly as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.VerifyTwoFactorAuth(ArturRios.Heimdall.Command.Input.VerifyTwoFactorAuthCommand) verifies\none. On success, every existing `TWO_FACTOR_RECOVERY_CODE` row for the caller is\nremoved, including any still unused, and replaced with ten new ones. The person acted on is\nalways the caller themselves — read from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
+        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\nthe authorization matrix grants regenerating recovery codes to all three person roles and\nwithholds it from anonymous callers, which authentication alone already enforces. AF-40a\n(404, not active) and AF-40b (401, second factor invalid) reuse UC-39's \"not active\" and\nUC-38's \"factor invalid\" messages rather than inventing new ones.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_RegenerateRecoveryCodes",
         "requestBody": {
           "content": {
@@ -1109,8 +1109,8 @@
         "tags": [
           "GoogleUser"
         ],
-        "summary": "Lists the Google Users of a scope, with pagination and optional name/email filters (UC-27,\r\nFR-GO-14). A System Admin or an owner of the scope may call it; the ownership check\r\n(AF-27b) is enforced by the handler from the acting caller.",
-        "description": "Unlike M:ArturRios.Heimdall.WebApi.Controllers.GoogleUserController.GetById(System.Guid,System.Guid,System.Boolean) this does carry a `RoleRequirement`: the authorization\r\nmatrix grants a Google User a read of themselves, never a listing, so every `User` is\r\nrefused here before the handler runs.\n\n**Requires role:** System Admin or Scope Admin.",
+        "summary": "Lists the Google Users of a scope, with pagination and optional name/email filters (UC-27,\nFR-GO-14). A System Admin or an owner of the scope may call it; the ownership check\n(AF-27b) is enforced by the handler from the acting caller.",
+        "description": "Unlike M:ArturRios.Heimdall.WebApi.Controllers.GoogleUserController.GetById(System.Guid,System.Guid,System.Boolean) this does carry a `RoleRequirement`: the authorization\nmatrix grants a Google User a read of themselves, never a listing, so every `User` is\nrefused here before the handler runs.\n\n**Requires role:** System Admin or Scope Admin.",
         "operationId": "GoogleUser_List",
         "parameters": [
           {
@@ -1225,7 +1225,7 @@
           "GoogleUser"
         ],
         "summary": "Retrieves a single Google User by its public identifier within a scope (UC-27, FR-GO-14).",
-        "description": "Open to any authenticated actor, deliberately. UC-27 names a Google User as one of its\r\nthree actors — they may read their own record — and a Google User's token carries the\r\n`User` role (FR-GO-04), so any attribute strong enough to keep other Users out would\r\nlock out the actor the use case grants. The per-actor rule (AF-27b) is data-dependent and\r\nis therefore the handler's, as UC-07's by-id read is.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "Open to any authenticated actor, deliberately. UC-27 names a Google User as one of its\nthree actors — they may read their own record — and a Google User's token carries the\n`User` role (FR-GO-04), so any attribute strong enough to keep other Users out would\nlock out the actor the use case grants. The per-actor rule (AF-27b) is data-dependent and\nis therefore the handler's, as UC-07's by-id read is.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "GoogleUser_GetById",
         "parameters": [
           {
@@ -1290,8 +1290,8 @@
         "tags": [
           "GoogleUser"
         ],
-        "summary": "Logically deletes a Google User by setting `IsDeleted = true` (UC-28, FR-GO-15). The\r\nattribute keeps every `User` out — the authorization matrix withholds this from them,\r\nGoogle or password alike — while the rule that depends on data it cannot see is the\r\nhandler's: whether the acting Scope Admin owns the Google User's scope (AF-28c).",
-        "description": "Unlike M:ArturRios.Heimdall.WebApi.Controllers.GoogleUserController.GetById(System.Guid,System.Guid,System.Boolean) there is no actor a role attribute would wrongly exclude\r\nhere, which is why this one carries the attribute the by-id read cannot.\n\n**Requires role:** System Admin or Scope Admin.",
+        "summary": "Logically deletes a Google User by setting `IsDeleted = true` (UC-28, FR-GO-15). The\nattribute keeps every `User` out — the authorization matrix withholds this from them,\nGoogle or password alike — while the rule that depends on data it cannot see is the\nhandler's: whether the acting Scope Admin owns the Google User's scope (AF-28c).",
+        "description": "Unlike M:ArturRios.Heimdall.WebApi.Controllers.GoogleUserController.GetById(System.Guid,System.Guid,System.Boolean) there is no actor a role attribute would wrongly exclude\nhere, which is why this one carries the attribute the by-id read cannot.\n\n**Requires role:** System Admin or Scope Admin.",
         "operationId": "GoogleUser_Delete",
         "parameters": [
           {
@@ -1353,8 +1353,8 @@
         "tags": [
           "GoogleUser"
         ],
-        "summary": "Permanently (hard) deletes a Google User, removing the record for good (UC-29, FR-GO-16).\r\nRestricted to System Admins — the authorization matrix withholds this even from an owning\r\nScope Admin, who may only delete logically (UC-28).",
-        "description": "The one Google User endpoint where the attribute is the whole authorization rule: UC-29\r\nnames a single actor and nothing about the decision depends on data, so the handler applies\r\nnone and the command carries no acting person. Nothing cascades either — a Google User owns\r\nno dependent row.\n\n**Requires role:** System Admin.",
+        "summary": "Permanently (hard) deletes a Google User, removing the record for good (UC-29, FR-GO-16).\nRestricted to System Admins — the authorization matrix withholds this even from an owning\nScope Admin, who may only delete logically (UC-28).",
+        "description": "The one Google User endpoint where the attribute is the whole authorization rule: UC-29\nnames a single actor and nothing about the decision depends on data, so the handler applies\nnone and the command carries no acting person. Nothing cascades either — a Google User owns\nno dependent row.\n\n**Requires role:** System Admin.",
         "operationId": "GoogleUser_HardDelete",
         "parameters": [
           {
@@ -1416,7 +1416,7 @@
         "tags": [
           "HealthCheck"
         ],
-        "summary": "Basic liveness check (UC-30, FR-HC-01): confirms the API process is up and responding.\r\nPublic — no authentication required.",
+        "summary": "Basic liveness check (UC-30, FR-HC-01): confirms the API process is up and responding.\nPublic — no authentication required.",
         "description": "**Anonymous** — no bearer token required.",
         "operationId": "HealthCheck_HelloWorld",
         "responses": {
@@ -1449,7 +1449,7 @@
         "tags": [
           "HealthCheck"
         ],
-        "summary": "Detailed health check (UC-30, FR-HC-02…07): reports the status of each verified service\r\nplus an aggregate general status. Restricted to System Admins (AF-30a → 403, AF-30b → 401).\r\nReturns `200 OK` when healthy and `503 Service Unavailable` when any verified\r\nservice is down (FR-HC-07, AF-30c).",
+        "summary": "Detailed health check (UC-30, FR-HC-02…07): reports the status of each verified service\nplus an aggregate general status. Restricted to System Admins (AF-30a → 403, AF-30b → 401).\nReturns `200 OK` when healthy and `503 Service Unavailable` when any verified\nservice is down (FR-HC-07, AF-30c).",
         "description": "**Requires role:** System Admin.",
         "operationId": "HealthCheck_Detailed",
         "responses": {
@@ -1492,7 +1492,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Creates a `ScopeAdmin` or `SystemAdmin` person with no scope (UC-06 path b).\r\nRestricted to System Admins (AF-06c).",
+        "summary": "Creates a `ScopeAdmin` or `SystemAdmin` person with no scope (UC-06 path b).\nRestricted to System Admins (AF-06c).",
         "description": "**Requires role:** System Admin.",
         "operationId": "Person_CreateAdmin",
         "requestBody": {
@@ -1554,7 +1554,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Creates a `User` within a scope (UC-06 path a). A System Admin or an owner of the scope\r\nmay call it; the ownership check (AF-06e) is enforced by the handler from the acting user.",
+        "summary": "Creates a `User` within a scope (UC-06 path a). A System Admin or an owner of the scope\nmay call it; the ownership check (AF-06e) is enforced by the handler from the acting user.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_CreateUser",
         "parameters": [
@@ -1625,7 +1625,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Lists the `User` persons of a scope (UC-07, FR-PE-04). A System Admin or an owner of\r\nthe scope may call it; the ownership check (AF-07b) is enforced by the handler from the\r\nacting user.",
+        "summary": "Lists the `User` persons of a scope (UC-07, FR-PE-04). A System Admin or an owner of\nthe scope may call it; the ownership check (AF-07b) is enforced by the handler from the\nacting user.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_ListScopePersons",
         "parameters": [
@@ -1740,7 +1740,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Creates a brand-new `ScopeAdmin` person directly as a co-owner of a scope (UC-06 path\r\nc, FR-SC-12). A System Admin or an owner of the scope may call it; the ownership check\r\n(AF-06e) is enforced by the handler from the acting user.",
+        "summary": "Creates a brand-new `ScopeAdmin` person directly as a co-owner of a scope (UC-06 path\nc, FR-SC-12). A System Admin or an owner of the scope may call it; the ownership check\n(AF-06e) is enforced by the handler from the acting user.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_CreateScopeOwner",
         "parameters": [
@@ -1811,7 +1811,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Lists the `ScopeAdmin` owners of a scope (UC-07, FR-PE-04). A System Admin or an\r\nowner of the scope may call it; the ownership check (AF-07b) is enforced by the handler\r\nfrom the acting user.",
+        "summary": "Lists the `ScopeAdmin` owners of a scope (UC-07, FR-PE-04). A System Admin or an\nowner of the scope may call it; the ownership check (AF-07b) is enforced by the handler\nfrom the acting user.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_ListScopeOwners",
         "parameters": [
@@ -1926,7 +1926,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Adds an existing `ScopeAdmin` person as an additional owner of a scope (UC-21,\r\nFR-SC-08/FR-SC-09). The attribute keeps a `User` out — they can never be a System\r\nAdmin nor an existing owner — while the rules that depend on data it cannot see are the\r\nhandler's: whether the acting Scope Admin owns this scope (AF-21c), whether the scope is\r\nactive (AF-21a), whether the named person is a usable `ScopeAdmin` (AF-21b), and\r\nwhether they already own it (AF-21d).",
+        "summary": "Adds an existing `ScopeAdmin` person as an additional owner of a scope (UC-21,\nFR-SC-08/FR-SC-09). The attribute keeps a `User` out — they can never be a System\nAdmin nor an existing owner — while the rules that depend on data it cannot see are the\nhandler's: whether the acting Scope Admin owns this scope (AF-21c), whether the scope is\nactive (AF-21a), whether the named person is a usable `ScopeAdmin` (AF-21b), and\nwhether they already own it (AF-21d).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_AddScopeOwner",
         "parameters": [
@@ -1987,7 +1987,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Removes a person's ownership of a scope (UC-22, FR-SC-08/FR-SC-10). The attribute keeps a\r\n`User` out — they can never be a System Admin nor an existing owner — while the rules\r\nthat depend on data it cannot see are the handler's: whether the acting Scope Admin owns\r\nthis scope (AF-22c), whether the scope is active and the named person actually owns it\r\n(AF-22a), and whether the scope would be left without an owner (AF-22b, NFR-12).",
+        "summary": "Removes a person's ownership of a scope (UC-22, FR-SC-08/FR-SC-10). The attribute keeps a\n`User` out — they can never be a System Admin nor an existing owner — while the rules\nthat depend on data it cannot see are the handler's: whether the acting Scope Admin owns\nthis scope (AF-22c), whether the scope is active and the named person actually owns it\n(AF-22a), and whether the scope would be left without an owner (AF-22b, NFR-12).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_RemoveScopeOwner",
         "parameters": [
@@ -2050,7 +2050,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Promotes an existing `User` of a scope to `ScopeAdmin`, making them a co-owner of\r\nthat scope (UC-23, FR-SC-08/FR-SC-13/FR-RO-03). The attribute keeps a `User` out —\r\nthey can never be a System Admin nor an existing owner — while the rules that depend on\r\ndata it cannot see are the handler's: whether the acting Scope Admin owns this scope\r\n(AF-23c), whether the scope is active (AF-23a), whether the named person is a `User`\r\nof it (AF-23b), and whether they already hold the role (AF-23d).",
+        "summary": "Promotes an existing `User` of a scope to `ScopeAdmin`, making them a co-owner of\nthat scope (UC-23, FR-SC-08/FR-SC-13/FR-RO-03). The attribute keeps a `User` out —\nthey can never be a System Admin nor an existing owner — while the rules that depend on\ndata it cannot see are the handler's: whether the acting Scope Admin owns this scope\n(AF-23c), whether the scope is active (AF-23a), whether the named person is a `User`\nof it (AF-23b), and whether they already hold the role (AF-23d).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_PromoteScopeUser",
         "parameters": [
@@ -2113,7 +2113,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\r\nany authenticated actor because a User may update their own record; the per-actor rule and\r\nthe role-change restriction (AF-08c) are enforced by the handler.",
+        "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\nany authenticated actor because a User may update their own record; the per-actor rule and\nthe role-change restriction (AF-08c) are enforced by the handler.",
         "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_Update",
         "parameters": [
@@ -2181,7 +2181,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\r\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\r\ntherefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner\r\n(AF-09e) refusals.",
+        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\ntherefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner\n(AF-09e) refusals.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_Delete",
         "parameters": [
@@ -2233,7 +2233,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any\r\nauthenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is\r\ntherefore enforced by the handler.",
+        "summary": "Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any\nauthenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is\ntherefore enforced by the handler.",
         "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_GetById",
         "parameters": [
@@ -2292,7 +2292,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\r\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\r\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the\r\nlast-owner guard (AF-10b) are enforced by the handler.",
+        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the\nlast-owner guard (AF-10b) are enforced by the handler.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Person_HardDelete",
         "parameters": [
@@ -2552,7 +2552,7 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Logically deletes a scope, cascading to its Users, Google Users, and applications (UC-04).\r\nRestricted to System Admins.",
+        "summary": "Logically deletes a scope, cascading to its Users, Google Users, and applications (UC-04).\nRestricted to System Admins.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Scope_Delete",
         "parameters": [
@@ -2604,7 +2604,7 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Retrieves a single scope by its public identifier (UC-02). Open to any authenticated actor\r\nbecause a Scope Admin reads the scopes they own and a User the scope they belong to; that\r\nper-actor visibility rule (AF-02b) is data-dependent and is therefore enforced by the\r\nhandler.",
+        "summary": "Retrieves a single scope by its public identifier (UC-02). Open to any authenticated actor\nbecause a Scope Admin reads the scopes they own and a User the scope they belong to; that\nper-actor visibility rule (AF-02b) is data-dependent and is therefore enforced by the\nhandler.",
         "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Scope_GetById",
         "parameters": [
@@ -2663,7 +2663,7 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Permanently (hard) deletes a scope, removing its Users, Google Users, applications,\r\nscope permissions, and ownership/membership join rows (UC-05). Restricted to System\r\nAdmins.",
+        "summary": "Permanently (hard) deletes a scope, removing its Users, Google Users, applications,\nscope permissions, and ownership/membership join rows (UC-05). Restricted to System\nAdmins.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Scope_HardDelete",
         "parameters": [
@@ -2717,7 +2717,7 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Turns Google Sign-In on or off for a scope (UC-24, FR-GO-01/FR-GO-02). The attribute keeps\r\na `User` out — they can never be a System Admin nor an existing owner — while the\r\nrules that depend on data it cannot see are the handler's: whether the acting Scope Admin\r\nowns this scope (AF-24b) and whether the scope is active (AF-24a).",
+        "summary": "Turns Google Sign-In on or off for a scope (UC-24, FR-GO-01/FR-GO-02). The attribute keeps\na `User` out — they can never be a System Admin nor an existing owner — while the\nrules that depend on data it cannot see are the handler's: whether the acting Scope Admin\nowns this scope (AF-24b) and whether the scope is active (AF-24a).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Scope_SetGoogleSignIn",
         "parameters": [
@@ -2790,7 +2790,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Creates a scope-specific permission within a scope (UC-31, FR-SP-01/02). Only a System Admin\r\nor a Scope Admin may call it: the endpoint's `[RoleRequirement]` refuses a `User`,\r\nwho has no standing to manage a scope's permissions. The remaining rules depend on data the\r\nattribute cannot see and are enforced by the handler — the target scope must exist and be\r\nactive (AF-31a), the input must be well-formed (AF-31d), and an acting Scope Admin must own\r\nthe scope (AF-31e). A scope permission has no owner of its own, so owning the scope is the\r\nwhole of the authorization.",
+        "summary": "Creates a scope-specific permission within a scope (UC-31, FR-SP-01/02). Only a System Admin\nor a Scope Admin may call it: the endpoint's `[RoleRequirement]` refuses a `User`,\nwho has no standing to manage a scope's permissions. The remaining rules depend on data the\nattribute cannot see and are enforced by the handler — the target scope must exist and be\nactive (AF-31a), the input must be well-formed (AF-31d), and an acting Scope Admin must own\nthe scope (AF-31e). A scope permission has no owner of its own, so owning the scope is the\nwhole of the authorization.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "ScopePermission_Create",
         "parameters": [
@@ -2861,7 +2861,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Lists the permissions of a scope (UC-32, FR-SP-05/09). A System Admin sees every\r\npermission in the scope; a Scope Admin must own the scope (AF-32e) and then sees every\r\npermission in it — a scope permission has no owner of its own, so there is no per-owner\r\nnarrowing. Both the ownership gate and the scope lookup are enforced by the handler from\r\nthe acting user; a missing or logically deleted scope reuses AF-31a.",
+        "summary": "Lists the permissions of a scope (UC-32, FR-SP-05/09). A System Admin sees every\npermission in the scope; a Scope Admin must own the scope (AF-32e) and then sees every\npermission in it — a scope permission has no owner of its own, so there is no per-owner\nnarrowing. Both the ownership gate and the scope lookup are enforced by the handler from\nthe acting user; a missing or logically deleted scope reuses AF-31a.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "ScopePermission_List",
         "parameters": [
@@ -2969,7 +2969,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Retrieves a single scope permission by its public identifier within the scope (UC-32,\r\nFR-SP-04/09). A `User` is refused by the attribute; among the remaining actors the\r\nrule is data-dependent and lives in the handler — a System Admin sees any permission, a\r\nScope Admin only one whose scope they own (AF-32e). A permission that does not exist under\r\nthe addressed scope, or that is logically deleted and was not explicitly requested, is\r\nAF-32a.",
+        "summary": "Retrieves a single scope permission by its public identifier within the scope (UC-32,\nFR-SP-04/09). A `User` is refused by the attribute; among the remaining actors the\nrule is data-dependent and lives in the handler — a System Admin sees any permission, a\nScope Admin only one whose scope they own (AF-32e). A permission that does not exist under\nthe addressed scope, or that is logically deleted and was not explicitly requested, is\nAF-32a.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "ScopePermission_GetById",
         "parameters": [
@@ -3038,7 +3038,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Updates a scope permission's name, description, and JWT-claim flag (UC-33, FR-SP-06). A\r\n`User` is refused by the attribute; among the remaining actors the rule is\r\ndata-dependent and lives in the handler — a System Admin updates any permission, a Scope\r\nAdmin only one whose scope they own (AF-33e). The handler resolves the permission inside\r\nthe addressed scope (AF-33a) and validates the input shape, reusing UC-31's messages.",
+        "summary": "Updates a scope permission's name, description, and JWT-claim flag (UC-33, FR-SP-06). A\n`User` is refused by the attribute; among the remaining actors the rule is\ndata-dependent and lives in the handler — a System Admin updates any permission, a Scope\nAdmin only one whose scope they own (AF-33e). The handler resolves the permission inside\nthe addressed scope (AF-33a) and validates the input shape, reusing UC-31's messages.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "ScopePermission_Update",
         "parameters": [
@@ -3118,7 +3118,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Logically deletes a scope permission by setting `IsDeleted = true` (UC-34, FR-SP-07).\r\nA `User` is refused by the attribute; among the remaining actors the rule is\r\ndata-dependent and lives in the handler — a System Admin deletes any permission, a Scope\r\nAdmin only one whose scope they own (AF-34e). The handler resolves the permission inside\r\nthe addressed scope (AF-34a) and answers an already-deleted permission idempotently\r\n(AF-34b). Nothing cascades: a scope permission owns no dependent row.",
+        "summary": "Logically deletes a scope permission by setting `IsDeleted = true` (UC-34, FR-SP-07).\nA `User` is refused by the attribute; among the remaining actors the rule is\ndata-dependent and lives in the handler — a System Admin deletes any permission, a Scope\nAdmin only one whose scope they own (AF-34e). The handler resolves the permission inside\nthe addressed scope (AF-34a) and answers an already-deleted permission idempotently\n(AF-34b). Nothing cascades: a scope permission owns no dependent row.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "ScopePermission_Delete",
         "parameters": [
@@ -3181,7 +3181,7 @@
         "tags": [
           "ScopePermission"
         ],
-        "summary": "Permanently (hard) deletes a scope permission, removing the record from the database\r\n(UC-35, FR-SP-08). Restricted to System Admins: a Scope Admin may logically delete a\r\npermission in a scope they own (UC-34), but never purge it, so the attribute settles\r\nauthorization on its own and the handler applies no further rule. The handler resolves the\r\npermission inside the addressed scope in any deletion state and reports AF-35a when it\r\ndoes not exist — which includes a repeated call, as the removal leaves nothing to find.\r\nNothing cascades: the permission's scope is untouched.",
+        "summary": "Permanently (hard) deletes a scope permission, removing the record from the database\n(UC-35, FR-SP-08). Restricted to System Admins: a Scope Admin may logically delete a\npermission in a scope they own (UC-34), but never purge it, so the attribute settles\nauthorization on its own and the handler applies no further rule. The handler resolves the\npermission inside the addressed scope in any deletion state and reports AF-35a when it\ndoes not exist — which includes a repeated call, as the removal leaves nothing to find.\nNothing cascades: the permission's scope is untouched.",
         "description": "**Requires role:** System Admin.",
         "operationId": "ScopePermission_HardDelete",
         "parameters": [

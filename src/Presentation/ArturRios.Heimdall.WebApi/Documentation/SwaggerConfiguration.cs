@@ -80,6 +80,9 @@ public static class SwaggerConfiguration
         options.IncludeXmlComments(xmlPath);
 
         options.DocumentFilter<SecurityDocumentFilter>();
+
+        // Runs last, and must: it normalises text the filters above also write.
+        options.DocumentFilter<LineEndingDocumentFilter>();
         options.CustomOperationIds(description =>
             (description.ActionDescriptor as ControllerActionDescriptor)
             is { } action
@@ -223,4 +226,129 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
 
     private static string Append(string? description, string line) =>
         string.IsNullOrWhiteSpace(description) ? line : $"{description}\n\n{line}";
+}
+
+/// <summary>
+///     Rewrites every CRLF in the finished document to LF.
+///
+///     Swashbuckle builds an operation's summary from the XML documentation file and rejoins the
+///     lines with <see cref="Environment.NewLine" />, so a single source comment becomes a summary
+///     broken by CRLF on Windows and by LF on Linux. Normalising the XML file on the way in does not
+///     help: the newlines are put back after it is read.
+///
+///     Nobody reading the page can tell the difference, but scripts/openapi.py --check compares
+///     bytes — so without this, the document generated on a developer's Windows machine and the one
+///     CI regenerates on Linux describe the very same API and still differ, in 46 hunks of pure line
+///     ending. LF is the side to standardise on: it is what .gitattributes pins the committed file
+///     to.
+/// </summary>
+public sealed class LineEndingDocumentFilter : IDocumentFilter
+{
+    public void Apply(OpenApiDocument document, DocumentFilterContext context)
+    {
+        if (document.Info is { } info)
+        {
+            info.Title = Normalize(info.Title);
+            info.Description = Normalize(info.Description);
+            info.Summary = Normalize(info.Summary);
+        }
+
+        foreach (var tag in document.Tags ?? Enumerable.Empty<OpenApiTag>())
+        {
+            if (tag is OpenApiTag concrete)
+            {
+                concrete.Description = Normalize(concrete.Description);
+            }
+        }
+
+        foreach (var scheme in document.Components?.SecuritySchemes?.Values ?? [])
+        {
+            if (scheme is OpenApiSecurityScheme concrete)
+            {
+                concrete.Description = Normalize(concrete.Description);
+            }
+        }
+
+        foreach (var pathItem in document.Paths.Values)
+        {
+            if (pathItem is OpenApiPathItem concrete)
+            {
+                concrete.Summary = Normalize(concrete.Summary);
+                concrete.Description = Normalize(concrete.Description);
+            }
+
+            foreach (var operation in pathItem.Operations?.Values ?? Enumerable.Empty<OpenApiOperation>())
+            {
+                Apply(operation);
+            }
+        }
+
+        // Schemas are walked with a seen-set: a $ref'd schema is shared between the operations that
+        // use it, and a self-referencing one would otherwise recurse forever.
+        var seen = new HashSet<IOpenApiSchema>();
+
+        foreach (var schema in document.Components?.Schemas?.Values ?? [])
+        {
+            Apply(schema, seen);
+        }
+    }
+
+    private static void Apply(OpenApiOperation operation)
+    {
+        operation.Summary = Normalize(operation.Summary);
+        operation.Description = Normalize(operation.Description);
+
+        foreach (var parameter in operation.Parameters ?? [])
+        {
+            if (parameter is OpenApiParameter concrete)
+            {
+                concrete.Description = Normalize(concrete.Description);
+            }
+        }
+
+        if (operation.RequestBody is OpenApiRequestBody requestBody)
+        {
+            requestBody.Description = Normalize(requestBody.Description);
+        }
+
+        foreach (var response in operation.Responses?.Values ?? Enumerable.Empty<IOpenApiResponse>())
+        {
+            if (response is OpenApiResponse concrete)
+            {
+                concrete.Description = Normalize(concrete.Description);
+            }
+        }
+    }
+
+    private static void Apply(IOpenApiSchema schema, HashSet<IOpenApiSchema> seen)
+    {
+        if (!seen.Add(schema))
+        {
+            return;
+        }
+
+        if (schema is OpenApiSchema concrete)
+        {
+            concrete.Title = Normalize(concrete.Title);
+            concrete.Description = Normalize(concrete.Description);
+        }
+
+        foreach (var property in schema.Properties?.Values ?? [])
+        {
+            Apply(property, seen);
+        }
+
+        if (schema.Items is { } items)
+        {
+            Apply(items, seen);
+        }
+
+        foreach (var composed in (schema.AllOf ?? []).Concat(schema.AnyOf ?? []).Concat(schema.OneOf ?? []))
+        {
+            Apply(composed, seen);
+        }
+    }
+
+    private static string? Normalize(string? text) =>
+        text?.ReplaceLineEndings("\n");
 }
