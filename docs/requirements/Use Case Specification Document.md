@@ -1142,6 +1142,13 @@ sequenceDiagram
 | AF-23b | Person not found, logically deleted, or not a `User` of that scope | Return `400 Bad Request` |
 | AF-23c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-23d | Person is already a `ScopeAdmin` | Return `409 Conflict` — "Person already holds the ScopeAdmin role" |
+| AF-23e | Person's email collides with an existing `ScopeAdmin`/`SystemAdmin` elsewhere in the system (FR-PE-09) — the promoted person moves from the scope-local `User` email namespace to the global admin namespace | Return `409 Conflict` |
+
+> **On AF-23e.** A `User`'s email is unique only within their scope; a `ScopeAdmin`'s is unique
+> system-wide (FR-PE-09). Promotion moves the person between those two namespaces, so the same email
+> that was fine as a `User` can collide with an existing admin the moment it becomes global. This is
+> checked the same way UC-08's role change re-checks uniqueness against the role the person is about
+> to hold.
 
 ---
 
@@ -1669,8 +1676,11 @@ sequenceDiagram
 | AF-38a | Challenge token expired or invalid | Return `401 Unauthorized` |
 | AF-38b | Code does not match any valid app code, email code, or unused recovery code | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
+| AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
 
 > **On the single rejection.** As with UC-11's own AF-11a..e, AF-38a through AF-38c collapse to one indistinguishable `401` — telling an unauthenticated caller which part of their guess was wrong would leak whether a challenge token is merely expired versus outright forged, or whether a recovery code was ever real.
+>
+> **On AF-38d being separate.** AF-38d is not folded into that collapse: the caller who reaches it proved both a valid challenge token and a genuine factor, so the failure is not "you guessed wrong" but "your account stopped qualifying between UC-11 and now." There is nothing to hide by distinguishing it — the caller already holds proof they are who they say they are.
 
 ---
 

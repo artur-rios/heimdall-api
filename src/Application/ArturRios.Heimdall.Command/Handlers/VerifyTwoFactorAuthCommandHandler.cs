@@ -22,9 +22,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     AF-38b (wrong or missing code) and AF-38c (an already-used recovery code) answer identically —
 ///     <see cref="TwoFactorMessages.FactorInvalid" />, 401 — so a caller cannot distinguish a wrong
 ///     code from a reused recovery code, exactly the reasoning UC-11's AF-11a…AF-11e collapse into
-///     one message for. A challenge token whose person (or 2FA configuration) no longer qualifies by
-///     the time this runs is treated the same as an invalid challenge (AF-38a) rather than inventing
-///     a fourth rejection UC-38 does not define.
+///     one message for. A person or 2FA configuration the challenge token names but that no longer
+///     resolves is treated the same as an invalid challenge (AF-38a). A person and configuration that
+///     do resolve, and a factor that genuinely checks out, but whose scope eligibility (UC-11's own
+///     AF-11d/AF-11e) no longer holds, gets its own <see cref="TwoFactorMessages.ScopeNoLongerEligible" />
+///     instead — the token and the factor were both valid, so collapsing that case into "challenge
+///     invalid" would misdescribe what actually happened.
 /// </remarks>
 public class VerifyTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person> personReader,
@@ -79,10 +82,11 @@ public class VerifyTwoFactorAuthCommandHandler(
         var consumedRecoveryCode = verification.ConsumedRecoveryCode;
 
         // UC-11 step 6 / UC-38 step 5 (FR-2F-09): the same scope-eligibility rules a direct login
-        // enforces still apply to a 2FA-gated one.
+        // enforces still apply to a 2FA-gated one. The factor already checked out, so this is a
+        // distinct rejection from AF-38a rather than a reuse of ChallengeTokenInvalid.
         if (!personAuthTokenService.TryBuildSubject(person, out var subject))
         {
-            return output.WithError(TwoFactorMessages.ChallengeTokenInvalid);
+            return output.WithError(TwoFactorMessages.ScopeNoLongerEligible);
         }
 
         // UC-38 step 4: a recovery code can never be replayed.

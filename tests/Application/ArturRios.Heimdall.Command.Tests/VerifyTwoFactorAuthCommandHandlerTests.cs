@@ -238,6 +238,29 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenFactorValidButScopeNoLongerEligible_WhenHandlingVerify_ThenReturnsScopeNoLongerEligibleError()
+    {
+        // Given — UC-38 step 5: the app code is genuinely correct, but the person's scope was
+        // logically deleted between UC-11's password check and this completion (the AF-11d
+        // condition, re-checked here). Distinct from AF-38a: the challenge token and the factor
+        // were both valid.
+        var fixture = await FixtureAsync();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = "scope", IsDeleted = true };
+        fixture.Person.RoleId = (long)Roles.User;
+        fixture.Person.ScopeMembership = new ScopeUser { Scope = scope, Person = fixture.Person };
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.ScopeNoLongerEligible, output.Errors);
+        Assert.DoesNotContain(TwoFactorMessages.ChallengeTokenInvalid, output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+    }
+
+    [UnitFact]
     public async Task GivenWrongAppCode_WhenHandlingVerify_ThenReturnsFactorInvalidError()
     {
         // Given — AF-38b

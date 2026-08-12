@@ -57,10 +57,19 @@ public static class TwoFactorMessages
 
     /// <summary>
     ///     AF-38a: the challenge token is missing, malformed, not signed by this API, expired, or
-    ///     does not carry the MFA-pending claim (FR-2F-10) — including the edge case where the
-    ///     person or configuration it names no longer qualifies by the time UC-38 runs.
+    ///     does not carry the MFA-pending claim (FR-2F-10).
     /// </summary>
     public const string ChallengeTokenInvalid = "The two-factor challenge is invalid or has expired. Log in again.";
+
+    /// <summary>
+    ///     UC-38 step 5 (FR-2F-09): the second factor checked out, but the person's scope eligibility —
+    ///     re-checked exactly as UC-11's own AF-11d/AF-11e do — no longer holds by the time UC-38 runs
+    ///     (e.g. their scope was logically deleted between the UC-11 password check and this
+    ///     completion). Kept distinct from <see cref="ChallengeTokenInvalid" /> since the token itself
+    ///     was valid and the factor was genuinely correct; the caller is told to log in again for the
+    ///     same reason UC-11 itself would now refuse them.
+    /// </summary>
+    public const string ScopeNoLongerEligible = "This account is no longer eligible to sign in. Log in again.";
 
     /// <summary>
     ///     AF-38b and AF-38c: neither a valid app/email code nor an unused recovery code was

@@ -236,6 +236,44 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.Equal(pending.Id, stored.Id);
         Assert.True(stored.EmailEnabled);
         Assert.False(stored.IsActive);
+
+        // Then — the App method dropped from this re-initiation is cleared, not left active
+        // alongside Email, so UC-37 will only ask for the email code.
+        Assert.False(stored.AppEnabled);
+        Assert.Null(stored.TotpSecretEncrypted);
+    }
+
+    [UnitFact]
+    public async Task GivenPendingEmailSetupExists_WhenReinitiatingWithAppOnly_ThenEmailIsCleared()
+    {
+        // Given — AF-36d: a prior, unconfirmed setup for the Email method only, with a live code
+        var fixture = await FixtureAsync();
+        var pending = new TwoFactorAuth
+        {
+            PersonId = fixture.Person.Id, IsActive = false, EmailEnabled = true
+        };
+        await fixture.TwoFactorAuths.CreateAsync(pending);
+        var outstanding = new TwoFactorEmailCode
+        {
+            TwoFactorAuthId = pending.Id,
+            CodeHash = [1],
+            Salt = [2],
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            Used = false
+        };
+        await fixture.EmailCodes.CreateAsync(outstanding);
+
+        // When re-initiating with App only
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App"));
+
+        // Then — Email is dropped from the pending configuration and its live code retired, so
+        // UC-37 will only ask for the app code.
+        Assert.True(output.Success);
+        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Equal(pending.Id, stored.Id);
+        Assert.True(stored.AppEnabled);
+        Assert.False(stored.EmailEnabled);
+        Assert.True(outstanding.Used);
     }
 
     [UnitFact]

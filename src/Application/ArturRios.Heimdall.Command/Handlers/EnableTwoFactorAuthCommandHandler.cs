@@ -107,6 +107,27 @@ public class EnableTwoFactorAuthCommandHandler(
 
         var responseData = new EnableTwoFactorAuthCommandOutput();
 
+        // AF-36d: re-initiation overwrites the pending configuration with the new selection — a
+        // method dropped from a prior pending selection is cleared, not left active alongside the
+        // new one, so UC-37 only ever asks for codes on the methods just (re)selected.
+        if (!wantsApp)
+        {
+            twoFactorAuth.AppEnabled = false;
+            twoFactorAuth.TotpSecretEncrypted = null;
+        }
+
+        if (!wantsEmail)
+        {
+            twoFactorAuth.EmailEnabled = false;
+
+            var retirement = await RetireOutstandingCodesAsync(twoFactorAuth.Id);
+
+            if (retirement is not null)
+            {
+                return output.WithErrors(retirement);
+            }
+        }
+
         // UC-36 step 3 (FR-2F-02): a fresh secret every time App is (re)selected, never returned
         // again once encrypted.
         if (wantsApp)
