@@ -155,9 +155,10 @@ the controllers themselves — the summaries below are the ones in the source �
 &lt;code&gt;python scripts/openapi.py&lt;/code&gt;. It is byte-for-byte what a running instance serves at
 &lt;code&gt;/swagger/v1/swagger.json&lt;/code&gt;: both come from the same &lt;code&gt;SwaggerConfiguration&lt;/code&gt;.&lt;/p&gt;
 &lt;div class="alert alert-info" role="alert"&gt;&lt;div class="h4 alert-heading" role="heading"&gt;This explorer does not call anything&lt;/div&gt;
-&lt;p&gt;The page has no server behind it, so &lt;strong&gt;Try it out&lt;/strong&gt; is switched off. To call the endpoints, run the
-API and use its own Swagger UI at &lt;code&gt;/swagger&lt;/code&gt; — same document, with &lt;strong&gt;Authorize&lt;/strong&gt; and &lt;strong&gt;Try it out&lt;/strong&gt;
-working — or the
+&lt;p&gt;The page has no server behind it, so &lt;strong&gt;Try it out&lt;/strong&gt; and &lt;strong&gt;Authorize&lt;/strong&gt; are both gone — a token entered
+here could only be attached to a request, and no request can be sent. The padlocks stay, because
+which endpoints need one is worth knowing. To call the endpoints, run the API and use its own Swagger
+UI at &lt;code&gt;/swagger&lt;/code&gt; — same document, with &lt;strong&gt;Authorize&lt;/strong&gt; and &lt;strong&gt;Try it out&lt;/strong&gt; working — or the
 &lt;a href="https://artur-rios.github.io/heimdall-api/docs/getting-started/#calling-the-api"&gt;&lt;code&gt;.http&lt;/code&gt; files or Bruno collection&lt;/a&gt;
  in
 &lt;code&gt;api-client/&lt;/code&gt;. For what each endpoint means and who may call it in prose, see the
