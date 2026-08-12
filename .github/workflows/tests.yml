@@ -1,0 +1,71 @@
+name: Tests
+
+# Runs the whole test suite on every pull request and on every commit that lands on main.
+#
+# The two suites are separate steps of the same job rather than separate jobs: they share one
+# restore and one build, and keeping them sequential means a broken unit test is reported before
+# the functional suite spends minutes pulling and starting a PostgreSQL container.
+#
+# No path filters. A test suite is the one workflow that should run for every change — a filter
+# would let a change to an unlisted path merge without evidence that anything still passes.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        # No submodules: the only one is the documentation site's theme, which no test touches.
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/ArturRios.Heimdall.sln
+
+      - name: Build solution
+        # Built once here so both test steps can run with --no-build and neither pays for it.
+        run: dotnet build src/ArturRios.Heimdall.sln --configuration Release --no-restore
+
+      - name: Run unit tests
+        # The Category trait comes from the [UnitFact] / [UnitTheory] attributes in
+        # ArturRios.Util.Test, so this filter needs no per-project configuration.
+        run: >-
+          dotnet test src/ArturRios.Heimdall.sln
+          --configuration Release
+          --no-build
+          --filter "Category=Unit"
+
+      - name: Run functional tests
+        # These start a real PostgreSQL container per run through Testcontainers. The
+        # ubuntu-latest runner ships a working Docker daemon, so nothing extra is needed —
+        # but that is the reason this suite cannot move to a Windows or macOS runner as is.
+        run: >-
+          dotnet test src/ArturRios.Heimdall.sln
+          --configuration Release
+          --no-build
+          --filter "Category=Functional"
+
+      - name: Upload test results
+        # Every project writes a .trx (tests/default.runsettings enables the trx logger). Keeping
+        # them means the next intermittent failure names itself instead of vanishing with the log.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: warn
