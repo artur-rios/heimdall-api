@@ -126,3 +126,12 @@
     filter: invert(1) hue-rotate(180deg);
   }
 }
+
+// The explorer removes Swagger UI's Authorize button (see content/en/docs/api-explorer.md): there is
+// no server behind the page, so a token could never be attached to anything. The per-operation
+// padlocks stay, because which endpoints need a token is worth reading — but clicking one opens the
+// same authorization dialog the button would have, so they are demoted to indicators.
+.heimdall-swagger .swagger-ui .authorization__btn {
+  pointer-events: none;
+  cursor: default;
+}
