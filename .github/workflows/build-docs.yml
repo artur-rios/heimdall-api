@@ -40,9 +40,17 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     # A workflow_run trigger fires on completion, failed runs included. A failed Tests run has no
-    # coverage artifact and nothing worth publishing, so only a successful one continues. The other
-    # triggers set no workflow_run context and pass on the first clause.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # coverage artifact and nothing worth publishing, so only a successful one continues.
+    #
+    # The event check is not redundant with the branches filter above. That filter matches the head
+    # branch of the triggering run, and a pull request opened from a branch named `main` — which is
+    # what a fork's default branch looks like — has exactly that head branch. Without this clause,
+    # anyone could deploy the site from an unmerged pull request by naming their branch main.
+    #
+    # The other triggers set no workflow_run context and pass on the first clause.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -70,9 +78,14 @@ jobs:
           extended: true
 
       - name: Download coverage report
-        # Always the latest successful Tests run on main, whatever triggered this build: on a
+        # Always the latest successful Tests run pushed to main, whatever triggered this build: on a
         # workflow_run that is the run that just finished, and on a docs-only push it is whichever
         # run last covered main. A docs change must not republish the site without the report.
+        #
+        # --event push is what confines publishing to main. --branch filters the head branch, and a
+        # pull request run carries its own head branch — normally harmless, since feat/x never
+        # matches main, but a pull request opened from a branch named main does. Pinning the event
+        # means only a commit that actually landed on main can reach the published site.
         #
         # The job fails rather than deploying without it. The alternative — warn and continue —
         # publishes a site whose "Test Coverage" nav link 404s, with nobody forced to notice. If
@@ -84,6 +97,7 @@ jobs:
 
           run_id=$(gh run list \
             --workflow tests.yml \
+            --event push \
             --branch main \
             --status success \
             --limit 1 \
