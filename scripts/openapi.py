@@ -22,8 +22,12 @@ Usage (from anywhere in the repository):
     python scripts/openapi.py --no-build      # reuse the last build (faster, and stale if src changed)
     python scripts/openapi.py --check         # fail if the committed document is out of date
 
---check is what CI would run: it regenerates into a temporary file and compares, so a controller
-change that never had its document regenerated is caught rather than silently published.
+--check is what CI runs (.github/workflows/check-openapi.yml): it regenerates into a temporary file
+and compares, so a controller change that never had its document regenerated is caught rather than
+silently published. It exits 1 when they differ.
+
+The comparison is over raw bytes, which is why docs/openapi/heimdall.json is pinned to LF in
+.gitattributes -- checked out as CRLF, it would differ from the generator's output on every run.
 """
 
 import argparse

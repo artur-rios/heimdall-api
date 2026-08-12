@@ -78,6 +78,17 @@ The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.do
 `docs/`, and deployed to GitHub Pages by
 [`build-docs.yml`](.github/workflows/build-docs.yml) on every push to `main` that touches `docs/`.
 
+The API explorer renders `docs/openapi/heimdall.json`, which is generated and committed. Regenerate
+it after changing anything it describes:
+
+```bash
+python scripts/openapi.py
+```
+
+[`check-openapi.yml`](.github/workflows/check-openapi.yml) fails the build if it is out of date —
+otherwise a controller change would keep being published with the old document, since the docs site
+only rebuilds on changes under `docs/`.
+
 To preview it locally — Hugo Extended and Node.js 24+ required:
 
 ```bash
