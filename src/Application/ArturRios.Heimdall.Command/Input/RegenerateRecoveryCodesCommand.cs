@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
@@ -12,7 +13,8 @@ namespace ArturRios.Heimdall.Command.Input;
 ///     active, and the second factor alone is what UC-38 already treats as sufficient proof of
 ///     possession. <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller
 ///     from the authenticated caller and are never bound from the body — a caller can only ever
-///     regenerate their own recovery codes.
+///     regenerate their own recovery codes. They are <c>[JsonIgnore]</c>, so they are not
+///     deserialized from the body and do not appear in the request schema.
 /// </summary>
 public class RegenerateRecoveryCodesCommand : BaseCommand, IActorScoped
 {
@@ -22,7 +24,9 @@ public class RegenerateRecoveryCodesCommand : BaseCommand, IActorScoped
     /// <summary>One of the caller's unused recovery codes, when no code is available.</summary>
     public string? RecoveryCode { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }

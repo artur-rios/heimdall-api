@@ -15,6 +15,7 @@ using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
+using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
 using ArturRios.Heimdall.WebApi.Security;
@@ -528,7 +529,20 @@ public class Startup(string[] args) : WebApiStartup(args)
         // every controller action — added here rather than per-action, since a UC-38 challenge token
         // must be rejected everywhere except POST /api/auth/2fa/verify, and that endpoint needs no
         // opt-out: it never reads the challenge token as a bearer credential to begin with.
-        Builder.Services.AddControllers(options => options.Filters.Add<MfaPendingGuardFilter>());
+        Builder.Services.AddControllers(options =>
+        {
+            options.Filters.Add<MfaPendingGuardFilter>();
+
+            // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
+            // AddControllers() rather than running this Startup, so that call site cannot catch a
+            // removal here. Without it, [FromQuery] list-query properties marked server-populated
+            // would become bindable from the query string again on the running API — the controllers
+            // still overwrite them before use, so the query-string forgery tests would keep passing,
+            // and the published document (generated from the other call site) would look unchanged.
+            // The guarantee that these properties are non-bindable, not merely undocumented, would
+            // silently revert with no test catching it.
+            ModelBindingConfiguration.Configure(options);
+        });
         Builder.Services.AddEndpointsApiExplorer();
     }
 

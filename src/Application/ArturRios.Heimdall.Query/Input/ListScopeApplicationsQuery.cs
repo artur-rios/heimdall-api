@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Query;
 
@@ -8,11 +9,14 @@ namespace ArturRios.Heimdall.Query.Input;
 ///     FR-AP-05). <see cref="ScopeId" /> comes from the route;
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
 ///     authenticated caller and are never taken from the request — a Scope Admin sees only the
-///     applications they own, so a forged acting id would be a forged answer.
+///     applications they own, so a forged acting id would be a forged answer. All three are
+///     <c>[JsonIgnore]</c>, which <c>ServerPopulatedBindingMetadataProvider</c> turns into
+///     "not bindable", so they never reach the public contract.
 /// </summary>
 public class ListScopeApplicationsQuery : BaseQuery, IActorScoped
 {
-    /// <summary>Public identifier of the scope whose applications are listed.</summary>
+    /// <summary>Public identifier of the scope whose applications are listed (assigned from the route).</summary>
+    [JsonIgnore]
     public Guid ScopeId { get; set; }
 
     /// <summary>Optional case-insensitive substring filter on the application's name.</summary>
@@ -27,7 +31,9 @@ public class ListScopeApplicationsQuery : BaseQuery, IActorScoped
     /// <summary>When <c>true</c>, logically deleted applications are included (FR-AP-09).</summary>
     public bool IncludeDeleted { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }

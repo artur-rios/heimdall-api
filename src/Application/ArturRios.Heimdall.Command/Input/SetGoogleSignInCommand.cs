@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
@@ -5,13 +6,16 @@ namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to turn Google Sign-In on or off for a scope (UC-24, FR-GO-01/FR-GO-02). The scope is
-///     addressed by its <c>PublicId</c> (GUID), bound from the route, while
+///     addressed by its <c>PublicId</c> (GUID), assigned from the route.
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the
 ///     authenticated caller (for the AF-24b ownership check) and are never bound from the request.
+///     All three are <c>[JsonIgnore]</c>, so they are not deserialized from the body and do not
+///     appear in the request schema.
 /// </summary>
 public class SetGoogleSignInCommand : BaseCommand, IActorScoped
 {
-    /// <summary>Public identifier of the scope whose setting is changing (bound from the route).</summary>
+    /// <summary>Public identifier of the scope whose setting is changing (assigned from the route).</summary>
+    [JsonIgnore]
     public Guid Id { get; set; }
 
     /// <summary>
@@ -22,7 +26,9 @@ public class SetGoogleSignInCommand : BaseCommand, IActorScoped
     /// </summary>
     public bool? Enabled { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }

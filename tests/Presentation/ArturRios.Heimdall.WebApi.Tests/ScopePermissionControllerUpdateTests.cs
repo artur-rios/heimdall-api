@@ -277,15 +277,24 @@ public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTe
     [FunctionalFact]
     public async Task GivenForgedActingRoleInBody_WhenPutScopePermission_ThenItIsIgnored()
     {
-        // Given a Scope Admin claiming SystemAdmin in the body: ApplyActor runs after model binding
-        // and overwrites both acting fields from the token, so the AF-33e refusal still stands
+        // Given a Scope Admin claiming SystemAdmin in the body: the acting fields are [JsonIgnore],
+        // so they are not deserialized at all, and ApplyActor sets them from the token — the AF-33e
+        // refusal still stands. The body is an anonymous object, not an UpdateScopePermissionCommand,
+        // precisely because the typed command can no longer carry the forged fields onto the wire.
         var scope = await SeedScopeAsync();
         var permission = await SeedScopePermissionAsync(scope);
         var stranger = await SeedScopeAdminAsync();
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
-        var body = Body("Hijacked");
-        body.ActingRole = (int)Roles.SystemAdmin;
-        body.ActingPersonId = Guid.NewGuid();
+        var body = new
+        {
+            name = "Hijacked",
+            description = (string?)null,
+            includeAsJwtClaim = false,
+            actingRole = (int)Roles.SystemAdmin,
+            actingPersonId = Guid.NewGuid(),
+            scopeId = Guid.NewGuid(),
+            id = Guid.NewGuid()
+        };
 
         // When
         var response = await Gateway.PutAsync<DataOutput<UpdateScopePermissionCommandOutput?>>(

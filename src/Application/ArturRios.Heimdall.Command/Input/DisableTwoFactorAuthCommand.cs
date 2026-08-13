@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 
@@ -9,7 +10,8 @@ namespace ArturRios.Heimdall.Command.Input;
 ///     recovery code — exactly as hard to satisfy as a login. <see cref="ActingPersonId" />/
 ///     <see cref="ActingRole" /> are set by the controller from the authenticated caller and are
 ///     never bound from the body — like <see cref="EnableTwoFactorAuthCommand" />, a caller can only
-///     ever disable their own configuration.
+///     ever disable their own configuration. They are <c>[JsonIgnore]</c>, so they are not
+///     deserialized from the body and do not appear in the request schema.
 /// </summary>
 public class DisableTwoFactorAuthCommand : BaseCommand, IActorScoped
 {
@@ -22,7 +24,9 @@ public class DisableTwoFactorAuthCommand : BaseCommand, IActorScoped
     /// <summary>One of the caller's unused recovery codes, when no code is available.</summary>
     public string? RecoveryCode { get; set; }
 
+    [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 
+    [JsonIgnore]
     public int ActingRole { get; set; }
 }
