@@ -9,7 +9,7 @@ Dark
 <svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li><li><button type=button class="dropdown-item d-flex align-items-center active" data-bs-theme-value=auto aria-pressed=true>
 <svg class="bi me-2 opacity-50"><use href="#circle-half"/></svg>
 Auto
-<svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li></ul></div></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.a93049a933756950bfbf7cbc298a895a.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><div class=td-content><div class="pageinfo pageinfo-primary d-print-none"><p>This is the multi-page printable view of this section.
+<svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li></ul></div></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.c5acf7a2ed25a0c3aa22303c7530a383.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><div class=td-content><div class="pageinfo pageinfo-primary d-print-none"><p>This is the multi-page printable view of this section.
 <a href=# onclick="return print(),!1">Click here to print</a>.</p><p><a href=/heimdall-api/docs/>Return to the regular view of this page</a>.</p></div><h1 class=title>Documentation</h1><div class=lead>Everything needed to understand, run, test, and extend the Heimdall API.</div><ul><li>1: <a href=#pg-f3b56000093113bd3bfb6c9c05e7e945>Overview</a></li><li>2: <a href=#pg-a39c9f7aa728d5fa3b973bc6ba49228a>Getting started</a></li><li>3: <a href=#pg-5a61e9f9f0b3221e1b12f6e24cf94ed4>Testing</a></li><li>4: <a href=#pg-934e0568852666ce9d12820b78b67fe9>Architecture</a></li><li>5: <a href=#pg-4c42c41716142769832f50eb96efc969>Domain model</a></li><li>6: <a href=#pg-7ab67ac220bbcfe8b5af499bf532ccff>API reference</a></li><li>7: <a href=#pg-3a22e9a437a7936d28ed19830a8c757e>API explorer</a></li><li>8: <a href=#pg-26a773483c29089778671621cfad6598>Flows</a></li><ul><li>8.1: <a href=#pg-94aee71b0a3d04d3ca9aeeab2d293e40>Login</a></li><li>8.2: <a href=#pg-65bcf283201edc503f290d206771aa6d>Two-factor authentication</a></li><li>8.3: <a href=#pg-0e60ae31ec4ff6e69af4d96dea8003e1>Google Sign-In</a></li><li>8.4: <a href=#pg-6c7fd6f1dba25ea29cf2d8d086832d27>Person onboarding</a></li><li>8.5: <a href=#pg-7beed924441b8b278bcc9607c9cec1c2>Password recovery</a></li><li>8.6: <a href=#pg-1e4d2a60edfaeaa182f469561228775e>Scope permission claims</a></li><li>8.7: <a href=#pg-371cc5e6a0a7743c509a176db5f11a6b>Audit logging</a></li></ul><li>9: <a href=#pg-c392aee15faa5c41449a151cb592d6a2>Operations</a></li><li>10: <a href=#pg-a10ce863ab42f99a6d67230947b74e08>Requirements</a></li><ul><li>10.1: <a href=#pg-59b83d0a408c3bc2b9340584d2b5c7fe>Vision Document</a></li><li>10.2: <a href=#pg-3fdc09c745b5604c3f024b199cc6178a>System Requirements Document</a></li><li>10.3: <a href=#pg-1d259f3a764f7845a2312bee4a85c609>Use Case Specification Document</a></li><li>10.4: <a href=#pg-8e021863aa7a9225677abee5fb2f05e1>Technology Stack Document</a></li><li>10.5: <a href=#pg-8d1d38bce753201722ee11594da10b42>Testing Specification Document</a></li><li>10.6: <a href=#pg-150bf7cdbb3815d3a3cd6691be6762dd>Development Workflow Document</a></li><li>10.7: <a href=#pg-96b4d631a56008ae2c2a922f899ea79b>Operations & Infrastructure Document</a></li></ul></ul><div class=content><p>Heimdall is a centralized identity management API. It answers one question for many client systems
 at once — <em>who is this caller, and what are they allowed to do?</em> — while keeping each client system&rsquo;s
 identities isolated from every other&rsquo;s inside its own <strong>scope</strong>.</p><h2 id=the-documentation>The documentation<a class=td-heading-self-link href=#the-documentation aria-label="Heading self-link"></a></h2><table><thead><tr><th>Section</th><th>What it covers</th></tr></thead><tbody><tr><td><a href=overview/>Overview</a></td><td>The domain vocabulary — scopes, persons, roles, applications, Google Users, permissions — and the rules that bind them.</td></tr><tr><td><a href=getting-started/>Getting started</a></td><td>Prerequisites, environment configuration, migrations, and running the API locally.</td></tr><tr><td><a href=testing/>Testing</a></td><td>The unit and functional suites, categories, <code>.trx</code> output, and the flake hunter.</td></tr><tr><td><a href=architecture/>Architecture</a></td><td>The four layers, the CQRS mediator, the auditing decorator, and the HTTP request pipeline — with class diagrams.</td></tr><tr><td><a href=domain-model/>Domain model</a></td><td>The entities, their relationships, and the deletion cascade rules — with a class diagram.</td></tr><tr><td><a href=api-reference/>API reference</a></td><td>Every endpoint, the role that may call it, and the use case it implements.</td></tr><tr><td><a href=flows/>Flows</a></td><td>Sequence diagrams for login, two-factor authentication, Google Sign-In, person onboarding, and audit logging.</td></tr><tr><td><a href=operations/>Operations</a></td><td>Migrations, health checks, logging, rate limiting, and the environment variables the API reads.</td></tr><tr><td><a href=requirements/>Requirements</a></td><td>The source specifications: vision, system requirements, use cases, technology stack, testing, workflow, and operations.</td></tr></tbody></table><h2 id=how-the-documents-relate>How the documents relate<a class=td-heading-self-link href=#how-the-documents-relate aria-label="Heading self-link"></a></h2><p>The <strong>requirements</strong> documents are the specification — they say what the system must do, and every
@@ -74,7 +74,7 @@ Testcontainers, so a running PostgreSQL is only needed to run the API itself.)</
 afterwards):</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>git clone --recurse-submodules https://github.com/artur-rios/heimdall-api.git
 </span></span></code></pre></div><h2 id=configure>Configure<a class=td-heading-self-link href=#configure aria-label="Heading self-link"></a></h2><p><code>Environments/.env</code> is a <strong>tracked template</strong> listing every variable the API reads. Real values live
 in per-environment files that are gitignored. Create your local one before the first run:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cp src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env.local
-</span></span></code></pre></div><h3 id=required--the-api-will-not-start-without-these>Required — the API will not start without these<a class=td-heading-self-link href=#required--the-api-will-not-start-without-these aria-label="Heading self-link"></a></h3><table><thead><tr><th>Variable</th><th>Value</th></tr></thead><tbody><tr><td><code>HEIMDALL_DATA_CONNECTIONSTRING</code></td><td>A PostgreSQL connection string</td></tr><tr><td><code>HEIMDALL_DATA_DATABASETYPE</code></td><td><code>PostgreSql</code></td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_SECRET</code></td><td>The JWT signing secret. Startup throws if unset — otherwise every authenticated request would fail inside the token validator with an opaque <code>IDX10703</code></td></tr><tr><td><code>HEIMDALL_MASTER_USER_NAME</code> / <code>_EMAIL</code> / <code>_PASSWORD</code></td><td>Credentials for the first system administrator. Consulted only when the database holds no system admin yet, but the seeder refuses to start without them in that case</td></tr></tbody></table><h3 id=optional--each-falls-back-to-a-default>Optional — each falls back to a default<a class=td-heading-self-link href=#optional--each-falls-back-to-a-default aria-label="Heading self-link"></a></h3><table><thead><tr><th>Variable</th><th>Default</th></tr></thead><tbody><tr><td><code>HEIMDALL_AUTH_TOKEN_ISSUER</code> / <code>_AUDIENCE</code></td><td>Empty</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>3600</code> (1 hour)</td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>86400</code> (24 hours)</td></tr><tr><td><code>HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>3600</code> (1 hour)</td></tr><tr><td><code>HEIMDALL_LOG_DIRECTORY</code></td><td><code>logs</code></td></tr></tbody></table><h3 id=optional-integrations>Optional integrations<a class=td-heading-self-link href=#optional-integrations aria-label="Heading self-link"></a></h3><p>Email delivery (Mailgun) and Google Sign-In are each configured by their own variables, and each has
+</span></span></code></pre></div><h3 id=required--the-api-will-not-start-without-these>Required — the API will not start without these<a class=td-heading-self-link href=#required--the-api-will-not-start-without-these aria-label="Heading self-link"></a></h3><table><thead><tr><th>Variable</th><th>Value</th></tr></thead><tbody><tr><td><code>HEIMDALL_DATA_CONNECTIONSTRING</code></td><td>A PostgreSQL connection string</td></tr><tr><td><code>HEIMDALL_DATA_DATABASETYPE</code></td><td><code>PostgreSql</code></td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_SECRET</code></td><td>The JWT signing secret. Startup throws if unset — otherwise every authenticated request would fail inside the token validator with an opaque <code>IDX10703</code></td></tr><tr><td><code>HEIMDALL_MASTER_USER_NAME</code> / <code>_EMAIL</code> / <code>_PASSWORD</code></td><td>Credentials for the first system administrator. Consulted only when the database holds no system admin yet, but the seeder refuses to start without them in that case</td></tr></tbody></table><h3 id=optional--each-falls-back-to-a-default>Optional — each falls back to a default<a class=td-heading-self-link href=#optional--each-falls-back-to-a-default aria-label="Heading self-link"></a></h3><table><thead><tr><th>Variable</th><th>Default</th></tr></thead><tbody><tr><td><code>HEIMDALL_AUTH_TOKEN_ISSUER</code> / <code>_AUDIENCE</code></td><td>Empty</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>3600</code> (1 hour)</td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>86400</code> (24 hours)</td></tr><tr><td><code>HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS</code></td><td><code>3600</code> (1 hour)</td></tr><tr><td><code>HEIMDALL_LOG_DIRECTORY</code></td><td><code>logs</code></td></tr><tr><td><code>HEIMDALL_CORS_ALLOWED_ORIGINS</code></td><td>Empty → every cross-origin request is refused. Set it to your front end&rsquo;s origin (<code>https://app.example.com</code>, comma separated for several) or a browser client cannot call the API</td></tr></tbody></table><h3 id=optional-integrations>Optional integrations<a class=td-heading-self-link href=#optional-integrations aria-label="Heading self-link"></a></h3><p>Email delivery (Mailgun) and Google Sign-In are each configured by their own variables, and each has
 a documented behaviour when left unconfigured. See <a href=../operations/#integrations>Operations</a>
 for the
 full table and the reasoning — including why an unconfigured <strong>Production</strong> deployment refuses to
@@ -305,22 +305,29 @@ user already succeeded at.</p><div class="alert alert-warning" role=alert><div c
 <code>ICommandHandlerAsync&lt;TCommand, TOutput></code>.</p></div><p>See <a href=../flows/audit-logging/>Audit logging</a>
 for the sequence.</p><h2 id=the-http-request-pipeline>The HTTP request pipeline<a class=td-heading-self-link href=#the-http-request-pipeline aria-label="Heading self-link"></a></h2><pre class=mermaid>graph LR
     REQ([Request]) --&gt; EX[ExceptionMiddleware]
-    EX --&gt; CORS[CORS]
+    EX --&gt; CORS[&#34;CORS&lt;br/&gt;configured origins only&#34;]
     CORS --&gt; HTTPS[HTTPS redirect]
     HTTPS --&gt; RL[Rate limiter&lt;br/&gt;auth endpoints only]
     RL --&gt; AUTHN[Authentication &#43;&lt;br/&gt;AuthenticationMiddleware]
     AUTHN --&gt; MFA[MfaPendingGuardFilter]
-    MFA --&gt; ROLE[&#34;RoleRequirement /&lt;br/&gt;AllowAnonymous&#34;]
+    MFA --&gt; LIVE[ActorLivenessFilter]
+    LIVE --&gt; ROLE[&#34;RoleRequirement /&lt;br/&gt;AllowAnonymous&#34;]
     ROLE --&gt; CTRL[Controller action]
     CTRL --&gt; MED[Mediator]
     MED --&gt; H[Handler]
     H --&gt; DB[(PostgreSQL)]
     H --&gt; RES[DataOutput]
     RES --&gt; RR[&#34;ResponseResolver&lt;br/&gt;&#43; message map&#34;]
-    RR --&gt; RESP([HTTP response])</pre><p>Three things about this pipeline are worth knowing before reading any handler:</p><p><strong>Authentication reads no database.</strong> <code>AddTokenAuthentication&lt;IdentityUserMapper></code> is configured with
+    RR --&gt; RESP([HTTP response])</pre><p>Four things about this pipeline are worth knowing before reading any handler:</p><p><strong>Authentication reads no database.</strong> <code>AddTokenAuthentication&lt;IdentityUserMapper></code> is configured with
 <code>JwtValidationMode.ClaimsOnly</code> and <code>TokenSource.Header</code>: the <code>IdentityUser</code> is rebuilt from the
-token&rsquo;s claims alone. Nothing is looked up per request — which is fast, and which is why a token
-remains valid until it expires even if the account behind it was deleted.</p><p><strong>One class owns both directions of the claims.</strong> <code>IdentityUserMapper</code> writes the claims when a token
+token&rsquo;s claims alone, and nothing is looked up while the token is validated.</p><p><strong>But the identity it names is checked.</strong> <code>ActorLivenessFilter</code> runs globally, right after the
+challenge-token guard, and refuses a token whose person or Google User is absent or logically
+deleted (<strong>FR-AU-05</strong>, <strong>FR-GO-12</strong>). Without it, <code>ClaimsOnly</code> meant a token kept working for its
+whole lifetime after the account behind it was deleted — and the handlers compensated unevenly:
+<code>ScopeOwnershipChecker</code> excluded a deleted Scope Admin, while every System Admin bypass and every
+&ldquo;acting on yourself&rdquo; branch trusted the role claim alone, leaving the protection in place for the
+lesser role and absent for the greater one. It costs one indexed read per authenticated request, and
+two for a Google User, since the token does not say which table its subject lives in.</p><p><strong>One class owns both directions of the claims.</strong> <code>IdentityUserMapper</code> writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a
 <code>PublicId</code>; an internal <code>bigint</code> never reaches a token (<strong>NFR-15</strong>).</p><p><strong>A challenge token is inert everywhere but one endpoint.</strong> <code>MfaPendingGuardFilter</code> is registered
 globally and rejects any request whose identity carries <code>MfaPending</code> with a 401 (<strong>FR-2F-10</strong>,
@@ -427,6 +434,8 @@ single-use token, and the append-only audit log.</p><pre class=mermaid>classDiag
         &#43;Guid PublicId
         &#43;string Email
         &#43;bool EmailVerified
+        &#43;int FailedLoginAttempts
+        &#43;DateTime? LockedOutUntil
     }
     class TwoFactorAuth {
         &#43;long PersonId
@@ -434,6 +443,7 @@ single-use token, and the append-only audit log.</p><pre class=mermaid>classDiag
         &#43;bool EmailEnabled
         &#43;byte[]? TotpSecretEncrypted
         &#43;bool IsActive
+        &#43;long? LastTotpTimeStepUsed
     }
     class TwoFactorEmailCode {
         &#43;long TwoFactorAuthId
@@ -441,6 +451,7 @@ single-use token, and the append-only audit log.</p><pre class=mermaid>classDiag
         &#43;byte[] Salt
         &#43;DateTime ExpiresAt
         &#43;bool Used
+        &#43;int FailedAttempts
     }
     class TwoFactorRecoveryCode {
         &#43;long TwoFactorAuthId
@@ -527,7 +538,16 @@ they had. Hard deletion removes it, via <code>two_factor_recovery_code → two_f
 <code>ScopeOwnerDbMap</code>, …) applied by <code>AppDbContext</code>. Constraints that the C# class cannot express live
 there: the composite key of <code>ScopeOwner</code>, the uniqueness of <code>ScopeUser.PersonId</code> (which is what makes
 &ldquo;a User belongs to exactly one scope&rdquo; true rather than merely intended), the per-scope uniqueness of
-<code>GoogleUser.GoogleId</code> and <code>GoogleUser.Email</code>, and the cascade behaviour above.</p></div><div class=td-content style=page-break-before:always><h1 id=pg-7ab67ac220bbcfe8b5af499bf532ccff>6 - API reference</h1><div class=lead>Every endpoint, the role that may call it, and the use case it implements.</div><p>Schema-level documentation — every parameter, every request and response body — is published as an
+<code>GoogleUser.GoogleId</code> and <code>GoogleUser.Email</code>, and the cascade behaviour above.</p><h3 id=email-uniqueness>Email uniqueness<a class=td-heading-self-link href=#email-uniqueness aria-label="Heading self-link"></a></h3><p>FR-PE-09 and FR-GO-07 make an address unique in a namespace chosen by role, and the three halves
+differ in how far the database can enforce them.</p><table><thead><tr><th>Rule</th><th>Enforced by</th></tr></thead><tbody><tr><td>An administrator&rsquo;s address is unique system-wide among live <code>ScopeAdmin</code>s and <code>SystemAdmin</code>s</td><td><code>ux_person_admin_email</code>, a partial unique index on <code>LOWER(email) WHERE role_id IN (1, 2) AND is_deleted = false</code></td></tr><tr><td>A Google User&rsquo;s address is unique within their scope</td><td><code>ix_google_user_scope_id_email</code>, unique on <code>(scope_id, LOWER(email))</code></td></tr><tr><td>A User&rsquo;s address is unique within their scope, jointly with that scope&rsquo;s Google Users</td><td>The application layer only — <code>CreateUserCommandHandler</code>, <code>UpdatePersonCommandHandler</code>, <code>GoogleSignInCommandHandler</code></td></tr></tbody></table><p>Both indexes are over <code>LOWER(email)</code> because the handlers compare addresses case-insensitively; an
+index over the raw column would enforce a different rule than the one the code applies, and accept
+pairs a handler had already refused.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>One rule the database cannot hold</div><p>The third row is a check-then-insert, so two concurrent creates can both read &ldquo;free&rdquo; and both write.
+It cannot be a unique index: a <code>User</code>&rsquo;s scope lives in <code>SCOPE_USER</code> and a PostgreSQL index covers one
+table, and a trigger would not close the race either — under <code>READ COMMITTED</code> both inserts see the
+same pre-write snapshot. Closing it properly needs the scope denormalised onto a column <code>PERSON</code> can
+index, or a reservation table keyed on <code>(scope_id, lower(email))</code> written in the same transaction.
+Until then the loser of that race is a person who cannot log in, because UC-11&rsquo;s lookup resolves one
+row and stops.</p></div></div><div class=td-content style=page-break-before:always><h1 id=pg-7ab67ac220bbcfe8b5af499bf532ccff>6 - API reference</h1><div class=lead>Every endpoint, the role that may call it, and the use case it implements.</div><p>Schema-level documentation — every parameter, every request and response body — is published as an
 OpenAPI document and rendered by the <a href=../api-explorer/>API explorer</a>
 , which is the same document a
 running instance serves through its own Swagger UI at <code>/swagger</code>. To <em>call</em> the endpoints, use that,
@@ -620,7 +640,7 @@ descriptions live in the
     H-&gt;&gt;PR: find by the lookup the role implies
     PR-&gt;&gt;DB: SELECT person &#43; role &#43; scope navigations
     DB--&gt;&gt;PR: person or null
-    Note over H: AF-11a unknown · AF-11b wrong password&lt;br/&gt;AF-11c deleted person · AF-11d/e scope not eligible&lt;br/&gt;→ all answer &#34;invalid credentials&#34;
+    Note over H: AF-11a unknown · AF-11b wrong password&lt;br/&gt;AF-11c deleted person · AF-11d/e scope not eligible&lt;br/&gt;locked out (FR-AU-08)&lt;br/&gt;→ all answer &#34;invalid credentials&#34;
 
     H-&gt;&gt;H: Hash.TextMatches(password, hash, salt)
     H-&gt;&gt;TS: TryBuildSubject(person)
@@ -643,7 +663,13 @@ person, so the person has to be found before they can be rejected.</p><h2 id=one
 scope is logically deleted) and AF-11e (a <code>ScopeAdmin</code> with no live owned scope) all return the same
 <code>invalid credentials</code> error.</p><p>The checks still run in the specification&rsquo;s order, so the code reads against UC-11 line by line —
 only the <em>answer</em> is uniform. An anonymous endpoint that distinguished them would be a directory of
-which addresses are registered and which accounts still exist.</p><h2 id=scope-eligibility>Scope eligibility<a class=td-heading-self-link href=#scope-eligibility aria-label="Heading self-link"></a></h2><p><code>PersonAuthTokenService.TryBuildSubject</code> is the single place the eligibility rules live, shared with
+which addresses are registered and which accounts still exist.</p><p><strong>The answer has to be uniform in time as well as in text.</strong> AF-11a used to return without hashing
+anything, since there was no stored hash to compare against — so &ldquo;no such account&rdquo; came back in
+single-digit milliseconds while every other rejection paid a full Argon2id verification (600 MB / 16
+threads) and took hundreds. That gap answered the question the shared message refuses, and varying
+the scope id turned it into a per-scope directory. The handler now verifies the submitted password
+against a decoy hash — of a random secret generated once per process, belonging to nobody — and
+discards the result. A lockout takes the same path, so it is not detectable either.</p><h2 id=scope-eligibility>Scope eligibility<a class=td-heading-self-link href=#scope-eligibility aria-label="Heading self-link"></a></h2><p><code>PersonAuthTokenService.TryBuildSubject</code> is the single place the eligibility rules live, shared with
 <a href=../two-factor/>two-factor verification</a>
 so a gated login ends exactly like a direct one:</p><pre class=mermaid>flowchart LR
     P[Person] --&gt; R{Role}
@@ -704,12 +730,19 @@ a path or body — so no caller can reach another person&rsquo;s configuration.<
     CH-&gt;&gt;DB: SELECT pending row
     CH-&gt;&gt;CH: check appCode if AppEnabled (AF-37b)
     CH-&gt;&gt;CH: check emailCode if EmailEnabled (AF-37c)
-    CH-&gt;&gt;DB: mark the confirming email code Used
     CH-&gt;&gt;DB: INSERT 10 recovery codes (hashes only)
     CH-&gt;&gt;DB: UPDATE IsActive = true
+    CH-&gt;&gt;DB: mark the confirming email code Used
     CH--&gt;&gt;P: 200 — ten recovery codes, shown exactly once</pre><p><code>IsActive</code> is what separates a <em>confirmed</em> configuration from one still pending. A row with
 <code>IsActive = false</code> means UC-36 created it and UC-37 has not yet activated it — and only an active
-configuration gates a login.</p><p>Confirmation requires proof of <strong>every</strong> method selected at setup: an <code>appCode</code> if <code>AppEnabled</code>, an
+configuration gates a login.</p><p><strong>The order of those last three writes is deliberate.</strong> The repository layer exposes no transaction,
+so ordering is what stands in for one, and the dangerous half-write is &ldquo;two-factor is active but the
+caller holds no recovery codes&rdquo; — which locks someone out of their own account on the strength of a
+request that reported failure. Writing the codes first (in one insert, not ten) leaves only harmless
+failure modes: codes stored against a configuration that never activated, which the next attempt
+replaces, and which authenticate nothing while <code>IsActive</code> is <code>false</code>. UC-40 orders its writes the
+same way and for the same reason, creating the replacements before deleting the set they replace, so
+a failure leaves the caller with the codes they already hold rather than none at all.</p><p>Confirmation requires proof of <strong>every</strong> method selected at setup: an <code>appCode</code> if <code>AppEnabled</code>, an
 <code>emailCode</code> if <code>EmailEnabled</code>, both if both.</p><h2 id=completing-a-gated-login--uc-38>Completing a gated login — UC-38<a class=td-heading-self-link href=#completing-a-gated-login--uc-38 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
     autonumber
     actor C as Client
@@ -751,7 +784,12 @@ configuration gates a login.</p><p>Confirmation requires proof of <strong>every<
 valid but the person&rsquo;s scope eligibility no longer holds, the answer is
 <code>scope no longer eligible</code>, not <code>challenge invalid</code>. Collapsing that case would misdescribe what
 actually happened — nothing the caller supplied was wrong.</p><p><strong>Nothing can be replayed.</strong> The redeemed recovery code and the redeemed email code are both marked
-used before the token is issued.</p><p>The final token is issued by <code>PersonAuthTokenService</code> — the same service a direct login uses — so a
+used before the token is issued. An app code is single-use too, though it has no row to mark: the
+time step it was accepted at is recorded on <code>TWO_FACTOR_AUTH.last_totp_time_step_used</code>, and a code
+from that step or earlier is refused (<strong>RFC 6238 §5.2</strong>). Without it the ±1-step tolerance meant an
+observed code stayed usable for up to ninety seconds, across verify, disable, and regenerate alike.</p><p><strong>A wrong email code costs the code.</strong> Five wrong guesses retire it (<code>failed_attempts</code>), so the
+million values a six-digit code can take are not a million attempts — guessing again costs a fresh
+login, which is rate limited and mails the account holder a code they did not ask for.</p><p>The final token is issued by <code>PersonAuthTokenService</code> — the same service a direct login uses — so a
 2FA-gated login ends with exactly the token a direct one would have produced.</p><h2 id=why-the-guard-filter-never-fires-here>Why the guard filter never fires here<a class=td-heading-self-link href=#why-the-guard-filter-never-fires-here aria-label="Heading self-link"></a></h2><p><code>MfaPendingGuardFilter</code> runs on every controller action and rejects any identity carrying
 <code>MfaPending</code>. It never trips on <code>POST /api/auth/2fa/verify</code> because that endpoint is
 <code>[AllowAnonymous]</code> and reads the challenge token as a <strong>body field</strong>, not as an
@@ -1085,15 +1123,29 @@ reported (AF-30c). Adding a verification is one more registration; the detailed 
 all as <code>IEnumerable&lt;IServiceHealthCheck></code>.</p><h2 id=logging>Logging<a class=td-heading-self-link href=#logging aria-label="Heading self-link"></a></h2><p>Serilog, configured before anything else so that even configuration failures are recorded:</p><ul><li><strong>Console</strong> — JSON formatted.</li><li><strong>Rolling files</strong> — <code>&lt;HEIMDALL_LOG_DIRECTORY>/&lt;yyyy/MM>/log-&lt;date>.json</code>, a new file per day inside
 a folder per month. <code>HEIMDALL_LOG_DIRECTORY</code> defaults to <code>logs</code>.</li></ul><p><strong>EF Core diagnostics are enabled outside Production only.</strong> <code>SensitiveDataLogging</code> and
 <code>DetailedErrors</code> print parameter and column values — password hashes, salts, email addresses — so
-they stay off where those logs are retained.</p><h2 id=rate-limiting>Rate limiting<a class=td-heading-self-link href=#rate-limiting aria-label="Heading self-link"></a></h2><p>A fixed-window limiter of <strong>10 requests per minute, partitioned by client IP</strong>, applied to
-<code>AuthController</code>&rsquo;s anonymous, credential-checking endpoints: login, password recovery, password
-reset, email verification, Google sign-in, and second-factor verification. Rejections answer <strong>429</strong>.</p><p>None of these requires a bearer token, so nothing else bounds how fast a caller can hit them. Each
-login attempt costs a full Argon2id verification (600 MB / 16 threads by the hashing library&rsquo;s
-defaults), and a 2FA email code has only 1,000,000 possible values — so both memory exhaustion and
-brute force are realistic without it.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>Not a substitute for a gateway</div><p>The partition key is the connection&rsquo;s remote IP. Behind a reverse proxy or load balancer that does
-not forward the real client IP (via <code>X-Forwarded-For</code> with <code>ForwardedHeadersMiddleware</code> configured),
-<strong>every caller shares one partition</strong>. This is a per-instance, defence-in-depth throttle — not a
-replacement for a WAF or an API gateway&rsquo;s own rate limiting in front of a real deployment.</p></div><h2 id=integrations>Integrations<a class=td-heading-self-link href=#integrations aria-label="Heading self-link"></a></h2><h3 id=email-delivery-mailgun>Email delivery (Mailgun)<a class=td-heading-self-link href=#email-delivery-mailgun aria-label="Heading self-link"></a></h3><p>Verification (UC-06) and password reset (UC-12) emails, and 2FA email codes, go out through Mailgun
+they stay off where those logs are retained.</p><h2 id=rate-limiting-and-lockout>Rate limiting and lockout<a class=td-heading-self-link href=#rate-limiting-and-lockout aria-label="Heading self-link"></a></h2><p>Brute force is bounded in two independent places, because each covers what the other misses.</p><p><strong>Per caller — a fixed-window limiter</strong> of <strong>10 requests per minute, partitioned by client IP</strong>,
+applied to <code>AuthController</code>&rsquo;s anonymous, credential-checking endpoints: login, password recovery,
+password reset, email verification, Google sign-in, and second-factor verification. Rejections
+answer <strong>429</strong>. None of these requires a bearer token, so nothing else bounds how fast one caller
+can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
+hashing library&rsquo;s defaults) — so memory exhaustion is realistic without it.</p><p><strong>Per account — a failure budget</strong>, which is what an attacker spread across many source addresses
+defeats the limiter with:</p><table><thead><tr><th>Target</th><th>Budget</th><th>On exhaustion</th></tr></thead><tbody><tr><td>Password (UC-11)</td><td>10 consecutive failures</td><td>The account is locked for 15 minutes. <code>PERSON.failed_login_attempts</code> counts, <code>PERSON.locked_out_until</code> holds the window; a successful login clears both.</td></tr><tr><td>2FA email code (UC-37, UC-38)</td><td>5 wrong guesses per issued code</td><td>The code is retired. <code>TWO_FACTOR_EMAIL_CODE.failed_attempts</code> counts; guessing again costs a fresh login, which is itself limited and mails the account holder a code they did not ask for.</td></tr><tr><td>2FA app code</td><td>Single use</td><td><code>TWO_FACTOR_AUTH.last_totp_time_step_used</code> records the accepted time step, so an observed code cannot be replayed within the ±1-step verification window (RFC 6238 §5.2).</td></tr></tbody></table><p>A lockout is a window rather than a latch an administrator clears: reaching the threshold needs
+nothing but wrong guesses, so a permanent lock would hand any anonymous caller a denial of service
+against any address they know. It answers with UC-11&rsquo;s ordinary <code>InvalidCredentials</code>, and spends the
+same Argon2id work a real check would, so it is not observable — by message or by timing — to a
+caller who does not already know the password.</p><div class="alert alert-warning" role=alert><div class="h4 alert-heading" role=heading>Not a substitute for a gateway</div><p>The limiter&rsquo;s partition key is the connection&rsquo;s remote IP. Behind a reverse proxy or load balancer
+that does not forward the real client IP (via <code>X-Forwarded-For</code> with <code>ForwardedHeadersMiddleware</code>
+configured), <strong>every caller shares one partition</strong>. This is a per-instance, defence-in-depth
+throttle — not a replacement for a WAF or an API gateway&rsquo;s own rate limiting in front of a real
+deployment. The per-account budgets above are in the database, so they hold across instances.</p></div><h2 id=cross-origin-requests>Cross-origin requests<a class=td-heading-self-link href=#cross-origin-requests aria-label="Heading self-link"></a></h2><p><code>HEIMDALL_CORS_ALLOWED_ORIGINS</code> lists the browser front ends allowed to call the API, comma
+separated, as scheme and host (<code>https://app.example.com</code>). <strong>With the variable unset, no
+cross-origin request is allowed.</strong></p><p>Refusing by default is deliberate. The same-origin policy is what stops a page on an unrelated
+origin from reading an authenticated response, and an identity API is the last place to switch it
+off: any site the caller visited could otherwise read <code>/api/persons/{id}</code> with a token it scraped,
+and drive the anonymous endpoints from every visitor&rsquo;s browser at once. A missing entry costs a
+front end its access until an operator adds one — visible, and quickly fixed. Defaulting to &ldquo;any
+origin&rdquo; would instead leave a deployment open with nothing to indicate it.</p><p>Server-to-server callers are unaffected: CORS is a browser rule, and non-browser clients send no
+<code>Origin</code> header.</p><h2 id=integrations>Integrations<a class=td-heading-self-link href=#integrations aria-label="Heading self-link"></a></h2><h3 id=email-delivery-mailgun>Email delivery (Mailgun)<a class=td-heading-self-link href=#email-delivery-mailgun aria-label="Heading self-link"></a></h3><p>Verification (UC-06) and password reset (UC-12) emails, and 2FA email codes, go out through Mailgun
 via <a href=https://github.com/artur-rios/dotnet-messaging target=_blank rel=noopener><code>ArturRios.Messaging</code></a>
 . Delivery is enabled only
 when <strong>both</strong> credentials are present:</p><table><thead><tr><th>Variable</th><th>Value</th></tr></thead><tbody><tr><td><code>MAILGUN_API_KEY</code></td><td>Your Mailgun private API key</td></tr><tr><td><code>MAILGUN_DOMAIN</code></td><td>The Mailgun sending domain</td></tr><tr><td><code>MAILGUN_API_VERSION</code></td><td>Optional; defaults to <code>v3</code></td></tr></tbody></table><table><thead><tr><th>Variable</th><th>Value</th></tr></thead><tbody><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_URL</code></td><td>Front-end page that verifies an email address</td></tr><tr><td><code>HEIMDALL_PASSWORD_RESET_URL</code></td><td>Front-end page that sets a new password</td></tr></tbody></table><p>Each page finishes the job by posting its token back — the verification page to
@@ -1104,11 +1156,15 @@ check against (<strong>NFR-13</strong>), so a verifier with no configured client
 trust everything. Every other endpoint is unaffected, as is any scope that never enabled the feature.</p><p>Google sign-in also requires the scope itself to have it switched on, through
 <code>PUT /api/scopes/{id}/google-signin</code> — it is off by default. See
 <a href=../flows/google-sign-in/>Google Sign-In</a>
-.</p><h2 id=environment-variables-at-a-glance>Environment variables at a glance<a class=td-heading-self-link href=#environment-variables-at-a-glance aria-label="Heading self-link"></a></h2><table><thead><tr><th>Variable</th><th>Required</th><th>Default</th></tr></thead><tbody><tr><td><code>HEIMDALL_DATA_CONNECTIONSTRING</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_DATA_DATABASETYPE</code></td><td>✅</td><td>— (<code>PostgreSql</code>)</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_SECRET</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_MASTER_USER_NAME</code> / <code>_EMAIL</code> / <code>_PASSWORD</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_ISSUER</code> / <code>_AUDIENCE</code></td><td></td><td>empty</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>3600</code></td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>86400</code></td></tr><tr><td><code>HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>3600</code></td></tr><tr><td><code>HEIMDALL_LOG_DIRECTORY</code></td><td></td><td><code>logs</code></td></tr><tr><td><code>HEIMDALL_GOOGLE_CLIENT_IDS</code></td><td></td><td>unset → Google sign-in refuses every token</td></tr><tr><td><code>MAILGUN_API_KEY</code> / <code>MAILGUN_DOMAIN</code></td><td></td><td>unset → tokens logged (fails start-up in Production)</td></tr><tr><td><code>MAILGUN_API_VERSION</code></td><td></td><td><code>v3</code></td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_URL</code> / <code>HEIMDALL_PASSWORD_RESET_URL</code></td><td></td><td>unset → the email carries the bare token</td></tr></tbody></table><p><code>Environments/.env</code> in the Web API project is a <strong>tracked template</strong> listing every variable; real
+.</p><h2 id=environment-variables-at-a-glance>Environment variables at a glance<a class=td-heading-self-link href=#environment-variables-at-a-glance aria-label="Heading self-link"></a></h2><table><thead><tr><th>Variable</th><th>Required</th><th>Default</th></tr></thead><tbody><tr><td><code>HEIMDALL_DATA_CONNECTIONSTRING</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_DATA_DATABASETYPE</code></td><td>✅</td><td>— (<code>PostgreSql</code>)</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_SECRET</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_MASTER_USER_NAME</code> / <code>_EMAIL</code> / <code>_PASSWORD</code></td><td>✅</td><td>—</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_ISSUER</code> / <code>_AUDIENCE</code></td><td></td><td>empty</td></tr><tr><td><code>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>3600</code></td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>86400</code></td></tr><tr><td><code>HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS</code></td><td></td><td><code>3600</code></td></tr><tr><td><code>HEIMDALL_LOG_DIRECTORY</code></td><td></td><td><code>logs</code></td></tr><tr><td><code>HEIMDALL_CORS_ALLOWED_ORIGINS</code></td><td></td><td>unset → every cross-origin request is refused</td></tr><tr><td><code>HEIMDALL_GOOGLE_CLIENT_IDS</code></td><td></td><td>unset → Google sign-in refuses every token</td></tr><tr><td><code>MAILGUN_API_KEY</code> / <code>MAILGUN_DOMAIN</code></td><td></td><td>unset → tokens logged (fails start-up in Production)</td></tr><tr><td><code>MAILGUN_API_VERSION</code></td><td></td><td><code>v3</code></td></tr><tr><td><code>HEIMDALL_EMAIL_VERIFICATION_URL</code> / <code>HEIMDALL_PASSWORD_RESET_URL</code></td><td></td><td>unset → the email carries the bare token</td></tr></tbody></table><p><code>Environments/.env</code> in the Web API project is a <strong>tracked template</strong> listing every variable; real
 values live in per-environment files that are gitignored.</p><h2 id=scaling>Scaling<a class=td-heading-self-link href=#scaling aria-label="Heading self-link"></a></h2><p>The API is designed for horizontal scaling (<strong>NFR-06</strong>), and the authentication design is what makes
 that cheap: tokens are stateless and validated from their claims, so no session store or sticky
-routing is needed. Two consequences follow from the same fact — a token remains valid until it
-expires even after the account behind it is deleted, and the rate limiter&rsquo;s window is per instance.</p><p>The full operational specification is the
+routing is needed. The rate limiter&rsquo;s window is per instance as a result, which is why the
+per-account failure budgets above live in the database instead.</p><p>A token still carries no revocation list, but it no longer outlives the identity it names:
+<code>ActorLivenessFilter</code> resolves the caller on every authenticated request and refuses a token whose
+person or Google User has been deleted (<strong>FR-AU-05</strong>, <strong>FR-GO-12</strong>). That costs one indexed read per
+request — the price of making logical deletion take effect immediately rather than whenever the
+token happens to expire.</p><p>The full operational specification is the
 <a href=../requirements/operations-infrastructure-document/>Operations & Infrastructure Document</a>
 .</p></div><div class=td-content style=page-break-before:always><h1 id=pg-a10ce863ab42f99a6d67230947b74e08>10 - Requirements</h1><div class=lead>The specification: vision, system requirements, use cases, technology stack, testing, workflow, and operations.</div><p>These seven documents are the <strong>specification</strong> for Heimdall. Everything else on this site describes
 what was built; these say what must be true.</p><p>They are also the working documents of the project, not a retrospective write-up: a feature is

@@ -9,7 +9,7 @@ Dark
 <svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li><li><button type=button class="dropdown-item d-flex align-items-center active" data-bs-theme-value=auto aria-pressed=true>
 <svg class="bi me-2 opacity-50"><use href="#circle-half"/></svg>
 Auto
-<svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li></ul></div></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.a93049a933756950bfbf7cbc298a895a.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><div class=td-content><div class="pageinfo pageinfo-primary d-print-none"><p>This is the multi-page printable view of this section.
+<svg class="bi ms-auto d-none"><use href="#check2"/></svg></button></li></ul></div></li></ul><div class="scroll-indicator scroll-right"></div></div><div class="td-navbar__search d-none d-lg-block"><div class="td-search td-search--offline"><div class=td-search__icon></div><input type=search name=q class="td-search__input form-control" placeholder='Search this site…' aria-label='Search this site…' autocomplete=off data-offline-search-index-json-src=/heimdall-api/offline-search-index.c5acf7a2ed25a0c3aa22303c7530a383.json data-offline-search-base-href=/ data-offline-search-max-results=10></div></div></div></nav></header><div class="container-fluid td-outer"><div class=td-main><div class="row flex-xl-nowrap"><main class="col-12 col-md-9 col-xl-8 ps-md-5" role=main><div class=td-content><div class="pageinfo pageinfo-primary d-print-none"><p>This is the multi-page printable view of this section.
 <a href=# onclick="return print(),!1">Click here to print</a>.</p><p><a href=/heimdall-api/docs/flows/>Return to the regular view of this page</a>.</p></div><h1 class=title>Flows</h1><div class=lead>Sequence diagrams for the paths that are worth tracing end to end.</div><ul><li>1: <a href=#pg-94aee71b0a3d04d3ca9aeeab2d293e40>Login</a></li><li>2: <a href=#pg-65bcf283201edc503f290d206771aa6d>Two-factor authentication</a></li><li>3: <a href=#pg-0e60ae31ec4ff6e69af4d96dea8003e1>Google Sign-In</a></li><li>4: <a href=#pg-6c7fd6f1dba25ea29cf2d8d086832d27>Person onboarding</a></li><li>5: <a href=#pg-7beed924441b8b278bcc9607c9cec1c2>Password recovery</a></li><li>6: <a href=#pg-1e4d2a60edfaeaa182f469561228775e>Scope permission claims</a></li><li>7: <a href=#pg-371cc5e6a0a7743c509a176db5f11a6b>Audit logging</a></li></ul><div class=content><p>Most endpoints are a straight line: validate, read, write, respond. The flows collected here are the
 ones that are not — they cross services, branch on stored state, or deliberately answer the same way
 down several different paths.</p><table><thead><tr><th>Flow</th><th>Why it is worth tracing</th></tr></thead><tbody><tr><td><a href=login/>Login</a></td><td>Five distinct failure causes, one answer — and a sixth outcome that is not a token at all.</td></tr><tr><td><a href=two-factor/>Two-factor authentication</a></td><td>Setup, confirmation, and the challenge-token round trip that completes a gated login.</td></tr><tr><td><a href=google-sign-in/>Google Sign-In</a></td><td>Verification before anything else, then sign-up or sign-in down the same endpoint.</td></tr><tr><td><a href=person-onboarding/>Person onboarding</a></td><td>Creation, the verification email, and the resend path — including what happens with no mail credentials.</td></tr><tr><td><a href=password-recovery/>Password recovery</a></td><td>An endpoint whose whole design is about what it must <em>not</em> reveal.</td></tr><tr><td><a href=scope-permission-claims/>Scope permission claims</a></td><td>How a permission defined in a scope ends up inside a caller&rsquo;s JWT.</td></tr><tr><td><a href=audit-logging/>Audit logging</a></td><td>One decorator, every write, no handler changes.</td></tr></tbody></table><p>Each page cites the use case (<code>UC-…</code>) and alternative flows (<code>AF-…</code>) it implements. The authoritative
@@ -42,7 +42,7 @@ descriptions live in the
     H-&gt;&gt;PR: find by the lookup the role implies
     PR-&gt;&gt;DB: SELECT person &#43; role &#43; scope navigations
     DB--&gt;&gt;PR: person or null
-    Note over H: AF-11a unknown · AF-11b wrong password&lt;br/&gt;AF-11c deleted person · AF-11d/e scope not eligible&lt;br/&gt;→ all answer &#34;invalid credentials&#34;
+    Note over H: AF-11a unknown · AF-11b wrong password&lt;br/&gt;AF-11c deleted person · AF-11d/e scope not eligible&lt;br/&gt;locked out (FR-AU-08)&lt;br/&gt;→ all answer &#34;invalid credentials&#34;
 
     H-&gt;&gt;H: Hash.TextMatches(password, hash, salt)
     H-&gt;&gt;TS: TryBuildSubject(person)
@@ -65,7 +65,13 @@ person, so the person has to be found before they can be rejected.</p><h2 id=one
 scope is logically deleted) and AF-11e (a <code>ScopeAdmin</code> with no live owned scope) all return the same
 <code>invalid credentials</code> error.</p><p>The checks still run in the specification&rsquo;s order, so the code reads against UC-11 line by line —
 only the <em>answer</em> is uniform. An anonymous endpoint that distinguished them would be a directory of
-which addresses are registered and which accounts still exist.</p><h2 id=scope-eligibility>Scope eligibility<a class=td-heading-self-link href=#scope-eligibility aria-label="Heading self-link"></a></h2><p><code>PersonAuthTokenService.TryBuildSubject</code> is the single place the eligibility rules live, shared with
+which addresses are registered and which accounts still exist.</p><p><strong>The answer has to be uniform in time as well as in text.</strong> AF-11a used to return without hashing
+anything, since there was no stored hash to compare against — so &ldquo;no such account&rdquo; came back in
+single-digit milliseconds while every other rejection paid a full Argon2id verification (600 MB / 16
+threads) and took hundreds. That gap answered the question the shared message refuses, and varying
+the scope id turned it into a per-scope directory. The handler now verifies the submitted password
+against a decoy hash — of a random secret generated once per process, belonging to nobody — and
+discards the result. A lockout takes the same path, so it is not detectable either.</p><h2 id=scope-eligibility>Scope eligibility<a class=td-heading-self-link href=#scope-eligibility aria-label="Heading self-link"></a></h2><p><code>PersonAuthTokenService.TryBuildSubject</code> is the single place the eligibility rules live, shared with
 <a href=../two-factor/>two-factor verification</a>
 so a gated login ends exactly like a direct one:</p><pre class=mermaid>flowchart LR
     P[Person] --&gt; R{Role}
@@ -126,12 +132,19 @@ a path or body — so no caller can reach another person&rsquo;s configuration.<
     CH-&gt;&gt;DB: SELECT pending row
     CH-&gt;&gt;CH: check appCode if AppEnabled (AF-37b)
     CH-&gt;&gt;CH: check emailCode if EmailEnabled (AF-37c)
-    CH-&gt;&gt;DB: mark the confirming email code Used
     CH-&gt;&gt;DB: INSERT 10 recovery codes (hashes only)
     CH-&gt;&gt;DB: UPDATE IsActive = true
+    CH-&gt;&gt;DB: mark the confirming email code Used
     CH--&gt;&gt;P: 200 — ten recovery codes, shown exactly once</pre><p><code>IsActive</code> is what separates a <em>confirmed</em> configuration from one still pending. A row with
 <code>IsActive = false</code> means UC-36 created it and UC-37 has not yet activated it — and only an active
-configuration gates a login.</p><p>Confirmation requires proof of <strong>every</strong> method selected at setup: an <code>appCode</code> if <code>AppEnabled</code>, an
+configuration gates a login.</p><p><strong>The order of those last three writes is deliberate.</strong> The repository layer exposes no transaction,
+so ordering is what stands in for one, and the dangerous half-write is &ldquo;two-factor is active but the
+caller holds no recovery codes&rdquo; — which locks someone out of their own account on the strength of a
+request that reported failure. Writing the codes first (in one insert, not ten) leaves only harmless
+failure modes: codes stored against a configuration that never activated, which the next attempt
+replaces, and which authenticate nothing while <code>IsActive</code> is <code>false</code>. UC-40 orders its writes the
+same way and for the same reason, creating the replacements before deleting the set they replace, so
+a failure leaves the caller with the codes they already hold rather than none at all.</p><p>Confirmation requires proof of <strong>every</strong> method selected at setup: an <code>appCode</code> if <code>AppEnabled</code>, an
 <code>emailCode</code> if <code>EmailEnabled</code>, both if both.</p><h2 id=completing-a-gated-login--uc-38>Completing a gated login — UC-38<a class=td-heading-self-link href=#completing-a-gated-login--uc-38 aria-label="Heading self-link"></a></h2><pre class=mermaid>sequenceDiagram
     autonumber
     actor C as Client
@@ -173,7 +186,12 @@ configuration gates a login.</p><p>Confirmation requires proof of <strong>every<
 valid but the person&rsquo;s scope eligibility no longer holds, the answer is
 <code>scope no longer eligible</code>, not <code>challenge invalid</code>. Collapsing that case would misdescribe what
 actually happened — nothing the caller supplied was wrong.</p><p><strong>Nothing can be replayed.</strong> The redeemed recovery code and the redeemed email code are both marked
-used before the token is issued.</p><p>The final token is issued by <code>PersonAuthTokenService</code> — the same service a direct login uses — so a
+used before the token is issued. An app code is single-use too, though it has no row to mark: the
+time step it was accepted at is recorded on <code>TWO_FACTOR_AUTH.last_totp_time_step_used</code>, and a code
+from that step or earlier is refused (<strong>RFC 6238 §5.2</strong>). Without it the ±1-step tolerance meant an
+observed code stayed usable for up to ninety seconds, across verify, disable, and regenerate alike.</p><p><strong>A wrong email code costs the code.</strong> Five wrong guesses retire it (<code>failed_attempts</code>), so the
+million values a six-digit code can take are not a million attempts — guessing again costs a fresh
+login, which is rate limited and mails the account holder a code they did not ask for.</p><p>The final token is issued by <code>PersonAuthTokenService</code> — the same service a direct login uses — so a
 2FA-gated login ends with exactly the token a direct one would have produced.</p><h2 id=why-the-guard-filter-never-fires-here>Why the guard filter never fires here<a class=td-heading-self-link href=#why-the-guard-filter-never-fires-here aria-label="Heading self-link"></a></h2><p><code>MfaPendingGuardFilter</code> runs on every controller action and rejects any identity carrying
 <code>MfaPending</code>. It never trips on <code>POST /api/auth/2fa/verify</code> because that endpoint is
 <code>[AllowAnonymous]</code> and reads the challenge token as a <strong>body field</strong>, not as an
