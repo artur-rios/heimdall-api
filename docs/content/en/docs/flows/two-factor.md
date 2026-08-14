@@ -63,15 +63,24 @@ sequenceDiagram
     CH->>DB: SELECT pending row
     CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
-    CH->>DB: mark the confirming email code Used
     CH->>DB: INSERT 10 recovery codes (hashes only)
     CH->>DB: UPDATE IsActive = true
+    CH->>DB: mark the confirming email code Used
     CH-->>P: 200 — ten recovery codes, shown exactly once
 ```
 
 `IsActive` is what separates a *confirmed* configuration from one still pending. A row with
 `IsActive = false` means UC-36 created it and UC-37 has not yet activated it — and only an active
 configuration gates a login.
+
+**The order of those last three writes is deliberate.** The repository layer exposes no transaction,
+so ordering is what stands in for one, and the dangerous half-write is "two-factor is active but the
+caller holds no recovery codes" — which locks someone out of their own account on the strength of a
+request that reported failure. Writing the codes first (in one insert, not ten) leaves only harmless
+failure modes: codes stored against a configuration that never activated, which the next attempt
+replaces, and which authenticate nothing while `IsActive` is `false`. UC-40 orders its writes the
+same way and for the same reason, creating the replacements before deleting the set they replace, so
+a failure leaves the caller with the codes they already hold rather than none at all.
 
 Confirmation requires proof of **every** method selected at setup: an `appCode` if `AppEnabled`, an
 `emailCode` if `EmailEnabled`, both if both.
@@ -129,7 +138,14 @@ valid but the person's scope eligibility no longer holds, the answer is
 actually happened — nothing the caller supplied was wrong.
 
 **Nothing can be replayed.** The redeemed recovery code and the redeemed email code are both marked
-used before the token is issued.
+used before the token is issued. An app code is single-use too, though it has no row to mark: the
+time step it was accepted at is recorded on `TWO_FACTOR_AUTH.last_totp_time_step_used`, and a code
+from that step or earlier is refused (**RFC 6238 §5.2**). Without it the ±1-step tolerance meant an
+observed code stayed usable for up to ninety seconds, across verify, disable, and regenerate alike.
+
+**A wrong email code costs the code.** Five wrong guesses retire it (`failed_attempts`), so the
+million values a six-digit code can take are not a million attempts — guessing again costs a fresh
+login, which is rate limited and mails the account holder a code they did not ask for.
 
 The final token is issued by `PersonAuthTokenService` — the same service a direct login uses — so a
 2FA-gated login ends with exactly the token a direct one would have produced.

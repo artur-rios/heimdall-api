@@ -99,23 +99,55 @@ Serilog, configured before anything else so that even configuration failures are
 `DetailedErrors` print parameter and column values — password hashes, salts, email addresses — so
 they stay off where those logs are retained.
 
-## Rate limiting
+## Rate limiting and lockout
 
-A fixed-window limiter of **10 requests per minute, partitioned by client IP**, applied to
-`AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
-reset, email verification, Google sign-in, and second-factor verification. Rejections answer **429**.
+Brute force is bounded in two independent places, because each covers what the other misses.
 
-None of these requires a bearer token, so nothing else bounds how fast a caller can hit them. Each
-login attempt costs a full Argon2id verification (600 MB / 16 threads by the hashing library's
-defaults), and a 2FA email code has only 1,000,000 possible values — so both memory exhaustion and
-brute force are realistic without it.
+**Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**,
+applied to `AuthController`'s anonymous, credential-checking endpoints: login, password recovery,
+password reset, email verification, Google sign-in, and second-factor verification. Rejections
+answer **429**. None of these requires a bearer token, so nothing else bounds how fast one caller
+can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
+hashing library's defaults) — so memory exhaustion is realistic without it.
+
+**Per account — a failure budget**, which is what an attacker spread across many source addresses
+defeats the limiter with:
+
+| Target | Budget | On exhaustion |
+| --- | --- | --- |
+| Password (UC-11) | 10 consecutive failures | The account is locked for 15 minutes. `PERSON.failed_login_attempts` counts, `PERSON.locked_out_until` holds the window; a successful login clears both. |
+| 2FA email code (UC-37, UC-38) | 5 wrong guesses per issued code | The code is retired. `TWO_FACTOR_EMAIL_CODE.failed_attempts` counts; guessing again costs a fresh login, which is itself limited and mails the account holder a code they did not ask for. |
+| 2FA app code | Single use | `TWO_FACTOR_AUTH.last_totp_time_step_used` records the accepted time step, so an observed code cannot be replayed within the ±1-step verification window (RFC 6238 §5.2). |
+
+A lockout is a window rather than a latch an administrator clears: reaching the threshold needs
+nothing but wrong guesses, so a permanent lock would hand any anonymous caller a denial of service
+against any address they know. It answers with UC-11's ordinary `InvalidCredentials`, and spends the
+same Argon2id work a real check would, so it is not observable — by message or by timing — to a
+caller who does not already know the password.
 
 {{% alert title="Not a substitute for a gateway" color="warning" %}}
-The partition key is the connection's remote IP. Behind a reverse proxy or load balancer that does
-not forward the real client IP (via `X-Forwarded-For` with `ForwardedHeadersMiddleware` configured),
-**every caller shares one partition**. This is a per-instance, defence-in-depth throttle — not a
-replacement for a WAF or an API gateway's own rate limiting in front of a real deployment.
+The limiter's partition key is the connection's remote IP. Behind a reverse proxy or load balancer
+that does not forward the real client IP (via `X-Forwarded-For` with `ForwardedHeadersMiddleware`
+configured), **every caller shares one partition**. This is a per-instance, defence-in-depth
+throttle — not a replacement for a WAF or an API gateway's own rate limiting in front of a real
+deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
+
+## Cross-origin requests
+
+`HEIMDALL_CORS_ALLOWED_ORIGINS` lists the browser front ends allowed to call the API, comma
+separated, as scheme and host (`https://app.example.com`). **With the variable unset, no
+cross-origin request is allowed.**
+
+Refusing by default is deliberate. The same-origin policy is what stops a page on an unrelated
+origin from reading an authenticated response, and an identity API is the last place to switch it
+off: any site the caller visited could otherwise read `/api/persons/{id}` with a token it scraped,
+and drive the anonymous endpoints from every visitor's browser at once. A missing entry costs a
+front end its access until an operator adds one — visible, and quickly fixed. Defaulting to "any
+origin" would instead leave a deployment open with nothing to indicate it.
+
+Server-to-server callers are unaffected: CORS is a browser rule, and non-browser clients send no
+`Origin` header.
 
 ## Integrations
 
@@ -174,6 +206,7 @@ Google sign-in also requires the scope itself to have it switched on, through
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
+| `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
@@ -186,8 +219,14 @@ values live in per-environment files that are gitignored.
 
 The API is designed for horizontal scaling (**NFR-06**), and the authentication design is what makes
 that cheap: tokens are stateless and validated from their claims, so no session store or sticky
-routing is needed. Two consequences follow from the same fact — a token remains valid until it
-expires even after the account behind it is deleted, and the rate limiter's window is per instance.
+routing is needed. The rate limiter's window is per instance as a result, which is why the
+per-account failure budgets above live in the database instead.
+
+A token still carries no revocation list, but it no longer outlives the identity it names:
+`ActorLivenessFilter` resolves the caller on every authenticated request and refuses a token whose
+person or Google User has been deleted (**FR-AU-05**, **FR-GO-12**). That costs one indexed read per
+request — the price of making logical deletion take effect immediately rather than whenever the
+token happens to expire.
 
 The full operational specification is the
 [Operations & Infrastructure Document](../requirements/operations-infrastructure-document/).

@@ -48,6 +48,8 @@ public class Startup(string[] args) : WebApiStartup(args)
     private const string TokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const double DefaultTokenExpirationInSeconds = 3600;
 
+    private const string CorsAllowedOriginsEnvironmentVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
+
     /// <summary>
     ///     Rate-limiting policy name applied via <c>[EnableRateLimiting(AuthEndpointRateLimitPolicy)]</c>
     ///     to <c>AuthController</c>'s anonymous, credential-checking endpoints. Public so the
@@ -257,6 +259,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         // Protection API before it is persisted.
         Builder.Services.AddDataProtection();
         Builder.Services.AddScoped<ITotpSecretProtector, TotpSecretProtector>();
+        // Shared by UC-37's confirmation and ITwoFactorFactorVerifier (UC-38/39/40): the TOTP secret,
+        // the clock-drift window, and the single-use rule that keeps an app code from being replayed
+        // live in one place rather than a copy per call site.
+        Builder.Services.AddScoped<ITotpCodeVerifier, TotpCodeVerifier>();
         Builder.Services.AddScoped<IValidator<EnableTwoFactorAuthCommand>, EnableTwoFactorAuthCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput, EnableTwoFactorAuthCommandHandler>();
 
@@ -305,10 +311,7 @@ public class Startup(string[] args) : WebApiStartup(args)
 
     public override void ConfigureApp()
     {
-        App.UseCors(x => x
-            .AllowAnyOrigin()
-            .AllowAnyMethod()
-            .AllowAnyHeader());
+        ConfigureCors();
 
         if (Builder.Environment.IsDevelopment())
         {
@@ -321,6 +324,56 @@ public class Startup(string[] args) : WebApiStartup(args)
         App.UseAuthentication();
         App.UseAuthorization();
         App.MapControllers();
+    }
+
+    /// <summary>
+    ///     Restricts cross-origin access to the front ends named by
+    ///     <c>HEIMDALL_CORS_ALLOWED_ORIGINS</c> (comma-separated, scheme and host as the browser sends
+    ///     them, e.g. <c>https://app.example.com</c>). With the variable unset, no cross-origin
+    ///     request is allowed.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This used to be <c>AllowAnyOrigin</c> in every environment. The same-origin policy is
+    ///         the control that stops a page on an unrelated origin from reading an authenticated
+    ///         response, and switching it off system-wide is a poor trade for an identity API: any
+    ///         site the caller visits could then read <c>/api/persons/{id}</c> with a token it
+    ///         scraped, and drive the anonymous endpoints from every visitor's browser at once.
+    ///     </para>
+    ///     <para>
+    ///         Refusing by default rather than falling back to the wildcard is deliberate, and it is
+    ///         the <c>UnconfiguredGoogleIdTokenVerifier</c> judgement rather than the e-mail sender's:
+    ///         a missing CORS entry costs a browser-based front end its access until an operator adds
+    ///         one, which is visible and quickly fixed, while defaulting to "any origin" would leave a
+    ///         deployment wide open with nothing to indicate it. Server-to-server callers are
+    ///         unaffected — CORS is a browser rule and non-browser clients never send an Origin.
+    ///     </para>
+    /// </remarks>
+    private void ConfigureCors()
+    {
+        var origins = (Environment.GetEnvironmentVariable(CorsAllowedOriginsEnvironmentVariable) ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (origins.Length == 0)
+        {
+            Log.Warning(
+                "No cross-origin front end is configured ({Variable}); every cross-origin request " +
+                "will be refused by the browser's same-origin policy",
+                CorsAllowedOriginsEnvironmentVariable);
+
+            return;
+        }
+
+        Log.Information("Allowing cross-origin requests from {Origins}", origins);
+
+        // Credentials are allowed because the front end sends the bearer token UC-11 issued. That is
+        // also why the origin list has to be explicit: AllowAnyOrigin and AllowCredentials are
+        // mutually exclusive by specification, precisely to stop this combination from existing.
+        App.UseCors(policy => policy
+            .WithOrigins(origins)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
     }
 
     public override void ConfigureSecurity()
@@ -532,6 +585,13 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddControllers(options =>
         {
             options.Filters.Add<MfaPendingGuardFilter>();
+
+            // Runs after the guard above, which is the cheap check: a challenge token misused as a
+            // bearer credential is rejected on its claims alone, without spending the database read
+            // this one makes. Global for the same reason — a token naming a deleted identity must be
+            // refused everywhere, and leaving that to each handler is what let a logically deleted
+            // System Admin keep acting until their token expired.
+            options.Filters.Add<ActorLivenessFilter>();
 
             // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
             // AddControllers() rather than running this Startup, so that call site cannot catch a

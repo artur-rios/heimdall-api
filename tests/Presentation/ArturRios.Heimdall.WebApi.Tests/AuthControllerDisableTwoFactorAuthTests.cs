@@ -166,6 +166,12 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
             "/api/auth/2fa/confirm", new ConfirmTwoFactorAuthCommand { AppCode = CurrentTotpCode(secret) });
         Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
 
+        // The confirmation just spent the current time step, and an app code is good once. The
+        // caller of this helper goes on to present a code from the same step microseconds later,
+        // which no real client does; forget the step so the test exercises its own subject rather
+        // than the replay guard. See PostgresFixture.ForgetLastTotpStepAsync.
+        await db.ForgetLastTotpStepAsync(person.PublicId);
+
         return secret;
     }
 

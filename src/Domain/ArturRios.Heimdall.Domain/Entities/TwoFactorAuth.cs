@@ -34,6 +34,15 @@ public class TwoFactorAuth : Entity
     /// </summary>
     public bool IsActive { get; set; }
 
+    /// <summary>
+    ///     The TOTP time step (30-second counter since the Unix epoch) of the most recently accepted
+    ///     authenticator-app code, or <c>null</c> while none has been accepted. A code is refused
+    ///     unless its step is strictly greater, which is what makes an app code single-use: without
+    ///     it the same six digits verify for as long as they are current, and the verification
+    ///     window widens that to a step either side (FR-2F-09, RFC 6238 §5.2).
+    /// </summary>
+    public long? LastTotpTimeStepUsed { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

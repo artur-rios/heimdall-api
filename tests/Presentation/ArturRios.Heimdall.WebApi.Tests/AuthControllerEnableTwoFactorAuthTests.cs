@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -16,9 +17,10 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/2fa/enable (UC-36, FR-2F-01…FR-2F-03): the main flow for each
-// method combination, AF-36a (409, already active), AF-36b (403 — no bearer token names an eligible
-// person, standing in for a Google User), AF-36c (400, no method selected), AF-36d (re-initiating
-// over a pending setup overwrites it), and the 401 an unauthenticated caller gets.
+// method combination, AF-36a (409, already active), AF-36b (403 — the caller is a live Google User,
+// who is never a Person and so is never eligible), AF-36c (400, no method selected), AF-36d
+// (re-initiating over a pending setup overwrites it), the 401 an unauthenticated caller gets, and
+// the 401 ActorLivenessFilter gives a token naming an identity that is absent or deleted.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
@@ -44,6 +46,29 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         context.Persons.Add(person);
         await context.SaveChangesAsync();
         return person;
+    }
+
+    private async Task<GoogleUser> SeedGoogleUserAsync()
+    {
+        await using var context = db.CreateContext();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        await context.SaveChangesAsync();
+
+        var googleUser = new GoogleUser
+        {
+            PublicId = Guid.NewGuid(),
+            GoogleId = $"google-{Guid.NewGuid():N}",
+            Name = "Google User",
+            Email = UniqueEmail("google"),
+            EmailVerified = true,
+            ScopeId = scope.Id,
+            Scope = scope
+        };
+        context.GoogleUsers.Add(googleUser);
+        await context.SaveChangesAsync();
+
+        return googleUser;
     }
 
     private async Task<TwoFactorAuth?> ConfigurationForAsync(Person person)
@@ -207,12 +232,14 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenTokenNamingNoEligiblePerson_WhenPostEnable2fa_ThenForbidden()
+    public async Task GivenGoogleUser_WhenPostEnable2fa_ThenForbidden()
     {
-        // Given — AF-36b: a bearer token naming no row in the Person table at all, the same shape a
-        // Google-issued token has here, since a Google User is never a Person (UC-25 step 8) and so
-        // can never be resolved by this lookup either.
-        Authorize(TestTokens.ForRole((int)Roles.User));
+        // Given — AF-36b proper: a live Google User. Their token names a GOOGLE_USER row, so
+        // ActorLivenessFilter is satisfied and the request reaches the handler, whose person lookup
+        // finds nothing — a Google User is never a Person (UC-25 step 8), and password-less
+        // authentication has no second factor to add.
+        var googleUser = await SeedGoogleUserAsync();
+        Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, googleUser.Scope.PublicId));
 
         // When
         var response = await EnableAsync("App");
@@ -223,17 +250,34 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenLogicallyDeletedPerson_WhenPostEnable2fa_ThenForbidden()
+    public async Task GivenTokenNamingNoIdentity_WhenPostEnable2fa_ThenUnauthorized()
     {
-        // Given — the same AF-36b refusal for a caller whose account was since logically deleted
+        // Given a bearer token naming neither a Person nor a Google User — what a hard deletion
+        // leaves behind
+        Authorize(TestTokens.For(Guid.NewGuid(), (int)Roles.User));
+
+        // When
+        var response = await EnableAsync("App");
+
+        // Then — ActorLivenessFilter answers before the handler, so this is a 401 rather than
+        // AF-36b's 403. The distinction is real: 403 says "you are somebody, but not somebody who
+        // may do this", and a token naming nobody has not earned that answer.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenLogicallyDeletedPerson_WhenPostEnable2fa_ThenUnauthorized()
+    {
+        // Given a caller whose account was logically deleted after their token was issued
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("deleted"), isDeleted: true);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
         var response = await EnableAsync("App");
 
-        // Then
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.NotEligible, response.Body!.Errors);
+        // Then — refused for the whole API, not just this endpoint (FR-AU-05)
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 }

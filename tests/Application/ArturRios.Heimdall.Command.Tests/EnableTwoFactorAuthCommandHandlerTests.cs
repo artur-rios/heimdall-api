@@ -45,14 +45,14 @@ public class EnableTwoFactorAuthCommandHandlerTests
         };
     }
 
-    private static async Task<Fixture> FixtureAsync()
+    private static async Task<Fixture> FixtureAsync(string email = "person@test.local")
     {
         var persons = new AsyncFakeRepository<Person>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
             Name = "person",
-            Email = "person@test.local",
+            Email = email,
             RoleId = (long)Roles.User
         };
         await persons.CreateAsync(person);
@@ -70,6 +70,27 @@ public class EnableTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenEmailWithUriReservedCharacters_WhenHandlingEnableTwoFactorAuth_ThenOtpAuthUriEncodesThem()
+    {
+        // Given a perfectly ordinary address that is not a URI-safe string. A sub-address like this
+        // is the common case: interpolated raw, the '+' is what an authenticator decodes as a space,
+        // so the account gets provisioned under a name that is not the caller's.
+        var fixture = await FixtureAsync("bob+heimdall@example.com");
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App"));
+
+        // Then — the label is encoded, and the URI still parses as one
+        Assert.True(output.Success);
+        Assert.Contains("otpauth://totp/Heimdall:bob%2Bheimdall%40example.com", output.Data!.OtpAuthUri);
+        Assert.DoesNotContain("bob+heimdall@example.com", output.Data.OtpAuthUri);
+
+        var uri = new Uri(output.Data.OtpAuthUri!);
+        Assert.Equal("otpauth", uri.Scheme);
+        Assert.Contains("issuer=Heimdall", uri.Query);
+    }
+
+    [UnitFact]
     public async Task GivenAppAndEmailSelected_WhenHandlingEnableTwoFactorAuth_ThenPendingRowIsCreatedForBoth()
     {
         // Given a person with no prior configuration
@@ -82,7 +103,10 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.Contains(TwoFactorMessages.SetupInitiated, output.Messages);
         Assert.NotNull(output.Data!.OtpAuthUri);
-        Assert.Contains("otpauth://totp/Heimdall:person@test.local", output.Data.OtpAuthUri);
+        // The label is percent-encoded, so the '@' arrives as %40 — an address is not a URI-safe
+        // string, and one carrying '+', '?' or '#' would otherwise produce a URI an authenticator
+        // reads as a different account or truncates outright.
+        Assert.Contains("otpauth://totp/Heimdall:person%40test.local", output.Data.OtpAuthUri);
         Assert.True(output.Data.EmailCodeSent);
 
         // Then — persisted state: exactly one pending (inactive) row, both methods enabled

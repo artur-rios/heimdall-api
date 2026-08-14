@@ -124,6 +124,7 @@ public class LoginCommandHandlerTests
             new(
                 ValidValidator().Object,
                 Persons,
+                Persons,
                 TwoFactorAuths,
                 EmailCodes,
                 EmailCodes,
@@ -140,6 +141,7 @@ public class LoginCommandHandlerTests
         AsyncFakeRepository<Person> persons, IAuthTokenIssuer issuer) =>
         new(
             ValidValidator().Object,
+            persons,
             persons,
             new AsyncFakeRepository<TwoFactorAuth>(),
             new AsyncFakeRepository<TwoFactorEmailCode>(),
@@ -246,6 +248,90 @@ public class LoginCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal([live.PublicId], issuer.Subject!.OwnedScopeIds);
+    }
+
+    [UnitFact]
+    public async Task GivenTenConsecutiveWrongPasswords_WhenHandlingLogin_ThenTheAccountIsLockedOut()
+    {
+        // Given an admin whose password an attacker is guessing. The per-IP request limiter bounds
+        // how fast one source can try; nothing bounded how many tries the account itself would
+        // accept, which is the half a caller spread across many addresses defeats.
+        var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        var persons = await PersonsWith(person);
+        var issuer = new RecordingIssuer();
+        var handler = HandlerFor(persons, issuer);
+
+        // When ten wrong guesses are made
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var wrong = await handler.HandleAsync(Command("admin@test.local", "wrong-password"));
+
+            Assert.False(wrong.Success);
+            Assert.Contains(AuthMessages.InvalidCredentials, wrong.Errors);
+        }
+
+        // Then the account is locked, and the counter is folded into the lockout rather than left
+        // to climb
+        var stored = Assert.Single(persons.Query().ToList());
+        Assert.NotNull(stored.LockedOutUntil);
+        Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
+        Assert.Equal(0, stored.FailedLoginAttempts);
+
+        // Then — and the correct password no longer works while the lockout holds, answering with
+        // UC-11's ordinary message so the lockout itself is not observable
+        var correct = await handler.HandleAsync(Command("admin@test.local"));
+
+        Assert.False(correct.Success);
+        Assert.Contains(AuthMessages.InvalidCredentials, correct.Errors);
+        Assert.Null(issuer.Subject);
+    }
+
+    [UnitFact]
+    public async Task GivenWrongPasswordsThenTheCorrectOne_WhenHandlingLogin_ThenTheCounterIsCleared()
+    {
+        // Given a person who mistypes their password a few times and then gets it right. The
+        // threshold counts consecutive failures, so a successful login has to reset it — otherwise
+        // an account would eventually lock on failures spread over months.
+        var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        var persons = await PersonsWith(person);
+        var handler = HandlerFor(persons, new RecordingIssuer());
+
+        for (var attempt = 0; attempt < 9; attempt++)
+        {
+            await handler.HandleAsync(Command("admin@test.local", "wrong-password"));
+        }
+
+        Assert.Equal(9, Assert.Single(persons.Query().ToList()).FailedLoginAttempts);
+
+        // When
+        var output = await handler.HandleAsync(Command("admin@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+
+        var stored = Assert.Single(persons.Query().ToList());
+        Assert.Equal(0, stored.FailedLoginAttempts);
+        Assert.Null(stored.LockedOutUntil);
+    }
+
+    [UnitFact]
+    public async Task GivenAnExpiredLockout_WhenHandlingLogin_ThenTheCorrectPasswordWorksAgain()
+    {
+        // Given a lockout that has run its course. It is a window, not a latch an administrator has
+        // to clear: reaching the threshold needs nothing but wrong guesses, so a permanent lock
+        // would hand any anonymous caller a denial of service against any address they know.
+        var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        person.LockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
+        var persons = await PersonsWith(person);
+        var issuer = new RecordingIssuer();
+
+        // When
+        var output = await HandlerFor(persons, issuer).HandleAsync(Command("admin@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotNull(issuer.Subject);
+        Assert.Null(Assert.Single(persons.Query().ToList()).LockedOutUntil);
     }
 
     [UnitFact]
@@ -384,6 +470,7 @@ public class LoginCommandHandlerTests
             ]));
         var handler = new LoginCommandHandler(
             validator.Object,
+            persons,
             persons,
             new AsyncFakeRepository<TwoFactorAuth>(),
             new AsyncFakeRepository<TwoFactorEmailCode>(),

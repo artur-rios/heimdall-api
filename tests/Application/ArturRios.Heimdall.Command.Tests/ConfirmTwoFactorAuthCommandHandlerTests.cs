@@ -1,9 +1,11 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -37,7 +39,12 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
                 EmailCodes,
                 EmailCodes,
                 RecoveryCodes,
-                Protector.Object);
+                RecoveryCodes,
+                TotpVerifier());
+
+        // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
+        // it enforces (a code cannot be presented twice) is part of what these tests exercise.
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
 
         public ConfirmTwoFactorAuthCommand Command(string? appCode = null, string? emailCode = null) => new()
         {
@@ -102,6 +109,82 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         await fixture.EmailCodes.CreateAsync(emailCode);
 
         return emailCode;
+    }
+
+    [UnitFact]
+    public async Task GivenRecoveryCodeWritesFail_WhenHandlingConfirmTwoFactorAuth_ThenSetupIsNotActivated()
+    {
+        // Given a store that refuses to write recovery codes. The order the handler writes in is the
+        // whole point: activating first and issuing codes afterwards would leave a caller whose
+        // request reported failure with two-factor switched on and not one recovery code to their
+        // name — locked out of their own account by a call that said it had not worked.
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+        var recoveryCodes = new FailingRecoveryCodeRepository();
+
+        var handler = new ConfirmTwoFactorAuthCommandHandler(
+            fixture.Persons,
+            fixture.TwoFactorAuths,
+            fixture.TwoFactorAuths,
+            fixture.EmailCodes,
+            fixture.EmailCodes,
+            recoveryCodes,
+            recoveryCodes,
+            fixture.TotpVerifier());
+
+        // When
+        var output = await handler.HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then — the request fails, and the configuration is left exactly as it was
+        Assert.False(output.Success);
+        Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.False(twoFactorAuth.IsActive);
+    }
+
+    [UnitFact]
+    public async Task GivenCodesLeftByAFailedAttempt_WhenHandlingConfirmTwoFactorAuth_ThenOnlyTheReturnedCodesRemain()
+    {
+        // Given ten recovery codes stored against a configuration that never activated — what a run
+        // that wrote its codes and then failed to activate leaves behind. Nobody was ever told them,
+        // and they must not survive alongside the set this attempt returns.
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        for (var i = 0; i < 10; i++)
+        {
+            await fixture.RecoveryCodes.CreateAsync(new TwoFactorRecoveryCode
+            {
+                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = [(byte)i], Used = false
+            });
+        }
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then — ten rows, and every one of them a code the caller was just handed
+        Assert.True(output.Success);
+
+        var stored = fixture.RecoveryCodes.Query().ToList();
+        Assert.Equal(10, stored.Count);
+
+        var issued = output.Data!.RecoveryCodes.Select(HashRecoveryCode).ToList();
+        Assert.All(stored, code => Assert.Contains(issued, hash => hash.SequenceEqual(code.CodeHash)));
+    }
+
+    private static byte[] HashRecoveryCode(string recoveryCode) =>
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(recoveryCode));
+
+    /// <summary>
+    ///     A recovery-code store whose writes always fail, for proving what the handler does when it
+    ///     cannot issue the codes it is about to promise.
+    /// </summary>
+    private sealed class FailingRecoveryCodeRepository
+        : AsyncFakeRepository<TwoFactorRecoveryCode>, IAsyncRepository<TwoFactorRecoveryCode>
+    {
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<TwoFactorRecoveryCode>.CreateRangeAsync(
+            IEnumerable<TwoFactorRecoveryCode> entities, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<IEnumerable<long>>.New
+                .WithError("recovery codes could not be written"));
     }
 
     [UnitFact]

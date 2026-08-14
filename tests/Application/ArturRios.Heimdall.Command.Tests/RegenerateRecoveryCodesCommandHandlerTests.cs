@@ -38,7 +38,11 @@ public class RegenerateRecoveryCodesCommandHandlerTests
                 TwoFactorAuths,
                 RecoveryCodes,
                 RecoveryCodes,
-                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object));
+                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()));
+
+        // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
+        // it enforces (a code cannot be presented twice) is part of what these tests exercise.
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
 
         public RegenerateRecoveryCodesCommand Command(string? code = null, string? recoveryCode = null) => new()
         {
@@ -149,7 +153,8 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         Assert.DoesNotContain(storedCodes, x => x.CodeHash.SequenceEqual(oldUsedHash));
 
         // Then — the old, still-unused code no longer verifies as a valid second factor
-        var verifier = new TwoFactorFactorVerifier(fixture.EmailCodes, fixture.RecoveryCodes, fixture.Protector.Object);
+        var verifier = new TwoFactorFactorVerifier(
+            fixture.EmailCodes, fixture.EmailCodes, fixture.RecoveryCodes, fixture.TotpVerifier());
         var replay = await verifier.VerifyAsync(twoFactorAuth, code: null, recoveryCode: oldUnused);
         Assert.False(replay.Matched);
     }

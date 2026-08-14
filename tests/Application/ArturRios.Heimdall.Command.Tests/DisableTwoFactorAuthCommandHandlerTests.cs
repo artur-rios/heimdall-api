@@ -37,7 +37,11 @@ public class DisableTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 TwoFactorAuths,
-                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object));
+                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()));
+
+        // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
+        // it enforces (a code cannot be presented twice) is part of what these tests exercise.
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
 
         public DisableTwoFactorAuthCommand Command(
             string? password = Password, string? code = null, string? recoveryCode = null) => new()

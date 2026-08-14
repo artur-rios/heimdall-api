@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -9,10 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="ArturRios.Data.PostgreSql" Version="3.0.0" />
-      <PackageReference Include="ArturRios.Util" Version="1.5.0" />
-      <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PackageReference Include="ArturRios.Data.PostgreSql" />
+      <PackageReference Include="ArturRios.Util" />
+      <PackageReference Include="EFCore.NamingConventions" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         <PrivateAssets>all</PrivateAssets>
       </PackageReference>

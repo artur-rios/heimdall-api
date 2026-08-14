@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Http;
@@ -158,9 +159,11 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
         // When
         var response = await SignOutAsync();
 
-        // Then
+        // Then — ActorLivenessFilter answers first: a token naming a deleted identity is refused
+        // for every endpoint, not just this one, so the refusal arrives before UC-26's own AF-26a
+        // check ever runs. The status is the 401 AF-26a specifies either way.
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 
     [FunctionalFact]
@@ -175,9 +178,10 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
         var response = await SignOutAsync();
 
         // Then — the same answer the deleted-account flow gives, so neither reveals whether the
-        // account exists
+        // account exists. Both are now ActorLivenessFilter's, which is where "this token names
+        // nobody" is decided for the whole API.
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 
     [FunctionalTheory]

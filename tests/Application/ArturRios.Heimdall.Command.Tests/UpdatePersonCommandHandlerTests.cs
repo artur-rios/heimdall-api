@@ -78,8 +78,15 @@ public class UpdatePersonCommandHandlerTests
     }
 
     private static UpdatePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
-        new(PassingValidator(), persons, persons, Ownership(ownershipAllowed));
+        AsyncFakeRepository<Person> persons,
+        bool ownershipAllowed = true,
+        AsyncFakeRepository<GoogleUser>? googleUsers = null) =>
+        new(
+            PassingValidator(),
+            persons,
+            googleUsers ?? new AsyncFakeRepository<GoogleUser>(),
+            persons,
+            Ownership(ownershipAllowed));
 
     private static UpdatePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -282,6 +289,95 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenRoleChangeOntoAnAddressAnAdminHolds_WhenUpdating_ThenReturnsEmailAlreadyExists()
+    {
+        // Given a User and an administrator who share an address. That is legal while they are in
+        // different namespaces — a User's address is unique within their scope, an admin's is unique
+        // system-wide — but promoting the User to System Admin moves them into the admin namespace,
+        // where the address is already taken.
+        //
+        // The uniqueness check used to run only when the *email* changed, so this promotion, which
+        // does not touch the address, slipped past it. UC-11's admin lookup then resolves one of the
+        // two rows and stops, leaving the other person unable to log in at all.
+        var scope = Scope(1);
+        var target = User(10, scope, "shared@test.local");
+        var existingAdmin = ScopeAdmin(11, "shared@test.local");
+        var persons = await PersonsWith(target, existingAdmin);
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
+        command.RoleId = (int)Roles.SystemAdmin;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
+
+        // Then — nothing was written: the target keeps their role and their scope membership
+        var stored = persons.Query().ToList().Single(person => person.Id == target.Id);
+        Assert.Equal((long)Roles.User, stored.RoleId);
+        Assert.NotNull(stored.ScopeMembership);
+    }
+
+    [UnitFact]
+    public async Task GivenRoleChangeOntoAFreeAddress_WhenUpdating_ThenThePromotionSucceeds()
+    {
+        // Given the same promotion where nobody else holds the address. The re-check must not turn
+        // an ordinary promotion into a conflict — the person being updated is excluded from it.
+        var scope = Scope(1);
+        var target = User(10, scope, "solo@test.local");
+        var persons = await PersonsWith(target, ScopeAdmin(11, "someone-else@test.local"));
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
+        command.RoleId = (int)Roles.SystemAdmin;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+
+        var stored = persons.Query().ToList().Single(person => person.Id == target.Id);
+        Assert.Equal((long)Roles.SystemAdmin, stored.RoleId);
+        Assert.Null(stored.ScopeMembership);
+
+        // Then — the address was not touched, so verification survives (only an email change clears it)
+        Assert.True(stored.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenEmailHeldByAGoogleUserOfTheScope_WhenUpdatingAUser_ThenReturnsEmailAlreadyExists()
+    {
+        // Given a scope whose address space it shares with its Google Users (FR-GO-07): moving a
+        // User onto an address a Google User holds is the same conflict as moving them onto another
+        // User's.
+        var scope = Scope(1);
+        var target = User(10, scope, "user@test.local");
+        var persons = await PersonsWith(target);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await googleUsers.CreateAsync(new GoogleUser
+        {
+            PublicId = Guid.NewGuid(),
+            GoogleId = "google-sub",
+            Email = "TAKEN@test.local",
+            ScopeId = scope.Id
+        });
+
+        var handler = HandlerFor(persons, googleUsers: googleUsers);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
+        command.Email = "taken@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
+        Assert.Equal("user@test.local", persons.Query().ToList().Single(x => x.Id == target.Id).Email);
     }
 
     [UnitFact]

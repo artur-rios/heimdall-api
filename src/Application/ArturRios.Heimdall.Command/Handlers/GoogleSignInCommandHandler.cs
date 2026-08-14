@@ -159,10 +159,16 @@ public class GoogleSignInCommandHandler(
 
         // AF-25c (FR-GO-07): the address must be free within the scope, considered jointly with the
         // scope's User persons. Two reads rather than one because the rule spans two tables — the
-        // unique index on (scope_id, email) only covers the Google User half. Compared
+        // unique index on (scope_id, lower(email)) only covers the Google User half. Compared
         // case-insensitively (LOWER() in SQL), matching CreateUserCommandHandler.
+        //
+        // Logically deleted Google Users count as taking the address, deliberately and unlike the
+        // person half below. That index does not exclude them either, so a check that did would
+        // answer "free" and then fail on the insert — a persistence error in place of AF-25c's 409,
+        // for a caller who could never get past it. FR-GO-12 keeps a deleted row addressable rather
+        // than erasing it, so the address it holds stays taken until UC-29 removes the row for good.
         var takenByGoogleUser = await googleUserReader.Query()
-            .AnyAsync(x => x.ScopeId == scope.Id && !x.IsDeleted && x.Email.ToLower() == email);
+            .AnyAsync(x => x.ScopeId == scope.Id && x.Email.ToLower() == email);
 
         if (takenByGoogleUser)
         {

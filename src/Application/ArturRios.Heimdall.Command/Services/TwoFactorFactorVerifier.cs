@@ -4,19 +4,16 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Util.Hashing;
 using Microsoft.EntityFrameworkCore;
-using OtpNet;
 
 namespace ArturRios.Heimdall.Command.Services;
 
 /// <inheritdoc cref="ITwoFactorFactorVerifier" />
 public class TwoFactorFactorVerifier(
     IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
     IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
-    ITotpSecretProtector totpSecretProtector) : ITwoFactorFactorVerifier
+    ITotpCodeVerifier totpCodeVerifier) : ITwoFactorFactorVerifier
 {
-    // Same one time-step (30s) tolerance ConfirmTwoFactorAuthCommandHandler allows for clock drift.
-    private static readonly VerificationWindow TotpVerificationWindow = new(previous: 1, future: 1);
-
     public async Task<TwoFactorFactorVerificationResult> VerifyAsync(
         TwoFactorAuth twoFactorAuth, string? code, string? recoveryCode)
     {
@@ -29,7 +26,9 @@ public class TwoFactorFactorVerifier(
                 : TwoFactorFactorVerificationResult.ForRecoveryCode(matchingRecoveryCode);
         }
 
-        if (twoFactorAuth.AppEnabled && VerifyAppCode(twoFactorAuth, code))
+        // ITotpCodeVerifier owns the secret, the window, and the single-use rule; this class only
+        // decides which factor to try.
+        if (twoFactorAuth.AppEnabled && await totpCodeVerifier.VerifyAsync(twoFactorAuth, code))
         {
             return TwoFactorFactorVerificationResult.AppCodeMatch;
         }
@@ -47,55 +46,16 @@ public class TwoFactorFactorVerifier(
         return TwoFactorFactorVerificationResult.NoMatch;
     }
 
-    /// <summary>Decrypts the stored TOTP secret and checks <paramref name="code" /> against it (FR-2F-09).</summary>
-    private bool VerifyAppCode(TwoFactorAuth twoFactorAuth, string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code) || twoFactorAuth.TotpSecretEncrypted is null)
-        {
-            return false;
-        }
-
-        string base32Secret;
-
-        try
-        {
-            base32Secret = totpSecretProtector.Unprotect(twoFactorAuth.TotpSecretEncrypted);
-        }
-        catch (CryptographicException)
-        {
-            // A corrupted or otherwise unreadable TotpSecretEncrypted value (e.g. protected under a
-            // Data Protection key that is no longer available) can never be decrypted back into a
-            // valid app code, so it fails the same way a wrong code does instead of surfacing as a
-            // 500.
-            return false;
-        }
-
-        var totp = new Totp(Base32Encoding.ToBytes(base32Secret));
-
-        return totp.VerifyTotp(code, out _, TotpVerificationWindow);
-    }
-
     /// <summary>
     ///     Finds a not-yet-used, not-yet-expired email code for this configuration that
     ///     <paramref name="code" /> hashes to — the same comparison
-    ///     <c>ConfirmTwoFactorAuthCommandHandler</c> uses. Returns <c>null</c> for a missing,
-    ///     incorrect, expired, or already-used code, all alike.
+    ///     <c>ConfirmTwoFactorAuthCommandHandler</c> uses, through the shared
+    ///     <see cref="TwoFactorEmailCodeVerification" />. Returns <c>null</c> for a missing,
+    ///     incorrect, expired, already-used, or exhausted code, all alike.
     /// </summary>
-    private async Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            return null;
-        }
-
-        var now = DateTime.UtcNow;
-
-        var live = await emailCodeReader.Query()
-            .Where(x => x.TwoFactorAuthId == twoFactorAuthId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        return live.FirstOrDefault(x => Hash.TextMatches(code, x.CodeHash, x.Salt));
-    }
+    private Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? code) =>
+        TwoFactorEmailCodeVerification.FindMatchingAsync(
+            emailCodeReader, emailCodeWriter, twoFactorAuthId, code);
 
     /// <summary>
     ///     Finds an unused recovery code for this configuration whose hash matches

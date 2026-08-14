@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -7,14 +7,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
-      <PackageReference Include="ArturRios.Data.Relational.Core" Version="3.0.2" />
-      <PackageReference Include="ArturRios.Util" Version="1.5.0" />
-      <PackageReference Include="FluentValidation" Version="12.1.1" />
-      <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.10" />
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-      <PackageReference Include="Otp.NET" Version="1.4.0" />
+      <PackageReference Include="ArturRios.Mediator" />
+      <PackageReference Include="ArturRios.Data.Relational.Core" />
+      <PackageReference Include="ArturRios.Util" />
+      <PackageReference Include="FluentValidation" />
+      <!-- Declared although ArturRios.Data.Relational.Core also brings it: the handlers use
+           EntityFrameworkCore's async query operators directly, so it is a real dependency of this
+           project rather than an implementation detail of another one. -->
+      <PackageReference Include="Microsoft.EntityFrameworkCore" />
+      <PackageReference Include="Microsoft.AspNetCore.DataProtection" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+      <PackageReference Include="Otp.NET" />
     </ItemGroup>
 
     <ItemGroup>

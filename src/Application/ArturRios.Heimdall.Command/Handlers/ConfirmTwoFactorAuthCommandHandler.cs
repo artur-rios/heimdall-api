@@ -11,7 +11,6 @@ using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
-using OtpNet;
 
 namespace ArturRios.Heimdall.Command.Handlers;
 
@@ -37,6 +36,18 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         request that fails either one leaves the pending row and its outstanding email code
 ///         completely untouched, and can be retried.
 ///     </para>
+///     <para>
+///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
+///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
+///         <see cref="IAsyncRepository{T}.CreateRangeAsync" /> rather than ten separate inserts. The
+///         repository layer exposes no transaction, so ordering is what stands in for one: the
+///         dangerous half-write is "two-factor is active but the caller holds no recovery codes",
+///         which would lock a caller out of their own account on the strength of a request this
+///         handler reported as failed. Writing the codes first makes the surviving failure modes
+///         harmless — codes stored against a configuration that never activated, which the next
+///         attempt replaces, and which authenticate nothing on their own while
+///         <see cref="TwoFactorAuth.IsActive" /> is <c>false</c>.
+///     </para>
 /// </remarks>
 public class ConfirmTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person> personReader,
@@ -44,17 +55,13 @@ public class ConfirmTwoFactorAuthCommandHandler(
     IAsyncRepository<TwoFactorAuth> twoFactorWriter,
     IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
     IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
     IAsyncRepository<TwoFactorRecoveryCode> recoveryCodeWriter,
-    ITotpSecretProtector totpSecretProtector)
+    ITotpCodeVerifier totpCodeVerifier)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {
     private const int RecoveryCodeCount = 10;
     private const int RecoveryCodeSegmentLength = 4;
-
-    // A one time-step (30s) tolerance on either side of "now", the conventional allowance for clock
-    // drift between the server and whatever device generated the code — wide enough to forgive a
-    // little skew, narrow enough that it does not meaningfully widen the guessing window.
-    private static readonly VerificationWindow TotpVerificationWindow = new(previous: 1, future: 1);
 
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
         ConfirmTwoFactorAuthCommand command)
@@ -82,8 +89,10 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.AlreadyActive);
         }
 
-        // AF-37b: the App method's code, if the method was selected.
-        if (twoFactorAuth.AppEnabled && !VerifyAppCode(twoFactorAuth, command.AppCode))
+        // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
+        // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
+        // ITwoFactorFactorVerifier.
+        if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
         {
             return output.WithError(TwoFactorMessages.AppCodeInvalid);
         }
@@ -101,7 +110,19 @@ public class ConfirmTwoFactorAuthCommandHandler(
             }
         }
 
-        // UC-37 step 3: every required check passed.
+        // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once —
+        // written before the activation below, per the write-order note in the remarks.
+        var recoveryCodes = GenerateRecoveryCodes();
+
+        var issuance = await IssueRecoveryCodesAsync(twoFactorAuth.Id, recoveryCodes);
+
+        if (issuance is not null)
+        {
+            return output.WithErrors(issuance);
+        }
+
+        // UC-37 step 3: every required check passed and the caller now holds their recovery codes,
+        // so the configuration can be activated.
         twoFactorAuth.IsActive = true;
 
         var activation = await twoFactorWriter.UpdateAsync(twoFactorAuth);
@@ -124,42 +145,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
             }
         }
 
-        // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once.
-        var recoveryCodes = GenerateRecoveryCodes();
-
-        foreach (var recoveryCode in recoveryCodes)
-        {
-            var creation = await recoveryCodeWriter.CreateAsync(new TwoFactorRecoveryCode
-            {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = HashRecoveryCode(recoveryCode), Used = false
-            });
-
-            if (!creation.Success)
-            {
-                return output.WithErrors(creation.Errors);
-            }
-        }
-
         return output
             .WithData(new ConfirmTwoFactorAuthCommandOutput { Enabled = true, RecoveryCodes = recoveryCodes })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
-    }
-
-    /// <summary>
-    ///     Decrypts the stored TOTP secret and checks <paramref name="appCode" /> against it, allowing
-    ///     <see cref="TotpVerificationWindow" />'s tolerance for clock drift (FR-2F-04).
-    /// </summary>
-    private bool VerifyAppCode(TwoFactorAuth twoFactorAuth, string? appCode)
-    {
-        if (string.IsNullOrWhiteSpace(appCode) || twoFactorAuth.TotpSecretEncrypted is null)
-        {
-            return false;
-        }
-
-        var base32Secret = totpSecretProtector.Unprotect(twoFactorAuth.TotpSecretEncrypted);
-        var totp = new Totp(Base32Encoding.ToBytes(base32Secret));
-
-        return totp.VerifyTotp(appCode, out _, TotpVerificationWindow);
     }
 
     /// <summary>
@@ -169,20 +157,46 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ///     <c>null</c> for a missing code, an incorrect one, or one that has expired or was already
     ///     used — UC-37 does not distinguish between them.
     /// </summary>
-    private async Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? emailCode)
+    private Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? emailCode) =>
+        TwoFactorEmailCodeVerification.FindMatchingAsync(
+            emailCodeReader, emailCodeWriter, twoFactorAuthId, emailCode);
+
+    /// <summary>
+    ///     Persists <paramref name="recoveryCodes" /> as the configuration's whole recovery code set,
+    ///     replacing anything already stored against it, in one insert. Returns the persistence errors,
+    ///     or <c>null</c> on success.
+    /// </summary>
+    /// <remarks>
+    ///     The delete is what makes a retry after a failed attempt safe: a prior run that stored its
+    ///     codes and then failed to activate left ten rows nobody was ever told about, and without
+    ///     this the next attempt would leave them in place alongside the ten it does return — the
+    ///     same "old codes valid alongside new ones" UC-40 exists to prevent.
+    /// </remarks>
+    private async Task<IEnumerable<string>?> IssueRecoveryCodesAsync(
+        long twoFactorAuthId, IReadOnlyCollection<string> recoveryCodes)
     {
-        if (string.IsNullOrWhiteSpace(emailCode))
-        {
-            return null;
-        }
-
-        var now = DateTime.UtcNow;
-
-        var live = await emailCodeReader.Query()
-            .Where(x => x.TwoFactorAuthId == twoFactorAuthId && !x.Used && x.ExpiresAt > now)
+        var supersededIds = await recoveryCodeReader.Query()
+            .Where(x => x.TwoFactorAuthId == twoFactorAuthId)
+            .Select(x => x.Id)
             .ToListAsync();
 
-        return live.FirstOrDefault(x => Hash.TextMatches(emailCode, x.CodeHash, x.Salt));
+        if (supersededIds.Count > 0)
+        {
+            var deletion = await recoveryCodeWriter.DeleteRangeAsync(supersededIds);
+
+            if (!deletion.Success)
+            {
+                return deletion.Errors;
+            }
+        }
+
+        var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
+            new TwoFactorRecoveryCode
+            {
+                TwoFactorAuthId = twoFactorAuthId, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+            }));
+
+        return creation.Success ? null : creation.Errors;
     }
 
     /// <summary>

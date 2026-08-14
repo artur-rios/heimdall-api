@@ -37,7 +37,7 @@ sequenceDiagram
     H->>PR: find by the lookup the role implies
     PR->>DB: SELECT person + role + scope navigations
     DB-->>PR: person or null
-    Note over H: AF-11a unknown · AF-11b wrong password<br/>AF-11c deleted person · AF-11d/e scope not eligible<br/>→ all answer "invalid credentials"
+    Note over H: AF-11a unknown · AF-11b wrong password<br/>AF-11c deleted person · AF-11d/e scope not eligible<br/>locked out (FR-AU-08)<br/>→ all answer "invalid credentials"
 
     H->>H: Hash.TextMatches(password, hash, salt)
     H->>TS: TryBuildSubject(person)
@@ -79,6 +79,14 @@ scope is logically deleted) and AF-11e (a `ScopeAdmin` with no live owned scope)
 The checks still run in the specification's order, so the code reads against UC-11 line by line —
 only the *answer* is uniform. An anonymous endpoint that distinguished them would be a directory of
 which addresses are registered and which accounts still exist.
+
+**The answer has to be uniform in time as well as in text.** AF-11a used to return without hashing
+anything, since there was no stored hash to compare against — so "no such account" came back in
+single-digit milliseconds while every other rejection paid a full Argon2id verification (600 MB / 16
+threads) and took hundreds. That gap answered the question the shared message refuses, and varying
+the scope id turned it into a per-scope directory. The handler now verifies the submitted password
+against a decoy hash — of a random secret generated once per process, belonging to nobody — and
+discards the result. A lockout takes the same path, so it is not detectable either.
 
 ## Scope eligibility
 

@@ -232,6 +232,20 @@ public class EnableTwoFactorAuthCommandHandler(
     ///     Builds the <c>otpauth://</c> provisioning URI a caller's authenticator app scans (FR-2F-02).
     ///     Otp.NET generates the secret; the URI format itself is RFC-conventional and built here.
     /// </summary>
-    private static string BuildOtpAuthUri(string email, string base32Secret) =>
-        $"otpauth://totp/{Issuer}:{email}?secret={base32Secret}&issuer={Issuer}";
+    /// <remarks>
+    ///     The label and the issuer are percent-encoded, the address included. An email is not a
+    ///     URI-safe string: <c>bob+heimdall@example.com</c> interpolated raw yields a label whose
+    ///     <c>+</c> an authenticator decodes as a space, so the account is provisioned under a name
+    ///     that is not the caller's — or, for an address carrying <c>?</c> or <c>#</c>, the URI is cut
+    ///     short and the secret lost. The secret itself is base32 and needs no encoding, but goes
+    ///     through the same call rather than relying on that.
+    /// </remarks>
+    private static string BuildOtpAuthUri(string email, string base32Secret)
+    {
+        var label = $"{Uri.EscapeDataString(Issuer)}:{Uri.EscapeDataString(email)}";
+
+        return $"otpauth://totp/{label}" +
+               $"?secret={Uri.EscapeDataString(base32Secret)}" +
+               $"&issuer={Uri.EscapeDataString(Issuer)}";
+    }
 }

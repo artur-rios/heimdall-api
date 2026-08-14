@@ -169,12 +169,13 @@ See [Audit logging](../flows/audit-logging/) for the sequence.
 ```mermaid
 graph LR
     REQ([Request]) --> EX[ExceptionMiddleware]
-    EX --> CORS[CORS]
+    EX --> CORS["CORS<br/>configured origins only"]
     CORS --> HTTPS[HTTPS redirect]
     HTTPS --> RL[Rate limiter<br/>auth endpoints only]
     RL --> AUTHN[Authentication +<br/>AuthenticationMiddleware]
     AUTHN --> MFA[MfaPendingGuardFilter]
-    MFA --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
+    MFA --> LIVE[ActorLivenessFilter]
+    LIVE --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
     ROLE --> CTRL[Controller action]
     CTRL --> MED[Mediator]
     MED --> H[Handler]
@@ -184,12 +185,20 @@ graph LR
     RR --> RESP([HTTP response])
 ```
 
-Three things about this pipeline are worth knowing before reading any handler:
+Four things about this pipeline are worth knowing before reading any handler:
 
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
-token's claims alone. Nothing is looked up per request — which is fast, and which is why a token
-remains valid until it expires even if the account behind it was deleted.
+token's claims alone, and nothing is looked up while the token is validated.
+
+**But the identity it names is checked.** `ActorLivenessFilter` runs globally, right after the
+challenge-token guard, and refuses a token whose person or Google User is absent or logically
+deleted (**FR-AU-05**, **FR-GO-12**). Without it, `ClaimsOnly` meant a token kept working for its
+whole lifetime after the account behind it was deleted — and the handlers compensated unevenly:
+`ScopeOwnershipChecker` excluded a deleted Scope Admin, while every System Admin bypass and every
+"acting on yourself" branch trusted the role claim alone, leaving the protection in place for the
+lesser role and absent for the greater one. It costs one indexed read per authenticated request, and
+two for a Google User, since the token does not say which table its subject lives in.
 
 **One class owns both directions of the claims.** `IdentityUserMapper` writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a

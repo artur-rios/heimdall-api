@@ -1,0 +1,77 @@
+<Project>
+
+  <!--
+    Central package management for every project in the repository — src/, tests/, and tools/.
+    A PackageReference names a package; this file alone decides its version.
+
+    Transitive pinning is on, which is what keeps the graph coherent rather than merely tidy. The
+    ArturRios.Data.* packages carry their own EntityFrameworkCore dependency, so before this file
+    existed a project that referenced Microsoft.EntityFrameworkCore.Design directly resolved EF Core
+    one patch ahead of a project that only got EF Core through ArturRios.Data.Relational.Core, and
+    the two disagreed at compile time (CS1705). With pinning, the versions below win over whatever a
+    dependency asked for, so every assembly in the build sees one EF Core.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- The author's own libraries the API is built on. -->
+  <ItemGroup>
+    <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.0" />
+    <PackageVersion Include="ArturRios.Data.Relational.Core" Version="3.0.2" />
+    <PackageVersion Include="ArturRios.Mediator" Version="1.0.3" />
+    <PackageVersion Include="ArturRios.Messaging" Version="1.1.0" />
+    <PackageVersion Include="ArturRios.Util" Version="1.5.0" />
+    <PackageVersion Include="ArturRios.Util.WebApi" Version="3.1.0" />
+  </ItemGroup>
+
+  <!--
+    EF Core. Relational, Abstractions, and Analyzers are listed although no project references them
+    directly: they are exactly the transitive dependencies that would otherwise stay a patch behind
+    Microsoft.EntityFrameworkCore and reintroduce the split described above.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- Everything else the product depends on. -->
+  <ItemGroup>
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="Google.Apis.Auth" Version="1.75.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.22.0" />
+    <PackageVersion Include="Otp.NET" Version="1.4.1" />
+    <PackageVersion Include="Serilog" Version="4.4.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Map" Version="2.0.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <!--
+    Test-only packages. SSH.NET is pinned rather than referenced: Testcontainers pulls it in for its
+    SSH transport, and the version its 4.13.0 release resolved (2025.1.0) carries GHSA-q939-rpr3-3284.
+    4.14.0 already resolves a fixed 2026.0.0, so this entry is a floor that keeps a future
+    Testcontainers downgrade from silently reintroducing the advisory.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="ArturRios.Util.Test" Version="2.2.0" />
+    <PackageVersion Include="Bogus" Version="35.6.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>

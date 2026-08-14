@@ -57,7 +57,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 TwoFactorAuths,
                 EmailCodes,
                 RecoveryCodes,
-                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object),
+                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()),
                 new StubChallengeTokenValidator(challengePersonId ?? Person.PublicId),
                 new PersonAuthTokenService(TokenIssuer));
 
@@ -67,9 +67,13 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 TwoFactorAuths,
                 EmailCodes,
                 RecoveryCodes,
-                new TwoFactorFactorVerifier(EmailCodes, RecoveryCodes, Protector.Object),
+                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()),
                 new StubChallengeTokenValidator(null),
                 new PersonAuthTokenService(TokenIssuer));
+
+        // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
+        // it enforces (a code cannot be presented twice) is part of what these tests exercise.
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
 
         public VerifyTwoFactorAuthCommand Command(string? code = null, string? recoveryCode = null) => new()
         {
@@ -151,6 +155,62 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         await fixture.RecoveryCodes.CreateAsync(recoveryCode);
 
         return recoveryCode;
+    }
+
+    [UnitFact]
+    public async Task GivenFiveWrongEmailCodeGuesses_WhenHandlingVerify_ThenTheCodeIsRetired()
+    {
+        // Given an active email-only configuration with a live code. Six digits is a million values
+        // over a ten-minute life, and the per-IP limiter does not bound an attacker spread across
+        // many addresses — so each issued code gets a small, fixed budget instead.
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        // When five wrong guesses are made
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var wrong = await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+            Assert.False(wrong.Success);
+            Assert.Contains(TwoFactorMessages.FactorInvalid, wrong.Errors);
+        }
+
+        // Then the code is spent, even though it was never guessed right and has not expired
+        Assert.True(emailCode.Used);
+        Assert.Equal(5, emailCode.FailedAttempts);
+
+        // Then — and the real code no longer works either: the budget is the code's, not the
+        // attacker's, so guessing further costs a fresh login rather than nothing
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(code: EmailCode));
+
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenFourWrongGuessesThenTheRightCode_WhenHandlingVerify_ThenTheTokenIsIssued()
+    {
+        // Given a caller who fat-fingers the code a few times before getting it right, which must
+        // still work — the cap is there to stop a million guesses, not four.
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+        }
+
+        Assert.False(emailCode.Used);
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(code: EmailCode));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotNull(output.Data!.Token);
+        Assert.True(emailCode.Used);
     }
 
     [UnitFact]

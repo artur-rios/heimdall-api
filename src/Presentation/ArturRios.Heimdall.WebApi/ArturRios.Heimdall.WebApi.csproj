@@ -13,19 +13,23 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ArturRios.Mediator" Version="1.0.3" />
-    <PackageReference Include="ArturRios.Messaging" Version="1.1.0" />
-    <PackageReference Include="ArturRios.Util.WebApi" Version="3.1.0" />
+    <PackageReference Include="ArturRios.Mediator" />
+    <PackageReference Include="ArturRios.Messaging" />
+    <PackageReference Include="ArturRios.Util.WebApi" />
     <!-- UC-25 verifies Google ID tokens itself (GoogleIdTokenVerifier) rather than through the
          library's IGoogleTokenVerifier, whose payload carries no name or picture claim and so cannot
          populate a Google User (FR-GO-05). Both packages arrive transitively via ArturRios.Util.WebApi;
          they are declared here because this project uses their types directly, and pinned to the
          versions that package already resolves. -->
-    <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
-    <PackageReference Include="Serilog" Version="4.4.0" />
-    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="Serilog.Sinks.Map" Version="2.0.0" />
+    <PackageReference Include="Google.Apis.Auth" />
+    <!-- Declared although ArturRios.Data.Relational.Core also brings it: this project uses
+         EntityFrameworkCore's async query operators directly, so it is a real dependency of
+         this project rather than an implementation detail of another one. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Map" />
   </ItemGroup>
 
   <ItemGroup>

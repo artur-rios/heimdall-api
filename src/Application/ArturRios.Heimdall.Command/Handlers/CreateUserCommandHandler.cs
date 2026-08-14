@@ -25,6 +25,7 @@ public class CreateUserCommandHandler(
     IValidator<CreateUserCommand> validator,
     IAsyncReadOnlyRepository<Scope> scopeReader,
     IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
     IAsyncRepository<Person> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IEmailVerificationService emailVerification)
@@ -59,11 +60,26 @@ public class CreateUserCommandHandler(
 
         // AF-06a: a User's email must be unique among the scope's Users, compared case-insensitively
         // (LOWER() in SQL).
+        var email = command.Email.ToLower();
+
         var emailTaken = await personReader.Query().AnyAsync(person =>
-            !person.IsDeleted && person.Email.ToLower() == command.Email.ToLower() &&
+            !person.IsDeleted && person.Email.ToLower() == email &&
             person.ScopeMembership != null && person.ScopeMembership.ScopeId == scope.Id);
 
         if (emailTaken)
+        {
+            return output.WithError(PersonMessages.EmailAlreadyExists);
+        }
+
+        // FR-GO-07: the scope's address space is shared with its Google Users, so the second half of
+        // the rule is a second read — the same pair GoogleSignInCommandHandler makes before signing a
+        // Google account up, in the other order. Without it the rule held in one direction only: a
+        // Google sign-up was refused an address a User held, while a User could still be created on
+        // an address a Google User held, leaving one scope with two identities for one address.
+        var takenByGoogleUser = await googleUserReader.Query()
+            .AnyAsync(googleUser => googleUser.ScopeId == scope.Id && googleUser.Email.ToLower() == email);
+
+        if (takenByGoogleUser)
         {
             return output.WithError(PersonMessages.EmailAlreadyExists);
         }

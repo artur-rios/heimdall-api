@@ -23,13 +23,26 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     challenge token instead (FR-2F-07…FR-2F-08; see UC-38 for how the login is then completed).
 /// </summary>
 /// <remarks>
-///     AF-11a…AF-11e all return the same <see cref="AuthMessages.InvalidCredentials" /> error, so the
-///     endpoint reveals nothing about which emails exist or which accounts and scopes are deleted.
-///     The checks nonetheless run in the specification's order, so the code reads against UC-11.
+///     <para>
+///         AF-11a…AF-11e all return the same <see cref="AuthMessages.InvalidCredentials" /> error, so
+///         the endpoint reveals nothing about which emails exist or which accounts and scopes are
+///         deleted. The checks nonetheless run in the specification's order, so the code reads
+///         against UC-11.
+///     </para>
+///     <para>
+///         AF-11a additionally verifies the submitted password against a decoy hash before answering.
+///         Argon2id is deliberately expensive — 600 MB and 16 threads by the hashing library's
+///         default — so a request that skipped it because no person matched returned in single-digit
+///         milliseconds while every other rejection took hundreds. That gap is readable from outside
+///         and answers the exact question the shared message exists to refuse: whether an address is
+///         registered, and (by varying <see cref="LoginCommand.ScopeId" />) which scope it sits in.
+///         One uniform message is not anti-enumeration on its own if the timing disagrees with it.
+///     </para>
 /// </remarks>
 public class LoginCommandHandler(
     IValidator<LoginCommand> validator,
     IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncRepository<Person> personWriter,
     IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
     IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
     IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
@@ -38,7 +51,24 @@ public class LoginCommandHandler(
     PersonAuthTokenService personAuthTokenService)
     : ICommandHandlerAsync<LoginCommand, LoginCommandOutput>
 {
+    private const int MaxFailedLoginAttempts = 10;
+
     private static readonly TimeSpan EmailCodeLifetime = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+
+    // A hash of a random secret nobody knows, used only to spend the same Argon2id work on AF-11a
+    // that a real password check spends. Generated per process rather than hard-coded so it is never
+    // a value an attacker could recognise, and computed once so the cost sits at start-up rather
+    // than on the request that needs to look like every other request.
+    private static readonly (byte[] Hash, byte[] Salt) Decoy = CreateDecoy();
+
+    private static (byte[] Hash, byte[] Salt) CreateDecoy()
+    {
+        var hash = Hash.EncodeWithRandomSalt(
+            CustomRandom.Text(new RandomStringOptions { Length = 32 }), out var salt);
+
+        return (hash, salt);
+    }
 
     public async Task<DataOutput<LoginCommandOutput?>> HandleAsync(LoginCommand command)
     {
@@ -56,17 +86,35 @@ public class LoginCommandHandler(
         // logically deleted person, so they must be found first.
         var person = await FindPersonAsync(command);
 
-        // AF-11a.
+        // AF-11a. The decoy verification is what keeps this path indistinguishable from the ones
+        // below by response time — see the remarks. Its result is discarded: the answer is already
+        // decided, and only the work matters.
         if (person is null)
         {
+            VerifyAgainstDecoy(command.Password);
+
+            return output.WithError(AuthMessages.InvalidCredentials);
+        }
+
+        // A locked-out account is refused before its password is even considered (FR-AU-08). The
+        // decoy keeps the cost of that refusal equal to a real check's, so a lockout cannot be
+        // detected by how quickly it answers.
+        if (person.LockedOutUntil is { } lockedUntil && lockedUntil > DateTime.UtcNow)
+        {
+            VerifyAgainstDecoy(command.Password);
+
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
         // UC-11 step 3 (AF-11b).
         if (!Hash.TextMatches(command.Password, person.PasswordHash, person.Salt))
         {
+            await RecordFailedAttemptAsync(person);
+
             return output.WithError(AuthMessages.InvalidCredentials);
         }
+
+        await ClearFailedAttemptsAsync(person);
 
         // UC-11 step 4 (AF-11c, FR-AU-05).
         if (person.IsDeleted)
@@ -98,6 +146,69 @@ public class LoginCommandHandler(
             })
             .WithMessage(AuthMessages.LoginSuccessful);
     }
+
+    /// <summary>
+    ///     Counts a wrong password and, at <see cref="MaxFailedLoginAttempts" /> consecutive misses,
+    ///     locks the account for <see cref="LockoutDuration" /> (FR-AU-08).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The per-IP limiter in <c>Startup</c> bounds how fast one source can guess; this bounds
+    ///         how many guesses an account will accept in total, which is the half a distributed
+    ///         attacker defeats by spreading requests across addresses.
+    ///     </para>
+    ///     <para>
+    ///         The lockout is a window rather than a latch that an administrator has to clear: a
+    ///         permanent lock would hand any anonymous caller a denial of service against any account
+    ///         whose address they know, since reaching the threshold needs nothing but wrong
+    ///         passwords. Fifteen minutes cuts a sustained guessing rate to a few hundred attempts a
+    ///         day while costing a caller who genuinely mistyped their password one coffee break.
+    ///     </para>
+    ///     <para>
+    ///         A failure to persist the counter is swallowed rather than surfaced. It is
+    ///         bookkeeping — the credentials were wrong either way, and UC-11 defines no flow in
+    ///         which a caller is told that the count of their failures could not be written.
+    ///     </para>
+    /// </remarks>
+    private async Task RecordFailedAttemptAsync(Person person)
+    {
+        person.FailedLoginAttempts++;
+
+        if (person.FailedLoginAttempts >= MaxFailedLoginAttempts)
+        {
+            person.LockedOutUntil = DateTime.UtcNow.Add(LockoutDuration);
+            person.FailedLoginAttempts = 0;
+        }
+
+        await personWriter.UpdateAsync(person);
+    }
+
+    /// <summary>
+    ///     Clears the failure counter once the password checks out, so the threshold counts
+    ///     consecutive failures rather than every failure the account has ever had. Nothing is written
+    ///     when there is nothing to clear, keeping an ordinary login read-only on this table.
+    /// </summary>
+    private async Task ClearFailedAttemptsAsync(Person person)
+    {
+        if (person is { FailedLoginAttempts: 0, LockedOutUntil: null })
+        {
+            return;
+        }
+
+        person.FailedLoginAttempts = 0;
+        person.LockedOutUntil = null;
+
+        await personWriter.UpdateAsync(person);
+    }
+
+    /// <summary>
+    ///     Runs one password verification against a hash that belongs to nobody, so that AF-11a costs
+    ///     what AF-11b costs. The salt and hash are computed once, at type initialisation, from a
+    ///     random secret no one holds; only the per-request Argon2id derivation is repeated, which is
+    ///     the whole of the expense being matched.
+    /// </summary>
+    private static void VerifyAgainstDecoy(string password) =>
+        Hash.TextMatches(password, Decoy.Hash, Decoy.Salt);
 
     /// <summary>
     ///     AF-11g: issues the short-lived challenge token instead of a full one, and — per FR-2F-08 —

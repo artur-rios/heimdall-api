@@ -98,6 +98,8 @@ classDiagram
         +Guid PublicId
         +string Email
         +bool EmailVerified
+        +int FailedLoginAttempts
+        +DateTime? LockedOutUntil
     }
     class TwoFactorAuth {
         +long PersonId
@@ -105,6 +107,7 @@ classDiagram
         +bool EmailEnabled
         +byte[]? TotpSecretEncrypted
         +bool IsActive
+        +long? LastTotpTimeStepUsed
     }
     class TwoFactorEmailCode {
         +long TwoFactorAuthId
@@ -112,6 +115,7 @@ classDiagram
         +byte[] Salt
         +DateTime ExpiresAt
         +bool Used
+        +int FailedAttempts
     }
     class TwoFactorRecoveryCode {
         +long TwoFactorAuthId
@@ -257,3 +261,28 @@ Each entity has a map class under `ArturRios.Heimdall.Data/EntityMaps/` (`Person
 there: the composite key of `ScopeOwner`, the uniqueness of `ScopeUser.PersonId` (which is what makes
 "a User belongs to exactly one scope" true rather than merely intended), the per-scope uniqueness of
 `GoogleUser.GoogleId` and `GoogleUser.Email`, and the cascade behaviour above.
+
+### Email uniqueness
+
+FR-PE-09 and FR-GO-07 make an address unique in a namespace chosen by role, and the three halves
+differ in how far the database can enforce them.
+
+| Rule | Enforced by |
+| --- | --- |
+| An administrator's address is unique system-wide among live `ScopeAdmin`s and `SystemAdmin`s | `ux_person_admin_email`, a partial unique index on `LOWER(email) WHERE role_id IN (1, 2) AND is_deleted = false` |
+| A Google User's address is unique within their scope | `ix_google_user_scope_id_email`, unique on `(scope_id, LOWER(email))` |
+| A User's address is unique within their scope, jointly with that scope's Google Users | The application layer only — `CreateUserCommandHandler`, `UpdatePersonCommandHandler`, `GoogleSignInCommandHandler` |
+
+Both indexes are over `LOWER(email)` because the handlers compare addresses case-insensitively; an
+index over the raw column would enforce a different rule than the one the code applies, and accept
+pairs a handler had already refused.
+
+{{% alert title="One rule the database cannot hold" color="warning" %}}
+The third row is a check-then-insert, so two concurrent creates can both read "free" and both write.
+It cannot be a unique index: a `User`'s scope lives in `SCOPE_USER` and a PostgreSQL index covers one
+table, and a trigger would not close the race either — under `READ COMMITTED` both inserts see the
+same pre-write snapshot. Closing it properly needs the scope denormalised onto a column `PERSON` can
+index, or a reservation table keyed on `(scope_id, lower(email))` written in the same transaction.
+Until then the loser of that race is a person who cannot log in, because UC-11's lookup resolves one
+row and stops.
+{{% /alert %}}

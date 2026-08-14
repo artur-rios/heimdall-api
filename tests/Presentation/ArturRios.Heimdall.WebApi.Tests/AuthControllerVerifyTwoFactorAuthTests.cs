@@ -139,6 +139,37 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     }
 
     [FunctionalFact]
+    public async Task GivenAppCodeAlreadyRedeemed_WhenPostTwoFactorVerifyAgain_ThenUnauthorized()
+    {
+        // Given a person who has enabled and confirmed App-based 2FA, and has already completed one
+        // 2FA-gated login with the current app code
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("totp-replay"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
+        var secret = await EnableAppAsync("App");
+        Assert.Equal(HttpStatusCode.OK, (await ConfirmAsync(CurrentTotpCode(secret))).StatusCode);
+
+        var appCode = CurrentTotpCode(secret);
+
+        await db.ForgetLastTotpStepAsync(person.PublicId);
+
+        var firstLogin = await LoginAsync(person.Email);
+        var firstVerify = await VerifyAsync(firstLogin.Body!.Data!.ChallengeToken!, appCode);
+        Assert.Equal(HttpStatusCode.OK, firstVerify.StatusCode);
+
+        // When an attacker who observed that same code — over a shoulder, through a phishing proxy,
+        // or in a logged request body — presents it again inside the same 30-second step, holding a
+        // challenge token of their own from the password they already knew
+        var secondLogin = await LoginAsync(person.Email);
+        var replay = await VerifyAsync(secondLogin.Body!.Data!.ChallengeToken!, appCode);
+
+        // Then it is refused: an app code is good exactly once (FR-2F-09, RFC 6238 §5.2), and the
+        // refusal is AF-38b's ordinary message, which says nothing about why
+        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        Assert.Null(replay.Body?.Data?.Token);
+        Assert.Contains(TwoFactorMessages.FactorInvalid, replay.Body!.Errors);
+    }
+
+    [FunctionalFact]
     public async Task GivenFullTwoFactorFlow_WhenEnablingConfirmingLoggingInAndVerifying_ThenFullTokenIsIssued()
     {
         // Given a person who enables and confirms App-based 2FA through the real endpoints
@@ -147,6 +178,12 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         var secret = await EnableAppAsync("App");
         var confirm = await ConfirmAsync(CurrentTotpCode(secret));
         Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
+
+        // The confirmation spent the current time step, and an app code is good once. Redeeming the
+        // challenge below with a code from that same step is the replay the guard refuses — covered
+        // on its own by GivenAppCodeAlreadyUsed_..., so forget the step here rather than sleep it
+        // out. See PostgresFixture.ForgetLastTotpStepAsync.
+        await db.ForgetLastTotpStepAsync(person.PublicId);
 
         // When logging in with the correct password. The stale bearer header from the setup above is
         // simply ignored: /api/auth/login is [AllowAnonymous], so AuthenticationMiddleware never
@@ -193,6 +230,12 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         var secret = await EnableAppAsync("App");
         var confirm = await ConfirmAsync(CurrentTotpCode(secret));
         Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
+
+        // The confirmation spent the current time step, and an app code is good once. Redeeming the
+        // challenge below with a code from that same step is the replay the guard refuses — covered
+        // on its own by GivenAppCodeAlreadyUsed_..., so forget the step here rather than sleep it
+        // out. See PostgresFixture.ForgetLastTotpStepAsync.
+        await db.ForgetLastTotpStepAsync(person.PublicId);
 
         var login = await LoginAsync(person.Email);
         Assert.True(login.Body!.Data!.RequiresTwoFactor);

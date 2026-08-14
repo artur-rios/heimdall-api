@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
 
@@ -11,10 +12,13 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 ///     (published into the environment by <see cref="PostgresFixture" />).
 /// </summary>
 /// <remarks>
-///     Authentication runs in <c>ClaimsOnly</c> mode, so the person a token names need not exist in
-///     the database — which keeps tests that only exercise a role gate from having to seed one.
-///     Tests whose behaviour depends on <em>who</em> the caller is must pass that person's
-///     <c>PublicId</c> explicitly.
+///     Authentication runs in <c>ClaimsOnly</c> mode, so no database read happens per request — but
+///     <see cref="ActorLivenessFilter" /> does resolve the caller, so the person a token names has to
+///     exist and be live. <see cref="ForRole" /> therefore names one of
+///     <see cref="PostgresFixture.StandInPersonIds" />, which the fixture seeds, and which keeps
+///     tests that only exercise a role gate from having to seed anyone themselves. Tests whose
+///     behaviour depends on <em>who</em> the caller is must seed that person and pass their
+///     <c>PublicId</c> to <see cref="For" />.
 /// </remarks>
 public static class TestTokens
 {
@@ -23,10 +27,11 @@ public static class TestTokens
     private const string AudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
     /// <summary>
-    ///     Builds a bearer token for an unspecified person with the given role value (see
-    ///     <c>Roles</c>), for tests that only care that the caller holds the role.
+    ///     Builds a bearer token for the stand-in person of the given role value (see <c>Roles</c>),
+    ///     for tests that only care that the caller holds the role. The stand-in owns no scope and
+    ///     belongs to none, so it carries exactly the authority the role alone confers.
     /// </summary>
-    public static string ForRole(int role) => For(Guid.NewGuid(), role);
+    public static string ForRole(int role) => For(PostgresFixture.StandInPersonIds[(Roles)role], role);
 
     /// <summary>Builds a bearer token for a specific person's <c>PublicId</c> and role value.</summary>
     public static string For(

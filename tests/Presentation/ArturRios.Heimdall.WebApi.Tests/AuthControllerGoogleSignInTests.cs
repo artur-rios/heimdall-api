@@ -292,6 +292,48 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     [FunctionalFact]
+    public async Task GivenEmailHeldByALogicallyDeletedGoogleUser_WhenPostAuthGoogle_ThenReturnsConflict()
+    {
+        // Given the address is held in this scope by a Google User that UC-28 logically deleted, and
+        // a different Google account now signing up on it.
+        //
+        // The AF-25c check used to exclude deleted rows while the unique index on
+        // (scope_id, lower(email)) does not, so this answered "address is free" and then failed on
+        // the insert — a persistence error in place of the 409, for a caller who could never get
+        // past it. The check now matches the index.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("deleted-holder");
+        await SeedGoogleUserAsync(scope, $"google-sub-{Guid.NewGuid():N}", email, isDeleted: true);
+
+        // When
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
+
+        // Then — a clean 409, and no second row
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(AuthMessages.EmailAlreadyExists, response.Body!.Errors);
+        Assert.Single(await StoredAsync(scope));
+    }
+
+    [FunctionalFact]
+    public async Task GivenEmailDifferingOnlyByCase_WhenPostAuthGoogle_ThenReturnsConflict()
+    {
+        // Given the same address in different casing. The application compares with LOWER(), so the
+        // index has to as well — over the raw column, "Taken@x" and "taken@x" were two free
+        // addresses to the database and one taken address to the handler.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("cased");
+        await SeedGoogleUserAsync(scope, $"google-sub-{Guid.NewGuid():N}", email.ToUpperInvariant());
+
+        // When
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
+
+        // Then
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(AuthMessages.EmailAlreadyExists, response.Body!.Errors);
+        Assert.Single(await StoredAsync(scope));
+    }
+
+    [FunctionalFact]
     public async Task GivenEmailAlreadyUsedByAnotherGoogleUserInScope_WhenPostAuthGoogle_ThenReturnsConflict()
     {
         // Given the address is held in this scope by a Google User with a different 'sub'

@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -203,18 +204,19 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenTokenNamingNoEligiblePerson_WhenPostConfirm2fa_ThenNotFound()
+    public async Task GivenTokenNamingNoIdentity_WhenPostConfirm2fa_ThenUnauthorized()
     {
-        // Given — AF-37a's other shape: no live Person named by the token, the same shape a
-        // Google-issued token has here (UC-25 step 8).
-        Authorize(TestTokens.ForRole((int)Roles.User));
+        // Given a bearer token naming neither a Person nor a Google User
+        Authorize(TestTokens.For(Guid.NewGuid(), (int)Roles.User));
 
         // When
         var response = await ConfirmAsync(CurrentTotpCode(Base32Secret));
 
-        // Then
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.NoPendingSetup, response.Body!.Errors);
+        // Then — ActorLivenessFilter answers before the handler, so this is a 401 rather than
+        // AF-37a's 404. A caller with a live identity and no pending setup still gets the 404;
+        // GivenNoPendingSetup_... covers that.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 
     [FunctionalFact]

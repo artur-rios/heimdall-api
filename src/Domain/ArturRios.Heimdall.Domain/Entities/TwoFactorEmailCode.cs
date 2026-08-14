@@ -29,6 +29,14 @@ public class TwoFactorEmailCode : Entity
     /// <summary>Whether the code has already been consumed or superseded by a fresher one.</summary>
     public bool Used { get; set; }
 
+    /// <summary>
+    ///     Wrong guesses made against this code. A six-digit code has a million values and lives ten
+    ///     minutes, which a distributed attacker can cover a real fraction of; retiring the code once
+    ///     this reaches its cap bounds each issued code to a handful of attempts, so guessing costs a
+    ///     fresh login per few tries rather than being free.
+    /// </summary>
+    public int FailedAttempts { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

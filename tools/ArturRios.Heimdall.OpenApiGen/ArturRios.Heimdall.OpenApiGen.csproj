@@ -15,7 +15,7 @@
          version is chosen; it is declared here because this project uses SwaggerGen's types directly.
          Microsoft.OpenApi needs no entry of its own — Util.WebApi 3.1.0 aligns it with the version
          Swashbuckle was built against, which is what makes generating a document possible at all. -->
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -123,14 +124,13 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
             .ToListAsync();
     }
 
-    private async Task<EmailVerificationToken> SingleLiveTokenAsync(Person person)
-    {
-        var live = (await TokensForAsync(person))
-            .Where(token => !token.Used && token.ExpiresAt > DateTime.UtcNow)
-            .ToList();
+    private async Task<List<EmailVerificationToken>> LiveTokensAsync(Person person) =>
+        (await TokensForAsync(person))
+        .Where(token => !token.Used && token.ExpiresAt > DateTime.UtcNow)
+        .ToList();
 
-        return Assert.Single(live);
-    }
+    private async Task<EmailVerificationToken> SingleLiveTokenAsync(Person person) =>
+        Assert.Single(await LiveTokensAsync(person));
 
     [FunctionalFact]
     public async Task GivenAuthenticatedSystemAdmin_WhenPostResendVerification_ThenNewTokenIsIssued()
@@ -282,25 +282,25 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     [FunctionalFact]
     public async Task GivenTokenNamingNoExistingPerson_WhenPostResendVerification_ThenNotFound()
     {
-        // Given a well-formed token for a person who is not in the database. Authentication runs in
-        // ClaimsOnly mode — no read per request — so this is what a hard deletion (UC-10) leaves
-        // behind: a valid token and no address to send to.
-        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        // Given a well-formed token for a person who is not in the database — what a hard deletion
+        // (UC-10) leaves behind, since authentication itself reads no data store.
+        Authorize(TestTokens.For(Guid.NewGuid(), (int)Roles.SystemAdmin));
 
         // When
         var response = await ResendAsync();
 
-        // Then
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Contains(AuthMessages.PersonNotFound, response.Body!.Errors);
+        // Then — ActorLivenessFilter refuses it before the handler runs, so this is a 401 rather
+        // than the handler's own 404. That is the stronger answer and the uniform one: a token
+        // naming nobody is not a request that failed to find something, it is a token the API will
+        // not honour anywhere.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 
     [FunctionalFact]
-    public async Task GivenLogicallyDeletedPerson_WhenPostResendVerification_ThenNewTokenIsIssued()
+    public async Task GivenLogicallyDeletedPerson_WhenPostResendVerification_ThenUnauthorized()
     {
-        // Given a deletion that landed after the caller's bearer token was issued. UC-15 defines
-        // exactly one alternative flow, so refusing here would be inventing a second — and verifying
-        // grants nothing on its own, since UC-11 refuses the login by AF-11c either way.
+        // Given a deletion that landed after the caller's bearer token was issued
         var email = UniqueEmail("deleted");
         var person = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -308,11 +308,16 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         // When
         var response = await ResendAsync();
 
-        // Then
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await SingleLiveTokenAsync(person);
+        // Then — refused. This endpoint used to serve a logically deleted person, on the reasoning
+        // that UC-15 defines one alternative flow and a verified address grants nothing on its own.
+        // ActorLivenessFilter overrides that: FR-AU-05 says a deleted person cannot authenticate,
+        // and letting their token keep working everywhere except login made that true of one
+        // endpoint rather than of the account. Nothing is issued.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
+        Assert.Empty(await LiveTokensAsync(person));
 
-        // Then — and it buys them nothing: the login is still refused
+        // Then — and the login they were deleted out of is still refused
         var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
             "/api/auth/login", new LoginCommand { Email = email, Password = Password });
 

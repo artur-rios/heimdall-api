@@ -41,6 +41,20 @@ public class Person : Entity
     /// <summary>Email verification status.</summary>
     public bool EmailVerified { get; set; }
 
+    /// <summary>
+    ///     Consecutive failed password attempts since the last successful login. Reset to zero on
+    ///     success, and the counter <see cref="LockedOutUntil" /> is derived from.
+    /// </summary>
+    public int FailedLoginAttempts { get; set; }
+
+    /// <summary>
+    ///     When set and still in the future, login is refused regardless of the password supplied —
+    ///     the per-account half of the brute-force defence, alongside the per-IP request limiter. The
+    ///     refusal is UC-11's ordinary <c>InvalidCredentials</c>, so a lockout is not observable to a
+    ///     caller who does not already know the password.
+    /// </summary>
+    public DateTime? LockedOutUntil { get; set; }
+
     /// <summary>Foreign key to the associated <c>Role</c> (internal Id). Required.</summary>
     public long RoleId { get; set; }
 

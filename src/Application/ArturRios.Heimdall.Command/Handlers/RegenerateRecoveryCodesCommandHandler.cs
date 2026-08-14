@@ -30,6 +30,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     marking used here — every existing recovery code is about to be deleted regardless, and an
 ///     email code that authorized a regeneration carries no further significance once the request
 ///     succeeds.
+///     <para>
+///         <b>Write order.</b> The replacements are inserted before the old set is deleted, in a
+///         single <see cref="IAsyncRepository{T}.CreateRangeAsync" /> rather than ten inserts. The
+///         repository layer exposes no transaction, so ordering is what decides which way a partial
+///         failure falls: delete-then-create can leave an account with no recovery codes at all,
+///         while create-then-delete leaves it with the set the caller already holds — the state it
+///         was in before the request, which is the only safe direction to fail in for a credential
+///         of last resort.
+///     </para>
 /// </remarks>
 public class RegenerateRecoveryCodesCommandHandler(
     IAsyncReadOnlyRepository<Person> personReader,
@@ -71,35 +80,36 @@ public class RegenerateRecoveryCodesCommandHandler(
             return output.WithError(TwoFactorMessages.FactorInvalid);
         }
 
-        // UC-40 step 3: every existing recovery code row is replaced, including any still unused.
-        var existingRecoveryCodeIds = await recoveryCodeReader.Query()
+        // UC-40 step 3: the rows this call replaces, captured before anything is written. Taking the
+        // set first means a run that failed partway through last time — leaving rows behind — has
+        // those rows swept up here too, rather than accumulating.
+        var supersededRecoveryCodeIds = await recoveryCodeReader.Query()
             .Where(x => x.TwoFactorAuthId == twoFactorAuth.Id)
             .Select(x => x.Id)
             .ToListAsync();
 
-        if (existingRecoveryCodeIds.Count > 0)
+        // UC-40 steps 4-5 (FR-2F-12): ten fresh recovery codes, hashed at rest, returned once,
+        // written in one insert before the old set is removed — see the write-order note below.
+        var recoveryCodes = GenerateRecoveryCodes();
+
+        var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
+            new TwoFactorRecoveryCode
+            {
+                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+            }));
+
+        if (!creation.Success)
         {
-            var deletion = await recoveryCodeWriter.DeleteRangeAsync(existingRecoveryCodeIds);
+            return output.WithErrors(creation.Errors);
+        }
+
+        if (supersededRecoveryCodeIds.Count > 0)
+        {
+            var deletion = await recoveryCodeWriter.DeleteRangeAsync(supersededRecoveryCodeIds);
 
             if (!deletion.Success)
             {
                 return output.WithErrors(deletion.Errors);
-            }
-        }
-
-        // UC-40 steps 4-5 (FR-2F-12): ten fresh recovery codes, hashed at rest, returned once.
-        var recoveryCodes = GenerateRecoveryCodes();
-
-        foreach (var recoveryCode in recoveryCodes)
-        {
-            var creation = await recoveryCodeWriter.CreateAsync(new TwoFactorRecoveryCode
-            {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = HashRecoveryCode(recoveryCode), Used = false
-            });
-
-            if (!creation.Success)
-            {
-                return output.WithErrors(creation.Errors);
             }
         }
 
