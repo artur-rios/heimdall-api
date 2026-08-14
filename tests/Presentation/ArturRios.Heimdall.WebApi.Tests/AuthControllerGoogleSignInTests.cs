@@ -381,6 +381,29 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     [FunctionalFact]
+    public async Task GivenStoredValueIsVerifiedAndTokenSaysOtherwise_WhenPostAuthGoogle_ThenStoredValueIsDowngraded()
+    {
+        // Given the refresh running in the direction its unit test can only assert against a mock:
+        // a stored true, and a token that actively asserts the address is not verified. FR-GO-19 is
+        // "match the token", so this must reach the database — unlike an absent claim, which asserts
+        // nothing and leaves the row alone.
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("downgrade");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(subject, email, emailVerified: false));
+
+        // Then — the response and the persisted row both report the token's value
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.False(stored.EmailVerified);
+    }
+
+    [FunctionalFact]
     public async Task GivenStoredValueIsStale_WhenPostAuthGoogle_ThenStoredValueIsRefreshed()
     {
         // Given a Google User registered while their address was unverified, signing in again with
