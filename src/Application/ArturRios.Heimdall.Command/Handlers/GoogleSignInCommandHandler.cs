@@ -84,6 +84,12 @@ public class GoogleSignInCommandHandler(
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }
 
+        // FR-GO-19: the row was populated from the token at sign-up (FR-GO-09) and never touched
+        // again, so a Google account verified after its first sign-in here kept a stale flag. The
+        // token just verified is the fresher truth, so the column is brought back into line — a
+        // no-op on a sign-up, where the two already agree by construction.
+        await RefreshEmailVerifiedAsync(googleUser, payload);
+
         // UC-25 step 8 (FR-GO-04): the token claims the Google User's PublicId, the User role — a
         // Google account is never a ScopeAdmin or SystemAdmin — and the one scope it belongs to.
         // Internal bigint Ids never reach a token (NFR-15), and OwnedScopeIds is empty because
@@ -100,6 +106,32 @@ public class GoogleSignInCommandHandler(
                 Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = payload.EmailVerified
             })
             .WithMessage(AuthMessages.GoogleSignInSuccessful);
+    }
+
+    /// <summary>
+    ///     FR-GO-19: writes the verified token's <c>email_verified</c> back to the stored row when
+    ///     the two disagree, so a returning Google User's flag does not stay frozen at whatever it
+    ///     was on their first sign-in. Nothing is written when they already agree, keeping the
+    ///     ordinary sign-in path read-only.
+    /// </summary>
+    /// <remarks>
+    ///     A failed write does not fail the sign-in. The caller has proved the account is theirs and
+    ///     the token is theirs to receive; a flag that could not be refreshed is a data-freshness
+    ///     problem, not an authentication one — the same judgement
+    ///     <c>LoginCommandHandler.IssueFreshEmailCodeAsync</c> makes about a delivery failure. The
+    ///     response reports the payload's value either way, so the caller is told the truth
+    ///     regardless of whether the write landed.
+    /// </remarks>
+    private async Task RefreshEmailVerifiedAsync(GoogleUser googleUser, GoogleIdTokenPayload payload)
+    {
+        if (googleUser.EmailVerified == payload.EmailVerified)
+        {
+            return;
+        }
+
+        googleUser.EmailVerified = payload.EmailVerified;
+
+        await googleUserWriter.UpdateAsync(googleUser);
     }
 
     /// <summary>

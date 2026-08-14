@@ -379,4 +379,25 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.False(response.Body!.Data!.EmailVerified);
     }
+
+    [FunctionalFact]
+    public async Task GivenStoredValueIsStale_WhenPostAuthGoogle_ThenStoredValueIsRefreshed()
+    {
+        // Given a Google User registered while their address was unverified, signing in again with
+        // a token that now says verified (FR-GO-19)
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("stale");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(subject, email, emailVerified: true));
+
+        // Then — the response and the persisted row both report the token's value
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.True(stored.EmailVerified);
+    }
 }

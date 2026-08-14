@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -489,5 +490,70 @@ public class GoogleSignInCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.True(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueIsStale_WhenHandlingGoogleSignIn_ThenStoredValueIsRefreshedFromTheToken()
+    {
+        // Given a returning Google User stored as unverified whose address has since been verified
+        // at Google: FR-GO-10 must not leave the row stale forever (FR-GO-19)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — the sign-in succeeded and the row now agrees with Google
+        Assert.True(output.Success);
+        var stored = (await googleUsers.GetAllAsync()).Data!.Single();
+        Assert.True(stored.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenGoogleRevokedVerification_WhenHandlingGoogleSignIn_ThenStoredValueIsRefreshedToFalse()
+    {
+        // Given the refresh running in the other direction too — the rule is "match the token",
+        // not "only ever turn the flag on"
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        var stored = (await googleUsers.GetAllAsync()).Data!.Single();
+        Assert.False(stored.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueAlreadyAgrees_WhenHandlingGoogleSignIn_ThenNoUpdateIsWritten()
+    {
+        // Given a row already matching the token: the ordinary sign-in path stays read-only
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
+        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, writer.Object, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        writer.Verify(w => w.UpdateAsync(It.IsAny<GoogleUser>()), Times.Never);
     }
 }
