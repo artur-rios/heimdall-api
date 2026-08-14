@@ -47,7 +47,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     private async Task<GoogleUser> SeedGoogleUserAsync(
-        Scope scope, string googleId, string email, bool isDeleted = false)
+        Scope scope, string googleId, string email, bool isDeleted = false, bool emailVerified = true)
     {
         await using var context = db.CreateContext();
 
@@ -57,7 +57,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
             GoogleId = googleId,
             Name = "Existing Signer",
             Email = email,
-            EmailVerified = true,
+            EmailVerified = emailVerified,
             ScopeId = scope.Id,
             IsDeleted = isDeleted
         };
@@ -363,5 +363,85 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
         var stored = Assert.Single(await StoredAsync(scope));
         Assert.True(stored.IsDeleted);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTokenReportsUnverifiedAddress_WhenPostAuthGoogle_ThenResponseReportsEmailVerifiedFalse()
+    {
+        // Given a first sign-in with a Google token whose email_verified claim is false (FR-EV-05)
+        var scope = await SeedScopeAsync();
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(emailVerified: false));
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Body!.Data!.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenStoredValueIsStale_WhenPostAuthGoogle_ThenStoredValueIsRefreshed()
+    {
+        // Given a Google User registered while their address was unverified, signing in again with
+        // a token that now says verified (FR-GO-19)
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("stale");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(subject, email, emailVerified: true));
+
+        // Then — the response and the persisted row both report the token's value
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.True(stored.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTokenOmitsEmailVerifiedClaim_WhenPostAuthGoogle_ThenStoredVerifiedValueIsKept()
+    {
+        // Given a verified Google User signing in again with a token that carries no email_verified
+        // claim at all — what a client that asked for a token without the email scope presents. An
+        // absent claim asserts nothing, so FR-GO-19's refresh must not downgrade the stored value
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("silent-claim");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(subject, email, emailVerified: null));
+
+        // Then — the row and the response both still say verified
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.True(stored.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTokenEmailVerifiedClaimIsNull_WhenPostAuthGoogle_ThenStoredVerifiedValueIsKept()
+    {
+        // Given a verified Google User signing in again with a token whose email_verified claim is
+        // present but JSON null. It asserts no more than an omitted claim does, so FR-GO-19's
+        // refresh must leave the stored value alone here too rather than read the null as "false"
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("null-claim");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.WithNullEmailVerified(subject, email));
+
+        // Then — the row and the response both still say verified
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.True(stored.EmailVerified);
     }
 }

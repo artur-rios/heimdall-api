@@ -84,6 +84,13 @@ public class GoogleSignInCommandHandler(
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }
 
+        // FR-GO-19: the row was populated from the token at sign-up (FR-GO-09) and never touched
+        // again, so a Google account verified after its first sign-in here kept a stale flag. The
+        // token just verified is the fresher truth, so the column is brought back into line — a
+        // no-op on a sign-up, where the two already agree by construction, and a no-op when the
+        // token carries no email_verified claim at all.
+        await RefreshEmailVerifiedAsync(googleUser, payload);
+
         // UC-25 step 8 (FR-GO-04): the token claims the Google User's PublicId, the User role — a
         // Google account is never a ScopeAdmin or SystemAdmin — and the one scope it belongs to.
         // Internal bigint Ids never reach a token (NFR-15), and OwnedScopeIds is empty because
@@ -95,8 +102,43 @@ public class GoogleSignInCommandHandler(
             []));
 
         return output
-            .WithData(new GoogleSignInCommandOutput { Token = token.Token, ExpiresAt = token.ExpiresAt })
+            .WithData(new GoogleSignInCommandOutput
+            {
+                // The stored flag, which the refresh above has already brought into line with the
+                // token whenever the token had something to say. Reporting the row rather than the
+                // claim keeps the response answerable when the claim is absent, without the
+                // published field having to become nullable.
+                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = googleUser.EmailVerified
+            })
             .WithMessage(AuthMessages.GoogleSignInSuccessful);
+    }
+
+    /// <summary>
+    ///     FR-GO-19: writes the verified token's <c>email_verified</c> back to the stored row when
+    ///     the two disagree, so a returning Google User's flag does not stay frozen at whatever it
+    ///     was on their first sign-in. Nothing is written when they already agree, keeping the
+    ///     ordinary sign-in path read-only, and nothing is written when the token carries no such
+    ///     claim — silence is not an assertion that the address is unverified, so a caller whose
+    ///     client asked for a token without the <c>email</c> scope keeps whatever is stored.
+    /// </summary>
+    /// <remarks>
+    ///     A failed write does not fail the sign-in. The caller has proved the account is theirs and
+    ///     the token is theirs to receive; a flag that could not be refreshed is a data-freshness
+    ///     problem, not an authentication one — the same judgement <c>EmailVerificationService</c>
+    ///     and <c>PasswordResetService</c> make about the writes they discard the result of. The
+    ///     response reports the in-memory row either way, so the caller is told the value this
+    ///     sign-in settled on regardless of whether the write landed.
+    /// </remarks>
+    private async Task RefreshEmailVerifiedAsync(GoogleUser googleUser, GoogleIdTokenPayload payload)
+    {
+        if (payload.EmailVerified is not { } claimed || googleUser.EmailVerified == claimed)
+        {
+            return;
+        }
+
+        googleUser.EmailVerified = claimed;
+
+        await googleUserWriter.UpdateAsync(googleUser);
     }
 
     /// <summary>
@@ -138,13 +180,16 @@ public class GoogleSignInCommandHandler(
 
         // FR-GO-05/06: every field comes from the verified token, and the row is bound to the one
         // scope the sign-in was initiated in. Name and picture are optional on the token — a caller
-        // who granted only the email scope still gets an account, with the fields left empty.
+        // who granted only the email scope still gets an account, with the fields left empty. An
+        // absent email_verified claim becomes false: the column is not nullable, and there is
+        // nothing stored yet to preserve, so a brand-new row starts unverified — the value it would
+        // have held before FR-GO-19 existed.
         var newGoogleUser = new GoogleUser
         {
             GoogleId = payload.Subject,
             Name = payload.Name ?? string.Empty,
             Email = payload.Email,
-            EmailVerified = payload.EmailVerified,
+            EmailVerified = payload.EmailVerified ?? false,
             ProfilePictureUrl = payload.PictureUrl,
             ScopeId = scope.Id
         };

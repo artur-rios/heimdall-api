@@ -71,7 +71,7 @@ sequenceDiagram
     H->>TI: IssueAsync(googleUser.PublicId, User role, scope.PublicId)
     TI->>DB: SELECT flagged scope permissions
     TI-->>H: signed JWT + expiry
-    H-->>C: 200 {token, expiresAt}
+    H-->>C: 200 {token, expiresAt, emailVerified}
 ```
 
 **Verification comes first, before the scope is even read.** An unverified caller learns nothing

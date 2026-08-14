@@ -8,7 +8,8 @@ namespace ArturRios.Heimdall.Command.Output;
 ///     authentication — a short-lived challenge token and the second-factor methods available,
 ///     leaving <see cref="Token" />/<see cref="ExpiresAt" /> unset. <see cref="RequiresTwoFactor" />
 ///     tells a caller which shape they got. The full token's own claims carry the person's and
-///     scopes' <c>PublicId</c>s (FR-AU-04); nothing about the person is repeated here.
+///     scopes' <c>PublicId</c>s (FR-AU-04); the only thing about the person repeated here is
+///     <see cref="EmailVerified" />, which no claim carries.
 /// </summary>
 public class LoginCommandOutput : CommandOutput
 {
@@ -17,6 +18,15 @@ public class LoginCommandOutput : CommandOutput
 
     /// <summary>When the token expires, in UTC. Null when <see cref="RequiresTwoFactor" /> is true.</summary>
     public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>
+    ///     Whether the authenticated person's email address is verified (FR-EV-05), so a caller
+    ///     knows whether to prompt them and offer <c>POST /api/auth/resend-verification</c> (UC-15).
+    ///     Null when <see cref="RequiresTwoFactor" /> is true: the caller has passed only the first
+    ///     factor and is not authenticated yet, so this response tells them nothing about the
+    ///     account. They receive it from <c>POST /api/auth/2fa/verify</c> instead (UC-38).
+    /// </summary>
+    public bool? EmailVerified { get; set; }
 
     /// <summary>
     ///     AF-11g (FR-2F-07): true when the person has active two-factor authentication, so this

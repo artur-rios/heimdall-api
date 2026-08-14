@@ -41,7 +41,8 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     }
 
     private async Task<Person> SeedPersonAsync(
-        Roles role, string email, bool isDeleted = false, string password = Password)
+        Roles role, string email, bool isDeleted = false, string password = Password,
+        bool emailVerified = true)
     {
         await using var context = db.CreateContext();
         var person = new Person
@@ -52,7 +53,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
             PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt),
             Salt = salt,
             RoleId = (long)role,
-            EmailVerified = true,
+            EmailVerified = emailVerified,
             IsDeleted = isDeleted
         };
         context.Persons.Add(person);
@@ -335,5 +336,34 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(response.Body?.Data?.Token);
+    }
+
+    [FunctionalFact]
+    public async Task GivenUnverifiedPerson_WhenPostAuthLogin_ThenResponseReportsEmailVerifiedFalse()
+    {
+        // Given an admin who never confirmed their address (FR-EV-05)
+        var person = await SeedPersonAsync(
+            Roles.SystemAdmin, UniqueEmail("unverified"), emailVerified: false);
+
+        // When
+        var response = await LoginAsync(person.Email);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Body!.Data!.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenVerifiedPerson_WhenPostAuthLogin_ThenResponseReportsEmailVerifiedTrue()
+    {
+        // Given an admin who confirmed their address
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("verified"));
+
+        // When
+        var response = await LoginAsync(person.Email);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
     }
 }

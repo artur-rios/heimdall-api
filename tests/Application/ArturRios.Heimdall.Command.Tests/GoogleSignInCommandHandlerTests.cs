@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -27,7 +28,7 @@ public class GoogleSignInCommandHandlerTests
     private static GoogleIdTokenPayload Payload(
         string subject = GoogleSubject,
         string email = Email,
-        bool emailVerified = true,
+        bool? emailVerified = true,
         string? name = "Google Signer",
         string? pictureUrl = "https://lh3.googleusercontent.test/a/photo") =>
         new(subject, email, emailVerified, name, pictureUrl);
@@ -71,7 +72,8 @@ public class GoogleSignInCommandHandlerTests
         Scope scope,
         string googleId = GoogleSubject,
         string email = Email,
-        bool isDeleted = false)
+        bool isDeleted = false,
+        bool emailVerified = true)
     {
         // Bogus fills the descriptive fields; only what the lookups read is pinned.
         var googleUser = new Bogus.Faker<GoogleUser>()
@@ -80,6 +82,7 @@ public class GoogleSignInCommandHandlerTests
             .RuleFor(x => x.Email, _ => email)
             .RuleFor(x => x.ScopeId, _ => scope.Id)
             .RuleFor(x => x.IsDeleted, _ => isDeleted)
+            .RuleFor(x => x.EmailVerified, _ => emailVerified)
             .Generate();
 
         await googleUsers.CreateAsync(googleUser);
@@ -428,5 +431,181 @@ public class GoogleSignInCommandHandlerTests
         var stored = (await googleUsers.GetAllAsync()).Data!.Single();
         Assert.Equal(string.Empty, stored.Name);
         Assert.Null(stored.ProfilePictureUrl);
+    }
+
+    [UnitFact]
+    public async Task GivenPayloadReportsVerifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedTrue()
+    {
+        // Given Google asserting the address is verified (FR-EV-05)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenPayloadReportsUnverifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedFalse()
+    {
+        // Given Google asserting the address is not verified — email_verified can be false
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueDisagreesWithPayload_WhenHandlingGoogleSignIn_ThenOutputReportsThePayload()
+    {
+        // Given a returning Google User stored as unverified whose token now says verified: the
+        // token just verified in this request is the fresher truth (design: source of the value)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueIsStale_WhenHandlingGoogleSignIn_ThenStoredValueIsRefreshedFromTheToken()
+    {
+        // Given a returning Google User stored as unverified whose address has since been verified
+        // at Google: FR-GO-10 must not leave the row stale forever (FR-GO-19)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
+        // A mock writer, not the fake repository: the fake holds entity references, so the handler's
+        // in-memory assignment alone would satisfy a GetAllAsync() assertion whether or not the row
+        // was ever written back. Verifying the write is the only way this test can fail if the
+        // UpdateAsync call goes away.
+        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, writer.Object, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — the sign-in succeeded and the row was written back carrying Google's value
+        Assert.True(output.Success);
+        writer.Verify(w => w.UpdateAsync(It.Is<GoogleUser>(g => g.EmailVerified)), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenGoogleRevokedVerification_WhenHandlingGoogleSignIn_ThenStoredValueIsRefreshedToFalse()
+    {
+        // Given the refresh running in the other direction too — the rule is "match the token",
+        // not "only ever turn the flag on"
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
+        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, writer.Object, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — written back, in the other direction
+        Assert.True(output.Success);
+        writer.Verify(w => w.UpdateAsync(It.Is<GoogleUser>(g => !g.EmailVerified)), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueAlreadyAgrees_WhenHandlingGoogleSignIn_ThenNoUpdateIsWritten()
+    {
+        // Given a row already matching the token: the ordinary sign-in path stays read-only
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
+        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, writer.Object, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        writer.Verify(w => w.UpdateAsync(It.IsAny<GoogleUser>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenTokenOmitsEmailVerifiedClaim_WhenHandlingGoogleSignIn_ThenStoredVerifiedValueIsKeptAndReported()
+    {
+        // Given a returning Google User stored as verified whose client obtained a token without the
+        // email scope, so it carries no email_verified claim at all: silence is not an assertion
+        // that the address is unverified, so FR-GO-19's refresh must leave the row alone
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
+        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, writer.Object, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — nothing written, and the caller is told what is stored rather than a downgrade
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
+        writer.Verify(w => w.UpdateAsync(It.IsAny<GoogleUser>()), Times.Never);
+        var stored = (await googleUsers.GetAllAsync()).Data!.Single();
+        Assert.True(stored.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenSignUpTokenOmitsEmailVerifiedClaim_WhenHandlingGoogleSignIn_ThenGoogleUserIsCreatedUnverified()
+    {
+        // Given a first sign-in with a token carrying no email_verified claim: there is nothing
+        // stored to preserve, and the column is not nullable, so the new row starts unverified
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.EmailVerified);
+        var stored = (await googleUsers.GetAllAsync()).Data!.Single();
+        Assert.False(stored.EmailVerified);
     }
 }

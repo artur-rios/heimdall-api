@@ -21,4 +21,13 @@ public class GoogleSignInCommandOutput : CommandOutput
 
     /// <summary>When the token expires, in UTC.</summary>
     public DateTime ExpiresAt { get; set; }
+
+    /// <summary>
+    ///     Whether the account's email address is verified (FR-EV-05): the Google User's stored
+    ///     flag, refreshed from the ID token verified in this same request whenever that token
+    ///     carried an <c>email_verified</c> claim (FR-GO-19). The token is the fresher of the two
+    ///     when it speaks; when it is silent the stored value stands, so the field always has an
+    ///     answer.
+    /// </summary>
+    public bool EmailVerified { get; set; }
 }

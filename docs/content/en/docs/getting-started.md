@@ -128,7 +128,8 @@ Log in as the master system administrator:
 curl -X POST http://localhost:5177/api/auth/login -H "Content-Type: application/json" -d '{"email":"<master-email>","password":"<master-password>"}'
 ```
 
-The response carries `token` and `expiresAt`. Send it as `Authorization: Bearer <token>` on every
+The response carries `token`, `expiresAt`, and `emailVerified` — the last telling you whether to
+prompt the person to confirm their address. Send it as `Authorization: Bearer <token>` on every
 other endpoint — see the [API reference](../api-reference/) for who may call what.
 
 {{% alert title="Two-factor" color="info" %}}

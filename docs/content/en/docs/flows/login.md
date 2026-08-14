@@ -52,9 +52,9 @@ sequenceDiagram
         TS->>TI: IssueAsync
         TI->>DB: SELECT flagged scope permissions
         TI-->>TS: signed JWT + expiry
-        H-->>AH: DataOutput{token, expiresAt}
+        H-->>AH: DataOutput{token, expiresAt, emailVerified}
         AH->>DB: INSERT AuditLog(LoginCommand)
-        AH-->>C: 200 {token, expiresAt}
+        AH-->>C: 200 {token, expiresAt, emailVerified}
     end
 ```
 

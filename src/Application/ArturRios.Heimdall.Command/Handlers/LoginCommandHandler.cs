@@ -92,7 +92,10 @@ public class LoginCommandHandler(
         var token = await personAuthTokenService.IssueAsync(subject!);
 
         return output
-            .WithData(new LoginCommandOutput { Token = token.Token, ExpiresAt = token.ExpiresAt })
+            .WithData(new LoginCommandOutput
+            {
+                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = person.EmailVerified
+            })
             .WithMessage(AuthMessages.LoginSuccessful);
     }
 

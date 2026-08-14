@@ -24,14 +24,17 @@ public static class TestGoogleTokens
     /// <summary>Builds a valid ID token carrying the claims a Google User is populated from.</summary>
     /// <param name="subject">Google's <c>sub</c>. Defaults to a fresh value, i.e. an unknown account.</param>
     /// <param name="email">The <c>email</c> claim.</param>
-    /// <param name="emailVerified">The <c>email_verified</c> claim.</param>
+    /// <param name="emailVerified">
+    ///     The <c>email_verified</c> claim; omitted from the token when null, as it is on a token
+    ///     obtained without the <c>email</c> scope.
+    /// </param>
     /// <param name="name">The <c>name</c> claim; omitted from the token when null.</param>
     /// <param name="pictureUrl">The <c>picture</c> claim; omitted from the token when null.</param>
     /// <param name="expiresIn">Lifetime, so a test can mint an expired token for AF-25a.</param>
     public static string For(
         string? subject = null,
         string? email = null,
-        bool emailVerified = true,
+        bool? emailVerified = true,
         string? name = "Google Signer",
         string? pictureUrl = "https://lh3.googleusercontent.test/a/photo",
         TimeSpan? expiresIn = null)
@@ -39,9 +42,13 @@ public static class TestGoogleTokens
         var claims = new List<Claim>
         {
             new("sub", subject ?? $"google-sub-{Guid.NewGuid():N}"),
-            new("email", email ?? $"google-{Guid.NewGuid():N}@gmail.test"),
-            new("email_verified", emailVerified ? "true" : "false")
+            new("email", email ?? $"google-{Guid.NewGuid():N}@gmail.test")
         };
+
+        if (emailVerified is not null)
+        {
+            claims.Add(new Claim("email_verified", emailVerified.Value ? "true" : "false"));
+        }
 
         if (name is not null)
         {
@@ -64,6 +71,24 @@ public static class TestGoogleTokens
                 SecurityAlgorithms.HmacSha256)
         });
     }
+
+    /// <summary>
+    ///     A valid ID token whose <c>email_verified</c> claim is present but JSON <c>null</c> —
+    ///     what <see cref="For" /> cannot mint, since <see cref="Claim" /> demands a value. Asserts
+    ///     nothing, so FR-GO-19 must treat it exactly as an omitted claim.
+    /// </summary>
+    public static string WithNullEmailVerified(string subject, string email) =>
+        Handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
+            Audience = LocalGoogleIdTokenVerifier.TestIssuer,
+            Subject = new ClaimsIdentity([new Claim("sub", subject), new Claim("email", email)]),
+            Claims = new Dictionary<string, object> { ["email_verified"] = null! },
+            Expires = DateTime.UtcNow.AddMinutes(10),
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PostgresFixture.GoogleTestSigningSecret)),
+                SecurityAlgorithms.HmacSha256)
+        });
 
     /// <summary>
     ///     A token signed with the wrong key — what an attacker forging one looks like from the
