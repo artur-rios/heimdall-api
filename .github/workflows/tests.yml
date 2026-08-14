@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which no test touches.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build the container image
         uses: docker/build-push-action@v6

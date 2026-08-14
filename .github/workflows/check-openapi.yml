@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which this job never builds.
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

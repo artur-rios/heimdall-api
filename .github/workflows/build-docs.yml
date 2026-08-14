@@ -53,7 +53,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # The Docsy theme is a submodule; without this the build fails with a missing theme.
           submodules: recursive
