@@ -210,7 +210,7 @@ graph LR
 | FR-GO-16 | The system shall allow **hard deletion** of a Google User, permanently removing the record | High |
 | FR-GO-17 | Logically deleted Google Users shall not appear in default query results unless explicitly requested | Medium |
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out, invalidating/discarding their authentication token | High |
-| FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims | Medium |
+| FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
 
 ### 3.9 Scope Permission Management
 

@@ -90,8 +90,9 @@ public class LocalGoogleIdTokenVerifier(
     /// <summary>
     ///     The <c>email_verified</c> claim, or <c>null</c> when the token carries none. Absence is
     ///     read straight off the validated claim set, which simply has no entry for a claim the
-    ///     token never held; a value that will not parse as a boolean is treated as absent too,
-    ///     since it asserts nothing this API can act on.
+    ///     token never held; a value that will not parse as a boolean is treated as absent too —
+    ///     a claim present but JSON <c>null</c> among them — since it asserts nothing this API can
+    ///     act on, and FR-GO-19 must not downgrade a stored <c>true</c> on the strength of it.
     /// </summary>
     private static bool? EmailVerified(TokenValidationResult result) =>
         bool.TryParse(Claim(result, "email_verified"), out var verified) ? verified : null;

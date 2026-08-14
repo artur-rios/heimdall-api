@@ -73,6 +73,24 @@ public static class TestGoogleTokens
     }
 
     /// <summary>
+    ///     A valid ID token whose <c>email_verified</c> claim is present but JSON <c>null</c> —
+    ///     what <see cref="For" /> cannot mint, since <see cref="Claim" /> demands a value. Asserts
+    ///     nothing, so FR-GO-19 must treat it exactly as an omitted claim.
+    /// </summary>
+    public static string WithNullEmailVerified(string subject, string email) =>
+        Handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
+            Audience = LocalGoogleIdTokenVerifier.TestIssuer,
+            Subject = new ClaimsIdentity([new Claim("sub", subject), new Claim("email", email)]),
+            Claims = new Dictionary<string, object> { ["email_verified"] = null! },
+            Expires = DateTime.UtcNow.AddMinutes(10),
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(PostgresFixture.GoogleTestSigningSecret)),
+                SecurityAlgorithms.HmacSha256)
+        });
+
+    /// <summary>
     ///     A token signed with the wrong key — what an attacker forging one looks like from the
     ///     API's side, for AF-25a.
     /// </summary>
