@@ -41,7 +41,7 @@
 <table>
 <tr>
 <th>Covered lines:</th>
-<td class="limit-width right" title="39">39</td>
+<td class="limit-width right" title="40">40</td>
 </tr>
 <tr>
 <th>Uncovered lines:</th>
@@ -49,15 +49,15 @@
 </tr>
 <tr>
 <th>Coverable lines:</th>
-<td class="limit-width right" title="40">40</td>
+<td class="limit-width right" title="41">41</td>
 </tr>
 <tr>
 <th>Total lines:</th>
-<td class="limit-width right" title="102">102</td>
+<td class="limit-width right" title="112">112</td>
 </tr>
 <tr>
 <th>Line coverage:</th>
-<td class="limit-width right" title="39 of 40">97.5%</td>
+<td class="limit-width right" title="40 of 41">97.5%</td>
 </tr>
 </table>
 </div>
@@ -235,21 +235,31 @@
 <tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line94"></a><code>94</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;UpdatedAt&nbsp;=&nbsp;x.UpdatedAt</code></td></tr>
 <tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line95"></a><code>95</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});</code></td></tr>
 <tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line96"></a><code>96</code></td><td></td><td class="lightgray"><code></code></td></tr>
-<tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line97"></a><code>97</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;page&nbsp;=&nbsp;await&nbsp;projected.PaginateAsync(query.PageNumber,&nbsp;query.PageSize,&nbsp;x&nbsp;=&gt;&nbsp;x.Name);</code></td></tr>
-<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line98"></a><code>98</code></td><td></td><td class="lightgray"><code></code></td></tr>
-<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line99"></a><code>99</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;UC-27&nbsp;step&nbsp;4.</code></td></tr>
-<tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line100"></a><code>100</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;page.WithMessage(GoogleUserMessages.GoogleUsersRetrievedSuccessfully);</code></td></tr>
-<tr class="coverableline" title="Covered (16 visits)" data-coverage="{'AllTestMethods': {'VC': '16', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">16</td><td class="rightmargin right"><a id="file0_line101"></a><code>101</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;}</code></td></tr>
-<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line102"></a><code>102</code></td><td></td><td class="lightgray"><code>}</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line97"></a><code>97</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;Ordered&nbsp;by&nbsp;name&nbsp;with&nbsp;the&nbsp;public&nbsp;identifier&nbsp;as&nbsp;a&nbsp;tiebreaker,&nbsp;then&nbsp;paginated&nbsp;over&nbsp;that</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line98"></a><code>98</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;ordering&nbsp;rather&nbsp;than&nbsp;handing&nbsp;PaginateAsync&nbsp;a&nbsp;sort&nbsp;key&nbsp;of&nbsp;its&nbsp;own.</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line99"></a><code>99</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line100"></a><code>100</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;Name&nbsp;is&nbsp;not&nbsp;unique,&nbsp;and&nbsp;PostgreSQL&nbsp;gives&nbsp;no&nbsp;ordering&nbsp;guarantee&nbsp;between&nbsp;rows&nbsp;whose&nbsp;sort&nbsp;key</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line101"></a><code>101</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;ties&nbsp;—&nbsp;each&nbsp;page&nbsp;is&nbsp;a&nbsp;separate&nbsp;query,&nbsp;free&nbsp;to&nbsp;break&nbsp;the&nbsp;tie&nbsp;differently.&nbsp;Two&nbsp;people&nbsp;called</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line102"></a><code>102</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;&quot;Ana&nbsp;Silva&quot;&nbsp;straddling&nbsp;a&nbsp;page&nbsp;boundary&nbsp;could&nbsp;therefore&nbsp;appear&nbsp;on&nbsp;both&nbsp;pages&nbsp;while&nbsp;somebody</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line103"></a><code>103</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;else&nbsp;appeared&nbsp;on&nbsp;neither.&nbsp;The&nbsp;tiebreaker&nbsp;makes&nbsp;the&nbsp;total&nbsp;order&nbsp;deterministic,&nbsp;so&nbsp;paging</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line104"></a><code>104</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;through&nbsp;a&nbsp;list&nbsp;sees&nbsp;every&nbsp;row&nbsp;exactly&nbsp;once.</code></td></tr>
+<tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line105"></a><code>105</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;ordered&nbsp;=&nbsp;projected.OrderBy(x&nbsp;=&gt;&nbsp;x.Name).ThenBy(x&nbsp;=&gt;&nbsp;x.Id);</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line106"></a><code>106</code></td><td></td><td class="lightgray"><code></code></td></tr>
+<tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line107"></a><code>107</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;page&nbsp;=&nbsp;await&nbsp;ordered.PaginateAsync(query.PageNumber,&nbsp;query.PageSize,&nbsp;orderBy:&nbsp;null);</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line108"></a><code>108</code></td><td></td><td class="lightgray"><code></code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line109"></a><code>109</code></td><td></td><td class="lightgray"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;UC-27&nbsp;step&nbsp;4.</code></td></tr>
+<tr class="coverableline" title="Covered (10 visits)" data-coverage="{'AllTestMethods': {'VC': '10', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">10</td><td class="rightmargin right"><a id="file0_line110"></a><code>110</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;page.WithMessage(GoogleUserMessages.GoogleUsersRetrievedSuccessfully);</code></td></tr>
+<tr class="coverableline" title="Covered (16 visits)" data-coverage="{'AllTestMethods': {'VC': '16', 'LVS': 'green'}}"><td class="green">&nbsp;</td><td class="leftmargin rightmargin right">16</td><td class="rightmargin right"><a id="file0_line111"></a><code>111</code></td><td></td><td class="lightgreen"><code>&nbsp;&nbsp;&nbsp;&nbsp;}</code></td></tr>
+<tr class="" title="Not coverable" data-coverage="{'AllTestMethods': {'VC': '', 'LVS': 'gray'}}"><td class="gray">&nbsp;</td><td class="leftmargin rightmargin right"></td><td class="rightmargin right"><a id="file0_line112"></a><code>112</code></td><td></td><td class="lightgray"><code>}</code></td></tr>
 </tbody>
 </table>
 </div>
-<div class="footer">Generated by: ReportGenerator 5.5.11.0<br />08/14/2026 - 17:04:16<br /><a href="https://github.com/danielpalme/ReportGenerator">GitHub</a> | <a href="https://reportgenerator.io">reportgenerator.io</a></div></div>
+<div class="footer">Generated by: ReportGenerator 5.5.11.0<br />08/14/2026 - 18:13:32<br /><a href="https://github.com/danielpalme/ReportGenerator">GitHub</a> | <a href="https://reportgenerator.io">reportgenerator.io</a></div></div>
 <div class="containerright">
 <div class="containerrightfixed">
 <h1>Methods/Properties</h1>
 <a href="#file0_line27" class="navigatetohash percentagebar percentagebar100" title="Line coverage: 100% - .ctor(ArturRios.Data.Relational.Core.Interfaces.IAsyncReadOnlyRepository`1&lt;ArturRios.Heimdall.Domain.Entities.Scope&gt;,ArturRios.Data.Relational.Core.Interfaces.IAsyncReadOnlyRepository`1&lt;ArturRios.Heimdall.Domain.Entities.GoogleUser&gt;,ArturRios.Heimdall.Shared.Services.IScopeOwnershipChecker,FluentValidation.IValidator`1&lt;ArturRios.Heimdall.Query.Input.ListScopeGoogleUsersQuery&gt;)"><i class="icon-cube"></i>.ctor(ArturRios.Data.Relational.Core.Interfaces.IAsyncReadOnlyRepository`1&lt;ArturRios.Heimdall.Domain.Entities.Scope&gt;,ArturRios.Data.Relational.Core.Interfaces.IAsyncReadOnlyRepository`1&lt;ArturRios.Heimdall.Domain.Entities.GoogleUser&gt;,ArturRios.Heimdall.Shared.Services.IScopeOwnershipChecker,FluentValidation.IValidator`1&lt;ArturRios.Heimdall.Query.Input.ListScopeGoogleUsersQuery&gt;)</a><br />
-<a href="#file0_line36" class="navigatetohash percentagebar percentagebar90" title="Line coverage: 97.1% - HandleAsync()"><i class="icon-cube"></i>HandleAsync()</a><br />
+<a href="#file0_line36" class="navigatetohash percentagebar percentagebar90" title="Line coverage: 97.2% - HandleAsync()"><i class="icon-cube"></i>HandleAsync()</a><br />
 <br/></div>
 </div></div>
 <script type="text/javascript" src="class.js"></script>
