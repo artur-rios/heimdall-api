@@ -18,8 +18,14 @@ Usage (from anywhere in the repository):
     python scripts/load_test.py --url ... --email ... --password '...' \\
         --concurrency 128 --seconds 60
 
+    python scripts/load_test.py --url ... --email ... --password '...' --write
+
 The account must be able to log in without a second factor: a load run cannot answer a two-factor
 challenge, and the tool refuses rather than pretending it can.
+
+--write adds the scope-creation scenario. It is off by default because it is the only part of this
+that leaves anything behind, and it leaves as many rows as the API can absorb -- tens of thousands.
+Use it against a deployment you can afterwards throw away.
 
 Point this only at a deployment you are allowed to load. It issues as many requests as it can for
 the whole duration, against every scenario in turn.
@@ -68,6 +74,8 @@ def main():
     parser.add_argument("--seconds", type=int, default=30, help="duration per scenario (default 30)")
     parser.add_argument("--report", default=str(DEFAULT_REPORT),
                         help=f"where to write the report (default {DEFAULT_REPORT.relative_to(REPO_ROOT)})")
+    parser.add_argument("--write", action="store_true",
+                        help="add the scope-creation scenario; leaves tens of thousands of rows behind")
     parser.add_argument("--no-build", action="store_true", help="reuse the last build")
     arguments = parser.parse_args()
 
@@ -88,6 +96,9 @@ def main():
 
     if arguments.scope:
         command += ["--scope", arguments.scope]
+
+    if arguments.write:
+        command += ["--write"]
 
     result = run(command)
 

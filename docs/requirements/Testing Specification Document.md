@@ -35,6 +35,23 @@ The rule is simple:
 5. **Same pattern every time.** The workflow in §9 is applied identically to every use case, so the
    test suite stays predictable as the system grows.
 
+### 2.1 The coverage floor
+
+Merged line coverage must stay at or above **90%**. `scripts/coverage.py` enforces it, in CI and on
+a developer machine alike, and the build fails below it. It was measured at 96.7% when the floor was
+introduced, so the number is a floor with room under it rather than one the suite has to be nursed
+against.
+
+That gap is deliberate. A threshold set just under the current figure fails on the next honest
+refactor and teaches everybody to lower it; one set well under catches the thing worth catching,
+which is a subsystem arriving with no tests at all, not a method. Coverage is a floor here and
+nothing more — §3 is what actually decides whether a use case is tested, and a change can hold 96%
+while testing none of the behavior that matters.
+
+Branch coverage is reported but not gated. It was 77.4% at the same measurement, so gating it at 90%
+would have failed the build on the day it was added, and a threshold chosen to be whatever passes
+measures nothing. Raising it is a decision to take deliberately, by writing the missing tests first.
+
 ## 3. What to test for each use case
 
 When a use case is implemented, walk this decision list and produce every applicable test:
@@ -758,6 +775,15 @@ shorter one that does not.
   over loopback from the same machine that hosts the API, so part of what it measures is the load
   generator. Compare its runs with each other; do not read them as a service level. The tool does
   fail the run when a request faults or answers 5xx, which is the part worth being strict about.
+- **The load run covers four endpoints, and its write scenario is off by default.** A liveness check,
+  a paginated read, a scope creation and a login — enough to separate the read path from the write
+  path and to reach the rate limiter, and nowhere near the whole surface. The write scenario needs
+  `--write` because it is the only part that leaves rows behind, and it leaves as many as the API can
+  absorb; the figures it produces are also only valid for the row count it started from (SRD §6.3.2).
+  Nothing here load-tests two-factor verification, Google sign-in, or any deletion.
+- **The rate limiter makes login unmeasurable as throughput.** Ten requests a minute per IP get
+  through, so a load run reports login's *capacity* honestly (SRD §6.3.1) and its throughput not at
+  all. Raising the limit to measure it would measure a deployment nobody runs.
 - **NFR-06 is verified for the state the API keeps, not by running two instances.** The key ring
   test builds two providers sharing only the database, which is the isolation two containers have,
   but nothing in CI starts a second replica behind a load balancer.

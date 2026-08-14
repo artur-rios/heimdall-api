@@ -1,0 +1,38 @@
+version: 2
+
+# Two halves of the same job, and neither replaces the other.
+#
+# scripts/vulnerabilities.py fails the build when a dependency has a published advisory — it is the
+# gate, and it says nothing about anything that is merely out of date. Dependabot is the other
+# direction: it opens the pull request that moves a version forward, before or after an advisory
+# exists. Without the gate, a Dependabot PR nobody merges is a vulnerability nobody is told about;
+# without Dependabot, the gate blocks main and leaves somebody to work out the upgrade by hand.
+#
+# Versions live in Directory.Packages.props under central package management, so that is the only
+# file NuGet updates touch. Dependabot understands it natively; no per-project entries are needed.
+
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the whole framework rather than a dozen. These packages share a version and are
+      # released together, and splitting them produces PRs that cannot pass on their own: a build
+      # with Microsoft.EntityFrameworkCore at one version and .Design at another fails to compile,
+      # which is the error that introduced central package management here in the first place.
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+      arturrios:
+        patterns:
+          - "ArturRios.*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    # Every workflow pins actions by major tag (actions/checkout@v4, and so on), which does float
+    # within the major version but never across one. Nothing else moves these.

@@ -30,6 +30,11 @@ Usage (from anywhere in the repository):
     python scripts/coverage.py --filter "Category=Unit"
     python scripts/coverage.py --no-report     # collect coverage but skip the HTML generation
     python scripts/coverage.py --report-only   # build the report from coverage files already on disk
+    python scripts/coverage.py --no-threshold  # generate without failing on the minimum
+
+The run fails when merged line coverage falls below MINIMUM_LINE_COVERAGE, in CI and locally alike.
+The report is still written when the threshold fails, because the report is how you find out which
+classes carry the gap.
 
 Requires the ReportGenerator global tool:
 
@@ -37,6 +42,7 @@ Requires the ReportGenerator global tool:
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -49,6 +55,16 @@ TESTS_DIR = REPO_ROOT / "tests"
 SRC_DIR = REPO_ROOT / "src"
 REPORT_DIR = REPO_ROOT / "docs/coverage-report"
 LICENSE_VARIABLE = "REPORTGENERATOR_LICENSE"
+
+# Line coverage, merged across both suites. Measured at 96.7% when this gate was introduced, so it
+# is a floor with real room under it rather than a number the suite has to be nursed against: it
+# catches a subsystem arriving untested, not a method.
+#
+# Line coverage only. Branch coverage was 77.4% at the same moment, and gating that at 90% would
+# have failed the build on the day it was added — a threshold that has to be met before it can be
+# committed gets set to whatever passes, which measures nothing.
+MINIMUM_LINE_COVERAGE = 90.0
+SUMMARY_FILE = "Summary.json"
 
 
 def run(command, echo=None, **kwargs):
@@ -122,7 +138,11 @@ def generate_report():
         "reportgenerator",
         f"-reports:{';'.join(str(path) for path in files)}",
         f"-targetdir:{REPORT_DIR}",
-        "-reporttypes:Html",
+        # JsonSummary alongside the HTML so the threshold is checked against the same merged numbers
+        # the published report shows. Computing it separately — summing the per-project Cobertura
+        # files, say — double-counts every line an assembly shares and produces a figure that
+        # disagrees with the report it sits next to.
+        "-reporttypes:Html;JsonSummary",
         "-title:Heimdall API",
     ]
     echo = list(command)
@@ -142,6 +162,43 @@ def generate_report():
     return run(command, echo=echo).returncode
 
 
+def read_line_coverage(summary_path):
+    """Read the merged line coverage percentage out of ReportGenerator's JsonSummary.
+
+    Returns None when the file cannot be read or carries no figure, which the caller treats as a
+    failure rather than a pass: a threshold that silently stops being evaluated is worse than no
+    threshold, because the build still reports the green tick that says it was.
+    """
+    try:
+        with open(summary_path, encoding="utf-8") as file:
+            summary = json.load(file).get("summary", {})
+    except (OSError, ValueError):
+        return None
+
+    coverage = summary.get("linecoverage")
+
+    return float(coverage) if isinstance(coverage, (int, float)) else None
+
+
+def check_threshold(minimum):
+    """Fail when merged line coverage has fallen below `minimum`."""
+    coverage = read_line_coverage(REPORT_DIR / SUMMARY_FILE)
+
+    if coverage is None:
+        print(f"Could not read line coverage from {REPORT_DIR / SUMMARY_FILE}; "
+              f"treating that as a failure rather than a pass.", file=sys.stderr)
+        return 1
+
+    if coverage < minimum:
+        print(f"\nLine coverage {coverage:.1f}% is below the {minimum:.1f}% minimum.", file=sys.stderr)
+        print(f"Open {REPORT_DIR} to see which classes carry the gap.", file=sys.stderr)
+        return 1
+
+    print(f"Line coverage {coverage:.1f}% (minimum {minimum:.1f}%)")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--clean", action="store_true",
@@ -152,6 +209,10 @@ def main():
                         help="collect coverage but do not regenerate the HTML report")
     parser.add_argument("--report-only", action="store_true",
                         help="skip the test run and build the report from coverage files already on disk")
+    parser.add_argument("--min-coverage", type=float, default=MINIMUM_LINE_COVERAGE,
+                        help=f"minimum merged line coverage percentage (default {MINIMUM_LINE_COVERAGE:g})")
+    parser.add_argument("--no-threshold", action="store_true",
+                        help="generate the report without failing on the minimum, for local exploration")
     args = parser.parse_args()
 
     if args.report_only and (args.clean or args.no_report or args.test_filter):
@@ -176,7 +237,15 @@ def main():
     if generate_report() != 0:
         return 1
 
-    print(f"\nReport written to {REPORT_DIR}")
+    # Flushed, so the threshold's verdict lands after this line rather than before it: stdout is
+    # block-buffered when the output is a pipe, which is exactly how CI captures it.
+    print(f"\nReport written to {REPORT_DIR}", flush=True)
+
+    # After the report is written, so a run that fails the threshold still leaves the report that
+    # shows why. Before the closing hint, so the last thing printed on a failure is the failure.
+    if not args.no_threshold and check_threshold(args.min_coverage) != 0:
+        return 1
+
     # ASCII on purpose: Python's stdout on Windows defaults to cp1252, which cannot encode an arrow
     # and raises UnicodeEncodeError — after the report has already been written, so the script would
     # fail on its very last line having done its whole job.

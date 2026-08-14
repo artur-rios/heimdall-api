@@ -37,7 +37,7 @@ public static class Program
 {
     private sealed record Options(
         Uri BaseUrl, string Email, string Password, Guid? ScopeId,
-        int Concurrency, TimeSpan Duration, string ReportPath);
+        int Concurrency, TimeSpan Duration, string ReportPath, bool IncludeWrites);
 
     private sealed record Sample(double Milliseconds, HttpStatusCode Status, bool Faulted);
 
@@ -61,6 +61,12 @@ public static class Program
         Console.WriteLine($"Target      : {options.BaseUrl}");
         Console.WriteLine($"Concurrency : {options.Concurrency}");
         Console.WriteLine($"Duration    : {options.Duration.TotalSeconds:F0}s");
+
+        if (options.IncludeWrites)
+        {
+            Console.WriteLine("Writes      : ON — this run creates a person and a scope per request");
+        }
+
         Console.WriteLine();
 
         using var handler = new SocketsHttpHandler
@@ -89,11 +95,44 @@ public static class Program
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var scenarios = new (string Name, Func<HttpClient, Task<HttpResponseMessage>> Request)[]
+        var scenarios = new List<(string Name, Func<HttpClient, Task<HttpResponseMessage>> Request)>
         {
             ("GET /HealthCheck", http => http.GetAsync("/HealthCheck")),
-            ("GET /api/scopes", http => http.GetAsync("/api/scopes?pageNumber=1&pageSize=25"))
+            ("GET /api/scopes", http => http.GetAsync("/api/scopes?pageNumber=1&pageSize=25")),
+
+            // Included by default even though the rate limiter sheds nearly all of it, because what
+            // it measures is the shedding. See the note on the 429 column in Report.
+            ("POST /api/auth/login", http => http.PostAsJsonAsync("/api/auth/login", new
+            {
+                email = options.Email, password = options.Password, scopeId = options.ScopeId
+            }))
         };
+
+        if (options.IncludeWrites)
+        {
+            Guid ownerId;
+
+            try
+            {
+                ownerId = await CreateOwnerAsync(client);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"Could not create the owner the write scenario needs: {exception.Message}");
+
+                return 1;
+            }
+
+            // A fresh scope per request rather than repeated updates of one row. Updating a single
+            // row from every caller would measure PostgreSQL's row lock, which is a property of the
+            // database rather than of this API, and would report contention as latency.
+            scenarios.Add(("POST /api/scopes", http => http.PostAsJsonAsync("/api/scopes", new
+            {
+                name = $"load-test-{Guid.NewGuid():N}",
+                description = "Created by ArturRios.Heimdall.LoadTest.",
+                ownerIds = new[] { ownerId }
+            })));
+        }
 
         var results = new List<(string Name, IReadOnlyList<Sample> Samples, double Seconds)>();
 
@@ -182,16 +221,89 @@ public static class Program
         return samples.SelectMany(s => s).ToList();
     }
 
-    private static async Task<string> SignInAsync(HttpClient client, Options options)
+    /// <summary>
+    ///     Creates the ScopeAdmin the write scenario names as the new scope's owner, and returns its
+    ///     PublicId.
+    /// </summary>
+    /// <remarks>
+    ///     Once, in setup, rather than per request: creating a person hashes a password with
+    ///     Argon2id, and doing that inside the measured loop would make the write scenario a second
+    ///     measurement of the hash rather than of the write path.
+    /// </remarks>
+    private static async Task<Guid> CreateOwnerAsync(HttpClient client)
     {
-        using var response = await client.PostAsJsonAsync("/api/auth/login", new
+        using var response = await client.PostAsJsonAsync("/api/persons", new
         {
-            email = options.Email, password = options.Password, scopeId = options.ScopeId
+            name = "Load Test Owner",
+            email = $"load-test-owner-{Guid.NewGuid():N}@heimdall.test",
+            password = $"Ld-{Guid.NewGuid():N}!aA1",
+            role = 2 // ScopeAdmin: a scope's owner must hold it, and this account is never signed in as.
         });
 
-        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"{(int)response.StatusCode} from POST /api/persons: {body}");
+        }
+
+        using var document = JsonDocument.Parse(body);
+
+        return document.RootElement.GetProperty("data").GetProperty("id").GetGuid();
+    }
+
+    /// <summary>
+    ///     Signs in for the bearer token every authenticated scenario needs, waiting out the rate
+    ///     limiter if it has to.
+    /// </summary>
+    /// <remarks>
+    ///     The retry is not defensive padding: this tool's own login scenario spends the whole
+    ///     per-IP permit budget, so a second run started within the limiter's window cannot sign in
+    ///     at all. Without this, the harness measured the API once and then refused to start until
+    ///     somebody worked out why — a failure caused entirely by the previous run.
+    /// </remarks>
+    private static async Task<string> SignInAsync(HttpClient client, Options options)
+    {
+        const int attempts = 6;
+
+        HttpResponseMessage response;
+
+        for (var attempt = 1; ; attempt++)
+        {
+            response = await client.PostAsJsonAsync("/api/auth/login", new
+            {
+                email = options.Email, password = options.Password, scopeId = options.ScopeId
+            });
+
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= attempts)
+            {
+                break;
+            }
+
+            // Retry-After when the deployment sends one; otherwise a guess wide enough to outlast a
+            // fixed window that has already been spent.
+            var wait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(15);
+
+            response.Dispose();
+
+            Console.WriteLine(
+                $"Sign-in shed by the rate limiter; waiting {wait.TotalSeconds:F0}s " +
+                $"(attempt {attempt} of {attempts - 1}) …");
+
+            await Task.Delay(wait);
+        }
+
+        using (response)
+        {
+            response.EnsureSuccessStatusCode();
+
+            return ReadToken(await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    private static string ReadToken(string body)
+    {
+        using var document = JsonDocument.Parse(body);
 
         var data = document.RootElement.GetProperty("data");
 
@@ -239,19 +351,34 @@ public static class Program
             "offered rate falls as the API slows. Latencies are therefore optimistic against a",
             "fixed-rate arrival — compare runs with each other, not with a service level.",
             "",
-            "| Scenario | Requests | Req/s | p50 (ms) | p95 (ms) | p99 (ms) | Max (ms) | Non-2xx | Faulted |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+            "Throughput and percentiles cover the requests the API *answered* — 2xx only. Attempts",
+            "counts everything sent, including what the rate limiter shed.",
+            "",
+            "That distinction is not pedantry. A shed request is refused in under a millisecond, so a",
+            "scenario the limiter sheds would otherwise report a sub-millisecond median describing",
+            "the speed of the refusal, and a throughput figure counting refusals as work. Both would",
+            "be excellent and neither would mean anything.",
+            "",
+            "| Scenario | Attempts | 2xx | 2xx/s | p50 (ms) | p95 (ms) | p99 (ms) | Max (ms) | 429 | Other non-2xx | Faulted |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
         };
 
         foreach (var (name, samples, seconds) in results)
         {
-            var sorted = samples.Select(s => s.Milliseconds).OrderBy(m => m).ToList();
+            var answered = samples.Where(s => !s.Faulted && (int)s.Status is >= 200 and < 300).ToList();
+            var sorted = answered.Select(s => s.Milliseconds).OrderBy(m => m).ToList();
+            var shed = samples.Count(s => s.Status == HttpStatusCode.TooManyRequests);
+
+            // A scenario the API answered nothing in has no latency to report, and printing 0.0
+            // would read as instantaneous rather than as absent.
+            string Latency(double value) => sorted.Count > 0 ? F(value) : "—";
 
             lines.Add(
-                $"| `{name}` | {samples.Count} | {F(samples.Count / seconds)} | " +
-                $"{F(Percentile(sorted, 50))} | {F(Percentile(sorted, 95))} | {F(Percentile(sorted, 99))} | " +
-                $"{F(sorted.Count > 0 ? sorted[^1] : 0)} | " +
-                $"{samples.Count(s => !s.Faulted && ((int)s.Status < 200 || (int)s.Status >= 300))} | " +
+                $"| `{name}` | {samples.Count} | {answered.Count} | {F(answered.Count / seconds)} | " +
+                $"{Latency(Percentile(sorted, 50))} | {Latency(Percentile(sorted, 95))} | " +
+                $"{Latency(Percentile(sorted, 99))} | {Latency(sorted.Count > 0 ? sorted[^1] : 0)} | {shed} | " +
+                $"{samples.Count(s => !s.Faulted && s.Status != HttpStatusCode.TooManyRequests &&
+                                      (int)s.Status is < 200 or >= 300)} | " +
                 $"{samples.Count(s => s.Faulted)} |");
         }
 
@@ -273,11 +400,19 @@ public static class Program
         Usage:
           dotnet run --project tools/ArturRios.Heimdall.LoadTest -- \
             --url http://localhost:8080 --email admin@example.com --password '…' \
-            [--scope <guid>] [--concurrency 32] [--seconds 30] [--report load-test.md]
+            [--scope <guid>] [--concurrency 32] [--seconds 30] [--report load-test.md] [--write]
 
         The account must be able to log in without a second factor. Point this at a deployment you
         are allowed to load: it issues as many requests as it can for the whole duration.
+
+        --write adds a scenario that creates a scope per request, and a ScopeAdmin to own them. It
+        is off by default because it is the only part of this that leaves anything behind, and the
+        rows it leaves are proportional to how fast the API is — tens of thousands of them. Use it
+        against a deployment you can afterwards throw away.
         """;
+
+    /// <summary>Options that take no value. Everything else must be followed by one.</summary>
+    private static readonly HashSet<string> SwitchOptions = new(StringComparer.OrdinalIgnoreCase) { "write" };
 
     private static Options Parse(string[] args)
     {
@@ -290,12 +425,24 @@ public static class Program
                 throw new ArgumentException($"Unexpected argument '{args[i]}'.");
             }
 
-            if (i + 1 >= args.Length)
+            var name = args[i][2..];
+
+            // A switch: last argument, or followed by another `--option`. Without this, `--write`
+            // would swallow whatever came after it as its value — silently, and most damagingly when
+            // that value was the next option's.
+            if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
             {
-                throw new ArgumentException($"'{args[i]}' needs a value.");
+                if (!SwitchOptions.Contains(name))
+                {
+                    throw new ArgumentException($"'{args[i]}' needs a value.");
+                }
+
+                values[name] = "true";
+
+                continue;
             }
 
-            values[args[i][2..]] = args[++i];
+            values[name] = args[++i];
         }
 
         string Required(string name) => values.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
@@ -309,6 +456,7 @@ public static class Program
             values.TryGetValue("scope", out var scope) ? Guid.Parse(scope) : null,
             values.TryGetValue("concurrency", out var concurrency) ? int.Parse(concurrency) : 32,
             TimeSpan.FromSeconds(values.TryGetValue("seconds", out var seconds) ? int.Parse(seconds) : 30),
-            values.TryGetValue("report", out var report) ? report : "load-test.md");
+            values.TryGetValue("report", out var report) ? report : "load-test.md",
+            values.ContainsKey("write"));
     }
 }

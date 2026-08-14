@@ -47,6 +47,20 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore src/ArturRios.Heimdall.sln
 
+      - name: Scan for vulnerable dependencies
+        # The SSH.NET advisory this project shipped with was found by reading advisories by hand.
+        # Nothing would have caught the next one, and a dependency does not have to change to become
+        # vulnerable — the advisory arrives on its own schedule, which is why this runs on every
+        # build rather than only when a package file changes.
+        #
+        # Straight after restore and before the build: it needs the resolved graph and nothing else,
+        # so a published CVE is reported in seconds rather than after the functional suite.
+        #
+        # `dotnet list package --vulnerable` exits 0 whether or not it found anything, so the script
+        # parses what it printed. That parsing is what the check is; scripts/test_vulnerabilities.py
+        # covers it, and those tests run in the step above.
+        run: python3 scripts/vulnerabilities.py
+
       - name: Build solution
         # Built once here so both test steps can run with --no-build and neither pays for it.
         run: dotnet build src/ArturRios.Heimdall.sln --configuration Release --no-restore
@@ -83,11 +97,18 @@ jobs:
           dotnet tool install --global dotnet-reportgenerator-globaltool
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
-      - name: Generate coverage report
+      - name: Generate coverage report and enforce the minimum
         # --report-only builds the HTML from the coverage files the two steps above already wrote,
         # reusing the script's own safeguards (it empties the directory first, so a page for a
         # deleted class cannot survive). Runs on pull requests too, so a change that breaks report
         # generation fails there rather than on main, where the docs site consumes the result.
+        #
+        # This step also fails the build when merged line coverage drops below the minimum in
+        # scripts/coverage.py. The threshold lives in the script rather than here so that a local
+        # run and a CI run answer the same question, and so raising it is one edit.
+        #
+        # The report is uploaded by the next step regardless, because a coverage failure is the case
+        # where somebody most needs to open the report.
         env:
           # Absent on pull requests from forks, where GitHub withholds secrets: the script then
           # generates with the free version instead of failing. Pushes to main — the only runs the
@@ -98,6 +119,12 @@ jobs:
       - name: Upload coverage report
         # build-docs.yml downloads this artifact by name from the latest successful run on main and
         # unpacks it into docs/coverage-report before Hugo builds. Renaming it breaks that job.
+        #
+        # always(), because the step before this one now fails the build when coverage drops below
+        # the minimum — and that is the run whose report somebody actually needs to open. The report
+        # is written before the threshold is evaluated, so it exists in that case. build-docs only
+        # ever reads from a successful run, so publishing is unaffected.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
