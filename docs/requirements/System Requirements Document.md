@@ -608,6 +608,10 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 
 ## 6. Non-Functional Requirements
 
+The security requirements below state what this API does. What they defend against, and what is left
+after them, is in the [Threat Model Document](Threat%20Model%20Document.md) — including two cases
+where a control is narrower than the threat it appears to cover.
+
 | ID | Category | Requirement |
 | ---- | ---------- | ------------- |
 | NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |

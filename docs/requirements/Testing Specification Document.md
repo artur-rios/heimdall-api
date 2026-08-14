@@ -725,6 +725,9 @@ but a requirement whose method is "none" is not a requirement yet.
 - **Measurement** — a number produced by a run and published. Not pass/fail: the figure is the
   output, and the requirement quotes it.
 
+The [Threat Model Document](Threat%20Model%20Document.md) uses these same three methods, and the same
+rule about "none", for the threats behind the security requirements.
+
 ### 11.1 Method and status per requirement
 
 | ID | Method | Where | Status |
