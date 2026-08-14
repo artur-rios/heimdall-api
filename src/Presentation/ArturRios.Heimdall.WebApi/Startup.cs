@@ -25,6 +25,7 @@ using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
+using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using ArturRios.Util.WebApi.Middleware;
 using ArturRios.Util.WebApi.Security.Enums;
@@ -257,7 +258,19 @@ public class Startup(string[] args) : WebApiStartup(args)
 
         // UC-36 (FR-2F-02): the TOTP secret is encrypted at rest with ASP.NET Core's Data
         // Protection API before it is persisted.
-        Builder.Services.AddDataProtection();
+        //
+        // The key ring goes in the database, and the application name is fixed, because the default
+        // is neither durable nor shared: keys land in a directory on the local filesystem that the
+        // image does not persist and a second instance does not see. Either way the effect is the
+        // same and it is silent — every stored TOTP secret becomes undecryptable, ITotpCodeVerifier
+        // catches the CryptographicException and reports it as a wrong code, and every caller whose
+        // second factor is an authenticator app is locked out of it with no indication why. That
+        // survives a redeploy today only because a single container keeps its filesystem between
+        // restarts; it would not survive being recreated, and it never survives a second replica
+        // (NFR-06).
+        Builder.Services.AddDataProtection()
+            .PersistKeysToDbContext<AppDbContext>()
+            .SetApplicationName("Heimdall");
         Builder.Services.AddScoped<ITotpSecretProtector, TotpSecretProtector>();
         // Shared by UC-37's confirmation and ITwoFactorFactorVerifier (UC-38/39/40): the TOTP secret,
         // the clock-drift window, and the single-use rule that keeps an app code from being replayed

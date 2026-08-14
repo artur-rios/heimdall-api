@@ -27,7 +27,7 @@ public class AuditLogWriterTests
         var writer = new AuditLogWriter(repository, Actor(personId, 2));
 
         // When
-        await writer.WriteAsync("CreateApplicationCommand", targetId);
+        await writer.WriteAsync("CreateApplicationCommand", targetId, succeeded: true, failureReason: null);
 
         // Then
         var stored = (await repository.GetAllAsync()).Data!.Single();
@@ -46,12 +46,44 @@ public class AuditLogWriterTests
         var writer = new AuditLogWriter(repository, Actor(null, null));
 
         // When
-        await writer.WriteAsync("PasswordRecoveryCommand", null);
+        await writer.WriteAsync("PasswordRecoveryCommand", null, succeeded: true, failureReason: null);
 
         // Then
         var stored = (await repository.GetAllAsync()).Data!.Single();
         Assert.Null(stored.ActorPersonId);
         Assert.Null(stored.ActorRole);
         Assert.Null(stored.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAFailure_WhenWritingEntry_ThenTheOutcomeAndReasonAreStored()
+    {
+        // Given
+        var repository = new AsyncFakeRepository<AuditLog>();
+        var writer = new AuditLogWriter(repository, Actor(Guid.NewGuid(), 1));
+
+        // When
+        await writer.WriteAsync("DeletePersonCommand", null, succeeded: false, failureReason: "Not authorized.");
+
+        // Then
+        var stored = (await repository.GetAllAsync()).Data!.Single();
+        Assert.False(stored.Succeeded);
+        Assert.Equal("Not authorized.", stored.FailureReason);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOverlongReason_WhenWritingEntry_ThenItIsTruncatedRatherThanRejected()
+    {
+        // The column is bounded, and a reason too long for it must not turn a recorded refusal into
+        // no record at all — which is the one outcome the trail cannot have.
+        var repository = new AsyncFakeRepository<AuditLog>();
+        var writer = new AuditLogWriter(repository, Actor(null, null));
+
+        // When
+        await writer.WriteAsync("StubCommand", null, succeeded: false, failureReason: new string('x', 900));
+
+        // Then
+        var stored = (await repository.GetAllAsync()).Data!.Single();
+        Assert.Equal(500, stored.FailureReason!.Length);
     }
 }

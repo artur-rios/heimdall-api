@@ -614,11 +614,11 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
 | NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
-| NFR-05 | Performance | The API shall respond to requests within 500 ms under normal load |
-| NFR-06 | Availability | The API shall be designed for horizontal scaling |
-| NFR-07 | Data Integrity | Logical deletion must not corrupt referential integrity |
+| NFR-05 | Performance | Every endpoint except those that verify a password shall complete server-side within **100 ms at the median and 250 ms at the slowest**, measured on the reference configuration (§6.1). Password-verifying endpoints are governed by NFR-18 |
+| NFR-06 | Availability | The API shall hold no state in a process or on a local filesystem that a second instance would need: authentication is validated from token claims with no server-side session, and the Data Protection key ring that TOTP secrets are encrypted with (NFR-16) is kept in the database. The per-IP rate limiter's window is the one deliberate exception, and is per instance by design (§6.2) |
+| NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
 | NFR-08 | Data Integrity | Hard deletion of a scope must cascade to its `SCOPE_USER`/`SCOPE_OWNER` rows, its Users, and its Applications |
-| NFR-09 | Logging | All write operations shall produce audit log entries |
+| NFR-09 | Logging | Every attempted write shall produce one audit entry, whether it succeeded or was refused, recording the acting identity, the operation, the affected entity where one was resolved, the outcome, and — on a refusal — the reason. The reason is drawn from the application's own messages, never from caller-supplied input |
 | NFR-10 | Validation | All inputs shall be validated before processing |
 | NFR-11 | Data Integrity | Hard deletion of a person must cascade to the applications they own |
 | NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected |
@@ -626,7 +626,66 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-14 | Data Integrity | Hard deletion of a scope must also cascade to its Google Users |
 | NFR-15 | Security | Internal `bigint` primary/foreign keys must never appear in API responses, API paths, or token claims; only `PublicId` (GUID) values may be exposed to callers |
 | NFR-16 | Security | A TOTP secret shall be stored encrypted at rest, and a recovery code shall be stored only as a hash; neither is ever returned to a caller after the response that first generates it |
-| NFR-17 | Security | A two-factor challenge token shall carry a distinct claim marking it as MFA-pending, expire quickly (target: 5 minutes), and be rejected by every endpoint except second-factor verification |
+| NFR-17 | Security | A two-factor challenge token shall carry a distinct claim marking it as MFA-pending, expire **5 minutes** after issue — a fixed lifetime, not a configurable one — and be rejected by every endpoint except second-factor verification |
+| NFR-18 | Performance | An endpoint that verifies a password is bounded by the cost of the password hash, not by NFR-05, and that cost is deliberate: it is what makes an offline attack on a stolen hash expensive. Every outcome shall pay it, including a rejection for an address that belongs to nobody (FR-AU-10). On the reference configuration this measures **347–491 ms at the median and 534–582 ms at the slowest**, the spread being idle versus contended (§6.1); the figure moves with the hashing parameters, the hardware and the load, and is republished rather than held constant |
+
+### 6.1 The reference configuration
+
+The figures in NFR-05 and NFR-18 are measurements, not estimates. They were taken by
+`ResponseTimeMeasurementTests`, which drives the running API against the suite's PostgreSQL
+container and writes `TestResults/response-times.md`. Reproducing them is a test run, not an
+exercise in trusting this document.
+
+Two runs are quoted, because the difference between them is itself a finding. *Idle* is the
+measurement suite running alone. *Loaded* is the same suite as part of a full solution test run, with
+the rest of the functional tests and their container competing for the same machine.
+
+| Endpoint | Class | Median (idle) | Slowest (idle) | Median (loaded) | Slowest (loaded) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `GET /HealthCheck` | unauthenticated | 0.3 ms | 0.5 ms | 0.4 ms | 1.0 ms |
+| `GET /api/persons/{id}` | authenticated read | 3.0 ms | 3.3 ms | 3.4 ms | 8.3 ms |
+| `POST /api/scopes/{id}/permissions` | authenticated write | 5.5 ms | 8.2 ms | 16.8 ms | 38.2 ms |
+| `GET /api/scopes/{id}/persons` | list, 50 rows, page of 25 | 5.7 ms | 17.2 ms | 14.4 ms | 18.8 ms |
+| `POST /api/auth/login` | password verification | 346.6 ms | 533.6 ms | 491.4 ms | 581.9 ms |
+
+Reference configuration: 32 logical processors, PostgreSQL in a local container, server-side time
+only — no network between caller and API. Median and slowest of 12 samples after 3 discarded
+warm-up requests, which pay for JIT, the EF model and the first query plan: costs a process meets
+once rather than costs a caller meets per request.
+
+The loaded column is why NFR-05's budget is set at 100 ms rather than at the idle figures. Contention
+moves a write from 5.5 ms to 16.8 ms and its slowest sample from 8.2 ms to 38.2 ms — a factor of
+three to five, on a machine with thirty-two cores and no other tenant. A budget written to the idle
+numbers would be a budget that fails whenever the machine is busy, which is precisely when a
+response-time requirement is supposed to hold.
+
+Two things follow from the table, and both were invisible while NFR-05 was a single unmeasured
+number. Everything that is not a password check runs one to two orders of magnitude inside the old
+500 ms budget, so that budget constrained nothing. And the one endpoint it should have constrained
+already exceeded it — 534 ms at the slowest when idle, 582 ms under load, on hardware more generous
+than most production deployments — because Argon2id is expensive on purpose. A single figure could
+describe neither.
+
+The automated ceilings in the measurement tests are set well above these numbers. They exist to
+catch an order-of-magnitude regression — an accidental N+1 in a listing, a password check running
+twice — not to certify conformance on a shared runner, where a scheduling hiccup would otherwise
+fail a build for no defect.
+
+### 6.2 What horizontal scaling depends on
+
+NFR-06 is a statement about shared state, and verifying it found a place where the claim did not
+hold. ASP.NET Core's Data Protection stores its key ring on the local filesystem by default; the
+container image does not persist that directory and two instances do not share it. The TOTP secrets
+of UC-36 are encrypted with those keys, so a second instance — or the same instance after being
+recreated — could not decrypt them. Nothing announced it: the protector throws, the verifier reports
+a wrong code, and every caller whose second factor is an authenticator app is quietly locked out of
+it. The key ring is now kept in the database, and `DataProtectionKeyRingTests` builds two providers
+the way two instances would and requires one to read the other's payload.
+
+What remains per-instance is the rate limiter's fixed window (§ Operations). That is deliberate and
+documented there: it is a defence-in-depth throttle, and the per-account budgets of FR-AU-09 and
+FR-2F-13 — which are in the database — are what hold across instances.
+
 
 **Accepted exception to NFR-15: `Person.RoleId`.** `RoleId` is an internal `bigint` foreign key into
 the `Role` table, and is exposed as `Role` in `PersonOutput`/`CreatePersonCommandOutput`/
@@ -810,4 +869,4 @@ Notes on cascading behavior:
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-14 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20&%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
-| Cross-cutting | NFR-01 through NFR-17 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |
+| Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

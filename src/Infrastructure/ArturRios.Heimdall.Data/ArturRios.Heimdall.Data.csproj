@@ -12,6 +12,7 @@
       <PackageReference Include="ArturRios.Data.PostgreSql" />
       <PackageReference Include="ArturRios.Util" />
       <PackageReference Include="EFCore.NamingConventions" />
+      <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         <PrivateAssets>all</PrivateAssets>

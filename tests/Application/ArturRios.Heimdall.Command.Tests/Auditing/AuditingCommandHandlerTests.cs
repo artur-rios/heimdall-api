@@ -37,13 +37,16 @@ public class AuditingCommandHandlerTests
 
         // Then
         Assert.True(result.Success);
-        writer.Verify(w => w.WriteAsync(nameof(StubCommand), targetId), Times.Once);
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), targetId, true, null), Times.Once);
     }
 
     [UnitFact]
-    public async Task GivenFailedInnerHandler_WhenHandling_ThenWriterIsNeverCalled()
+    public async Task GivenFailedInnerHandler_WhenHandling_ThenTheRefusalIsRecorded()
     {
-        // Given an inner handler that fails validation
+        // Given an inner handler that refuses the command. This used to write nothing at all, which
+        // left the trail describing only what the API allowed — and a caller repeatedly denied a
+        // scope they do not own, or repeatedly failing a password, has no other trace anywhere
+        // (NFR-09).
         var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutput>>();
         inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>()))
             .ReturnsAsync(DataOutput<StubOutput?>.New.WithError("invalid"));
@@ -53,9 +56,27 @@ public class AuditingCommandHandlerTests
         // When
         var result = await handler.HandleAsync(new StubCommand());
 
-        // Then
+        // Then — recorded as a refusal, carrying why
         Assert.False(result.Success);
-        writer.Verify(w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid?>()), Times.Never);
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), null, false, "invalid"), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenSeveralErrors_WhenHandling_ThenOnlyTheFirstIsRecorded()
+    {
+        // One reason is enough to say why, and the field is bounded. All of them are the
+        // application's own canonical messages, so none of this is caller-supplied text.
+        var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutput>>();
+        inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>()))
+            .ReturnsAsync(DataOutput<StubOutput?>.New.WithErrors(["first", "second"]));
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = new AuditingCommandHandler<StubCommand, StubOutput>(inner.Object, writer.Object, NullLogger());
+
+        // When
+        await handler.HandleAsync(new StubCommand());
+
+        // Then
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), null, false, "first"), Times.Once);
     }
 
     [UnitFact]
@@ -66,7 +87,7 @@ public class AuditingCommandHandlerTests
         inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>()))
             .ReturnsAsync(DataOutput<StubOutput?>.New.WithData(new StubOutput { Id = Guid.NewGuid() }));
         var writer = new Mock<IAuditLogWriter>();
-        writer.Setup(w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid?>()))
+        writer.Setup(w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ThrowsAsync(new InvalidOperationException("db unavailable"));
         var handler = new AuditingCommandHandler<StubCommand, StubOutput>(inner.Object, writer.Object, NullLogger());
 
@@ -91,6 +112,6 @@ public class AuditingCommandHandlerTests
         await handler.HandleAsync(new StubCommand());
 
         // Then
-        writer.Verify(w => w.WriteAsync(nameof(StubCommand), null), Times.Once);
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), null, true, null), Times.Once);
     }
 }

@@ -1,5 +1,4 @@
 <Project>
-
   <!--
     Central package management for every project in the repository — src/, tests/, and tools/.
     A PackageReference names a package; this file alone decides its version.
@@ -15,7 +14,6 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-
   <!-- The author's own libraries the API is built on. -->
   <ItemGroup>
     <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.1" />
@@ -24,8 +22,8 @@
     <PackageVersion Include="ArturRios.Messaging" Version="1.1.0" />
     <PackageVersion Include="ArturRios.Util" Version="1.5.0" />
     <PackageVersion Include="ArturRios.Util.WebApi" Version="3.1.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
   </ItemGroup>
-
   <!--
     EF Core. Relational, Abstractions, and Analyzers are listed although no project references them
     directly: they are exactly the transitive dependencies that would otherwise stay a patch behind
@@ -39,7 +37,6 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
   </ItemGroup>
-
   <!-- Everything else the product depends on. -->
   <ItemGroup>
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
@@ -55,7 +52,6 @@
     <PackageVersion Include="Serilog.Sinks.Map" Version="2.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
-
   <!--
     Test-only packages. SSH.NET is pinned rather than referenced: Testcontainers pulls it in for its
     SSH transport, and the version its 4.13.0 release resolved (2025.1.0) carries GHSA-q939-rpr3-3284.
@@ -73,5 +69,4 @@
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
-
 </Project>

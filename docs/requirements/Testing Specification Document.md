@@ -689,3 +689,77 @@ anti-enumeration work should follow the same shape:
 The senders are unit-tested with a stub `IEmailService` rather than reached over the network. The
 functional suite leaves the Mailgun variables unset, so the API registers its logging senders and
 never makes an outbound call.
+
+## 11. Verifying the non-functional requirements
+
+Every use case in this document has a stated way of being tested. The non-functional requirements
+had none: of the eighteen, exactly one — NFR-12 — was named anywhere in this specification, and the
+rest were assertions about the system that nothing was obliged to check. Several were true and
+tested by accident. At least three were not true as written, and that only became visible when
+somebody tried to verify them.
+
+An NFR is not always a test. Three verification methods are used here, and naming which one applies
+is half the point: a requirement verified by inspection is not weaker than one verified by a test,
+but a requirement whose method is "none" is not a requirement yet.
+
+- **Test** — executed by the suite. Fails the build when the property stops holding.
+- **Inspection** — established by reading the code or configuration, and re-established when it
+  changes. Used where executing the property would prove less than reading it.
+- **Measurement** — a number produced by a run and published. Not pass/fail: the figure is the
+  output, and the requirement quotes it.
+
+### 11.1 Method and status per requirement
+
+| ID | Method | Where | Status |
+| --- | --- | --- | --- |
+| NFR-01 (technology) | Inspection | `Directory.Packages.props`, project files | Verified |
+| NFR-02 (password hashing) | Test | `LoginCommandHandlerTests`, `ResetPasswordCommandHandlerTests` — a stored hash never equals the password, and a reset re-salts | Verified |
+| NFR-03 (signed tokens, configurable expiry) | Test | `AuthControllerLoginTests` reads `expiresAt`; `IdentityUserMapperTests` covers the claim round trip | Verified |
+| NFR-04 (authentication required) | Test | Every controller suite has a no-token case; `ActorLivenessTests` covers the liveness exemption | Verified |
+| NFR-05 (response time) | Measurement + regression ceilings | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
+| NFR-06 (horizontal scaling) | Test + inspection | `DataProtectionKeyRingTests` for the key ring; inspection for session-free authentication | Verified — and a defect found, see SRD §6.2 |
+| NFR-07 (integrity under logical deletion) | Test | `NonFunctionalRequirementTests` walks every foreign key in the catalogue after UC-04's cascade | Verified |
+| NFR-08 (hard delete cascades a scope) | Test | `HardDeleteScopeCommandHandlerTests`, `ScopeControllerHardDeleteTests` | Verified |
+| NFR-09 (audit trail) | Test | `AuditLoggingTests`, `AuditingCommandHandlerTests` — both outcomes | Verified |
+| NFR-10 (input validation) | Test | Every `*ValidatorTests` class, plus the 400 cases in the controller suites | Verified |
+| NFR-11 (hard delete cascades a person) | Test | `HardDeletePersonCommandHandlerTests` | Verified |
+| NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10 and UC-22 suites | Verified |
+| NFR-13 (Google token verification) | Inspection + test | `GoogleIdTokenVerifier` delegates to Google's own validator, which a test cannot exercise without contacting Google or forging its signature; `LocalGoogleIdTokenVerifier` covers the flows behind it | Partly verified — see 11.2 |
+| NFR-14 (hard delete cascades Google Users) | Test | `HardDeleteScopeCommandHandlerTests` | Verified |
+| NFR-15 (no internal ids exposed) | Test | `OpenApiContractTests` over the published document; `SchemaTests` on the shape | Verified |
+| NFR-16 (secrets at rest) | Test | `AuthControllerEnableTwoFactorAuthTests` — the secret is stored encrypted and never returned twice; recovery codes stored as hashes | Verified |
+| NFR-17 (challenge token) | Test | `NonFunctionalRequirementTests` — lifetime, the pending claim, and rejection elsewhere | Verified |
+| NFR-18 (password verification cost) | Measurement | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
+
+### 11.2 What this does not cover
+
+Naming the gaps is part of the method; a table of green ticks that hides them is worth less than a
+shorter one that does not.
+
+- **NFR-13 is verified in halves.** That a Google ID token is checked for signature, issuer, audience
+  and expiry is established by inspection: `GoogleJsonWebSignature.ValidateAsync` does it, and
+  reaching that code in a test would mean contacting Google or holding Google's signing key. The
+  suite substitutes a locally signed verifier to reach the flows behind verification, which is the
+  right trade — but it means the suite proves what the API does *with* a verified token, not that
+  Google's own check is wired up correctly. A change that dropped the audience constraint would pass.
+- **NFR-05 and NFR-18 are measured on a developer machine**, not on production hardware, and
+  server-side only. They describe the API's own cost, not what a caller experiences across a network.
+  NFR-18 in particular will be slower wherever there are fewer cores, since Argon2id is configured to
+  use them. The figures also move with load on the measuring machine — a write triples between an
+  idle run and a full-suite one (SRD §6.1) — so a single reading is not a promise, which is why two
+  are published and the budget is set above both.
+- **No load testing exists.** "Under normal load" was removed from NFR-05 rather than defined,
+  because nothing here generates load and a phrase nobody can evaluate is worse than an honest
+  single-caller figure. Concurrency is exercised only where correctness depends on it — the
+  contended-address test in `PersonControllerCreateUserTests`.
+- **NFR-06 is verified for the state the API keeps, not by running two instances.** The key ring
+  test builds two providers sharing only the database, which is the isolation two containers have,
+  but nothing in CI starts a second replica behind a load balancer.
+
+### 11.3 Adding a non-functional requirement
+
+The same rule as a use case: it does not exist until something checks it. A new NFR needs a method
+chosen from 11.1 and an entry in that table before it is merged. If the method is measurement, the
+requirement quotes the figure and names where it was produced; if none of the three fits, that is a
+sign the requirement is not yet stated in a way anybody could disagree with, and it needs rewriting
+rather than exempting.
