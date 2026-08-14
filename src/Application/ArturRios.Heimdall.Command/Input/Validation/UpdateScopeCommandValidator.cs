@@ -14,6 +14,15 @@ public class UpdateScopeCommandValidator : AbstractValidator<UpdateScopeCommand>
     {
         RuleFor(command => command.Name)
             .NotEmpty()
-            .WithMessage(ScopeMessages.NameRequired);
+            .WithMessage(ScopeMessages.NameRequired)
+            .MaximumLength(200)
+            .WithMessage(ScopeMessages.NameTooLong);
+
+        // FluentValidation's MaximumLength rule skips a null argument, so only a non-null overlong
+        // description is rejected — matching how the Application and ScopePermission validators
+        // treat their optional descriptions.
+        RuleFor(command => command.Description)
+            .MaximumLength(500)
+            .WithMessage(ScopeMessages.DescriptionTooLong);
     }
 }

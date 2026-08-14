@@ -32,9 +32,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         inventing a second refusal UC-37 does not define.
 ///     </para>
 ///     <para>
-///         The App and Email checks both run, in that order, before anything is written — so a
-///         request that fails either one leaves the pending row and its outstanding email code
-///         completely untouched, and can be retried.
+///         The App and Email checks both run, in that order, and a request that fails either one
+///         activates nothing — the pending row stays pending and can be confirmed by a later attempt.
+///         One thing does change on the way through, though: an app code that verified is spent, so
+///         a request whose App check passed and whose Email check then failed has to be retried with
+///         a <em>fresh</em> app code. That is the single-use rule working as intended
+///         (<see cref="ITotpCodeVerifier" />), not an accident of ordering — a code presented to this
+///         endpoint has been presented, whatever the rest of the request went on to do.
 ///     </para>
 ///     <para>
 ///         <b>Write order.</b> The recovery codes are persisted <em>before</em>

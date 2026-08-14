@@ -92,6 +92,44 @@ public class PersonControllerListScopePersonsTests(PostgresFixture db) : WebApiT
     }
 
     [FunctionalFact]
+    public async Task GivenUsersSharingAName_WhenPagingThroughTheScope_ThenEveryUserAppearsExactlyOnce()
+    {
+        // Given six Users of whom four share a name — an ordinary situation, and one that used to
+        // break paging. The list is ordered by name, which is not unique, and PostgreSQL gives no
+        // ordering guarantee between rows whose sort key ties: each page is its own query, free to
+        // break the tie differently. A caller walking the pages could see one person twice and miss
+        // another entirely.
+        var scope = await SeedScopeAsync();
+        var expected = new List<Guid>();
+
+        foreach (var name in new[] { "Ana Silva", "Ana Silva", "Ana Silva", "Ana Silva", "Bruno", "Carla" })
+        {
+            expected.Add((await SeedUserAsync(scope, name)).PublicId);
+        }
+
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When every page is walked at a size that puts the boundary inside the tied run
+        var seen = new List<Guid>();
+
+        for (var pageNumber = 1; pageNumber <= 3; pageNumber++)
+        {
+            var page = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(
+                $"/api/scopes/{scope.PublicId}/persons?pageNumber={pageNumber}&pageSize=2");
+
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            Assert.Equal(6, page.Body!.TotalItems);
+
+            seen.AddRange(page.Body.Data!.Select(person => person.Id));
+        }
+
+        // Then — six distinct people, and exactly the six that were seeded
+        Assert.Equal(6, seen.Count);
+        Assert.Equal(6, seen.Distinct().Count());
+        Assert.Equal(expected.OrderBy(id => id), seen.OrderBy(id => id));
+    }
+
+    [FunctionalFact]
     public async Task GivenOwnerScopeAdmin_WhenGetScopePersons_ThenReturnsUsers()
     {
         // Given a ScopeAdmin who owns the scope

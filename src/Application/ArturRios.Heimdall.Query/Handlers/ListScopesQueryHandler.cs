@@ -57,7 +57,17 @@ public class ListScopesQueryHandler(
             UpdatedAt = x.UpdatedAt
         });
 
-        var output = await projected.PaginateAsync(query.PageNumber, query.PageSize, x => x.Name);
+        // Ordered by name with the public identifier as a tiebreaker, then paginated over that
+        // ordering rather than handing PaginateAsync a sort key of its own.
+        //
+        // Name is not unique, and PostgreSQL gives no ordering guarantee between rows whose sort key
+        // ties — each page is a separate query, free to break the tie differently. Two people called
+        // "Ana Silva" straddling a page boundary could therefore appear on both pages while somebody
+        // else appeared on neither. The tiebreaker makes the total order deterministic, so paging
+        // through a list sees every row exactly once.
+        var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
+
+        var output = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
 
         return output.WithMessage(ScopeMessages.ScopesRetrievedSuccessfully);
     }

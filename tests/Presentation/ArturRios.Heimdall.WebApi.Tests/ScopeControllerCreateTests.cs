@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -106,6 +107,48 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
 
         // Then
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenOverlongName_WhenPostScope_ThenBadRequestWithTheValidationMessage()
+    {
+        // Given a name one character past the column that stores it. Every other entity's validator
+        // bounds its lengths; the scope validators did not, so the value travelled all the way to
+        // PostgreSQL and came back as "22001: value too long for type character varying(200)" —
+        // a 400, but one that names the database's error code and the column's type to the caller
+        // instead of saying what was wrong with the request (NFR-10).
+        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<CreateScopeCommandOutput?>>(
+            "/api/scopes",
+            new CreateScopeCommand { Name = new string('x', 201), OwnerIds = [owner.PublicId] });
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(ScopeMessages.NameTooLong, response.Body!.Errors);
+        Assert.DoesNotContain(response.Body.Errors, error => error.Contains("character varying"));
+    }
+
+    [FunctionalFact]
+    public async Task GivenOverlongDescription_WhenPostScope_ThenBadRequestWithTheValidationMessage()
+    {
+        // Given a description one character past its column, the optional field's counterpart
+        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<CreateScopeCommandOutput?>>(
+            "/api/scopes",
+            new CreateScopeCommand
+            {
+                Name = UniqueName(), Description = new string('x', 501), OwnerIds = [owner.PublicId]
+            });
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(ScopeMessages.DescriptionTooLong, response.Body!.Errors);
     }
 
     [FunctionalFact]

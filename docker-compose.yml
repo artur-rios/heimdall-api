@@ -73,6 +73,9 @@ services:
       # Comma-separated Google OAuth client IDs accepted as an ID token's audience. Unset, Google
       # sign-in refuses every token rather than trusting an unverified one.
       HEIMDALL_GOOGLE_CLIENT_IDS: ${HEIMDALL_GOOGLE_CLIENT_IDS:-}
+      # Empty by default, which refuses every cross-origin request. A browser front end will not
+      # reach the API until its origin is listed here.
+      HEIMDALL_CORS_ALLOWED_ORIGINS: ${HEIMDALL_CORS_ALLOWED_ORIGINS:-}
 
       # The entrypoint applies pending EF Core migrations before starting the API. false when they
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.

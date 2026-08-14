@@ -34,6 +34,12 @@ public static class ScopeMessages
     /// <summary>AF-01b: the scope name was not supplied.</summary>
     public const string NameRequired = "Scope name is required.";
 
+    /// <summary>AF-01b: the scope name is longer than the column that stores it.</summary>
+    public const string NameTooLong = "Scope name must be at most 200 characters.";
+
+    /// <summary>AF-01b: the scope description is longer than the column that stores it.</summary>
+    public const string DescriptionTooLong = "Scope description must be at most 500 characters.";
+
     /// <summary>AF-01b: no owner was supplied.</summary>
     public const string AtLeastOneOwnerRequired = "At least one owner must be specified.";
 

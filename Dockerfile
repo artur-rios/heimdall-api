@@ -11,6 +11,12 @@ WORKDIR /source
 COPY .config/dotnet-tools.json .config/
 RUN dotnet tool restore
 
+# Central package management: the project files name their packages and this file alone gives the
+# versions, so restore fails outright without it. It belongs in this layer rather than with the
+# sources below for the same reason the csproj files do — a source-only change must not invalidate
+# the restore cache, and a version change should.
+COPY Directory.Packages.props ./
+
 COPY src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall.WebApi.csproj src/Presentation/ArturRios.Heimdall.WebApi/
 COPY src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj src/Application/ArturRios.Heimdall.Command/
 COPY src/Application/ArturRios.Heimdall.Query/ArturRios.Heimdall.Query.csproj src/Application/ArturRios.Heimdall.Query/

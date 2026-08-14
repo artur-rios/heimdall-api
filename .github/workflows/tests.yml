@@ -103,3 +103,22 @@ jobs:
           name: test-results
           path: '**/TestResults/*.trx'
           if-no-files-found: warn
+
+  # Nothing else in CI builds the container image, and it can break on its own: the Dockerfile
+  # restores from a hand-listed set of project files rather than the whole tree, so a new file that
+  # restore depends on — Directory.Packages.props, when central package management was introduced —
+  # is missing from the build context and fails there while every other job stays green.
+  #
+  # Build only, no push and no run: the point is that the image can still be produced, and the API
+  # inside it is already covered by the suites above.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
