@@ -71,7 +71,8 @@ public class GoogleSignInCommandHandlerTests
         Scope scope,
         string googleId = GoogleSubject,
         string email = Email,
-        bool isDeleted = false)
+        bool isDeleted = false,
+        bool emailVerified = true)
     {
         // Bogus fills the descriptive fields; only what the lookups read is pinned.
         var googleUser = new Bogus.Faker<GoogleUser>()
@@ -80,6 +81,7 @@ public class GoogleSignInCommandHandlerTests
             .RuleFor(x => x.Email, _ => email)
             .RuleFor(x => x.ScopeId, _ => scope.Id)
             .RuleFor(x => x.IsDeleted, _ => isDeleted)
+            .RuleFor(x => x.EmailVerified, _ => emailVerified)
             .Generate();
 
         await googleUsers.CreateAsync(googleUser);
@@ -428,5 +430,64 @@ public class GoogleSignInCommandHandlerTests
         var stored = (await googleUsers.GetAllAsync()).Data!.Single();
         Assert.Equal(string.Empty, stored.Name);
         Assert.Null(stored.ProfilePictureUrl);
+    }
+
+    [UnitFact]
+    public async Task GivenPayloadReportsVerifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedTrue()
+    {
+        // Given Google asserting the address is verified (FR-EV-05)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenPayloadReportsUnverifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedFalse()
+    {
+        // Given Google asserting the address is not verified — email_verified can be false
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenStoredValueDisagreesWithPayload_WhenHandlingGoogleSignIn_ThenOutputReportsThePayload()
+    {
+        // Given a returning Google User stored as unverified whose token now says verified: the
+        // token just verified in this request is the fresher truth (design: source of the value)
+        var scopes = new AsyncFakeRepository<Scope>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
     }
 }

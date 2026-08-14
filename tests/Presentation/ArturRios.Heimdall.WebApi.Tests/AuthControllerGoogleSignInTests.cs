@@ -47,7 +47,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     private async Task<GoogleUser> SeedGoogleUserAsync(
-        Scope scope, string googleId, string email, bool isDeleted = false)
+        Scope scope, string googleId, string email, bool isDeleted = false, bool emailVerified = true)
     {
         await using var context = db.CreateContext();
 
@@ -57,7 +57,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
             GoogleId = googleId,
             Name = "Existing Signer",
             Email = email,
-            EmailVerified = true,
+            EmailVerified = emailVerified,
             ScopeId = scope.Id,
             IsDeleted = isDeleted
         };
@@ -363,5 +363,20 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
         var stored = Assert.Single(await StoredAsync(scope));
         Assert.True(stored.IsDeleted);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTokenReportsUnverifiedAddress_WhenPostAuthGoogle_ThenResponseReportsEmailVerifiedFalse()
+    {
+        // Given a first sign-in with a Google token whose email_verified claim is false (FR-EV-05)
+        var scope = await SeedScopeAsync();
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(emailVerified: false));
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Body!.Data!.EmailVerified);
     }
 }

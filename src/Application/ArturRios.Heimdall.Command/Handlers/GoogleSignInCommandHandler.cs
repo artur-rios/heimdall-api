@@ -95,7 +95,10 @@ public class GoogleSignInCommandHandler(
             []));
 
         return output
-            .WithData(new GoogleSignInCommandOutput { Token = token.Token, ExpiresAt = token.ExpiresAt })
+            .WithData(new GoogleSignInCommandOutput
+            {
+                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = payload.EmailVerified
+            })
             .WithMessage(AuthMessages.GoogleSignInSuccessful);
     }
 

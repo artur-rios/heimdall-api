@@ -21,4 +21,11 @@ public class GoogleSignInCommandOutput : CommandOutput
 
     /// <summary>When the token expires, in UTC.</summary>
     public DateTime ExpiresAt { get; set; }
+
+    /// <summary>
+    ///     Whether Google asserts the account's email address is verified (FR-EV-05), read from the
+    ///     ID token verified in this same request rather than from the stored row — the token is the
+    ///     fresher of the two.
+    /// </summary>
+    public bool EmailVerified { get; set; }
 }
