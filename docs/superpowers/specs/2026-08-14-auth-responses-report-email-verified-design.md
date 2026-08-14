@@ -121,8 +121,11 @@ Controller tests, asserting the field on the serialized response, in
 `AuthControllerLoginTests`, `AuthControllerVerifyTwoFactorAuthTests`, and
 `AuthControllerGoogleSignInTests`.
 
-`OpenApiContractTests` runs against the regenerated document; the three schemas must carry
-the new property.
+`OpenApiContractTests` asserts only that no server-populated field reaches a request body,
+so it neither covers nor obstructs this change; it must keep passing against the
+regenerated document. What guards the published contract here is `scripts/openapi.py
+check`, which CI runs and which fails if the committed document does not match what the
+built API serves.
 
 ## Documentation
 
