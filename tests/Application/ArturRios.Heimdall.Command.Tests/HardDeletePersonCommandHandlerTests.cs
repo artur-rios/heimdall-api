@@ -49,7 +49,7 @@ public class HardDeletePersonCommandHandlerTests
             Email = $"user-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.User,
             IsDeleted = isDeleted,
-            ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         };
         await fakes.Persons.CreateAsync(person);
 

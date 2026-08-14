@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -72,6 +73,50 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Equal((long)Roles.User, person.RoleId);
         Assert.True(await context.ScopeUsers.AnyAsync(su => su.PersonId == person.Id && su.ScopeId == scope.Id));
         Assert.True(await context.EmailVerificationTokens.AnyAsync(t => t.PersonId == person.Id));
+    }
+
+    [FunctionalFact]
+    public async Task GivenConcurrentCreatesOnOneAddress_WhenPostScopePersons_ThenExactlyOneSucceeds()
+    {
+        // Given one address and several requests for it at once, in the same scope. UC-06 checks the
+        // address is free and then writes, and nothing serialised the two steps: every request read
+        // "free" before any of them wrote, so all of them proceeded. The scope ended up with several
+        // Users on one address, and since UC-11's lookup resolves one row and stops, all but one of
+        // them could never log in — an account created successfully that cannot be used.
+        //
+        // ux_person_scope_user_email is what serialises them now. The losers are refused by the
+        // index, and the handler reports that as AF-06a, so a caller cannot tell a lost race from
+        // an address that was already taken when they asked.
+        var scope = await SeedScopeAsync();
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        var email = $"contended-{Guid.NewGuid():N}@test.local";
+
+        var attempts = Enumerable.Range(0, 4).Select(_ =>
+            Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
+                $"/api/scopes/{scope.PublicId}/persons",
+                new CreateUserCommand { Name = "Contended", Email = email, Password = "Str0ngPass!" }));
+
+        var responses = await Task.WhenAll(attempts);
+
+        // Then — exactly one row exists for the address in this scope
+        await using var context = db.CreateContext();
+
+        var persisted = await context.Persons
+            .Where(person => person.Email == email && person.ScopeId == scope.Id)
+            .ToListAsync();
+
+        Assert.Single(persisted);
+
+        // Then — exactly one caller was told it succeeded, and the rest got AF-06a's conflict rather
+        // than a persistence failure
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
+
+        foreach (var loser in responses.Where(r => r.StatusCode != HttpStatusCode.Created))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, loser.StatusCode);
+            Assert.Contains(PersonMessages.EmailAlreadyExists, loser.Body!.Errors);
+        }
     }
 
     [FunctionalFact]

@@ -55,6 +55,9 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
         var user = await SeedPersonAsync(Roles.User);
         await using var context = db.CreateContext();
         context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = user.Id });
+        // Person.ScopeId mirrors the membership row, as the application writes it — without
+        // it the seeded User sits outside the per-scope uniqueness index.
+        user.ScopeId = scope.Id;
         await context.SaveChangesAsync();
         return user;
     }

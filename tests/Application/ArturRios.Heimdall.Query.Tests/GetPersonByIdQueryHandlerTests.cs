@@ -23,7 +23,7 @@ public class GetPersonByIdQueryHandlerTests
         Email = $"user-{id}@test.local",
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
-        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, params Scope[] ownedScopes) => new()

@@ -58,7 +58,7 @@ public class CreateApplicationCommandHandlerTests
             Email = $"user-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.User,
             IsDeleted = isDeleted,
-            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         };
         await persons.CreateAsync(person);
         return person;

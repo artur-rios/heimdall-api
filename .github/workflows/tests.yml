@@ -34,6 +34,16 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Run the Python helper tests
+        # scripts/test_migrations.py covers migrations.py's pure helpers — the .env parser, and the
+        # connection-string masking that keeps a password out of the console. They are the only
+        # Python in the repository with tests, and until now nothing ran them: every other step here
+        # is dotnet, so a change that broke the masking would have landed green.
+        #
+        # First, because it costs milliseconds and needs no build: a broken helper is reported before
+        # the runner spends minutes restoring, building and starting a PostgreSQL container.
+        run: python3 -m unittest discover -s scripts -p "test_*.py" --verbose
+
       - name: Restore dependencies
         run: dotnet restore src/ArturRios.Heimdall.sln
 

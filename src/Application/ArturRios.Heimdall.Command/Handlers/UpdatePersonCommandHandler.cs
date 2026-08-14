@@ -97,6 +97,7 @@ public class UpdatePersonCommandHandler(
         {
             person.RoleId = roleChange.TargetRoleId;
             person.ScopeMembership = null;
+            person.ScopeId = null;
             person.ScopeOwnerships.Clear();
         }
 

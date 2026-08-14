@@ -39,6 +39,7 @@ public class PasswordRecoveryCommandHandlerTests
     private static Person User(long id, string email, Scope scope, bool isDeleted = false)
     {
         var person = Person(id, email, Roles.User, isDeleted);
+        person.ScopeId = scope.Id;
         person.ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope };
         return person;
     }

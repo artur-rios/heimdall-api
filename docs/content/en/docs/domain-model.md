@@ -100,6 +100,7 @@ classDiagram
         +bool EmailVerified
         +int FailedLoginAttempts
         +DateTime? LockedOutUntil
+        +long? ScopeId
     }
     class TwoFactorAuth {
         +long PersonId
@@ -271,18 +272,34 @@ differ in how far the database can enforce them.
 | --- | --- |
 | An administrator's address is unique system-wide among live `ScopeAdmin`s and `SystemAdmin`s | `ux_person_admin_email`, a partial unique index on `LOWER(email) WHERE role_id IN (1, 2) AND is_deleted = false` |
 | A Google User's address is unique within their scope | `ix_google_user_scope_id_email`, unique on `(scope_id, LOWER(email))` |
-| A User's address is unique within their scope, jointly with that scope's Google Users | The application layer only — `CreateUserCommandHandler`, `UpdatePersonCommandHandler`, `GoogleSignInCommandHandler` |
+| A User's address is unique within their scope | `ux_person_scope_user_email`, unique on `(scope_id, LOWER(email))` where `role_id = 3 AND is_deleted = false` |
+| …jointly with that scope's Google Users | The application layer — `CreateUserCommandHandler`, `UpdatePersonCommandHandler`, `GoogleSignInCommandHandler` |
 
-Both indexes are over `LOWER(email)` because the handlers compare addresses case-insensitively; an
-index over the raw column would enforce a different rule than the one the code applies, and accept
-pairs a handler had already refused.
+All three indexes are over `LOWER(email)` because the handlers compare addresses case-insensitively;
+an index over the raw column would enforce a different rule than the one the code applies, and
+accept pairs a handler had already refused.
 
-{{% alert title="One rule the database cannot hold" color="warning" %}}
-The third row is a check-then-insert, so two concurrent creates can both read "free" and both write.
-It cannot be a unique index: a `User`'s scope lives in `SCOPE_USER` and a PostgreSQL index covers one
-table, and a trigger would not close the race either — under `READ COMMITTED` both inserts see the
-same pre-write snapshot. Closing it properly needs the scope denormalised onto a column `PERSON` can
-index, or a reservation table keyed on `(scope_id, lower(email))` written in the same transaction.
-Until then the loser of that race is a person who cannot log in, because UC-11's lookup resolves one
-row and stops.
+### The scope a User belongs to, twice
+
+`PERSON.scope_id` is a copy of the owning `SCOPE_USER` row's scope, and exists for one reason: the
+third rule above could not otherwise be enforced. The scope lives in `SCOPE_USER` and the address in
+`PERSON`, a PostgreSQL unique index covers one table, and a trigger closes nothing — under
+`READ COMMITTED` two concurrent inserts see the same pre-write snapshot and both find the address
+free. Only a unique index serialises them, and an index needs its columns on one table.
+
+`SCOPE_USER` remains the relationship (§4.6) and every read goes through it. The copy is written by
+the three handlers that write the membership — UC-06 path a sets both, UC-23 and UC-08's role change
+clear both — and the index's condition matches `CreateUserCommandHandler`'s check term for term, so
+the rule itself did not change. Only who enforces it under concurrency did.
+
+A caller who loses that race is answered by AF-06a, the same conflict they would have got had the
+address already been taken when they asked, rather than a persistence failure: losing a race is not
+something the API makes visible.
+
+{{% alert title="The one half still in the application" color="warning" %}}
+The joint rule with Google Users spans `PERSON` and `GOOGLE_USER`, so no single index can hold it —
+both identity kinds would have to write into one. It remains a check-then-insert, and a Google
+sign-up racing a `User` creation on the same address in the same scope can still produce both. The
+window is far narrower than the one just closed, since it needs two different endpoints to interleave
+rather than two calls to the same one.
 {{% /alert %}}

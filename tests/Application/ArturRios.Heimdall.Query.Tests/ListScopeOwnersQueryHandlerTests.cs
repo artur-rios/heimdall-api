@@ -37,7 +37,7 @@ public class ListScopeOwnersQueryHandlerTests
         Name = $"user-{id}",
         Email = $"user-{id}@test.local",
         RoleId = (long)Roles.User,
-        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static IScopeOwnershipChecker Ownership(bool allowed)

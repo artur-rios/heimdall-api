@@ -28,11 +28,13 @@ internal static class PersonDbMap
         // one filtered on a role set). It is the real enforcement: the application's check-then-
         // insert cannot be, since two concurrent creates both read "free" before either writes.
         //
-        // The User half — unique per scope — reads the scope from SCOPE_USER, so no single-table
-        // index covers it, and a trigger would not close the race either (two concurrent inserts see
-        // the same pre-write snapshot under READ COMMITTED). It stays enforced in the application
-        // layer, and closing its race properly needs the scope denormalised onto a column this table
-        // can index. See docs/content/en/docs/domain-model.md.
+        // The User half — unique per scope — is now a partial unique index too, created by the
+        // AddPersonScopeId migration over (scope_id, LOWER(email)) WHERE role_id = 3 AND
+        // is_deleted = false. It reads the scope from Person.ScopeId, the copy of SCOPE_USER's
+        // ScopeId that exists for exactly this purpose: the relationship itself is still SCOPE_USER,
+        // but an index has to be written over one table's columns, and every other column the rule
+        // needs already lives here. The condition matches the application's check term for term, so
+        // the rule did not change — only who is able to enforce it under concurrency.
         //
         // This non-unique index remains for lookup speed: UC-11 and UC-12 both resolve a person by
         // address on every call.
@@ -43,6 +45,12 @@ internal static class PersonDbMap
 
         person.Property(x => x.IsDeleted).HasDefaultValue(false);
         person.Property(x => x.EmailVerified).HasDefaultValue(false);
+
+        // Deliberately not a foreign key and not a navigation. It carries no relationship of its own
+        // — SCOPE_USER is the relationship, and mapping this as a second one would give EF two ways
+        // to describe the same association and two chances to disagree. It is a value the per-scope
+        // uniqueness index is written over, kept in step by the handlers that write the membership.
+        person.Property(x => x.ScopeId);
 
         person.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         person.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");

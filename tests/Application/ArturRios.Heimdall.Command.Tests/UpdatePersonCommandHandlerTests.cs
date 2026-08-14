@@ -31,7 +31,7 @@ public class UpdatePersonCommandHandlerTests
         Email = email,
         RoleId = (long)Roles.User,
         EmailVerified = true,
-        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, string email = "admin@test.local", params Scope[] owned) => new()

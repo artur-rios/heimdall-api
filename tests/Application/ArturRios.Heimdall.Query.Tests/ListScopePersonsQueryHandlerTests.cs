@@ -27,7 +27,7 @@ public class ListScopePersonsQueryHandlerTests
         Email = email,
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
-        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person Owner(long id, Scope scope) => new()

@@ -58,6 +58,26 @@ public class Person : Entity
     /// <summary>Foreign key to the associated <c>Role</c> (internal Id). Required.</summary>
     public long RoleId { get; set; }
 
+    /// <summary>
+    ///     The scope a <c>User</c> belongs to (internal Id), or <c>null</c> for a <c>ScopeAdmin</c>
+    ///     or <c>SystemAdmin</c>. A copy of <see cref="ScopeMembership" />'s <c>ScopeId</c>, not a
+    ///     second source of truth: <c>SCOPE_USER</c> remains the relationship (§4.6) and every read
+    ///     goes through it.
+    /// </summary>
+    /// <remarks>
+    ///     This exists for one reason — FR-PE-09's per-scope rule cannot otherwise be enforced. The
+    ///     scope lives in <c>SCOPE_USER</c> and the address in <c>PERSON</c>, and a PostgreSQL unique
+    ///     index covers one table, so the rule was left to a check-then-insert that two concurrent
+    ///     creates both pass. Carrying the scope here lets the index be written over columns this
+    ///     table already has — <c>role_id</c>, <c>is_deleted</c>, <c>email</c> — with a condition
+    ///     matching the application's check exactly, so nothing about the rule changes; only who
+    ///     enforces it does.
+    ///
+    ///     Kept in step with <see cref="ScopeMembership" /> at the three places that write it:
+    ///     UC-06 path a sets both, UC-23 and UC-08's role change clear both.
+    /// </remarks>
+    public long? ScopeId { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

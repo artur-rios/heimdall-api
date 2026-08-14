@@ -29,7 +29,7 @@ public class DeletePersonCommandHandlerTests
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
         UpdatedAt = Stamp,
-        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person ScopeAdmin(long id, bool isDeleted = false, params Scope[] owned) => new()

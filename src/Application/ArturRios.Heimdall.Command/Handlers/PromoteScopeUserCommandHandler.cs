@@ -100,6 +100,7 @@ public class PromoteScopeUserCommandHandler(
         // SCOPE_OWNER row (as UC-21 does). UpdatedAt is stamped by hand — no trigger maintains it.
         person.RoleId = (long)Roles.ScopeAdmin;
         person.ScopeMembership = null;
+        person.ScopeId = null;
         person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
         person.UpdatedAt = DateTime.UtcNow;
 

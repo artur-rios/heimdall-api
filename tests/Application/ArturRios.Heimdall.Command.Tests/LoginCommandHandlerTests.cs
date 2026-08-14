@@ -47,6 +47,7 @@ public class LoginCommandHandlerTests
         string password = Password)
     {
         var person = Person(id, email, Roles.User, isDeleted, password);
+        person.ScopeId = scope.Id;
         person.ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope };
         return person;
     }

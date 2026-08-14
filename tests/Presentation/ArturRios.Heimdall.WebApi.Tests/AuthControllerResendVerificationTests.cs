@@ -68,6 +68,9 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
 
         await using var context = db.CreateContext();
         context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
+        // Person.ScopeId mirrors the membership row, as the application writes it — without
+        // it the seeded User sits outside the per-scope uniqueness index.
+        person.ScopeId = scope.Id;
         await context.SaveChangesAsync();
 
         return person;

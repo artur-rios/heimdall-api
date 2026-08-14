@@ -47,7 +47,7 @@ public class PromoteScopeUserCommandHandlerTests
             IsDeleted = isDeleted,
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             UpdatedAt = DateTime.UtcNow.AddDays(-1),
-            ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         };
 
         await persons.CreateAsync(person);

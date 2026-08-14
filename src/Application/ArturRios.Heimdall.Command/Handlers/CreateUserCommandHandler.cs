@@ -1,4 +1,5 @@
 using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
@@ -94,13 +95,26 @@ public class CreateUserCommandHandler(
             PasswordHash = passwordHash,
             Salt = salt,
             RoleId = (long)Roles.User,
-            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id },
+            // Kept in step with the membership row above; see Person.ScopeId for why the scope is
+            // carried here as well. It is what the per-scope uniqueness index is written over.
+            ScopeId = scope.Id
         };
 
         var creation = await personWriter.CreateAsync(newPerson);
 
         if (!creation.Success)
         {
+            // The per-scope uniqueness index refusing the insert means another request took the
+            // address between this handler's check above and this write — the race the index exists
+            // to catch. It is the same conflict AF-06a describes, so it is reported as AF-06a rather
+            // than as a persistence failure: a caller who lost the race should not be able to tell
+            // they lost a race, only that the address is taken.
+            if (creation.Errors.Contains(RelationalErrors.UniqueViolationMessage))
+            {
+                return output.WithError(PersonMessages.EmailAlreadyExists);
+            }
+
             return output.WithErrors(creation.Errors);
         }
 
