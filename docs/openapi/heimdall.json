@@ -4073,6 +4073,9 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "emailVerified": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -4576,6 +4579,10 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          },
+          "emailVerified": {
+            "type": "boolean",
             "nullable": true
           },
           "requiresTwoFactor": {
@@ -5840,6 +5847,9 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "emailVerified": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

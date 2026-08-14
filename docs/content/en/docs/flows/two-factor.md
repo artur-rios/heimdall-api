@@ -115,7 +115,7 @@ sequenceDiagram
     VH->>DB: mark the redeemed email code Used
     VH->>TS: IssueAsync(subject)
     TS-->>VH: full authentication token
-    VH-->>C: 200 {token, expiresAt}
+    VH-->>C: 200 {token, expiresAt, emailVerified}
 ```
 
 Three details in that diagram carry real weight:

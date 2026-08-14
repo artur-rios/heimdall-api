@@ -172,6 +172,7 @@ graph LR
 | FR-EV-02 | The verification email shall contain a time-limited verification token | High |
 | FR-EV-03 | The system shall mark the person's email as verified upon receiving a valid verification token | High |
 | FR-EV-04 | The system shall allow re-sending the verification email | Medium |
+| FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
 
 ### 3.7 Application Management
 
@@ -209,6 +210,7 @@ graph LR
 | FR-GO-16 | The system shall allow **hard deletion** of a Google User, permanently removing the record | High |
 | FR-GO-17 | Logically deleted Google Users shall not appear in default query results unless explicitly requested | Medium |
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out, invalidating/discarding their authentication token | High |
+| FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims | Medium |
 
 ### 3.9 Scope Permission Management
 
@@ -799,7 +801,7 @@ Notes on cascading behavior:
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-08 |
 | Password Recovery | FR-PR-01 through FR-PR-04 |
-| Email Verification | FR-EV-01 through FR-EV-04 |
-| Google Sign-In | FR-GO-01 through FR-GO-18 |
+| Email Verification | FR-EV-01 through FR-EV-05 |
+| Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-12 |

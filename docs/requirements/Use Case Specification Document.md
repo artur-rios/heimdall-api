@@ -645,7 +645,7 @@ sequenceDiagram
 | **Actors** | Anonymous, User, Scope Admin, System Admin |
 | **Description** | Authenticate a person with email and password to obtain a token. A `User` must also provide their scope ID, since their email is only unique within that scope; a `ScopeAdmin` or `SystemAdmin` logs in with email and password only |
 | **Preconditions** | None |
-| **Postconditions** | An authentication token is issued |
+| **Postconditions** | An authentication token is issued, and the response reports whether the person's email is verified |
 
 **Main Flow (User):**
 
@@ -663,7 +663,7 @@ sequenceDiagram
     API->>API: Check IsDeleted == false
     API->>API: Check scope.IsDeleted == false
     API->>API: Generate JWT token { personId, role, scopeId }
-    API-->>U: 200 OK { token, expiresAt }
+    API-->>U: 200 OK { token, expiresAt, emailVerified }
 ```
 
 **Main Flow (Scope Admin / System Admin):**
@@ -682,7 +682,7 @@ sequenceDiagram
     API->>API: Check IsDeleted == false
     API->>DB: If ScopeAdmin, load owned ScopeIds and check at least one is not logically deleted
     API->>API: Generate JWT token { personId, role, ownedScopeIds? }
-    API-->>A: 200 OK { token, expiresAt }
+    API-->>A: 200 OK { token, expiresAt, emailVerified }
 ```
 
 1. Caller sends email and password to `POST /api/auth/login` (a `User` also sends their scope ID). The endpoint is open to anonymous callers — it is where every other endpoint's token comes from.
@@ -1245,9 +1245,10 @@ sequenceDiagram
     else Google User exists
         API->>DB: Check IsDeleted == false
         DB-->>API: Confirmed
+        API->>DB: Refresh EmailVerified from the token claims if it differs
     end
     API->>API: Generate JWT token { googleUserId, role = User, scopeId }
-    API-->>Caller: 200 OK { token, expiresAt }
+    API-->>Caller: 200 OK { token, expiresAt, emailVerified }
 ```
 
 1. The caller authenticates with Google (outside this API) and obtains a signed ID token.
@@ -1256,7 +1257,7 @@ sequenceDiagram
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
 6. If none exists: the system verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
-7. If one exists: the system confirms it is not logically deleted.
+7. If one exists: the system confirms it is not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19).
 8. The system issues an authentication token containing the Google User's ID, `role = User`, and the scope ID.
 
 **Alternative Flows:**
@@ -1667,7 +1668,7 @@ sequenceDiagram
     API->>API: Verify code as a current TOTP/email code, or as an unused recovery code
     API->>DB: If a recovery code was used, mark it Used = true
     API->>API: Generate full JWT token { personId, role, scopeId/ownedScopeIds? }
-    API-->>U: 200 OK { token, expiresAt }
+    API-->>U: 200 OK { token, expiresAt, emailVerified }
 ```
 
 1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
