@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -21,7 +22,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 //
 // The proof that the password really changed is a login: the response says only that it did, and the
 // stored hash is meaningless on its own, so the tests reset a password and then authenticate with
-// it — and confirm the old one is refused. That also pins the two use cases together end to end.
+// it — and confirm the old one is refused. Every token here is seeded, so the test holds the
+// plaintext; since TH-14 one the API issued cannot be read back and spent.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -79,20 +81,24 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     ///     about consuming a token, and only a direct write can produce one that is already expired
     ///     or already used.
     /// </summary>
-    private async Task<PasswordResetToken> SeedTokenAsync(
+    private async Task<string> SeedTokenAsync(
         Person person, string? value = null, DateTime? expiresAt = null, bool used = false)
     {
+        // Returns the token, stores its digest (TH-14). The caller gets what a person gets out of an
+        // email, and the row holds what the row is allowed to hold.
+        var plaintext = value ?? UniqueToken();
+
         await using var context = db.CreateContext();
         var token = new PasswordResetToken
         {
             PersonId = person.Id,
-            Token = value ?? UniqueToken(),
+            TokenHash = SingleUseTokenHash.Of(plaintext),
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddHours(1),
             Used = used
         };
         context.PasswordResetTokens.Add(token);
         await context.SaveChangesAsync();
-        return token;
+        return plaintext;
     }
 
     private Task<HttpOutput<DataOutput<ResetPasswordCommandOutput?>?>> ResetAsync(
@@ -125,7 +131,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await ResetAsync(token.Token);
+        var response = await ResetAsync(token);
 
         // Then — response
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -151,7 +157,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await ResetAsync(token.Token);
+        var response = await ResetAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -171,7 +177,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person);
 
         // When
-        await ResetAsync(token.Token);
+        await ResetAsync(token);
 
         // Then
         await using var context = db.CreateContext();
@@ -192,14 +198,14 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var second = await SeedTokenAsync(person);
 
         // When the second link is the one clicked
-        var response = await ResetAsync(second.Token);
+        var response = await ResetAsync(second);
 
         // Then — both rows are spent
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.All(await TokensForAsync(person), token => Assert.True(token.Used));
 
         // Then — and the first link cannot change the password a second time (AF-13b)
-        var replay = await ResetAsync(first.Token, "An0ther-Pass!");
+        var replay = await ResetAsync(first, "An0ther-Pass!");
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, replay.Body!.Errors);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
@@ -214,11 +220,12 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var theirToken = await SeedTokenAsync(other);
 
         // When
-        await ResetAsync((await SeedTokenAsync(person)).Token);
+        await ResetAsync(await SeedTokenAsync(person));
 
         // Then
         Assert.False(Assert.Single(await TokensForAsync(other)).Used);
-        Assert.Equal(theirToken.Token, (await TokensForAsync(other)).Single().Token);
+        Assert.Equal(
+            SingleUseTokenHash.Of(theirToken), (await TokensForAsync(other)).Single().TokenHash);
     }
 
     [FunctionalFact]
@@ -230,7 +237,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
 
         // When
-        var response = await ResetAsync(token.Token);
+        var response = await ResetAsync(token);
 
         // Then — response
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -250,7 +257,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person, used: true);
 
         // When
-        var response = await ResetAsync(token.Token);
+        var response = await ResetAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -280,7 +287,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
 
         // When
-        var response = await ResetAsync(token.Token.ToLower());
+        var response = await ResetAsync(token.ToLower());
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -314,7 +321,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await ResetAsync(token.Token);
+        var response = await ResetAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -337,30 +344,36 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     }
 
     [FunctionalFact]
-    public async Task GivenRecoveryRequested_WhenResettingWithTheIssuedToken_ThenPasswordIsChanged()
+    public async Task GivenRecoveryRequested_WhenInspectingWhatWasStored_ThenOnlyADigestIs()
     {
-        // Given the two use cases joined as a person actually meets them: UC-12 issues the token,
-        // UC-13 spends it. Nothing here reaches into the database to build a token by hand.
+        // This test used to join UC-12 to UC-13 — request a recovery, read the issued token back out
+        // of the row, spend it — and it cannot any more, which is the point of TH-14: the token is
+        // mailed and nowhere else, and this suite has no Mailgun credentials and no seam to
+        // substitute a sender through, so there is no inbox for it to read.
+        //
+        // What it asserts instead is the property that replaced the one it lost: UC-12 wrote a live,
+        // unused token, and what it wrote is a 32-byte SHA-256 rather than anything a caller could
+        // present back. The spending half is covered where the plaintext is still reachable —
+        // PasswordResetServiceTests captures it from the sender and pins the stored digest to it,
+        // and ResetPasswordCommandHandlerTests seeds through the same helper and spends it — so both
+        // halves go through SingleUseTokenHash and would fail together if it changed.
         var email = UniqueEmail("admin");
         await SeedPersonAsync(Roles.SystemAdmin, email);
 
+        // When
         var recovery = await Gateway.PostAsync<DataOutput<PasswordRecoveryCommandOutput?>>(
             "/api/auth/password-recovery", new PasswordRecoveryCommand { Email = email });
 
+        // Then
         Assert.Equal(HttpStatusCode.OK, recovery.StatusCode);
 
-        // The token itself never appears in a response — it is mailed. The functional suite has no
-        // Mailgun credentials, so it is read back from the row UC-12 wrote.
         await using var context = db.CreateContext();
         var issued = await context.PasswordResetTokens
             .Include(token => token.Person)
             .SingleAsync(token => token.Person.Email == email);
 
-        // When
-        var response = await ResetAsync(issued.Token);
-
-        // Then
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
+        Assert.False(issued.Used);
+        Assert.True(issued.ExpiresAt > DateTime.UtcNow);
+        Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
     }
 }

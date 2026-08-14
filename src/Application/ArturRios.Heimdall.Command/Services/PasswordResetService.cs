@@ -42,7 +42,7 @@ public class PasswordResetService(
         await tokenWriter.CreateAsync(new PasswordResetToken
         {
             PersonId = person.Id,
-            Token = token,
+            TokenHash = SingleUseTokenHash.Of(token),
             ExpiresAt = DateTime.UtcNow.Add(options.TokenLifetime),
             Used = false
         });

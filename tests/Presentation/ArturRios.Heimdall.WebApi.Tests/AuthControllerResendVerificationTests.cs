@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -21,8 +22,10 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // any /api/auth endpoint has — and the 404 a token outliving its person gets.
 //
 // The token never appears in a response, so every test reads the email_verification_token rows back
-// instead: exactly one live row after a resend, and the previously outstanding ones spent. One test
-// drives UC-06 → UC-15 → UC-14 end to end, proving the old link is dead and the new one works.
+// instead: exactly one live row after a resend, and the previously outstanding ones spent. Since
+// TH-14 those rows hold only a digest, so a token a test seeded is recognised in them by hashing it
+// again, and a token the API issued is recognised only as "the live one" — which is all UC-15's
+// contract is about.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerResendVerificationTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
@@ -81,20 +84,22 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     ///     write can produce one that is already expired or already spent, and these tests are about
     ///     what a resend does to the tokens that already exist.
     /// </summary>
-    private async Task<EmailVerificationToken> SeedTokenAsync(
+    private async Task<string> SeedTokenAsync(
         Person person, string? value = null, DateTime? expiresAt = null, bool used = false)
     {
+        var plaintext = value ?? UniqueToken();
+
         await using var context = db.CreateContext();
         var token = new EmailVerificationToken
         {
             PersonId = person.Id,
-            Token = value ?? UniqueToken(),
+            TokenHash = SingleUseTokenHash.Of(plaintext),
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddHours(1),
             Used = used
         };
         context.EmailVerificationTokens.Add(token);
         await context.SaveChangesAsync();
-        return token;
+        return plaintext;
     }
 
     /// <summary>
@@ -154,7 +159,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         // to see — no response ever carries it
         var issued = await SingleLiveTokenAsync(person);
         Assert.True(issued.ExpiresAt > DateTime.UtcNow);
-        Assert.False(string.IsNullOrWhiteSpace(issued.Token));
+        Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
     }
 
     [FunctionalFact]
@@ -205,14 +210,15 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
 
         var tokens = await TokensForAsync(person);
         Assert.Equal(2, tokens.Count);
-        Assert.True(tokens.Single(token => token.Id == outstanding.Id).Used);
+        var outstandingHash = SingleUseTokenHash.Of(outstanding);
+        Assert.True(tokens.Single(token => token.TokenHash == outstandingHash).Used);
 
         var issued = await SingleLiveTokenAsync(person);
-        Assert.NotEqual(outstanding.Token, issued.Token);
+        Assert.NotEqual(outstandingHash, issued.TokenHash);
 
         // Then — and the retired link cannot be spent (UC-14 AF-14b)
         var replay = await Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
-            "/api/auth/verify-email", new VerifyEmailCommand { Token = outstanding.Token });
+            "/api/auth/verify-email", new VerifyEmailCommand { Token = outstanding });
 
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, replay.Body!.Errors);
@@ -231,7 +237,10 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         await ResendAsync();
 
         // Then
-        Assert.False((await TokensForAsync(person)).Single(token => token.Id == expired.Id).Used);
+        var expiredHash = SingleUseTokenHash.Of(expired);
+
+        Assert.False((await TokensForAsync(person))
+            .Single(token => token.TokenHash == expiredHash).Used);
     }
 
     [FunctionalFact]
@@ -268,7 +277,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         // Then — nothing was issued and nothing retired: AF-15a is checked before UC-15 step 3
         var tokens = await TokensForAsync(person);
         Assert.False(Assert.Single(tokens).Used);
-        Assert.Equal(outstanding.Token, tokens.Single().Token);
+        Assert.Equal(SingleUseTokenHash.Of(outstanding), tokens.Single().TokenHash);
     }
 
     [FunctionalFact]
@@ -328,10 +337,16 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenPersonCreated_WhenResendingThenVerifying_ThenOldLinkIsDeadAndNewOneWorks()
+    public async Task GivenPersonCreated_WhenResending_ThenTheOldTokenIsRetiredAndAFreshOneIssued()
     {
-        // Given the three use cases joined as a person actually meets them: UC-06 issues a link,
-        // UC-15 replaces it, UC-14 spends the replacement. Nothing here builds a token by hand.
+        // UC-06 issues a link and UC-15 replaces it. This used to go one step further and have UC-14
+        // spend the replacement, which needed both tokens in plaintext — and since TH-14 neither is
+        // readable from the database, with no inbox in this suite to read them from instead.
+        //
+        // What is still observable is the whole of UC-15's contract, and it is not a small residue:
+        // the token UC-06 issued is retired, exactly one live token remains, and it is a different
+        // one. Whether a live token can then be spent is UC-14's own question, covered by
+        // VerifyEmailCommandHandlerTests where the plaintext is in the test's hands.
         var email = UniqueEmail("created");
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -354,23 +369,22 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        // Then — UC-06's link is dead (UC-14 AF-14b)
+        // Then — UC-06's token is retired (UC-15 step 3), so the link in the first email is dead
+        var all = await TokensForAsync(created);
+
+        Assert.Equal(2, all.Count);
+        Assert.True(all.Single(token => token.TokenHash.SequenceEqual(original.TokenHash)).Used);
+
+        // Then — and exactly one live token remains, which is not the retired one
         var reissued = await SingleLiveTokenAsync(created);
 
-        var replay = await Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
-            "/api/auth/verify-email", new VerifyEmailCommand { Token = original.Token });
+        Assert.NotEqual(original.TokenHash, reissued.TokenHash);
+        Assert.Equal(SingleUseTokenHash.Length, reissued.TokenHash.Length);
+        Assert.True(reissued.ExpiresAt > DateTime.UtcNow);
 
-        Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
-        Assert.Contains(AuthMessages.TokenAlreadyUsed, replay.Body!.Errors);
-
-        // Then — and the reissued one verifies the address
-        var verification = await Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
-            "/api/auth/verify-email", new VerifyEmailCommand { Token = reissued.Token });
-
-        Assert.Equal(HttpStatusCode.OK, verification.StatusCode);
-
+        // Then — and the address is still unverified: replacing a link verifies nothing by itself
         await using var context = db.CreateContext();
-        Assert.True(await context.Persons
+        Assert.False(await context.Persons
             .Where(person => person.Id == created.Id)
             .Select(person => person.EmailVerified)
             .SingleAsync());

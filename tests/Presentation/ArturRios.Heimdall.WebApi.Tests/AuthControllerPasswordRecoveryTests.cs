@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -127,7 +128,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // Then — database state: one unused token, expiring in the future (FR-PR-02)
         var token = Assert.Single(await TokensForAsync(person));
         Assert.False(token.Used);
-        Assert.False(string.IsNullOrWhiteSpace(token.Token));
+        Assert.Equal(SingleUseTokenHash.Length, token.TokenHash.Length);
         Assert.True(token.ExpiresAt > DateTime.UtcNow);
     }
 
@@ -178,7 +179,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         AssertGenericSuccess(response);
         var tokens = await TokensForAsync(person);
         Assert.Equal(2, tokens.Count);
-        Assert.NotEqual(tokens[0].Token, tokens[1].Token);
+        Assert.NotEqual(tokens[0].TokenHash, tokens[1].TokenHash);
     }
 
     [FunctionalFact]

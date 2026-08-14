@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -91,11 +92,13 @@ public class HardDeletePersonCommandHandlerTests
     {
         await fakes.PasswordResetTokens.CreateAsync(new PasswordResetToken
         {
-            PersonId = person.Id, Token = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await fakes.EmailVerificationTokens.CreateAsync(new EmailVerificationToken
         {
-            PersonId = person.Id, Token = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
     }
 

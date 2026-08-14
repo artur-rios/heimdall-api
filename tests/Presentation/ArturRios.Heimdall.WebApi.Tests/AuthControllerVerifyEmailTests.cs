@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -20,8 +21,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // anonymous access the endpoint depends on.
 //
 // Unlike UC-13, the result of this use case is directly observable — EmailVerified is a column — so
-// every test reads the person row back rather than proving the change through a login. One test
-// drives UC-06 and UC-14 end to end, since no response ever carries the token.
+// every test reads the person row back rather than proving the change through a login. Tokens are
+// seeded here so the test holds the plaintext: since TH-14 the row keeps only a digest, so one the
+// API issued cannot be spent from here, and the last test asserts what UC-06 stored instead.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -79,20 +81,23 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     ///     tests are about consuming a token, and only a direct write can produce one that is already
     ///     expired or already used.
     /// </summary>
-    private async Task<EmailVerificationToken> SeedTokenAsync(
+    private async Task<string> SeedTokenAsync(
         Person person, string? value = null, DateTime? expiresAt = null, bool used = false)
     {
+        // Returns the token, stores its digest (TH-14), as an email would leave things.
+        var plaintext = value ?? UniqueToken();
+
         await using var context = db.CreateContext();
         var token = new EmailVerificationToken
         {
             PersonId = person.Id,
-            Token = value ?? UniqueToken(),
+            TokenHash = SingleUseTokenHash.Of(plaintext),
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddHours(1),
             Used = used
         };
         context.EmailVerificationTokens.Add(token);
         await context.SaveChangesAsync();
-        return token;
+        return plaintext;
     }
 
     private Task<HttpOutput<DataOutput<VerifyEmailCommandOutput?>?>> VerifyAsync(string token) =>
@@ -126,7 +131,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then — response
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -148,7 +153,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -163,7 +168,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person);
 
         // When
-        await VerifyAsync(token.Token);
+        await VerifyAsync(token);
 
         // Then
         await using var context = db.CreateContext();
@@ -181,14 +186,14 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var second = await SeedTokenAsync(person);
 
         // When the second link is the one clicked
-        var response = await VerifyAsync(second.Token);
+        var response = await VerifyAsync(second);
 
         // Then — both rows are spent
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.All(await TokensForAsync(person), token => Assert.True(token.Used));
 
         // Then — and the first link cannot be replayed (AF-14b)
-        var replay = await VerifyAsync(first.Token);
+        var replay = await VerifyAsync(first);
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, replay.Body!.Errors);
     }
@@ -203,12 +208,16 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var live = await SeedTokenAsync(person);
 
         // When
-        await VerifyAsync(live.Token);
+        await VerifyAsync(live);
 
-        // Then
+        // Then — the rows are told apart by their digests, which is the only thing left that ties a
+        // stored row to the token it was issued for.
         var tokens = await TokensForAsync(person);
-        Assert.False(tokens.Single(token => token.Id == expired.Id).Used);
-        Assert.True(tokens.Single(token => token.Id == live.Id).Used);
+        var expiredHash = SingleUseTokenHash.Of(expired);
+        var liveHash = SingleUseTokenHash.Of(live);
+
+        Assert.False(tokens.Single(token => token.TokenHash == expiredHash).Used);
+        Assert.True(tokens.Single(token => token.TokenHash == liveHash).Used);
     }
 
     [FunctionalFact]
@@ -220,7 +229,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         await SeedTokenAsync(other);
 
         // When
-        await VerifyAsync((await SeedTokenAsync(person)).Token);
+        await VerifyAsync(await SeedTokenAsync(person));
 
         // Then
         Assert.False(Assert.Single(await TokensForAsync(other)).Used);
@@ -235,7 +244,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then — response
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -254,7 +263,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person, used: true);
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -283,7 +292,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
 
         // When
-        var response = await VerifyAsync(token.Token.ToLower());
+        var response = await VerifyAsync(token.ToLower());
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -315,7 +324,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -334,7 +343,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         var token = await SeedTokenAsync(person);
 
         // When
-        var response = await VerifyAsync(token.Token);
+        var response = await VerifyAsync(token);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -361,10 +370,13 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     }
 
     [FunctionalFact]
-    public async Task GivenPersonCreated_WhenVerifyingWithTheIssuedToken_ThenEmailIsVerified()
+    public async Task GivenPersonCreated_WhenInspectingWhatWasStored_ThenOnlyADigestIs()
     {
-        // Given the two use cases joined as a person actually meets them: UC-06 issues the token,
-        // UC-14 spends it. Nothing here reaches into the database to build a token by hand.
+        // The mirror of AuthControllerPasswordResetTests' last test, and it lost the same half for
+        // the same reason (TH-14): UC-06's token is mailed, the suite has no inbox, so it can no
+        // longer be spent here. What remains assertable is that UC-06 issued a live, unused token
+        // against an unverified address, and stored a 32-byte digest rather than the token. The
+        // spending half is covered by VerifyEmailCommandHandlerTests through the same helper.
         var email = UniqueEmail("created");
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -377,27 +389,15 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
 
         Assert.Equal(HttpStatusCode.Created, creation.StatusCode);
 
-        // The token itself never appears in a response — it is mailed. The functional suite has no
-        // Mailgun credentials, so it is read back from the row UC-06 wrote.
+        // Then
         await using var context = db.CreateContext();
         var issued = await context.EmailVerificationTokens
             .Include(token => token.Person)
             .SingleAsync(token => token.Person.Email == email);
 
         Assert.False(issued.Person.EmailVerified);
-
-        // When
-        var response = await VerifyAsync(issued.Token);
-
-        // Then
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        await using var verification = db.CreateContext();
-        var stored = await verification.EmailVerificationTokens
-            .Include(token => token.Person)
-            .SingleAsync(token => token.Id == issued.Id);
-
-        Assert.True(stored.Person.EmailVerified);
-        Assert.True(stored.Used);
+        Assert.False(issued.Used);
+        Assert.True(issued.ExpiresAt > DateTime.UtcNow);
+        Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
     }
 }

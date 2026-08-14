@@ -27,7 +27,7 @@ Document](Testing%20Specification%20Document.md) §11, for the same reason:
   changes.
 - **Measurement** — a number produced by a run and published.
 
-And the same rule: **a threat whose verification method is "none" is a finding.** §7 collects them.
+And the same rule: **a threat whose verification method is "none" is a finding.** §11 collects them.
 
 This is a design-level review. It is not a penetration test, and nothing here was established by
 attacking a deployment.
@@ -106,17 +106,16 @@ each threat asks is what happens when the present disagrees with it.
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
 | TH-07 | A Scope Admin reaching a scope they do not own | `ScopeOwnershipChecker` re-reads ownership from the database on every attempt, and excludes a deleted person | Test | Low |
-| TH-08 | A demoted person keeping the authority they held when their token was issued | None | **None** | **High** |
+| TH-08 | A demoted person keeping the authority they held when their token was issued | `ActorLivenessFilter` compares the role claim against the stored role on every request, and refuses the token when they disagree | Test | Low |
 | TH-09 | A deleted or removed identity continuing to act on an unexpired token | `ActorLivenessFilter` re-reads both identity tables per request (FR-AU-05, FR-GO-12) | Test | Low |
 | TH-10 | Inferring another tenant's row counts from sequential identifiers | Only `PublicId` GUIDs cross the boundary (NFR-15) | Test | Low |
-| TH-11 | Granting oneself or another person the System Admin role | `UpdatePersonCommandHandler` refuses any role change unless the acting role is System Admin, and supports no transition other than *to* System Admin (UC-08) | Test | Medium — the acting role is read from the claim, see TH-08 |
+| TH-11 | Granting oneself or another person the System Admin role | `UpdatePersonCommandHandler` refuses any role change unless the acting role is System Admin, and supports no transition other than *to* System Admin (UC-08) | Test | Low — the claim it reads is now verified against the row by TH-08's fix |
 | TH-12 | Acting on a scope after being removed as its owner | `ScopeOwnershipChecker` re-reads, so removal takes effect immediately | Test | Low |
 
-**TH-08 has no control and no test, and it is the finding this section exists for.** The role is
-carried in the `roleId` claim and is never re-read. `ActorLivenessFilter` re-reads the identity, but
-it asks only whether the person exists and is not deleted — not what role they now hold. And
-`ScopeOwnershipChecker` grants an unconditional bypass when the acting role is `SystemAdmin`, taken
-from the claim without a lookup.
+**TH-08 is the finding this section exists for, and it is now fixed.** As first written the role was
+carried in the `roleId` claim and never re-read: `ActorLivenessFilter` asked only whether the person
+existed and was not deleted, and `ScopeOwnershipChecker` grants an unconditional bypass when the
+acting role is `SystemAdmin`, taken from the claim without a lookup.
 
 So demoting a System Admin does not take effect until their token expires — an hour by default, and
 configurable upward. For that hour the demoted account keeps cross-tenant authority over every scope
@@ -133,9 +132,17 @@ promotion is a database write that outlives every token involved. What looks lik
 stale privilege is a path to an unbounded one, which is why TH-11 is Medium rather than Low: its own
 control is sound, and it inherits this one's weakness through the claim it trusts.
 
-Note the asymmetry with TH-09 and TH-12, both of which are Low precisely because something re-reads
-the database. The mechanism to fix TH-08 already exists and is already paid for on every request —
-`ActorLivenessFilter` holds the `Person` row it just read.
+The fix is the mechanism TH-09 and TH-12 were already Low for: `ActorLivenessFilter` was reading the
+`Person` row on every request anyway, so it now selects the role out of that row instead of asking
+whether it exists, and refuses the request when the claim disagrees. No extra query. A promotion is
+refused on the same rule as a demotion — a check that only rejected claims *above* the stored role
+would be the one worth writing carefully and then getting backwards.
+
+Two things fell out of making it true. A token whose role is out of date now gets its own message
+rather than the deliberately vague one deletion gets, because a role change is not an existence
+question and the caller can act on it. And a functional test that had been minting a System Admin
+claim for a person stored as a User stopped passing — it was relying on exactly the forgery this
+closes, and now names an actor whose claim and row agree.
 
 ## 6. TB-3 — The API to its database
 
@@ -146,22 +153,33 @@ one asks is what that reader can do with what they find.
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
 | TH-13 | Recovering passwords from stolen rows | Argon2id with a per-person salt (NFR-02) | Test | Low |
-| TH-14 | Taking over an account using a stolen password-reset or email-verification token | None — both are stored in plaintext | Inspection | **High** |
+| TH-14 | Taking over an account using a stolen password-reset or email-verification token | Both are stored as a SHA-256 digest and never in the form a caller presents (`SingleUseTokenHash`) | Test | Low |
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
 | TH-18 | Denying an action that was taken | Every write produces an audit entry with actor, operation and outcome (NFR-09) | Test | Medium |
 
-**TH-14 is a straightforward inconsistency, and the cheapest thing in this document to fix.**
-`PasswordResetService` and `EmailVerificationService` both write the token they just generated
-straight into the row: `Token = token`. Meanwhile a second-factor recovery code — which is *weaker*
-as an account-takeover primitive, since it still requires the password — is stored as a hash, and a
-2FA email code is stored hashed and salted.
+**TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
+`EmailVerificationService` both used to write the token they had just generated straight into the
+row — `Token = token` — while a second-factor recovery code, which is *weaker* as an
+account-takeover primitive since it still requires the password, was stored as a hash, and a 2FA
+email code hashed and salted. A reader of the `password_reset_token` table could complete a reset for
+any account holding a live token, which did not break the Argon2id work protecting the password so
+much as walk around it.
 
-A reader who obtains the `password_reset_token` table can complete a password reset for any account
-with a live token, and the Argon2id work protecting the password becomes irrelevant: they do not need
-the password, they need the reset. The fix is the one already used for recovery codes — store the
-hash, compare on presentation — and it changes two services and one comparison each.
+Both now store a SHA-256 through `SingleUseTokenHash`, and the presented token is hashed and looked
+up against a unique index on the digest. Unsalted, deliberately: these are 48 characters from a
+CSPRNG, so there is no precomputed table for a salt to defend against, and a per-row salt would force
+a scan of every live token on every attempt — the caller presents the token alone, with nothing to
+narrow the candidates by. The migration computes the digest from the column it replaces rather than
+discarding rows, so links already sitting in inboxes keep working.
+
+What it cost is worth recording, because it is the kind of loss a table of green ticks hides. Two
+functional tests used to drive issue-then-spend end to end by reading the token back out of the row.
+They cannot: the suite has no inbox and no seam to substitute a sender through. They now assert what
+UC-12 and UC-06 *stored*, and the spending half is covered where the plaintext is still in the test's
+hands — the service tests capture it from the sender, the handler tests seed through the same helper.
+Both halves go through `SingleUseTokenHash`, so they would fail together if it changed.
 
 **TH-15 is Medium rather than Low for a reason worth stating.** The TOTP secrets are encrypted, and
 since the key ring is persisted to the database so that a second instance can decrypt them (SRD
@@ -243,14 +261,23 @@ Ordered by what they cost to fix against what they prevent, which is not the sam
 
 | Rank | Threat | Why it is here | Shape of the fix |
 | ---: | --- | --- | --- |
-| 1 | TH-14 | Reset and verification tokens are stored in plaintext, while weaker secrets beside them are hashed | Store the hash, compare on presentation — the pattern recovery codes already use |
-| 2 | TH-08 | A demoted account keeps its authority until its token expires — and can use that window to promote itself back permanently (TH-11) | Re-read the role in `ActorLivenessFilter`, which already holds the row |
-| 3 | TH-21 | Nobody has established what a Google sign-in does with an address that already has a password account | Trace it, then write the test that states the answer |
-| 4 | TH-03 | The rate limiter is the only bound on login's memory demand, and it is per-IP and per-instance | A global concurrency bound on password verification, independent of source address |
-| 5 | TH-18 | The audit log is append-only by convention only | Database-level restriction, or a periodic integrity check |
-| 6 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation |
+| 1 | TH-21 | Nobody has established what a Google sign-in does with an address that already has a password account | Trace it, then write the test that states the answer |
+| 2 | TH-03 | The rate limiter is the only bound on login's memory demand, and it is per-IP and per-instance | A global concurrency bound on password verification, independent of source address |
+| 3 | TH-18 | The audit log is append-only by convention only | Database-level restriction, or a periodic integrity check |
+| 4 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation |
 
-Ranks 1 and 2 are both small, well-understood changes against clearly stated consequences, and both
-have an existing pattern in this codebase to copy. Rank 3 costs an afternoon and may cost nothing
-more than a test. Ranks 4 to 6 are design changes and should be decided deliberately rather than
-squeezed into an unrelated pull request.
+Rank 1 costs an afternoon and may cost nothing more than a test. Ranks 2 to 4 are design changes and
+should be decided deliberately rather than squeezed into an unrelated pull request.
+
+### 11.1 Closed
+
+Kept rather than deleted, because a register that only ever lists open items gives no sense of what
+this document has been worth.
+
+| Threat | What it was | What closed it |
+| --- | --- | --- |
+| TH-14 | Password-reset and email-verification tokens were stored in plaintext, while the weaker recovery codes beside them were hashed | `SingleUseTokenHash`: both are stored as a SHA-256 digest, the migration converts existing rows rather than dropping them, and the issue and spend paths share one helper |
+| TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
+
+Both were found by reading the code while writing this document, and neither was visible from the
+requirements they were supposed to follow from — which is the argument for keeping it current.

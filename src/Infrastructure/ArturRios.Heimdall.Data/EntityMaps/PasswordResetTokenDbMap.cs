@@ -13,8 +13,8 @@ internal static class PasswordResetTokenDbMap
         // Internal bigint Id only; no PublicId — the caller-facing reference is the Token string (§4.0).
         token.HasKey(x => x.Id);
 
-        token.Property(x => x.Token).IsRequired();
-        token.HasIndex(x => x.Token).IsUnique();
+        token.Property(x => x.TokenHash).IsRequired();
+        token.HasIndex(x => x.TokenHash).IsUnique();
 
         token.Property(x => x.ExpiresAt).IsRequired();
         token.Property(x => x.Used).HasDefaultValue(false);

@@ -1,6 +1,7 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -98,11 +99,13 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
         await using var context = db.CreateContext();
         context.PasswordResetTokens.Add(new PasswordResetToken
         {
-            PersonId = person.Id, Token = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         context.EmailVerificationTokens.Add(new EmailVerificationToken
         {
-            PersonId = person.Id, Token = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await context.SaveChangesAsync();
     }
@@ -223,18 +226,25 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenActorTargetingThemselves_WhenHardDeletePerson_ThenForbidden()
     {
         // Given — AF-10c. The message is asserted because the role gate returns the same status.
-        var scope = await SeedScopeAsync();
-        var actor = await SeedUserAsync(scope);
-        Authorize(TestTokens.For(actor.PublicId, (int)Roles.SystemAdmin));
+        //
+        // The actor is the fixture's stand-in System Admin rather than a seeded User carrying a
+        // forged System Admin claim, which is how this read before ActorLivenessFilter began
+        // comparing the role claim against the stored role (TH-08). That token no longer reaches a
+        // handler at all — it is refused as out of date, which is the fix working — so the test
+        // would have proven a 401 where it means to prove AF-10c's 403.
+        var actorId = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeletePersonCommandOutput?>>(
-            $"/api/persons/{actor.PublicId}/hard");
+            $"/api/persons/{actorId}/hard");
 
         // Then
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Contains(PersonMessages.CannotDeleteSelf, response.Body?.Errors ?? []);
-        Assert.True(await PersonExistsAsync(actor));
+
+        await using var context = db.CreateContext();
+        Assert.True(await context.Persons.AsNoTracking().AnyAsync(person => person.PublicId == actorId));
     }
 
     [FunctionalFact]

@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
@@ -55,11 +56,13 @@ public class VerifyEmailCommandHandler(
 
         var now = DateTime.UtcNow;
 
-        // UC-14 step 2. Matched exactly: the token is case-sensitive and uniquely indexed, so unlike
-        // an email it is compared as issued.
+        // UC-14 step 2. Matched by hash rather than by value, for the reason given in
+        // ResetPasswordCommandHandler and in SingleUseTokenHash: the token is not stored.
+        var presented = SingleUseTokenHash.Of(command.Token);
+
         var token = await tokenReader.Query()
             .Include(x => x.Person)
-            .FirstOrDefaultAsync(x => x.Token == command.Token);
+            .FirstOrDefaultAsync(x => x.TokenHash == presented);
 
         // AF-14c.
         if (token is null)

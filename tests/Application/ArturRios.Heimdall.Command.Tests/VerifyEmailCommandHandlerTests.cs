@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -76,7 +77,7 @@ public class VerifyEmailCommandHandlerTests
         {
             PersonId = person.Id,
             Person = person,
-            Token = value,
+            TokenHash = SingleUseTokenHash.Of(value),
             ExpiresAt = expiresAt ?? Now.AddHours(1),
             Used = used
         };

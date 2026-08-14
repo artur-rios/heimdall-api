@@ -201,6 +201,81 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    private async Task DemoteAsync(Person person, Roles to)
+    {
+        await using var context = db.CreateContext();
+        var stored = await context.Persons.FirstAsync(x => x.PublicId == person.PublicId);
+        stored.RoleId = (long)to;
+        await context.SaveChangesAsync();
+    }
+
+    [FunctionalFact]
+    public async Task GivenDemotedSystemAdmin_WhenCallingAnyEndpoint_ThenUnauthorized()
+    {
+        // Threat Model TH-08. Deletion was enforced within one request and demotion was not enforced
+        // at all: the role travels in a claim, and until this filter compared it, nothing re-read it.
+        // For the rest of the token's life — an hour by default — a demoted System Admin kept
+        // authority over every scope in the system.
+        var admin = await SeedPersonAsync(Roles.SystemAdmin);
+        var target = await SeedPersonAsync(Roles.User);
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
+
+        // The token works while the claim agrees with the row
+        var before = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{target.PublicId}");
+        Assert.Equal(HttpStatusCode.OK, before.StatusCode);
+
+        // When they are demoted rather than deleted
+        await DemoteAsync(admin, Roles.User);
+
+        // Then the same token is refused, and says why
+        var read = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{target.PublicId}");
+        Assert.Equal(HttpStatusCode.Unauthorized, read.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorRoleChanged, read.Body!.Errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenDemotedSystemAdmin_WhenPromotingThemselvesBack_ThenUnauthorized()
+    {
+        // The reason TH-08 was ranked above a merely stale privilege. A role change is authorised
+        // from the acting role claim, and the one transition UC-08 supports is a promotion to System
+        // Admin — so the window was long enough for a demoted account to make itself permanent with a
+        // write that outlives every token involved.
+        var admin = await SeedPersonAsync(Roles.SystemAdmin);
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
+
+        await DemoteAsync(admin, Roles.ScopeAdmin);
+
+        // When they try to promote themselves back on the strength of the old claim
+        var response = await Gateway.PutAsync<DataOutput<object?>>(
+            $"/api/persons/{admin.PublicId}",
+            new { name = "Restored", email = UniqueEmail("restored"), roleId = (int)Roles.SystemAdmin });
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        // Then — and the demotion stands
+        await using var context = db.CreateContext();
+        var stored = await context.Persons.FirstAsync(x => x.PublicId == admin.PublicId);
+        Assert.Equal((long)Roles.ScopeAdmin, stored.RoleId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenPromotedPerson_WhenCallingWithTheOlderToken_ThenUnauthorized()
+    {
+        // The same rule in the harmless direction, asserted so the check cannot quietly become a
+        // one-way "is the claim at least as high as the row" comparison, which would let a stale
+        // higher claim through — the exact case this exists to stop.
+        var person = await SeedPersonAsync(Roles.User);
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        await DemoteAsync(person, Roles.ScopeAdmin);
+
+        var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorRoleChanged, response.Body!.Errors);
+    }
+
     [FunctionalFact]
     public async Task GivenNoBearerToken_WhenCallingAnAnonymousEndpoint_ThenTheFilterIsANoOp()
     {

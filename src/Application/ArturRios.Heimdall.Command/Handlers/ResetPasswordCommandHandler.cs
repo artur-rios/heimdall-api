@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
@@ -53,11 +54,15 @@ public class ResetPasswordCommandHandler(
 
         var now = DateTime.UtcNow;
 
-        // UC-13 step 2. Matched exactly: the token is case-sensitive and uniquely indexed, so unlike
-        // an email it is compared as issued.
+        // UC-13 step 2. Matched by hash, because the token itself is not stored (TH-14): the
+        // presented value is hashed the same way the issued one was and looked up against the unique
+        // index on the digest. Still an exact, case-sensitive match — hashing preserves that, since
+        // any difference in the input changes the digest.
+        var presented = SingleUseTokenHash.Of(command.Token);
+
         var token = await tokenReader.Query()
             .Include(x => x.Person)
-            .FirstOrDefaultAsync(x => x.Token == command.Token);
+            .FirstOrDefaultAsync(x => x.TokenHash == presented);
 
         // AF-13c.
         if (token is null)

@@ -80,7 +80,7 @@ public class ResendVerificationEmailCommandHandlerTests
         {
             PersonId = person.Id,
             Person = person,
-            Token = value,
+            TokenHash = SingleUseTokenHash.Of(value),
             ExpiresAt = expiresAt ?? Now.AddHours(1),
             Used = used
         };
