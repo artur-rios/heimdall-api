@@ -120,7 +120,10 @@ public class VerifyTwoFactorAuthCommandHandler(
         var token = await personAuthTokenService.IssueAsync(subject!);
 
         return output
-            .WithData(new VerifyTwoFactorAuthCommandOutput { Token = token.Token, ExpiresAt = token.ExpiresAt })
+            .WithData(new VerifyTwoFactorAuthCommandOutput
+            {
+                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = person.EmailVerified
+            })
             .WithMessage(TwoFactorMessages.VerificationSuccessful);
     }
 }

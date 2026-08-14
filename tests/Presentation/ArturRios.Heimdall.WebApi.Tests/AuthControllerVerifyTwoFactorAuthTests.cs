@@ -36,7 +36,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     private static string CurrentTotpCode(string base32Secret) =>
         new Totp(Base32Encoding.ToBytes(base32Secret)).ComputeTotp();
 
-    private async Task<Person> SeedPersonAsync(Roles role, string email)
+    private async Task<Person> SeedPersonAsync(Roles role, string email, bool emailVerified = true)
     {
         await using var context = db.CreateContext();
         var person = new Person
@@ -47,7 +47,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
             PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
             Salt = salt,
             RoleId = (long)role,
-            EmailVerified = true
+            EmailVerified = emailVerified
         };
         context.Persons.Add(person);
         await context.SaveChangesAsync();
@@ -176,6 +176,30 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         Authorize(verify.Body!.Data!.Token);
         var whoAmI = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
         Assert.Equal(HttpStatusCode.OK, whoAmI.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenUnverifiedGatedPerson_WhenPostTwoFactorVerify_ThenResponseReportsEmailVerifiedFalse()
+    {
+        // Given a 2FA-gated person whose address is unverified: login gave them a challenge that
+        // deliberately said nothing about the account, so this is where they learn it (FR-EV-05)
+        var person = await SeedPersonAsync(
+            Roles.SystemAdmin, UniqueEmail("gated-unverified"), emailVerified: false);
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
+        var secret = await EnableAppAsync("App");
+        var confirm = await ConfirmAsync(CurrentTotpCode(secret));
+        Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
+
+        var login = await LoginAsync(person.Email);
+        Assert.True(login.Body!.Data!.RequiresTwoFactor);
+
+        // When redeeming the challenge token with the current app code
+        var verify = await VerifyAsync(login.Body.Data.ChallengeToken!, CurrentTotpCode(secret));
+
+        // Then — the full token, and the verification status the challenge withheld
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+        Assert.NotNull(verify.Body?.Data?.Token);
+        Assert.False(verify.Body!.Data!.EmailVerified);
     }
 
     [FunctionalFact]

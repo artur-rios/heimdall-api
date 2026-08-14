@@ -15,4 +15,11 @@ public class VerifyTwoFactorAuthCommandOutput : CommandOutput
 
     /// <summary>When the token expires, in UTC.</summary>
     public DateTime ExpiresAt { get; set; }
+
+    /// <summary>
+    ///     Whether the authenticated person's email address is verified (FR-EV-05), reported here
+    ///     rather than on UC-11's challenge response — the same value a direct login returns, since a
+    ///     UC-38 login ends exactly like an ungated one.
+    /// </summary>
+    public bool EmailVerified { get; set; }
 }
