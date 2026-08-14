@@ -30,9 +30,10 @@ public class GoogleIdTokenVerifier(
 
         try
         {
+            // The settings are built by GoogleIdTokenValidationSettings so the audience constraint
+            // is something a test can see — see its remarks for why that one is worth isolating.
             var payload = await GoogleJsonWebSignature.ValidateAsync(
-                idToken,
-                new GoogleJsonWebSignature.ValidationSettings { Audience = options.ClientIds });
+                idToken, GoogleIdTokenValidationSettings.For(options));
 
             // Reached only once ValidateAsync has returned, i.e. once signature, issuer, audience
             // and expiry are all verified: the claim is never read off an untrusted token. Why the

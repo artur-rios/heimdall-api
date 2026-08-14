@@ -716,7 +716,7 @@ but a requirement whose method is "none" is not a requirement yet.
 | NFR-02 (password hashing) | Test | `LoginCommandHandlerTests`, `ResetPasswordCommandHandlerTests` — a stored hash never equals the password, and a reset re-salts | Verified |
 | NFR-03 (signed tokens, configurable expiry) | Test | `AuthControllerLoginTests` reads `expiresAt`; `IdentityUserMapperTests` covers the claim round trip | Verified |
 | NFR-04 (authentication required) | Test | Every controller suite has a no-token case; `ActorLivenessTests` covers the liveness exemption | Verified |
-| NFR-05 (response time) | Measurement + regression ceilings | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
+| NFR-05 (response time) | Measurement + regression ceilings | `ResponseTimeMeasurementTests` for one caller; `scripts/load_test.py` for the 128-caller condition | Measured; see SRD §6.1 and §6.3 |
 | NFR-06 (horizontal scaling) | Test + inspection | `DataProtectionKeyRingTests` for the key ring; inspection for session-free authentication | Verified — and a defect found, see SRD §6.2 |
 | NFR-07 (integrity under logical deletion) | Test | `NonFunctionalRequirementTests` walks every foreign key in the catalogue after UC-04's cascade | Verified |
 | NFR-08 (hard delete cascades a scope) | Test | `HardDeleteScopeCommandHandlerTests`, `ScopeControllerHardDeleteTests` | Verified |
@@ -724,7 +724,7 @@ but a requirement whose method is "none" is not a requirement yet.
 | NFR-10 (input validation) | Test | Every `*ValidatorTests` class, plus the 400 cases in the controller suites | Verified |
 | NFR-11 (hard delete cascades a person) | Test | `HardDeletePersonCommandHandlerTests` | Verified |
 | NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10 and UC-22 suites | Verified |
-| NFR-13 (Google token verification) | Inspection + test | `GoogleIdTokenVerifier` delegates to Google's own validator, which a test cannot exercise without contacting Google or forging its signature; `LocalGoogleIdTokenVerifier` covers the flows behind it | Partly verified — see 11.2 |
+| NFR-13 (Google token verification) | Test + inspection | `GoogleIdTokenValidationSettingsTests` pins the audience constraint this application supplies; `LocalGoogleIdTokenVerifierTests` requires the suite's substitute verifier to refuse a wrong signature, issuer, audience or expiry; inspection for Google's own validator | Partly verified — see 11.2 |
 | NFR-14 (hard delete cascades Google Users) | Test | `HardDeleteScopeCommandHandlerTests` | Verified |
 | NFR-15 (no internal ids exposed) | Test | `OpenApiContractTests` over the published document; `SchemaTests` on the shape | Verified |
 | NFR-16 (secrets at rest) | Test | `AuthControllerEnableTwoFactorAuthTests` — the secret is stored encrypted and never returned twice; recovery codes stored as hashes | Verified |
@@ -736,22 +736,28 @@ but a requirement whose method is "none" is not a requirement yet.
 Naming the gaps is part of the method; a table of green ticks that hides them is worth less than a
 shorter one that does not.
 
-- **NFR-13 is verified in halves.** That a Google ID token is checked for signature, issuer, audience
-  and expiry is established by inspection: `GoogleJsonWebSignature.ValidateAsync` does it, and
-  reaching that code in a test would mean contacting Google or holding Google's signing key. The
-  suite substitutes a locally signed verifier to reach the flows behind verification, which is the
-  right trade — but it means the suite proves what the API does *with* a verified token, not that
-  Google's own check is wired up correctly. A change that dropped the audience constraint would pass.
+- **NFR-13's last quarter is still inspection.** Signature, issuer and expiry are checked by
+  `GoogleJsonWebSignature.ValidateAsync` against certificates fetched from Google, and reaching that
+  code in a test would mean contacting Google or holding Google's signing key. What was closed is the
+  part this application decides. The audience is supplied by us, and Google reads a null `Audience`
+  as "do not check the audience" — so dropping the constraint was a one-line change no test could
+  see; `GoogleIdTokenValidationSettingsTests` now sees it. And the substitute verifier the functional
+  suite reaches UC-25 through is itself attacked by `LocalGoogleIdTokenVerifierTests`, because a
+  substitute that waved anything through would make every UC-25 test a report on a system no
+  deployment has. What remains unexecuted is Google's own check, and it stays that way by choice.
 - **NFR-05 and NFR-18 are measured on a developer machine**, not on production hardware, and
   server-side only. They describe the API's own cost, not what a caller experiences across a network.
   NFR-18 in particular will be slower wherever there are fewer cores, since Argon2id is configured to
   use them. The figures also move with load on the measuring machine — a write triples between an
   idle run and a full-suite one (SRD §6.1) — so a single reading is not a promise, which is why two
   are published and the budget is set above both.
-- **No load testing exists.** "Under normal load" was removed from NFR-05 rather than defined,
-  because nothing here generates load and a phrase nobody can evaluate is worse than an honest
-  single-caller figure. Concurrency is exercised only where correctness depends on it — the
-  contended-address test in `PersonControllerCreateUserTests`.
+- **The load run is not in CI and is not pass/fail on a threshold.** `scripts/load_test.py` needs a
+  deployment to point at and takes minutes, so nothing in the pipeline runs it and no merge is gated
+  on it; SRD §6.3 is a reading somebody took, not a figure a build re-establishes. It is also a
+  closed loop, which makes its latencies optimistic against a fixed-rate arrival, and it is driven
+  over loopback from the same machine that hosts the API, so part of what it measures is the load
+  generator. Compare its runs with each other; do not read them as a service level. The tool does
+  fail the run when a request faults or answers 5xx, which is the part worth being strict about.
 - **NFR-06 is verified for the state the API keeps, not by running two instances.** The key ring
   test builds two providers sharing only the database, which is the isolation two containers have,
   but nothing in CI starts a second replica behind a load balancer.

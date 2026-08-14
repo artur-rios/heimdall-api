@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ArturRios.Heimdall.LoadTest</RootNamespace>
+    <!-- Deliberately outside src/ArturRios.Heimdall.sln, for the reason OpenApiGen is: this drives a
+         deployment over the network rather than testing the code, so it has no place in the build
+         the test suites and coverage run from. `dotnet test` must never start a load run. Invoke it
+         through scripts/load_test.py. -->
+  </PropertyGroup>
+
+  <!-- No package or project references at all, deliberately. This is a client: it should see the API
+       exactly as any other caller does, over HTTP and through its published JSON, so referencing the
+       Web API's own types would let it depend on shapes a real caller cannot see. -->
+
+</Project>

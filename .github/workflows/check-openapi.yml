@@ -10,6 +10,9 @@ name: Check OpenAPI Document
 #
 # The two path filters are duplicated rather than shared through a YAML anchor: GitHub Actions does
 # not support anchors in workflow files. Keep them in step.
+#
+# They name the generator rather than all of tools/, because the load-test tool also lives there and
+# cannot change what the published document says: it only ever reads the API over HTTP.
 
 on:
   push:
@@ -17,14 +20,14 @@ on:
       - main
     paths:
       - 'src/**'
-      - 'tools/**'
+      - 'tools/ArturRios.Heimdall.OpenApiGen/**'
       - 'scripts/openapi.py'
       - 'docs/openapi/**'
       - '.github/workflows/check-openapi.yml'
   pull_request:
     paths:
       - 'src/**'
-      - 'tools/**'
+      - 'tools/ArturRios.Heimdall.OpenApiGen/**'
       - 'scripts/openapi.py'
       - 'docs/openapi/**'
       - '.github/workflows/check-openapi.yml'

@@ -614,7 +614,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
 | NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
-| NFR-05 | Performance | Every endpoint except those that verify a password shall complete server-side within **100 ms at the median and 250 ms at the slowest**, measured on the reference configuration (§6.1). Password-verifying endpoints are governed by NFR-18 |
+| NFR-05 | Performance | Every endpoint except those that verify a password shall complete within **100 ms at the median and 250 ms at the tail** — the slowest of a single caller's samples (§6.1), the 99th percentile under load (§6.3) — and shall hold that while **128 callers are in flight at once**, answering all of them without a failed or 5xx response. Both conditions are measured on the reference configuration. Password-verifying endpoints are governed by NFR-18 |
 | NFR-06 | Availability | The API shall hold no state in a process or on a local filesystem that a second instance would need: authentication is validated from token claims with no server-side session, and the Data Protection key ring that TOTP secrets are encrypted with (NFR-16) is kept in the database. The per-IP rate limiter's window is the one deliberate exception, and is per instance by design (§6.2) |
 | NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
 | NFR-08 | Data Integrity | Hard deletion of a scope must cascade to its `SCOPE_USER`/`SCOPE_OWNER` rows, its Users, and its Applications |
@@ -687,7 +687,56 @@ documented there: it is a defence-in-depth throttle, and the per-account budgets
 FR-2F-13 — which are in the database — are what hold across instances.
 
 
-**Accepted exception to NFR-15: `Person.RoleId`.** `RoleId` is an internal `bigint` foreign key into
+### 6.3 Under load
+
+NFR-05 used to promise a response time "under normal load" while nothing in the repository generated
+any, so the clause could be neither met nor missed and the phrase was removed. It is back, with a
+number behind it: `scripts/load_test.py` drives a deployment through
+`tools/ArturRios.Heimdall.LoadTest`, and the figures below are what that produced.
+
+Two runs, at 32 and at 128 callers in flight, 20 seconds per scenario, against the container image
+served over loopback with PostgreSQL in a second container, both after the deployment was warm.
+
+| Callers | Scenario | Requests | Req/s | p50 | p95 | p99 | Max | Non-2xx | Faulted |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | `GET /HealthCheck` | 319,978 | 15,999 | 1.8 ms | 4.1 ms | 5.6 ms | 21.8 ms | 0 | 0 |
+| 32 | `GET /api/scopes` | 73,203 | 3,660 | 8.5 ms | 11.4 ms | 13.3 ms | 52.5 ms | 0 | 0 |
+| 128 | `GET /HealthCheck` | 434,792 | 21,740 | 5.7 ms | 9.4 ms | 11.7 ms | 26.2 ms | 0 | 0 |
+| 128 | `GET /api/scopes` | 85,175 | 4,259 | 29.3 ms | 41.9 ms | 51.3 ms | 98.5 ms | 0 | 0 |
+
+The authenticated read is already saturated at 32 callers. Quadrupling them bought 16% more
+throughput — 3,660 to 4,259 requests per second — and cost three and a half times the median, 8.5 ms
+to 29.3 ms. That is the signature of a queue rather than of spare capacity: past roughly 32
+concurrent readers this deployment is not doing more work, it is making each caller wait longer for
+the same work. Additional load is answered by adding an instance (§6.2), not by sending it to one.
+
+That is why NFR-05's load condition is set at 128 rather than at 32. 128 is not a forecast of demand;
+it is a point comfortably past where this configuration stops scaling, and the requirement still
+holds there with room — 29.3 ms against a 100 ms median budget, 51.3 ms against a 250 ms tail — and
+with no request failing, timing out, or answering 5xx across 913,000 of them.
+
+These numbers are not comparable to §6.1's and must not be read against them. §6.1 measures
+server-side handler time for one caller; this measures wall-clock at the client and therefore
+includes every queue between the two, which is the whole reason to run it.
+
+Warm-up dominates a cold deployment badly enough to invalidate a run, which is why the harness now
+discards an opening phase at the same concurrency before it starts sampling. The run that showed this
+was taken against a freshly started container and reported the authenticated read at 17.1 ms median
+where the warm figure is 8.5 ms, and the health check at 8.1 ms against 1.8 ms — two to four times,
+for the JIT, the EF model and the first query plans.
+
+The harness is a closed loop — each caller waits for its own response before sending the next — so
+the offered rate falls as the API slows, and the latencies are optimistic against a fixed-rate
+arrival. Correcting for that would mean building a benchmark harness, which is not what NFR-05 needs.
+Compare these runs against each other across releases; do not publish them as a service level.
+
+The run is deliberately not part of `dotnet test`. It needs a deployment, takes minutes, and its
+figures depend on the machine it is driven from — none of which belongs in a suite that gates a
+merge.
+
+### 6.4 Accepted exception to NFR-15
+
+**`Person.RoleId`.** `RoleId` is an internal `bigint` foreign key into
 the `Role` table, and is exposed as `Role` in `PersonOutput`/`CreatePersonCommandOutput`/
 `UpdatePersonCommandOutput` and as a `roleId` JWT claim, rather than `Role.PublicId` or a symbolic
 name. This is accepted rather than fixed: `Role` is not an addressable resource — there is no
