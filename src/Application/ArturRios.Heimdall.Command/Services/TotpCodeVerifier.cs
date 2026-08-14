@@ -44,7 +44,7 @@ public class TotpCodeVerifier(
             return false;
         }
 
-        // FR-2F-09 / RFC 6238 §5.2: a code is good once. The window above accepts the neighbouring
+        // FR-2F-14 / RFC 6238 §5.2: a code is good once. The window above accepts the neighbouring
         // steps too, so without this an observed code stays usable for up to ninety seconds and
         // across every endpoint that takes a second factor — verify, disable, and regenerate alike.
         // Strictly-greater rather than not-equal, so a replay of an older step inside the window is

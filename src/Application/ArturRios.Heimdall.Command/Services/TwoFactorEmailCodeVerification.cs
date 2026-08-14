@@ -7,7 +7,7 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Matches a submitted email two-factor code against the live codes issued for a configuration,
-///     and counts the guesses that miss so a code cannot be brute-forced (FR-2F-03).
+///     and counts the guesses that miss so a code cannot be brute-forced (FR-2F-13).
 /// </summary>
 /// <remarks>
 ///     <para>

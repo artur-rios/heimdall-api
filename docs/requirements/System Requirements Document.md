@@ -154,6 +154,8 @@ graph LR
 | FR-AU-06 | The system shall reject authentication attempts for a `User` whose scope is logically deleted | High |
 | FR-AU-07 | The system shall reject authentication attempts for a `ScopeAdmin` if all scopes they own are logically deleted | High |
 | FR-AU-08 | Upon successful authentication, the system shall fold into the token the distinct `Name`s of the non-logically-deleted `ScopePermission`s of the acting scope(s) whose `IncludeAsJwtClaim` flag is set: the scope a `User` belongs to for a `User`; the union over the scopes a `ScopeAdmin` owns for a `ScopeAdmin`; none for a `SystemAdmin`, who carries no scope. Logically deleted scopes and permissions are excluded, so a deleted resource is never claimed | Medium |
+| FR-AU-09 | The system shall count consecutive failed password attempts per person and, on reaching ten, refuse authentication for that person for fifteen minutes regardless of the password supplied. A successful authentication shall reset the count. The refusal shall be indistinguishable from any other authentication failure — the same message as FR-AU-05 through FR-AU-07, and the same cost, so a lockout is not detectable by response time | High |
+| FR-AU-10 | The system shall verify a submitted password against a hash on every authentication attempt, including one for an address that belongs to nobody, so that the uniform rejection of FR-AU-05 through FR-AU-07 and FR-AU-09 is uniform in elapsed time as well as in message | High |
 
 ### 3.5 Password Recovery
 
@@ -242,6 +244,8 @@ graph LR
 | FR-2F-10 | The system shall reject a challenge token at every endpoint other than second-factor verification, and shall reject an expired or already-redeemed challenge token at that endpoint too | High |
 | FR-2F-11 | Disabling two-factor authentication shall require both the person's current password and a valid second factor (an app/email code or a recovery code). On success the system shall remove the two-factor configuration and all of its recovery codes | High |
 | FR-2F-12 | Regenerating recovery codes shall require a valid second factor, shall invalidate every previously issued recovery code for the person, and shall return ten new codes in plaintext exactly once, per FR-2F-05 | High |
+| FR-2F-13 | The system shall count failed verification attempts against an issued email code and retire the code on the fifth, so a six-digit code cannot be exhausted by guessing. Obtaining a further code shall require a fresh authentication attempt | High |
+| FR-2F-14 | The system shall accept an authenticator-app code at most once: the time step of an accepted code shall be recorded, and a code from that step or any earlier one shall be refused, so a code observed in transit cannot be replayed within the verification window | High |
 
 ---
 
@@ -799,9 +803,9 @@ Notes on cascading behavior:
 | Application CRUD | FR-AP-01 through FR-AP-09 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
-| Authentication | FR-AU-01 through FR-AU-08 |
+| Authentication | FR-AU-01 through FR-AU-10 |
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
-| Two-Factor Authentication | FR-2F-01 through FR-2F-12 |
+| Two-Factor Authentication | FR-2F-01 through FR-2F-14 |

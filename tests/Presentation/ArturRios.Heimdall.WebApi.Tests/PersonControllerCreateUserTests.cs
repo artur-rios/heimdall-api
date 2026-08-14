@@ -81,13 +81,25 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
+        var command = Command();
 
         // When
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
-            $"/api/scopes/{scope.PublicId}/persons", Command());
+            $"/api/scopes/{scope.PublicId}/persons", command);
 
-        // Then
+        // Then — the row, not just the status. A handler that answered 201 and wrote nothing would
+        // have passed on the status alone, and this test's name is a claim about what was created.
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        await using var context = db.CreateContext();
+
+        var created = await context.Persons.AsNoTracking()
+            .FirstOrDefaultAsync(person => person.Email == command.Email);
+
+        Assert.NotNull(created);
+        Assert.Equal((long)Roles.User, created.RoleId);
+        Assert.True(await context.ScopeUsers
+            .AnyAsync(membership => membership.PersonId == created.Id && membership.ScopeId == scope.Id));
     }
 
     [FunctionalFact]

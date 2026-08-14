@@ -4,8 +4,8 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Checks an authenticator-app code against a person's <see cref="TwoFactorAuth" /> configuration
-///     (FR-2F-04, FR-2F-09), and records the time step it accepted so the same code cannot be
-///     presented twice.
+///     (FR-2F-04, FR-2F-09), and records the time step it accepted (FR-2F-14) so the same code
+///     cannot be presented twice.
 /// </summary>
 /// <remarks>
 ///     <para>

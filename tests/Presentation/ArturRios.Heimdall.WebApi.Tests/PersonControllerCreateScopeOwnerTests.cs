@@ -81,11 +81,26 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
     {
         var scope = await SeedScopeAsync();
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        var command = Command();
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
-            $"/api/scopes/{scope.PublicId}/owners", Command());
+            $"/api/scopes/{scope.PublicId}/owners", command);
 
+        // Then — the status alone would pass for a handler that answered 201 and wrote nothing, so
+        // the row the endpoint exists to create is what is asserted: a ScopeAdmin person, and the
+        // SCOPE_OWNER row that makes them an owner of this scope (UC-06 path c, FR-SC-12).
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        await using var context = db.CreateContext();
+
+        var created = await context.Persons
+            .Include(person => person.ScopeOwnerships)
+            .FirstOrDefaultAsync(person => person.Email == command.Email);
+
+        Assert.NotNull(created);
+        Assert.Equal((long)Roles.ScopeAdmin, created.RoleId);
+        Assert.Equal(created.PublicId, response.Body!.Data!.Id);
+        Assert.Equal(scope.Id, Assert.Single(created.ScopeOwnerships).ScopeId);
     }
 
     [FunctionalFact]

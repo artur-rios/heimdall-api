@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ArturRios.Heimdall.Data.Migrations
 {
     /// <summary>
-    ///     Adds the per-account brute-force counters (FR-AU-08, FR-2F-03) and the TOTP replay guard
+    ///     Adds the per-account brute-force counters (FR-AU-09, FR-2F-13) and the TOTP replay guard
     ///     (FR-2F-09), and turns the two email-uniqueness rules a unique index can express into
     ///     actual unique indexes (FR-PE-09, FR-GO-07).
     /// </summary>

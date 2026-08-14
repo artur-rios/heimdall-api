@@ -96,7 +96,7 @@ public class LoginCommandHandler(
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        // A locked-out account is refused before its password is even considered (FR-AU-08). The
+        // A locked-out account is refused before its password is even considered (FR-AU-09). The
         // decoy keeps the cost of that refusal equal to a real check's, so a lockout cannot be
         // detected by how quickly it answers.
         if (person.LockedOutUntil is { } lockedUntil && lockedUntil > DateTime.UtcNow)
@@ -149,7 +149,7 @@ public class LoginCommandHandler(
 
     /// <summary>
     ///     Counts a wrong password and, at <see cref="MaxFailedLoginAttempts" /> consecutive misses,
-    ///     locks the account for <see cref="LockoutDuration" /> (FR-AU-08).
+    ///     locks the account for <see cref="LockoutDuration" /> (FR-AU-09).
     /// </summary>
     /// <remarks>
     ///     <para>

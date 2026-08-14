@@ -39,7 +39,7 @@ public class TwoFactorAuth : Entity
     ///     authenticator-app code, or <c>null</c> while none has been accepted. A code is refused
     ///     unless its step is strictly greater, which is what makes an app code single-use: without
     ///     it the same six digits verify for as long as they are current, and the verification
-    ///     window widens that to a step either side (FR-2F-09, RFC 6238 §5.2).
+    ///     window widens that to a step either side (FR-2F-14, RFC 6238 §5.2).
     /// </summary>
     public long? LastTotpTimeStepUsed { get; set; }
 

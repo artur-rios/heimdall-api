@@ -37,7 +37,7 @@ sequenceDiagram
     H->>PR: find by the lookup the role implies
     PR->>DB: SELECT person + role + scope navigations
     DB-->>PR: person or null
-    Note over H: AF-11a unknown · AF-11b wrong password<br/>AF-11c deleted person · AF-11d/e scope not eligible<br/>locked out (FR-AU-08)<br/>→ all answer "invalid credentials"
+    Note over H: AF-11a unknown · AF-11b wrong password<br/>AF-11c deleted person · AF-11d/e scope not eligible<br/>locked out (FR-AU-09)<br/>→ all answer "invalid credentials"
 
     H->>H: Hash.TextMatches(password, hash, salt)
     H->>TS: TryBuildSubject(person)
