@@ -5,8 +5,9 @@ namespace ArturRios.Heimdall.Command.Input.Validation;
 
 /// <summary>
 ///     Input validation for <see cref="UpdateScopeCommand" /> (UC-03). Only checks the shape of the
-///     request; business rules that require data access (existence, name uniqueness) are enforced by
-///     the handler.
+///     request — including the field lengths the columns impose, so an overlong value is a named 400
+///     here rather than the persistence layer's unclassified data-access failure; business rules
+///     that require data access (existence, name uniqueness) are enforced by the handler.
 /// </summary>
 public class UpdateScopeCommandValidator : AbstractValidator<UpdateScopeCommand>
 {

@@ -341,6 +341,13 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         scraped, and drive the anonymous endpoints from every visitor's browser at once.
     ///     </para>
     ///     <para>
+    ///         This is <see cref="WebApiStartup.ConfigureCors" />, the base class's own extension
+    ///         point, overridden rather than shadowed — it was declared privately at first, which
+    ///         hid the inherited member instead of implementing it (CS0114). Nothing in the base
+    ///         orchestrates start-up (<c>Build</c> is this class's), so it is still called exactly
+    ///         once, from <see cref="ConfigureApp" />, where its position in the pipeline is decided.
+    ///     </para>
+    ///     <para>
     ///         Refusing by default rather than falling back to the wildcard is deliberate, and it is
     ///         the <c>UnconfiguredGoogleIdTokenVerifier</c> judgement rather than the e-mail sender's:
     ///         a missing CORS entry costs a browser-based front end its access until an operator adds
@@ -349,7 +356,7 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         unaffected — CORS is a browser rule and non-browser clients never send an Origin.
     ///     </para>
     /// </remarks>
-    private void ConfigureCors()
+    public override void ConfigureCors()
     {
         var origins = (Environment.GetEnvironmentVariable(CorsAllowedOriginsEnvironmentVariable) ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

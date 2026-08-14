@@ -164,6 +164,38 @@ The concrete `THandler` registration exists only so the decorator factory can re
 
 See [Audit logging](../flows/audit-logging/) for the sequence.
 
+## How a failure becomes a status
+
+`ResponseResolver` resolves the HTTP status from the envelope's first error (or, on success, its
+first message) against the map the controller passes it, falling back to 200 on success and 400 on
+failure. Each use case owns a `*MessageMap` naming its own outcomes — `InvalidCredentials` is a 401,
+`EmailAlreadyExists` a 409, and so on.
+
+Persistence failures are not the use case's vocabulary, and until recently they had none of their
+own: a repository handed back the provider's text, which named the violated index, the conflicting
+value, or the column and its type. Nothing stable could be keyed off that, so every one of them fell
+through to the 400 default — a duplicate that lost a race and a database that had gone away were
+both reported as bad requests, and the message leaked schema detail to the caller.
+
+`ArturRios.Data.Relational.Core` 4.0.0 classifies each failure into one of five fixed, caller-safe
+messages instead, reading the provider text only to decide which. `DataAccessMessageMap` folds four
+of them into every use case's map:
+
+| Classified failure | Status |
+| --- | --- |
+| Unique violation | 409 Conflict |
+| Other integrity rule (FK, NOT NULL, CHECK) | 409 Conflict |
+| Concurrency conflict | 409 Conflict |
+| Transient — the store is unavailable | 503 Service Unavailable |
+
+The fifth, the unclassified `A data-access error occurred.`, is deliberately left unmapped and keeps
+the 400 default. It covers both causes a caller can fix — a value longer than its column, where a
+validator failed to bound it — and causes only an operator can, so neither 400 nor 500 fits all of
+it, and 400 is the safer of the two.
+
+A use case's own entries always win over these, so a map assembled this way can never override the
+vocabulary the use case defines.
+
 ## The HTTP request pipeline
 
 ```mermaid

@@ -6,8 +6,9 @@ namespace ArturRios.Heimdall.Command.Input.Validation;
 /// <summary>
 ///     Input validation for <see cref="CreateScopeCommand" /> (UC-01, step 2 / AF-01b). Only checks
 ///     the shape of the request — including the field lengths the columns impose, so an overlong
-///     value is a 400 here rather than a data-access error from PostgreSQL; business rules that require data access (name uniqueness, owner
-///     eligibility) are enforced by the handler.
+///     value is a named 400 here rather than the persistence layer's unclassified data-access
+///     failure; business rules that require data access (name uniqueness, owner eligibility) are
+///     enforced by the handler.
 /// </summary>
 public class CreateScopeCommandValidator : AbstractValidator<CreateScopeCommand>
 {
