@@ -400,4 +400,26 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         var stored = Assert.Single(await StoredAsync(scope));
         Assert.True(stored.EmailVerified);
     }
+
+    [FunctionalFact]
+    public async Task GivenTokenOmitsEmailVerifiedClaim_WhenPostAuthGoogle_ThenStoredVerifiedValueIsKept()
+    {
+        // Given a verified Google User signing in again with a token that carries no email_verified
+        // claim at all — what a client that asked for a token without the email scope presents. An
+        // absent claim asserts nothing, so FR-GO-19's refresh must not downgrade the stored value
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("silent-claim");
+        await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(subject, email, emailVerified: null));
+
+        // Then — the row and the response both still say verified
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.EmailVerified);
+        var stored = Assert.Single(await StoredAsync(scope));
+        Assert.True(stored.EmailVerified);
+    }
 }

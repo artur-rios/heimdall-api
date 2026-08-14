@@ -170,6 +170,10 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         Assert.True(verify.Body!.Data!.ExpiresAt > DateTime.UtcNow);
         Assert.Contains(TwoFactorMessages.VerificationSuccessful, verify.Body.Messages);
 
+        // The person seeded above is verified, so this is where the response says so (FR-EV-05) —
+        // the positive counterpart of GivenUnverifiedGatedPerson_...
+        Assert.True(verify.Body.Data.EmailVerified);
+
         // Replaces the stale bearer header from the setup step above — Authorize only adds a header,
         // it does not overwrite one already present.
         Gateway.Client.DefaultRequestHeaders.Remove("Authorization");

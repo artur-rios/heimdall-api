@@ -1218,7 +1218,7 @@ sequenceDiagram
 | **Actors** | Anonymous, Google Identity Platform |
 | **Description** | Authenticate with a Google account against a specific scope. If no Google User exists yet for that Google account in that scope, one is created (sign-up); otherwise the existing Google User is authenticated (sign-in). Only usable for scopes with `GoogleSignInEnabled = true`, and only ever produces a `User`-equivalent identity |
 | **Preconditions** | The target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`; the caller holds a valid Google ID token |
-| **Postconditions** | A Google User record exists for this Google account within the scope (created if this was the first sign-in); an authentication token is issued |
+| **Postconditions** | A Google User record exists for this Google account within the scope (created if this was the first sign-in), with its stored `EmailVerified` refreshed from the token's claims when they differ (FR-GO-19); an authentication token is issued, and the response reports whether the account's email is verified |
 
 **Main Flow:**
 

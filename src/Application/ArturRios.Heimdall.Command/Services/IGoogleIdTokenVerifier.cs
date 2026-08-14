@@ -7,13 +7,19 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </summary>
 /// <param name="Subject">Google's stable <c>sub</c> claim, stored as the Google User's <c>GoogleId</c>.</param>
 /// <param name="Email">The <c>email</c> claim.</param>
-/// <param name="EmailVerified">The <c>email_verified</c> claim.</param>
+/// <param name="EmailVerified">
+///     The <c>email_verified</c> claim, or <c>null</c> when the token carries no such claim — a
+///     client that obtained its token without the <c>email</c> scope gets one. Nullable so that
+///     "Google says the address is unverified" stays distinguishable from "Google said nothing":
+///     FR-GO-19's refresh only runs on the former, so an absent claim cannot downgrade a stored
+///     <c>true</c>.
+/// </param>
 /// <param name="Name">The <c>name</c> claim, absent on tokens whose issuer withheld the profile scope.</param>
 /// <param name="PictureUrl">The <c>picture</c> claim; optional, as the Google User field is.</param>
 public record GoogleIdTokenPayload(
     string Subject,
     string Email,
-    bool EmailVerified,
+    bool? EmailVerified,
     string? Name,
     string? PictureUrl);
 

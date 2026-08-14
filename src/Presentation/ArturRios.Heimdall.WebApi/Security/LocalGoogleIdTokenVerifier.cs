@@ -82,10 +82,19 @@ public class LocalGoogleIdTokenVerifier(
         return new GoogleIdTokenPayload(
             subject,
             email,
-            bool.TryParse(Claim(result, "email_verified"), out var verified) && verified,
+            EmailVerified(result),
             Claim(result, "name"),
             Claim(result, "picture"));
     }
+
+    /// <summary>
+    ///     The <c>email_verified</c> claim, or <c>null</c> when the token carries none. Absence is
+    ///     read straight off the validated claim set, which simply has no entry for a claim the
+    ///     token never held; a value that will not parse as a boolean is treated as absent too,
+    ///     since it asserts nothing this API can act on.
+    /// </summary>
+    private static bool? EmailVerified(TokenValidationResult result) =>
+        bool.TryParse(Claim(result, "email_verified"), out var verified) ? verified : null;
 
     private static string? Claim(TokenValidationResult result, string name) =>
         result.Claims.TryGetValue(name, out var value) ? value?.ToString() : null;
