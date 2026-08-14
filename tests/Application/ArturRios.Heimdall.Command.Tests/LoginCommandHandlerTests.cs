@@ -406,6 +406,7 @@ public class LoginCommandHandlerTests
     {
         // Given — AF-11g (FR-2F-07): correct credentials, but active 2FA
         var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        person.EmailVerified = true;
         var fixture = FixtureFor(await PersonsWith(person));
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
@@ -421,6 +422,9 @@ public class LoginCommandHandlerTests
         Assert.Equal("challenge-token", output.Data.ChallengeToken);
         Assert.Null(output.Data.Token);
         Assert.Null(output.Data.ExpiresAt);
+        // The caller has passed only the first factor, so the challenge response says nothing about
+        // the account — they get this from /api/auth/2fa/verify instead (UC-38).
+        Assert.Null(output.Data.EmailVerified);
         Assert.Equal(["App", "Email"], output.Data.AvailableMethods);
         Assert.Contains(AuthMessages.TwoFactorRequired, output.Messages);
 
@@ -521,5 +525,38 @@ public class LoginCommandHandlerTests
         Assert.True(output.Success);
         Assert.False(output.Data!.RequiresTwoFactor);
         Assert.Equal("issued-token", output.Data.Token);
+    }
+
+    [UnitFact]
+    public async Task GivenVerifiedPerson_WhenHandlingLogin_ThenOutputReportsEmailVerifiedTrue()
+    {
+        // Given a person whose address has been verified (FR-EV-05)
+        var person = Person(10, "verified@test.local", Roles.SystemAdmin);
+        person.EmailVerified = true;
+        var handler = FixtureFor(await PersonsWith(person)).Handler();
+
+        // When
+        var output = await handler.HandleAsync(Command("verified@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenUnverifiedPerson_WhenHandlingLogin_ThenOutputReportsEmailVerifiedFalse()
+    {
+        // Given a person who has not yet clicked their verification link — the case the field
+        // exists for, since the client must know to prompt them (UC-15)
+        var person = Person(10, "unverified@test.local", Roles.SystemAdmin);
+        person.EmailVerified = false;
+        var handler = FixtureFor(await PersonsWith(person)).Handler();
+
+        // When
+        var output = await handler.HandleAsync(Command("unverified@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.EmailVerified);
     }
 }
