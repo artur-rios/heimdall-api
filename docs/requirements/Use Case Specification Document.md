@@ -2,7 +2,7 @@
 title: "Use Case Specification Document"
 linkTitle: "Use Case Specification Document"
 weight: 30
-description: "Every use case with its main flow and numbered alternative flows."
+description: "The actor-facing use cases, each with its main flow and numbered alternative flows."
 ---
 
 # Use Case Specification Document — Heimdall API
@@ -11,7 +11,9 @@ description: "Every use case with its main flow and numbered alternative flows."
 
 ### 1.1 Purpose
 
-This document specifies the use cases for the **Heimdall API**. Each use case describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.
+This document specifies the actor-facing use cases for the **Heimdall API** — UC-01 through UC-29 and UC-31 through UC-40. Each describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.
+
+UC-30 (Check API Health) is specified in the [Operations & Infrastructure Document](Operations%20&%20Infrastructure%20Document.md), §3.5, alongside the FR-HC requirements it realises: it describes how the system is operated rather than what it does for an actor, and keeping it with the monitoring requirements keeps the two together.
 
 Note on identifiers: every `{id}` / `{scopeId}` / `{personId}` referenced in these flows is the entity's `PublicId` (a GUID). Internally, each entity also has an auto-increment `bigint Id` used only for storage and joins — it is never seen by any actor in these use cases (see the System Requirements Document, §4.0).
 
@@ -703,7 +705,16 @@ sequenceDiagram
 | AF-11e | Scope Admin's owned scopes are all logically deleted | Return `401 Unauthorized` |
 | AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
 | AF-11g | Person has active two-factor authentication (FR-2F-07) | Return `200 OK` with a short-lived challenge token and the available second-factor methods, instead of the full authentication token; if the Email method is enabled, also send a fresh email code (FR-2F-08). See UC-38 for how the login is completed |
+| AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09) | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
 
+> **On the lockout.** AF-11h joins the collapse deliberately. Answering it distinctly would tell an
+> anonymous caller that an address is registered *and* that they have made it stop responding,
+> which is the pair of facts the uniform rejection exists to withhold. FR-AU-10 keeps the timing
+> uniform too, so the lockout is not detectable by how quickly the refusal arrives. It expires on
+> its own after fifteen minutes — no operator action clears it — because reaching the threshold
+> needs nothing but wrong guesses, and a lock that persisted would hand any caller a denial of
+> service against any address they know.
+>
 > **On the single rejection.** AF-11a through AF-11e are five different conditions with one
 > indistinguishable response: the same `401` and the same message. Telling them apart would turn the
 > login endpoint into a directory — confirming which emails are registered, which accounts have been
@@ -1636,7 +1647,7 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-37a | No pending setup exists for the person | Return `404 Not Found` |
 | AF-37b | `appCode` missing or incorrect, when `AppEnabled` | Return `400 Bad Request` |
-| AF-37c | `emailCode` missing, incorrect, expired, or already used, when `EmailEnabled` | Return `400 Bad Request` |
+| AF-37c | `emailCode` missing, incorrect, expired, already used, or retired after five wrong guesses (FR-2F-13), when `EmailEnabled` | Return `400 Bad Request` |
 | AF-37d | Setup is already active (repeated confirm) | Return `409 Conflict` |
 
 > **On requiring every selected method's code.** If both `App` and `Email` were chosen in UC-36, both codes are required in the same confirmation request. Confirming with only one channel would activate a method whose configuration was never actually exercised — for the app, that a QR code was scanned into a real authenticator; for email, that the address reliably receives mail — leaving a silently broken second factor discovered only at the next login.
@@ -1682,7 +1693,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-38a | Challenge token expired or invalid | Return `401 Unauthorized` |
-| AF-38b | Code does not match any valid app code, email code, or unused recovery code | Return `401 Unauthorized` |
+| AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
 

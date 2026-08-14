@@ -613,7 +613,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
-| NFR-04 | Security | All endpoints (except auth) shall require a valid authentication token |
+| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
 | NFR-05 | Performance | The API shall respond to requests within 500 ms under normal load |
 | NFR-06 | Availability | The API shall be designed for horizontal scaling |
 | NFR-07 | Data Integrity | Logical deletion must not corrupt referential integrity |
@@ -809,3 +809,5 @@ Notes on cascading behavior:
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-14 |
+| Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20&%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
+| Cross-cutting | NFR-01 through NFR-17 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

@@ -586,11 +586,12 @@ class. It repeats UC-21's ordering test and adds two of its own kinds:
   every person AF-23d describes also satisfies AF-23b. `GivenPersonAlreadyScopeAdmin_…` would still
   pass against a handler that answered 400, so it asserts the 409 *and* that the ownership rows the
   person already held are untouched.
-- **A requirement the use case does not name.** Promotion moves the address from the scope's `User`
-  namespace into the system-wide admin one (FR-PE-09), which no `AF-23x` covers. Three tests pin it:
-  a live admin holding the address refuses the promotion, a *logically deleted* admin does not, and a
-  `User` of another scope holding it does not either — the last one is what makes "the two namespaces
-  are independent" a tested claim rather than a comment.
+- **A flow whose condition is easy to state and easy to get wrong.** Promotion moves the address from
+  the scope's `User` namespace into the system-wide admin one, so AF-23e refuses it when a live
+  administrator already holds that address (FR-PE-09). Three tests pin the boundary the flow's wording
+  implies but does not spell out: a live admin holding the address refuses the promotion, a
+  *logically deleted* admin does not, and a `User` of another scope holding it does not either — the
+  last is what makes "the two namespaces are independent" a tested claim rather than a comment.
 
 The pair also contrasts with UC-21 on repetition: `PersonControllerAddScopeOwnerTests` asserts a
 second call is an idempotent `200`, while `PersonControllerPromoteScopeUserTests` asserts it is a
@@ -657,6 +658,20 @@ One create test pins an absence rather than a rule: `GivenDuplicateName_…ThenB
 purpose — if uniqueness is ever wanted, it is a specification change and this test is what fails
 first.
 
+### 10.1 Functional database
+
+`PostgresFixture` starts a `postgres:16-alpine` container, points
+`HEIMDALL_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
+suite never touches a developer's local `.env.local` database — and creates the schema by applying
+**the real EF Core migrations** (`context.Database.MigrateAsync()`). Migrations were chosen over
+`EnsureCreated` deliberately: the API refuses to start with migrations pending (see
+`DatabaseSeeder`), and applying them here means the functional suite exercises the same schema
+production gets. `SchemaTests` asserts the result — every table under the `heimdall` schema,
+named in singular snake_case.
+
+`SeedingTests` covers the other half of startup: `DatabaseSeeder` writes the three `Roles` rows and
+the master system administrator, so functional tests can authenticate as a System Admin.
+
 ### 10.2 Testing an endpoint that answers the same way twice
 
 UC-12 is the first use case whose alternative flow is *indistinguishable from its main flow* by
@@ -674,17 +689,3 @@ anti-enumeration work should follow the same shape:
 The senders are unit-tested with a stub `IEmailService` rather than reached over the network. The
 functional suite leaves the Mailgun variables unset, so the API registers its logging senders and
 never makes an outbound call.
-
-### 10.1 Functional database
-
-`PostgresFixture` starts a `postgres:16-alpine` container, points
-`HEIMDALL_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
-suite never touches a developer's local `.env.local` database — and creates the schema by applying
-**the real EF Core migrations** (`context.Database.MigrateAsync()`). Migrations were chosen over
-`EnsureCreated` deliberately: the API refuses to start with migrations pending (see
-`DatabaseSeeder`), and applying them here means the functional suite exercises the same schema
-production gets. `SchemaTests` asserts the result — every table under the `heimdall` schema,
-named in singular snake_case.
-
-`SeedingTests` covers the other half of startup: `DatabaseSeeder` writes the three `Roles` rows and
-the master system administrator, so functional tests can authenticate as a System Admin.
