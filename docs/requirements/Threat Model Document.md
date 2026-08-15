@@ -199,15 +199,30 @@ one. It is evidence against an ordinary caller, not against an attacker who reac
 | --- | --- | --- | --- | --- |
 | TH-19 | Presenting a forged or replayed Google ID token | Signature, issuer, audience and expiry are all verified before any claim is trusted (NFR-13) | Test (audience) + inspection (Google's own checks) | Low |
 | TH-20 | Presenting a token minted for a different OAuth client | The configured client IDs are the trusted audience, and a test requires that constraint to be present | Test | Low |
-| TH-21 | Reaching an existing password account by signing in with the same address through Google | Not established | **None** | Medium |
+| TH-21 | Reaching an existing password account by signing in with the same address through Google | The two identity tables are never joined on email: the sign-in resolves by Google's `sub` within the scope, the token names the Google User's own `PublicId`, and UC-25 issues the `User` role unconditionally | Test | Low |
 
-**TH-21 is a gap in this document rather than a known defect.** Google Users and Persons are separate
-identity tables that mint tokens through the same claims, and what happens when a Google sign-in
-presents an address that already belongs to a password account has not been traced through the code
-here, nor is there a test that asks the question in those terms. It may well be handled. Until
-somebody establishes which, it is written down as unverified rather than assumed safe — that is the
-rule this document runs on, and the first threat to which it applies to the document's own authors is
-worth keeping.
+**TH-21 was the one gap this document opened against itself, and it has now been traced.** The answer
+is that a Google sign-in cannot reach a password account, for three independent reasons: the account
+is looked up by Google's `sub` within the scope and never by email, so a Person is never a candidate;
+the token names the Google User's own `PublicId`, which is a different GUID from any Person's; and
+UC-25 mints the `User` role unconditionally, which `ActorLivenessFilter` now enforces for any Google
+identity. Two tests pin it — one that the colliding sign-in creates a separate row and leaves the
+admin's record untouched, one that the token it returns is refused by an endpoint the admin whose
+address it shares could reach.
+
+What the trace did turn up is narrower, and is recorded here as accepted rather than as a defect.
+AF-25c asks whether the address is free *within the scope*, and asks the person half of that question
+only of persons holding a `SCOPE_USER` row. An admin has none — UC-06 path b creates them with no
+scope association — so an admin's address does not read as taken and the sign-up proceeds. The
+address then exists twice across the two tables.
+
+That is left as it is on purpose. The alternative is that any address belonging to a system-wide
+admin blocks Google sign-up in every scope, which is a worse rule than the one being avoided: it
+turns a system-wide account into a veto over per-scope sign-ups, for no gain that the three
+separations above do not already provide. Nothing in the system keys off an email across the two
+tables — login and password recovery read Persons, Google sign-in reads Google Users — so the
+duplicate is an operational surprise rather than a way in. It is written down because a reader of
+FR-GO-07 would not expect it.
 
 ## 8. TB-5 — An operator to configuration, logs and images
 
@@ -261,13 +276,13 @@ Ordered by what they cost to fix against what they prevent, which is not the sam
 
 | Rank | Threat | Why it is here | Shape of the fix |
 | ---: | --- | --- | --- |
-| 1 | TH-21 | Nobody has established what a Google sign-in does with an address that already has a password account | Trace it, then write the test that states the answer |
-| 2 | TH-03 | The rate limiter is the only bound on login's memory demand, and it is per-IP and per-instance | A global concurrency bound on password verification, independent of source address |
-| 3 | TH-18 | The audit log is append-only by convention only | Database-level restriction, or a periodic integrity check |
-| 4 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation |
+| 1 | TH-03 | The rate limiter is the only bound on login's memory demand, and it is per-IP and per-instance | A global concurrency bound on password verification, independent of source address |
+| 2 | TH-18 | The audit log is append-only by convention only | Database-level restriction, or a periodic integrity check |
+| 3 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation |
 
-Rank 1 costs an afternoon and may cost nothing more than a test. Ranks 2 to 4 are design changes and
-should be decided deliberately rather than squeezed into an unrelated pull request.
+All three are design changes rather than repairs, and should be decided deliberately rather than
+squeezed into an unrelated pull request. None is a defect in what the code does today; each is a
+limit in what the control can cover.
 
 ### 11.1 Closed
 
@@ -278,6 +293,9 @@ this document has been worth.
 | --- | --- | --- |
 | TH-14 | Password-reset and email-verification tokens were stored in plaintext, while the weaker recovery codes beside them were hashed | `SingleUseTokenHash`: both are stored as a SHA-256 digest, the migration converts existing rows rather than dropping them, and the issue and spend paths share one helper |
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
+| TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 
-Both were found by reading the code while writing this document, and neither was visible from the
-requirements they were supposed to follow from — which is the argument for keeping it current.
+The first two were found by reading the code while writing this document, and neither was visible
+from the requirements they were supposed to follow from. The third was found by this document
+admitting it did not know — which is the case for the rule that an unanswered question is written
+down rather than assumed safe.

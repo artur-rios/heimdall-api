@@ -200,7 +200,7 @@ graph LR
 | FR-GO-04 | Only accounts equivalent to the `User` role may sign up or sign in via Google; Google authentication shall never create or authenticate a `ScopeAdmin` or `SystemAdmin` | High |
 | FR-GO-05 | The system shall register a Google User with: `Id`, `GoogleId`, `Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`, `IsDeleted`, `ScopeId` | High |
 | FR-GO-06 | A Google User must be associated with exactly **one** scope, matching the scope in which the sign-up/sign-in was initiated | High |
-| FR-GO-07 | A Google User's `Email` must be unique within its scope, considered jointly with the emails of `User` persons in that same scope (see FR-PE-09) | High |
+| FR-GO-07 | A Google User's `Email` must be unique within its scope, considered jointly with the emails of `User` persons in that same scope (see FR-PE-09). `User` persons is meant literally: an admin holds no scope membership, so an admin's address does not make one taken in any scope, and the same address can exist as both. Accepted and tested — see Threat Model TH-21 | High |
 | FR-GO-08 | A Google User's `GoogleId` (Google's `sub` claim) must be unique within its scope | High |
 | FR-GO-09 | On first sign-in with a given Google account for a scope with Google sign-in enabled, the system shall create (sign up) a new Google User record populated from the verified Google ID token claims | High |
 | FR-GO-10 | On subsequent sign-ins with the same Google account and scope, the system shall authenticate the existing Google User by `GoogleId`, without creating a duplicate record | High |

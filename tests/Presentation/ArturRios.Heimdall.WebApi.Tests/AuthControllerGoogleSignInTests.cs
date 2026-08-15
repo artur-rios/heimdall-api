@@ -372,6 +372,98 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Empty(await StoredAsync(scope));
     }
 
+    /// <summary>
+    ///     Seeds an admin person: no scope membership, which is how UC-06 path b creates one.
+    /// </summary>
+    private async Task<Person> SeedAdminPersonAsync(Roles role, string email)
+    {
+        await using var context = db.CreateContext();
+
+        var person = new Person
+        {
+            PublicId = Guid.NewGuid(),
+            Name = $"{role}",
+            Email = email,
+            PasswordHash = Hash.EncodeWithRandomSalt("Str0ng-Pass!", out var salt),
+            Salt = salt,
+            RoleId = (long)role,
+            EmailVerified = true
+        };
+
+        context.Persons.Add(person);
+        await context.SaveChangesAsync();
+
+        return person;
+    }
+
+    [FunctionalFact]
+    public async Task GivenEmailAlreadyUsedByAnAdminPerson_WhenPostAuthGoogle_ThenASeparateGoogleUserIsCreated()
+    {
+        // Threat Model TH-21, established rather than assumed. AF-25c asks whether the address is
+        // free "within the scope", and it asks the person half of that question only of persons who
+        // hold a SCOPE_USER row. An admin has none — UC-06 path b creates them with no scope
+        // association at all — so an admin's address does not read as taken, and the sign-up
+        // proceeds.
+        //
+        // That is not the account takeover it might look like, and this test exists to say which of
+        // the two it is. What gets created is a new row in the other identity table, with its own
+        // PublicId; the token names that row and claims the User role, which UC-25 issues
+        // unconditionally. The admin's person row is untouched and the caller receives none of its
+        // authority. What is real is that the address now exists twice across the two tables, which
+        // is narrower than FR-GO-07 reads.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("sysadmin");
+        var admin = await SeedAdminPersonAsync(Roles.SystemAdmin, email);
+
+        // When somebody signs in with Google using that same address
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
+
+        // Then — it is allowed, and what was created is a Google User, not a claim on the admin
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var created = Assert.Single(await StoredAsync(scope));
+        Assert.Equal(email, created.Email);
+        Assert.NotEqual(admin.PublicId, created.PublicId);
+
+        // Then — the admin's own record is untouched, and still a System Admin
+        await using var context = db.CreateContext();
+        var storedAdmin = await context.Persons.AsNoTracking()
+            .SingleAsync(person => person.PublicId == admin.PublicId);
+
+        Assert.Equal((long)Roles.SystemAdmin, storedAdmin.RoleId);
+        Assert.False(storedAdmin.IsDeleted);
+    }
+
+    [FunctionalFact]
+    public async Task GivenEmailAlreadyUsedByAnAdminPerson_WhenPostAuthGoogle_ThenTheTokenCarriesOnlyTheUserRole()
+    {
+        // The half of TH-21 that would matter if it were wrong: the token minted for the colliding
+        // address must name the Google User and the User role, never the admin it shares an address
+        // with. UC-25 hard-codes Roles.User, and ActorLivenessFilter refuses a Google identity
+        // claiming anything else — this pins the outcome from the caller's side.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("scopeadmin");
+        var admin = await SeedAdminPersonAsync(Roles.ScopeAdmin, email);
+
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The issued token is spendable, and spends as a User of this scope rather than as an admin:
+        // an endpoint the seeded ScopeAdmin could reach is refused to its holder.
+        Authorize(response.Body!.Data!.Token!);
+
+        var asAdmin = await Gateway.GetAsync<DataOutput<object?>>("/api/scopes");
+
+        Assert.Equal(HttpStatusCode.Forbidden, asAdmin.StatusCode);
+
+        // And the admin's record is still theirs
+        await using var context = db.CreateContext();
+        Assert.Equal(
+            (long)Roles.ScopeAdmin,
+            (await context.Persons.AsNoTracking().SingleAsync(p => p.PublicId == admin.PublicId)).RoleId);
+    }
+
     [FunctionalFact]
     public async Task GivenSameEmailInAnotherScope_WhenPostAuthGoogle_ThenGoogleUserIsCreated()
     {
