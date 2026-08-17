@@ -34,11 +34,15 @@ Prerequisites, none of which this script can create for you:
 """
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from migrations import parse_env_file
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
@@ -46,9 +50,34 @@ DEFAULT_ENV_FILE = REPO_ROOT / "docker/development.env"
 DEFAULT_DISTRO = "Ubuntu"
 DEFAULT_REMOTE_DIR = "~/heimdall"
 
+# Compose marks a variable required by interpolating it as ${NAME:?message}. Reading them out
+# of the file keeps this check in step with it: a variable made required there needs no edit here.
+REQUIRED_VARIABLE_PATTERN = re.compile(r"\$\{([A-Z_]+):\?")
+
 
 class DeployError(Exception):
     """A step failed in a way the operator has to resolve."""
+
+
+def unfilled_variables(env_file):
+    """Name the required variables the environment file leaves empty.
+
+    Copying a docker/*.env.example over the real file is the easy mistake, and it produces
+    the least helpful error in the set: Compose reports each required variable as "missing
+    a value", which reads as though the file were absent rather than blank. Catching it
+    here costs nothing and names the file being read.
+
+    The process environment counts as a source, since Compose interpolates from it in
+    preference to the file -- `DB_HOST=... python scripts/deploy_wsl.py` is a documented
+    way to run this.
+    """
+    required = sorted(set(REQUIRED_VARIABLE_PATTERN.findall(COMPOSE_FILE.read_text())))
+    values = parse_env_file(env_file.read_text(encoding="utf-8-sig"))
+
+    return [
+        name for name in required
+        if not (values.get(name) or os.environ.get(name, "")).strip()
+    ]
 
 
 def run(command, capture=False, dry_run=False, stdin_bytes=None):
@@ -93,6 +122,17 @@ def preflight(distro, env_file, dry_run):
         raise DeployError(
             f"{env_file} not found. Copy the matching docker/*.env.example to it and fill "
             "it in; Compose refuses to build while a required value is empty."
+        )
+
+    empty = unfilled_variables(env_file)
+
+    if empty:
+        listed = "\n".join(f"  {name}=" for name in empty)
+
+        raise DeployError(
+            f"{env_file} leaves {len(empty)} required variable(s) empty:\n{listed}\n"
+            "Fill them in and run again. An unfilled file is usually the .env.example copied "
+            "over a filled one -- the template carries every key with no value."
         )
 
     if shutil.which("wsl.exe") is None:
