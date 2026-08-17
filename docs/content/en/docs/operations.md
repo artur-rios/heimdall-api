@@ -193,6 +193,26 @@ Google sign-in also requires the scope itself to have it switched on, through
 `PUT /api/scopes/{id}/google-signin` — it is off by default. See
 [Google Sign-In](../flows/google-sign-in/).
 
+## Rotating the signing secret
+
+`HEIMDALL_AUTH_TOKEN_SECRET` signs every token the API issues, so replacing it used to invalidate
+every token in flight the moment the new value took effect. `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`
+makes that a rotation instead: both secrets are accepted while only the current one signs.
+
+1. Set `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` to the secret currently in use, set
+   `HEIMDALL_AUTH_TOKEN_SECRET` to a new one, and restart. Tokens issued before the restart keep
+   working; new ones are signed with the new secret.
+2. Wait one `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` — an hour by default — so that no token
+   signed with the old secret can still be alive.
+3. Clear `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and restart again.
+
+Do step 3 immediately when the reason for rotating is that the old secret leaked. Withdrawing a key
+invalidates its tokens at once, which is the point: signing everybody out is the correct response to
+a compromised key and the wrong response to a routine replacement.
+
+Every instance must carry the same pair, so roll the change out to all of them before step 3 — an
+instance that has already dropped the old secret will refuse tokens its neighbours still accept.
+
 ## Environment variables at a glance
 
 | Variable | Required | Default |
@@ -203,6 +223,7 @@ Google sign-in also requires the scope itself to have it switched on, through
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |

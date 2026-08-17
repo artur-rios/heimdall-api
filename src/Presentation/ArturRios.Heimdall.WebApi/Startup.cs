@@ -47,6 +47,7 @@ public class Startup(string[] args) : WebApiStartup(args)
     private const string TokenExpirationEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS";
     private const string TokenIssuerEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
+    private const string PreviousTokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
     private const double DefaultTokenExpirationInSeconds = 3600;
 
     private const string CorsAllowedOriginsEnvironmentVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
@@ -563,6 +564,27 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///     empty one every authenticated request dies inside the token validator with an opaque
     ///     <c>IDX10703</c>, so a missing secret fails startup instead.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="PreviousTokenSecretEnvironmentVariable" /> is how a signing secret is
+    ///         replaced without signing everybody out (Threat Model TH-22). Both secrets are handed
+    ///         to <c>JwtConfiguration.Keys</c>, so a token signed with either is accepted, while new
+    ///         tokens are signed with the current one. Rotating is then: set the previous variable to
+    ///         the secret in use, set the current variable to a new one, restart; and an hour later —
+    ///         one token lifetime — clear the previous variable and restart again.
+    ///     </para>
+    ///     <para>
+    ///         The keys carry ids because <c>JwtKey</c> requires them, but no <c>kid</c> is written to
+    ///         the tokens: <c>SigningKeyId</c> is deliberately left unset, so a token names no key and
+    ///         validation tries both. That is the point of not using the <c>kid</c> feature here. An
+    ///         identifier stamped on the token has to stay attached to the same key forever, and these
+    ///         ids are positional — today's "current" is tomorrow's "previous" — so stamping them
+    ///         would make every token issued before a rotation name the wrong key afterwards, and be
+    ///         refused. Deriving stable ids from the secrets instead would mean publishing something
+    ///         computed from a signing key on every token, which is a poor trade for saving one HMAC
+    ///         against two keys.
+    ///     </para>
+    /// </remarks>
     private static JwtConfiguration BuildJwtConfiguration()
     {
         var secret = Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable);
@@ -580,12 +602,27 @@ public class Startup(string[] args) : WebApiStartup(args)
             ? configuredExpiration
             : DefaultTokenExpirationInSeconds;
 
+        var previousSecret = Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable);
+
+        // The current secret is always accepted; the previous one only while it is configured, and
+        // only when it is genuinely a different key — the same value under two ids would be two ways
+        // of saying nothing has been rotated yet.
+        List<JwtKey> keys = [new("current", secret)];
+
+        if (!string.IsNullOrWhiteSpace(previousSecret) && previousSecret != secret)
+        {
+            keys.Add(new JwtKey("previous", previousSecret));
+        }
+
         return new JwtConfiguration(
             expiration,
             Environment.GetEnvironmentVariable(TokenIssuerEnvironmentVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
             secret,
-            []);
+            [])
+        {
+            Keys = keys
+        };
     }
 
     /// <summary>

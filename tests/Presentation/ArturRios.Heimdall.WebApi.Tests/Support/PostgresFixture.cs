@@ -22,6 +22,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
     private const string DatabaseTypeVariable = "HEIMDALL_DATA_DATABASETYPE";
     private const string TokenSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
+    private const string PreviousTokenSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
     private const string TokenIssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
@@ -30,6 +31,17 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     /// <summary>Password the master system administrator is seeded with.</summary>
     public const string MasterUserPassword = "Str0ng-Master-Pass!";
+
+    /// <summary>
+    ///     The retired signing secret the host under test still accepts, so the suite can prove a
+    ///     token signed before a rotation keeps working (Threat Model TH-22).
+    /// </summary>
+    /// <remarks>
+    ///     Published here rather than in a test because the API reads its key material once, at
+    ///     start-up. A test that set this afterwards would be configuring a host that had already
+    ///     decided which keys it accepts.
+    /// </remarks>
+    public const string PreviousTokenSecret = "functional-tests-previous-signing-secret";
 
     /// <summary>
     ///     Secret the suite's stand-in Google ID tokens are signed with (UC-25). Long enough for
@@ -81,6 +93,11 @@ public sealed class PostgresFixture : IAsyncLifetime
         // Startup refuses to boot without a signing secret, since an empty one makes every request
         // fail inside the token validator. This value is for tests only.
         Environment.SetEnvironmentVariable(TokenSecretVariable, "functional-tests-signing-secret-key");
+
+        // The key a rotation has moved off but not yet withdrawn. Configuring it here means
+        // every functional test runs against a host that accepts two keys, so the ordinary
+        // suite doubles as proof that doing so breaks nothing.
+        Environment.SetEnvironmentVariable(PreviousTokenSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
 

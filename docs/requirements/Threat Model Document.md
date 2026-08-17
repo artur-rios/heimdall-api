@@ -256,14 +256,28 @@ FR-GO-07 would not expect it.
 
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
-| TH-22 | Minting a valid token for any identity, using the signing secret | The secret is supplied by environment and never logged | Inspection | Medium |
+| TH-22 | Minting a valid token for any identity, using the signing secret | The secret is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` keeps the retired key acceptable while the new one signs | Test + inspection | Low |
 | TH-23 | Reading a delivered verification, reset or 2FA code out of the logs | Production fails startup when email delivery is unconfigured, rather than falling back to logging the token | Inspection | Medium |
 | TH-24 | Using the seeded master account | Credentials are supplied by environment and required at startup | Inspection | Medium |
 
-**TH-22 is Medium because there is no rotation story.** Tokens carry no key identifier, so the
-signing secret cannot be rotated without invalidating every token in flight, which means in practice
-that it is rarely rotated at all. A leaked secret is total — it mints any identity at any role — and
-the only remediation available today is a hard cutover.
+**TH-22 was Medium because there was no rotation story, and it now has one.** A leaked signing
+secret is total — it mints any identity at any role — and the only remediation available was a hard
+cutover: change the secret, and every token in flight dies at once. A remediation that is also an
+outage is one nobody performs pre-emptively, which is why the secret was in practice never rotated.
+
+`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` is the other half. Both secrets are handed to
+`JwtConfiguration.Keys`, so a token signed with either is accepted while new tokens are signed with
+the current one. Rotating is three steps and no outage: set the previous variable to the secret in
+use, set the current variable to a new one, restart; then an hour later — one token lifetime — clear
+the previous variable and restart again. Withdrawing a key still invalidates its tokens immediately,
+which is what makes the shortened version of that procedure the right response to a leak.
+
+No `kid` is written to the tokens, deliberately. The library supports it, but the identifiers here are
+positional — today's "current" is tomorrow's "previous" — so stamping one would make every token
+issued before a rotation name the wrong key afterwards and be refused, which is precisely the failure
+this closes. Deriving stable identifiers from the secrets instead would publish something computed
+from a signing key on every token, a poor trade for saving one HMAC against two keys. Validation
+tries both.
 
 **TH-23's control covers Production and by design does not cover anything else.** A developer or
 staging deployment without Mailgun credentials logs verification tokens, reset tokens and 2FA codes
@@ -299,34 +313,28 @@ that hides one. What is not permitted is the entry being absent.
 
 ## 11. Findings register
 
-The threats above with no control, or with a control whose coverage is narrower than the threat.
-Ordered by what they cost to fix against what they prevent, which is not the same as by severity.
+Every threat above now has a control and a verification method, so this table is empty for the first
+time since the document was written. That is a statement about coverage, not about safety: §9 lists
+what this model does not look at, and the register can only be as complete as §4 to §8 are.
 
-| Rank | Threat | Why it is here | Shape of the fix | Where |
-| ---: | --- | --- | --- | --- |
-| 1 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation | **Not this repository** |
+### 11.1 A correction
 
-TH-22 is the only one left, and it cannot be closed here. Tokens are signed by
-`ArturRios.Jwt`'s `JwtHandler.CreateToken`, which takes a `JwtConfiguration` carrying a single
-`Secret` string and writes no key identifier; they are validated by `ArturRios.Util.WebApi`'s
-`JwtMiddleware`, which is constructed with that same single configuration. There is no seam in either
-for a second key, so nothing in this repository can accept an old signature while issuing a new one.
+An earlier revision of this section said TH-22 could not be closed in this repository and needed a
+change to `ArturRios.Jwt` and `ArturRios.Util.WebApi` first. That was wrong, and wrong in a way worth
+recording rather than quietly editing out.
 
-The two ways forward, neither of which belongs in an unrelated pull request:
+It was based on reading `JwtMiddleware` as taking a single `JwtConfiguration`, and concluding there
+was no seam for a second key. There was: `AuthenticationMiddleware` runs a collection of
+`ITokenValidator`s, that interface is public, and `JwtHandler.IsTokenValidAsync` already took the
+secret as a parameter — so this API could always have registered its own validator and rotated
+without either library changing at all.
 
-1. **Change the libraries.** `JwtConfiguration` grows a key set with identifiers, `CreateToken` stamps
-   `kid` on the header, and `JwtMiddleware` resolves the key by it — accepting any key in the set
-   while signing with the current one. That is the real fix, and it is a change to two packages this
-   API depends on rather than to the API.
-2. **Stop using them for this.** Issue and validate tokens here, which means owning the middleware
-   and duplicating what the libraries already do correctly, to gain one property.
+The libraries were changed anyway, because the alternative was every consumer rebuilding the same
+validator, and because a rotation belongs where the tokens are signed. But the reason recorded here
+for not doing it sooner was a misreading, and a threat model that cites an obstacle should be right
+about the obstacle.
 
-Until one of those happens, a leaked signing secret is remediated by a hard cutover: change the
-secret, and every token in flight becomes invalid at once. That is survivable — the default lifetime
-is an hour — but it is an outage rather than a rotation, and it is worth knowing before the day it is
-needed rather than during it.
-
-### 11.1 Closed
+### 11.2 Closed
 
 Kept rather than deleted, because a register that only ever lists open items gives no sense of what
 this document has been worth.
@@ -338,10 +346,13 @@ this document has been worth.
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
 | TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | A trigger refusing `UPDATE`, `DELETE` and `TRUNCATE`, per statement so an empty `DELETE` is refused too |
+| TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 |
 
 TH-14 and TH-08 were found by reading the code while writing this document, and neither was visible
 from the requirements they were supposed to follow from. TH-21 was found by this document admitting
 it did not know — the case for the rule that an unanswered question is written down rather than
-assumed safe. TH-03 and TH-18 were known limits from the first draft, closed later once their cost
-was understood; TH-03's fix, in particular, was worth measuring rather than reasoning about, since
-the obvious prediction — that bounding concurrency would slow login down — turned out to be wrong.
+assumed safe. TH-03, TH-18 and TH-22 were known limits from the first draft, closed later once their
+cost was understood. Two of those are worth a second look: TH-03's fix was worth measuring rather
+than reasoning about, since the obvious prediction — that bounding concurrency would slow login down
+— turned out to be wrong; and TH-22 sat open partly because this document had the reason for it
+wrong (§11.1).
