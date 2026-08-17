@@ -312,6 +312,50 @@ curl http://localhost:8080/healthcheck
 The API answers on the distro's port 8080, and WSL forwards `localhost:8080` from Windows too, so a
 browser on Windows reaches <http://localhost:8080/swagger> unchanged.
 
+### Deploying without a clone in the distro
+
+Steps 6 and 7 assume the repository is reachable from the distro. It does not have to be:
+[`scripts/deploy_wsl.py`](https://github.com/artur-rios/heimdall-api/blob/main/scripts/deploy_wsl.py)
+builds the image on Windows with Docker Desktop, exports it, and imports it into the distro's own
+engine. Three things reach the distro — the image, the Compose file, the environment file — and no
+source, SDK or build ever does.
+
+```powershell
+python scripts/deploy_wsl.py --env-file docker/development.env
+```
+
+```
+Windows                                   WSL (Ubuntu)
+-------                                   ------------
+docker compose build   ->  image tar  ->  docker load
+docker-compose.yml     ---- copy ------>  ~/heimdall/docker-compose.yml
+docker/development.env ---- copy ------>  ~/heimdall/development.env
+                                          docker compose up -d
+```
+
+The transferred Compose file keeps its `build:` section, and that is fine: Compose resolves a build
+context only when it actually has to build, so the preloaded image starts even though the distro
+holds no `Dockerfile` and no sources. `docker load` needs no registry credentials either, which is
+what keeps step 2's credential helper from mattering on this path.
+
+| Flag | Effect |
+| --- | --- |
+| `--distro` | Which distro to deploy into (default `Ubuntu`) |
+| `--env-file` | Which environment file to build with and copy (default `docker/development.env`) |
+| `--remote-dir` | Where in the distro to deploy (default `~/heimdall`) |
+| `--no-build` | Reuse the image already on Docker Desktop |
+| `--no-start` | Transfer everything, start nothing |
+| `--dry-run` | Print every command, run none of them |
+
+Everything the script runs is echoed as it goes, so a failed step can be repeated by hand.
+
+{{% alert title="What this does not remove" color="info" %}}
+Only the clone. The distro still needs a running Docker engine, and its PostgreSQL still needs the
+`listen_addresses` and `pg_hba.conf` edits from step 3 — the container reaches the database exactly
+as it would have if it had been built in the distro. The script fails early and by name when the
+engine is missing or the environment file is unfilled, but it cannot make those two edits for you.
+{{% /alert %}}
+
 ### Using Docker Desktop's engine instead
 
 If the distro's `docker` is Docker Desktop's (WSL integration), the containers run in **Docker
