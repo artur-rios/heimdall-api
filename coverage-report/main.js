@@ -576,7 +576,7 @@ var assemblies = [
       { "name": "ArturRios.Heimdall.WebApi.Security.MfaPendingGuardFilter", "rp": "ArturRios.Heimdall.WebApi_MfaPendingGuardFilter.html", "cl": 7, "ucl": 0, "cal": 7, "tl": 49, "cb": 4, "tb": 4, "cm": 1, "fcm": 1, "tm": 1, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { "crp": 4,  "cc": 4,  "cov": 100,  "bcov": 100 } },
       { "name": "ArturRios.Heimdall.WebApi.Security.PasswordHashSaturationFilter", "rp": "ArturRios.Heimdall.WebApi_PasswordHashSaturationFilter.html", "cl": 6, "ucl": 1, "cal": 7, "tl": 60, "cb": 1, "tb": 2, "cm": 1, "fcm": 0, "tm": 1, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { "crp": 2,  "cc": 2,  "cov": 85.71,  "bcov": 50.0 } },
       { "name": "ArturRios.Heimdall.WebApi.Security.UnconfiguredGoogleIdTokenVerifier", "rp": "ArturRios.Heimdall.WebApi_UnconfiguredGoogleIdTokenVerifier.html", "cl": 0, "ucl": 6, "cal": 6, "tl": 30, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 2, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { "crp": 2,  "cc": 1,  "cov": 0,  "bcov": 100 } },
-      { "name": "ArturRios.Heimdall.WebApi.Startup", "rp": "ArturRios.Heimdall.WebApi_Startup.html", "cl": 286, "ucl": 30, "cal": 316, "tl": 692, "cb": 16, "tb": 34, "cm": 13, "fcm": 8, "tm": 13, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { "crp": 12,  "cc": 12,  "cov": 50.0,  "bcov": 33.33 } },
+      { "name": "ArturRios.Heimdall.WebApi.Startup", "rp": "ArturRios.Heimdall.WebApi_Startup.html", "cl": 287, "ucl": 29, "cal": 316, "tl": 697, "cb": 17, "tb": 36, "cm": 13, "fcm": 9, "tm": 13, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { "crp": 12,  "cc": 12,  "cov": 50.0,  "bcov": 33.33 } },
     ]},
 ];
 
