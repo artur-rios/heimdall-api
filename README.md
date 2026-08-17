@@ -458,6 +458,10 @@ docker compose --env-file docker/local.env up -d --build
 The real env files are gitignored: they hold the database password, the token signing secret and the
 master user's credentials.
 
+For the full walkthrough of the two developer-machine environments — every command, what each host's
+Postgres has to allow, and the errors each misconfiguration produces — see
+[Deploying with Docker](https://artur-rios.github.io/heimdall-api/docs/deploying-with-docker/).
+
 ### What the container does at start-up
 
 The image carries an **EF Core migrations bundle** built from
@@ -482,7 +486,10 @@ own processes use, so an installation that only listens on `localhost` is unreac
   sudo -u postgres createuser --pwprompt heimdall_svc && sudo -u postgres createdb --owner heimdall_svc heimdall
   ```
 
-- On Windows, allow inbound 5432 from the Docker/WSL virtual adapter in Windows Firewall.
+Docker Desktop on Windows is the exception: it forwards the connection through its own VM, so the
+Windows Postgres sees it arrive from `127.0.0.1` and the stock `pg_hba.conf` already covers it —
+neither an extra rule nor a firewall opening is needed there. The plain engine (WSL, the server)
+connects over the bridge for real, and needs both of the above.
 
 Check reachability before the first deploy:
 
