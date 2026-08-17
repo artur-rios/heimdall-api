@@ -86,8 +86,10 @@ public class ResetPasswordCommandHandler(
         // one, so the stored hash shares nothing with the one it replaces.
         var person = token.Person;
 
-        person.PasswordHash = Hash.EncodeWithRandomSalt(command.NewPassword, out var salt);
-        person.Salt = salt;
+        var (newHash, newSalt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.NewPassword);
+
+        person.PasswordHash = newHash;
+        person.Salt = newSalt;
         person.UpdatedAt = now;
 
         var update = await personWriter.UpdateAsync(person);

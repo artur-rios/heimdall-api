@@ -49,7 +49,7 @@ public class CreateAdminCommandHandler(
         }
 
         // Create the admin person with no SCOPE_OWNER/SCOPE_USER row.
-        var passwordHash = Hash.EncodeWithRandomSalt(command.Password, out var salt);
+        var (passwordHash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.Password);
 
         var newPerson = new Person
         {

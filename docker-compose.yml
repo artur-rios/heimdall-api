@@ -53,6 +53,8 @@ services:
       HEIMDALL_AUTH_TOKEN_ISSUER: ${HEIMDALL_AUTH_TOKEN_ISSUER:-heimdall}
       HEIMDALL_AUTH_TOKEN_AUDIENCE: ${HEIMDALL_AUTH_TOKEN_AUDIENCE:-heimdall}
       HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS: ${HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS:-3600}
+      # A memory budget rather than a throughput dial: each derivation wants about 600 MB (TH-03).
+      HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES: ${HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES:-4}
 
       # Seeded on first start, and only while the database holds no system administrator.
       HEIMDALL_MASTER_USER_NAME: ${HEIMDALL_MASTER_USER_NAME:?set HEIMDALL_MASTER_USER_NAME in the env file}

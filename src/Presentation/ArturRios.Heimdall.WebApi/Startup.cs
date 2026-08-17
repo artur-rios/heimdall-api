@@ -418,6 +418,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         });
 
         AddAuthEndpointRateLimiting();
+
+        // TH-03: bound how many Argon2id derivations run at once. Read here, with the rest of the
+        // security configuration, because it belongs to the same defence: the rate limiter caps what
+        // one address can ask for, and this caps what the process will attempt regardless of how
+        // many addresses ask.
+        PasswordHashGate.ConfigureSharedFromEnvironment();
     }
 
     /// <summary>
@@ -612,6 +618,11 @@ public class Startup(string[] args) : WebApiStartup(args)
             // refused everywhere, and leaving that to each handler is what let a logically deleted
             // System Admin keep acting until their token expired.
             options.Filters.Add<ActorLivenessFilter>();
+
+            // Turns a saturated password-hash gate into 503 rather than 500 (TH-03). An exception
+            // filter because the condition is cross-cutting: every endpoint that derives a password
+            // can meet it, and each has its own message map.
+            options.Filters.Add<PasswordHashSaturationFilter>();
 
             // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
             // AddControllers() rather than running this Startup, so that call site cannot catch a

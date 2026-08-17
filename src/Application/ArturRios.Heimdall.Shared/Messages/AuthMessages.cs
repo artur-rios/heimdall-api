@@ -6,6 +6,19 @@ namespace ArturRios.Heimdall.Shared.Messages;
 /// </summary>
 public static class AuthMessages
 {
+    /// <summary>
+    ///     The process was already running as many password derivations as it permits at once, and
+    ///     none finished in time (Threat Model TH-03). A load condition, not a rejection: nothing is
+    ///     wrong with the request and the caller should retry.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately says nothing about the account. Every endpoint that derives a password can
+    ///     answer this, whether or not the address exists, so it reveals no more than a timeout
+    ///     would — the same reasoning that gives AF-11a…AF-11e one shared message.
+    /// </remarks>
+    public const string AuthenticationTemporarilyUnavailable =
+        "The service is busy verifying credentials. Try again shortly.";
+
     /// <summary>UC-11 success: the person was authenticated and a token issued.</summary>
     public const string LoginSuccessful = "Login successful.";
 

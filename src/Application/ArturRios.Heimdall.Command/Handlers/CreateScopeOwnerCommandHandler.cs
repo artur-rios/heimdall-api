@@ -68,7 +68,7 @@ public class CreateScopeOwnerCommandHandler(
         }
 
         // Create the ScopeAdmin with a SCOPE_OWNER row linking them to the scope as a co-owner.
-        var passwordHash = Hash.EncodeWithRandomSalt(command.Password, out var salt);
+        var (passwordHash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.Password);
 
         var newPerson = new Person
         {

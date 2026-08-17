@@ -60,7 +60,7 @@ public class DisableTwoFactorAuthCommandHandler(
         }
 
         // UC-39 step 2 (AF-39b): the same check LoginCommandHandler makes.
-        if (!Hash.TextMatches(command.Password, person.PasswordHash, person.Salt))
+        if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
         {
             return output.WithError(TwoFactorMessages.PasswordMismatch);
         }

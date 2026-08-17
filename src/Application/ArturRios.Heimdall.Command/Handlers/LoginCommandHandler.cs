@@ -91,7 +91,7 @@ public class LoginCommandHandler(
         // decided, and only the work matters.
         if (person is null)
         {
-            VerifyAgainstDecoy(command.Password);
+            await VerifyAgainstDecoy(command.Password);
 
             return output.WithError(AuthMessages.InvalidCredentials);
         }
@@ -101,13 +101,13 @@ public class LoginCommandHandler(
         // detected by how quickly it answers.
         if (person.LockedOutUntil is { } lockedUntil && lockedUntil > DateTime.UtcNow)
         {
-            VerifyAgainstDecoy(command.Password);
+            await VerifyAgainstDecoy(command.Password);
 
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
         // UC-11 step 3 (AF-11b).
-        if (!Hash.TextMatches(command.Password, person.PasswordHash, person.Salt))
+        if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
         {
             await RecordFailedAttemptAsync(person);
 
@@ -207,8 +207,8 @@ public class LoginCommandHandler(
     ///     random secret no one holds; only the per-request Argon2id derivation is repeated, which is
     ///     the whole of the expense being matched.
     /// </summary>
-    private static void VerifyAgainstDecoy(string password) =>
-        Hash.TextMatches(password, Decoy.Hash, Decoy.Salt);
+    private static Task VerifyAgainstDecoy(string password) =>
+        PasswordHashGate.Shared.TextMatchesAsync(password, Decoy.Hash, Decoy.Salt);
 
     /// <summary>
     ///     AF-11g: issues the short-lived challenge token instead of a full one, and — per FR-2F-08 —

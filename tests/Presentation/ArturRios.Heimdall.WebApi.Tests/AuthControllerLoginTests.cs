@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
@@ -368,5 +369,57 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Body!.Data!.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheHashGateIsSaturated_WhenPostLogin_ThenServiceUnavailableRatherThanServerError()
+    {
+        // Threat Model TH-03, end to end. The unit tests prove the gate counts and refuses; this
+        // proves it is wired into the request path and that its refusal reaches the caller as a load
+        // condition rather than as a fault. Without the exception filter this answers 500, which is
+        // both wrong and the shape an operator would page on.
+        //
+        // The gate is static, and the host under test runs in this process, so configuring it here
+        // configures the one the API uses. Functional tests share a collection and so run one at a
+        // time; the original bound is restored either way.
+        var email = UniqueEmail("saturated");
+        await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var original = PasswordHashGate.Shared;
+        var saturated = new PasswordHashGate(1, TimeSpan.FromMilliseconds(100));
+
+        PasswordHashGate.Shared = saturated;
+
+        var holder = saturated.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        try
+        {
+            await holding.Task;
+
+            // When the only permit is taken
+            var response = await LoginAsync(email);
+
+            // Then
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Contains(AuthMessages.AuthenticationTemporarilyUnavailable, response.Body!.Errors);
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+
+            PasswordHashGate.Shared = original;
+        }
+
+        // Then — and the endpoint works again once the gate drains, so saturation is not a latch
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
     }
 }

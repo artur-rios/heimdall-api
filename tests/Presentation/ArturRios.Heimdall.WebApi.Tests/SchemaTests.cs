@@ -89,6 +89,93 @@ public class SchemaTests(PostgresFixture fixture)
         Assert.Null(other);
     }
 
+    /// <summary>
+    ///     Threat Model TH-18. The audit trail is the record NFR-09 exists for, and it was
+    ///     append-only by convention: the entity said so, nothing enforced it, and the credentials
+    ///     the API connects with were enough to rewrite it. These require the database to refuse
+    ///     every way of doing that, from the same connection the application uses.
+    /// </summary>
+    private async Task<Exception?> RunAsync(string statement)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand(statement, connection);
+
+        return await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync());
+    }
+
+    private async Task<Guid> InsertAuditEntryAsync()
+    {
+        var publicId = Guid.NewGuid();
+
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO heimdall.audit_log (public_id, action, succeeded)
+            VALUES (@publicId, 'SchemaTestCommand', true)
+            """,
+            connection);
+        command.Parameters.AddWithValue("publicId", publicId);
+
+        await command.ExecuteNonQueryAsync();
+
+        return publicId;
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAuditEntry_WhenRewritingIt_ThenTheDatabaseRefuses()
+    {
+        var publicId = await InsertAuditEntryAsync();
+
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET succeeded = false WHERE public_id = '{publicId}'");
+
+        Assert.IsType<PostgresException>(failure);
+
+        // And the row still says what it said.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var read = new NpgsqlCommand(
+            $"SELECT succeeded FROM heimdall.audit_log WHERE public_id = '{publicId}'", connection);
+
+        Assert.True((bool)(await read.ExecuteScalarAsync())!);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAuditEntry_WhenDeletingIt_ThenTheDatabaseRefuses()
+    {
+        var publicId = await InsertAuditEntryAsync();
+
+        Assert.IsType<PostgresException>(
+            await RunAsync($"DELETE FROM heimdall.audit_log WHERE public_id = '{publicId}'"));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheAuditTable_WhenDeletingNothingOrTruncating_ThenTheDatabaseStillRefuses()
+    {
+        // The two ways around a naive rule. A row-level trigger would wave through a DELETE that
+        // matches nothing, making the guard depend on what the statement happened to hit; and
+        // TRUNCATE skips BEFORE DELETE altogether, so it needs a trigger of its own.
+        Assert.IsType<PostgresException>(await RunAsync("DELETE FROM heimdall.audit_log WHERE false"));
+        Assert.IsType<PostgresException>(await RunAsync("TRUNCATE heimdall.audit_log"));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheAuditTable_WhenAppending_ThenItIsStillAllowed()
+    {
+        // The control. A guard that refused inserts too would pass every test above and break the
+        // requirement it exists to protect.
+        Assert.Null(await RunAsync(
+            """
+            INSERT INTO heimdall.audit_log (public_id, action, succeeded)
+            VALUES (gen_random_uuid(), 'SchemaTestCommand', false)
+            """));
+    }
+
     private async Task<long> InsertScopeAsync()
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);

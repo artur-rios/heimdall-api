@@ -86,7 +86,7 @@ public class CreateUserCommandHandler(
         }
 
         // Create the User with its SCOPE_USER membership row.
-        var passwordHash = Hash.EncodeWithRandomSalt(command.Password, out var salt);
+        var (passwordHash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.Password);
 
         var newPerson = new Person
         {

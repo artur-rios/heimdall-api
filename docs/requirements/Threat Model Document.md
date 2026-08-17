@@ -82,19 +82,33 @@ expensive work is.
 | --- | --- | --- | --- | --- |
 | TH-01 | Password guessing against a known address | Per-account lockout after 10 failures for 15 minutes (FR-AU-09); per-IP fixed window of 10 requests a minute | Test | Low |
 | TH-02 | Enumerating which addresses and scopes exist, from the response or its timing | One message for every rejection, and a decoy Argon2id verification when no person matches (FR-AU-10) | Test + measurement (SRD §6.1) | Low |
-| TH-03 | Exhausting the API's memory through login | The per-IP rate limiter, and nothing else | Measurement (SRD §6.3.1) | **High** |
+| TH-03 | Exhausting the API's memory through login | `PasswordHashGate` bounds concurrent Argon2id derivations process-wide and sheds with `503`, behind the per-IP rate limiter | Test + measurement (SRD §6.3.1) | Low |
 | TH-04 | Guessing a 6-digit second-factor code | Five attempts per code, hashed at rest, short lifetime (FR-2F-13) | Test | Low |
 | TH-05 | Guessing a password-reset or verification token | 48 characters from a CSPRNG, single-use, expiring | Inspection | Low |
 | TH-06 | Using an MFA-pending challenge token as a full token | Distinct claim, 5-minute fixed lifetime, rejected everywhere but second-factor verification (NFR-17) | Test | Low |
 
-**TH-03 is the one to read twice.** Each login costs a full Argon2id verification at 600 MB and 16
-threads. The rate limiter admits ten a minute per IP and releases them together, so one address can
-demand roughly **6 GB of working set per minute** and remain entirely within policy — measured at 2.8
-seconds per login when it happens (SRD §6.3.1). The limiter is partitioned by remote IP and is
-per-instance, so callers spread across addresses multiply that budget rather than share it, and there
-is no global bound on concurrent password verification behind it to catch what gets through. The
-control was written as an anti-brute-force measure; it is load-bearing for memory, and nothing says
-so at the point where the cost is configured.
+**TH-03 was the one to read twice, and it is now closed.** Each login costs a full Argon2id
+verification at 600 MB and 16 threads. The rate limiter admits ten a minute per IP and releases them
+together, so one address could demand roughly **6 GB of working set per minute** and remain entirely
+within policy — measured at 2.8 seconds per login when it happened (SRD §6.3.1). The limiter is
+partitioned by remote IP and is per-instance, so callers spread across addresses multiplied that
+budget rather than sharing it, and nothing behind it bounded what got through.
+
+`PasswordHashGate` is that second bound, and it is deliberately not partitioned by anything: four
+derivations at once for the whole process, the rest refused with `503` and a `Retry-After` after ten
+seconds. Two properties matter and both are tested. It covers every derivation on a request path
+rather than login alone — an authenticated caller creating persons in a loop reaches the same memory,
+and a bound with a way around it is not a bound. And it refuses rather than queues, because an
+unbounded queue is this threat with the pressure moved from memory into the thread pool.
+
+The refusal is a load condition, not a rejection, so it answers 503 rather than 500 and says nothing
+about the account: the decoy verification AF-11a spends passes through the same gate as a real check,
+so saturation cannot be used to tell an existing address from an absent one.
+
+What remains, and is why this is Low rather than absent: the gate bounds one process. Two instances
+behind a load balancer will each permit four, so the deployment's total is the bound times the
+replica count — which is the ordinary arithmetic of horizontal scaling (§6.2) rather than a gap, but
+it means the number to size against is per instance.
 
 ## 5. TB-2 — An authenticated caller to another tenant's data
 
@@ -157,7 +171,7 @@ one asks is what that reader can do with what they find.
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
-| TH-18 | Denying an action that was taken | Every write produces an audit entry with actor, operation and outcome (NFR-09) | Test | Medium |
+| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09), and a database trigger refuses `UPDATE`, `DELETE` and `TRUNCATE` on the table | Test | Low — but see below on DDL |
 
 **TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
 `EmailVerificationService` both used to write the token they had just generated straight into the
@@ -189,9 +203,23 @@ but it means the encryption at rest defends against a stolen *table* and not aga
 *database*. Naming that is the point of writing it down; moving the key ring to a separate secret
 store is a real change with its own operational cost, and is not being recommended here without one.
 
-**TH-18 is Medium because the audit log is append-only by convention.** Nothing in the schema
-prevents an `UPDATE` or `DELETE` against it, and the API's own credentials are sufficient to issue
-one. It is evidence against an ordinary caller, not against an attacker who reaches the database.
+**TH-18 was Medium because the audit log was append-only by convention.** `AuditLog` had said
+"append-only: never updated or logically deleted after creation" since it was written, and nothing
+enforced it: the API's own credentials were sufficient to rewrite the trail, so it was evidence
+against an ordinary caller and none at all against anyone who reached the database.
+
+A trigger now refuses `UPDATE`, `DELETE` and `TRUNCATE` on the table. A trigger rather than a
+permission grant, because a grant depends on the deployment connecting as a role that lacks those
+rights, and this repository's compose file, the functional suite and most development setups all
+connect as the owner; a trigger holds regardless of who is connected and travels with the schema.
+`TRUNCATE` needs naming separately because it skips `BEFORE DELETE` entirely, and the triggers fire
+per statement rather than per row so that a `DELETE` matching nothing is refused too — otherwise the
+rule would depend on what the statement happened to hit.
+
+It does not defend against somebody who can also run DDL: a superuser can drop the trigger and then
+rewrite history. That is smaller than the hole it closes — it leaves a schema change behind, where an
+`UPDATE` left nothing — but it is not zero, which is why the row above is qualified rather than
+simply Low.
 
 ## 7. TB-4 — The API to Google
 
@@ -274,15 +302,29 @@ that hides one. What is not permitted is the entry being absent.
 The threats above with no control, or with a control whose coverage is narrower than the threat.
 Ordered by what they cost to fix against what they prevent, which is not the same as by severity.
 
-| Rank | Threat | Why it is here | Shape of the fix |
-| ---: | --- | --- | --- |
-| 1 | TH-03 | The rate limiter is the only bound on login's memory demand, and it is per-IP and per-instance | A global concurrency bound on password verification, independent of source address |
-| 2 | TH-18 | The audit log is append-only by convention only | Database-level restriction, or a periodic integrity check |
-| 3 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation |
+| Rank | Threat | Why it is here | Shape of the fix | Where |
+| ---: | --- | --- | --- | --- |
+| 1 | TH-22 | The signing secret cannot be rotated without invalidating every token in flight | A key identifier in the token, and acceptance of two keys during a rotation | **Not this repository** |
 
-All three are design changes rather than repairs, and should be decided deliberately rather than
-squeezed into an unrelated pull request. None is a defect in what the code does today; each is a
-limit in what the control can cover.
+TH-22 is the only one left, and it cannot be closed here. Tokens are signed by
+`ArturRios.Jwt`'s `JwtHandler.CreateToken`, which takes a `JwtConfiguration` carrying a single
+`Secret` string and writes no key identifier; they are validated by `ArturRios.Util.WebApi`'s
+`JwtMiddleware`, which is constructed with that same single configuration. There is no seam in either
+for a second key, so nothing in this repository can accept an old signature while issuing a new one.
+
+The two ways forward, neither of which belongs in an unrelated pull request:
+
+1. **Change the libraries.** `JwtConfiguration` grows a key set with identifiers, `CreateToken` stamps
+   `kid` on the header, and `JwtMiddleware` resolves the key by it — accepting any key in the set
+   while signing with the current one. That is the real fix, and it is a change to two packages this
+   API depends on rather than to the API.
+2. **Stop using them for this.** Issue and validate tokens here, which means owning the middleware
+   and duplicating what the libraries already do correctly, to gain one property.
+
+Until one of those happens, a leaked signing secret is remediated by a hard cutover: change the
+secret, and every token in flight becomes invalid at once. That is survivable — the default lifetime
+is an hour — but it is an outage rather than a rotation, and it is worth knowing before the day it is
+needed rather than during it.
 
 ### 11.1 Closed
 
@@ -294,8 +336,12 @@ this document has been worth.
 | TH-14 | Password-reset and email-verification tokens were stored in plaintext, while the weaker recovery codes beside them were hashed | `SingleUseTokenHash`: both are stored as a SHA-256 digest, the migration converts existing rows rather than dropping them, and the issue and spend paths share one helper |
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
+| TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
+| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | A trigger refusing `UPDATE`, `DELETE` and `TRUNCATE`, per statement so an empty `DELETE` is refused too |
 
-The first two were found by reading the code while writing this document, and neither was visible
-from the requirements they were supposed to follow from. The third was found by this document
-admitting it did not know — which is the case for the rule that an unanswered question is written
-down rather than assumed safe.
+TH-14 and TH-08 were found by reading the code while writing this document, and neither was visible
+from the requirements they were supposed to follow from. TH-21 was found by this document admitting
+it did not know — the case for the rule that an unanswered question is written down rather than
+assumed safe. TH-03 and TH-18 were known limits from the first draft, closed later once their cost
+was understood; TH-03's fix, in particular, was worth measuring rather than reasoning about, since
+the obvious prediction — that bounding concurrency would slow login down — turned out to be wrong.

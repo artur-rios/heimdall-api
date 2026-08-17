@@ -734,13 +734,29 @@ ms NFR-18 documents for a single caller. The window releases its whole budget at
 Argon2id verifications start together, each configured for 600 MB and 16 threads. Ten of them is
 6 GB of working set and 160 threads of demand on a 32-core machine, and they queue behind each other.
 
-The consequence is worth stating plainly, because it is not what a reader of NFR-18 would expect:
-**the rate limiter is not only anti-brute-force, it is the only thing bounding login's memory
-demand.** One IP can ask for 6 GB of Argon2id working set every minute and be within policy. The
-limiter is per-instance and per-IP (§6.2), so callers spread across addresses multiply that budget
-rather than share it, and the API has no global concurrency bound on password verification to fall
-back on. A deployment that exposes login without a gateway limiting by something other than source
-IP is one distributed request pattern away from memory exhaustion.
+The consequence was not what a reader of NFR-18 would expect: **the rate limiter was not only
+anti-brute-force, it was the only thing bounding login's memory demand.** One IP could ask for 6 GB
+of Argon2id working set every minute and be within policy, and because the limiter is per-instance
+and per-IP (§6.2), callers spread across addresses multiplied that budget rather than sharing it.
+
+There is now a second bound that does not depend on where the callers come from. `PasswordHashGate`
+permits four derivations at once across the whole process — about 2.4 GB — and refuses the rest with
+`503` after ten seconds rather than queueing them. It covers every derivation on a request path, not
+only login: an authenticated caller creating persons in a loop reaches the same memory, and a bound
+with a way around it is not a bound. `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` raises or lowers
+it (Threat Model TH-03).
+
+Measuring it settled a question the change raised. Bounding concurrency looked like it should make
+login slower, since the ten the limiter admits now queue behind four permits. It did not: the same
+128-caller run measured **2,314 ms at the median against 2,890 ms without the gate**. Ten concurrent
+600 MB derivations contend for memory bandwidth badly enough that doing four at a time finishes the
+same work no slower. The reading is "the bound cost nothing measurable", not "the bound made login
+faster" — the two runs were taken on a machine in different states, and the figure moves with both.
+
+What a load run from one address cannot show is the gate shedding, because the rate limiter admits
+only ten a minute from one IP and the gate permits four at once. The `503` path is verified by test
+instead — a functional test holds the only permit and requires login to answer 503 with a
+`Retry-After` rather than 500.
 
 #### 6.3.2 The write degrades with the size of the table
 
