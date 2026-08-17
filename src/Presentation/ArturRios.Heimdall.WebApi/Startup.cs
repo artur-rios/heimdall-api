@@ -327,7 +327,12 @@ public class Startup(string[] args) : WebApiStartup(args)
     {
         ConfigureCors();
 
-        if (Builder.Environment.IsDevelopment())
+        // Local is included alongside Development because it is what a developer machine now runs:
+        // the configuration loader resolves Environments/.env.<environment>, so the launch profiles
+        // name Local to reach .env.local rather than relying on the loader's fallback. Testing
+        // IsDevelopment() alone would have silently cost the developer exception page in the one
+        // environment that exists to have it.
+        if (Builder.Environment.IsDevelopment() || Builder.Environment.IsEnvironment("Local"))
         {
             App.UseDeveloperExceptionPage();
         }

@@ -483,6 +483,10 @@ appsettings.api.Local.json
 appsettings.api.Development.json
 appsettings.api.Staging.json
 appsettings.api.Production.json
+appsettings.Local.json
+appsettings.Development.json
+appsettings.Staging.json
+appsettings.Production.json
 
 # Env files
 .env.local

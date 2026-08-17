@@ -36,6 +36,33 @@ in per-environment files that are gitignored. Create your local one before the f
 cp src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env.local
 ```
 
+### How the environment picks its files
+
+`ASPNETCORE_ENVIRONMENT` selects two files, both resolved next to the built assembly:
+
+| Environment | Variables | App settings |
+| --- | --- | --- |
+| `Local` (what the launch profiles set) | `Environments/.env.local` | `Settings/appsettings.Local.json` |
+| `Development` | `Environments/.env.development` | `Settings/appsettings.Development.json` |
+| `Production` | `Environments/.env.production` | `Settings/appsettings.Production.json` |
+
+Both sets are gitignored — the env files hold credentials, and the app settings are per-machine.
+`Settings/appsettings.json` is tracked and loaded first, so a missing environment file costs defaults
+rather than the whole configuration.
+
+{{% alert title="The fallback hides a missing file" color="warning" %}}
+When the file for the current environment does not exist, the loader falls back to the **default
+environment, `Local`**, and says so:
+
+```
+Could not find variables for Development environment. Loading default environment Local instead...
+```
+
+That line is easy to miss in a start-up log, and the run then succeeds against the wrong
+configuration — which is why the launch profiles name `Local` outright rather than leaving
+`Development` to fall back into it.
+{{% /alert %}}
+
 ### Required — the API will not start without these
 
 | Variable | Value |
