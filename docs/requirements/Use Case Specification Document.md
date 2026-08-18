@@ -454,8 +454,8 @@ sequenceDiagram
 | **ID** | UC-07 |
 | **Name** | View Person |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve a person's details or list the persons associated with a scope. There are three distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; or (c) the `ScopeAdmin` owners of a scope, via `GET /api/scopes/{scopeId}/owners` |
-| **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted |
+| **Description** | Retrieve a person's details or list persons. There are four distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the `ScopeAdmin` owners of a scope, via `GET /api/scopes/{scopeId}/owners`; or (d) the `ScopeAdmin` persons of the system, via `GET /api/persons/scope-admins` |
+| **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted; for read (d), the scope named for exclusion — if any — exists and is not logically deleted |
 | **Postconditions** | Person information is returned, never including `PasswordHash` or `Salt` |
 
 **Main Flow (read a — person by ID):**
@@ -482,12 +482,29 @@ sequenceDiagram
 2. The system applies the same scope and authorization checks as read (b).
 3. The system returns the scope's `ScopeAdmin` owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
 
+**Main Flow (read d — list the system's Scope Admins):**
+
+1. A System Admin or a Scope Admin requests the system's `ScopeAdmin` persons, optionally filtering by name or email, optionally naming a scope whose current owners are to be excluded, and paging the result (FR-PE-12).
+2. If a scope was named for exclusion, the system verifies it exists, is not logically deleted, and that the actor may manage it: a System Admin always may; a Scope Admin must own it.
+3. The system returns every `ScopeAdmin` person that is not logically deleted, less the named scope's current owners if one was named, projected to the person's identifier, name, and email only.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-07a | Person not found, or logically deleted and not explicitly requested (read a); target scope not found or logically deleted (reads b, c) | Return `404 Not Found` |
-| AF-07b | Actor not authorized to view the requested person (read a); actor is not an owner of the target scope (reads b, c) | Return `403 Forbidden` |
+| AF-07a | Person not found, or logically deleted and not explicitly requested (read a); target scope not found or logically deleted (reads b, c); scope named for exclusion not found or logically deleted (read d) | Return `404 Not Found` |
+| AF-07b | Actor not authorized to view the requested person (read a); actor is not an owner of the target scope (reads b, c); actor is not an owner of the scope named for exclusion (read d) | Return `403 Forbidden` |
+
+> **On read d being open to a Scope Admin.** Read a's visibility rule lets a Scope Admin see only
+> the Scope Admins co-owning the scopes they own. Read d is deliberately wider: UI-14 has a Scope
+> Admin add a co-owner who, by definition, does not own the scope yet, so under read a's rule that
+> person could never be found and the flow could not be completed at all. What makes the widening
+> safe is the projection, not the audience — identifier, name, and email, and nothing else. A Scope
+> Admin learns that an administrator with a given address exists, which they can already establish
+> by submitting that address to UC-06 path c and reading the duplicate-email refusal. The
+> exclusion parameter is gated separately, because it is a different question: subtracting a
+> scope's owners from a list reveals them by comparison, so only an actor entitled to manage that
+> scope may ask for it.
 
 ---
 
@@ -1565,13 +1582,13 @@ sequenceDiagram
 | Field | Value |
 | ------- | ------- |
 | **ID** | UC-36 |
-| **Name** | Enable Two-Factor Authentication (Initiate Setup) |
+| **Name** | Enable Two-Factor Authentication (Initiate Setup and Read Status) |
 | **Actors** | User, Scope Admin, System Admin |
-| **Description** | Begin opting an authenticated person into two-factor authentication, selecting an authenticator-app method, an email method, or both. Setup is inactive until confirmed by UC-37 |
+| **Description** | Begin opting an authenticated person into two-factor authentication, selecting an authenticator-app method, an email method, or both; and read a person's own current two-factor state. Setup is inactive until confirmed by UC-37. There are two operations: (a) initiate setup, via `POST /api/auth/2fa/enable`; and (b) read the caller's own status, via `GET /api/auth/2fa` |
 | **Preconditions** | Actor is authenticated; the person has no active two-factor configuration (`TWO_FACTOR_AUTH.IsActive` is not already `true`) |
-| **Postconditions** | A `TWO_FACTOR_AUTH` row exists for the person with `IsActive = false`; for the App method, a TOTP secret has been generated and returned; for the Email method, a first code has been emailed |
+| **Postconditions** | For (a): a `TWO_FACTOR_AUTH` row exists for the person with `IsActive = false`; for the App method, a TOTP secret has been generated and returned; for the Email method, a first code has been emailed. For (b): nothing is changed |
 
-**Main Flow:**
+**Main Flow (a — initiate setup):**
 
 ```mermaid
 sequenceDiagram
@@ -1595,12 +1612,19 @@ sequenceDiagram
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
 
+**Main Flow (b — read the caller's own status):**
+
+1. An authenticated person requests their own two-factor state through `GET /api/auth/2fa` (FR-2F-15). The person read is always the caller, taken from their token — a configuration is never addressed by an identifier in a path.
+2. The system loads the caller's `TWO_FACTOR_AUTH` row, if one exists.
+3. The system returns whether two-factor authentication is active, which methods are configured, and how many issued recovery codes remain unused. No secret is returned: never the TOTP secret, never a recovery code.
+4. A caller with no `TWO_FACTOR_AUTH` row is answered successfully, with every flag false and a zero count. Never having enabled two-factor authentication is an ordinary state, not a fault, and a setup initiated but not yet confirmed is reported as inactive with its selected methods set.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
-| AF-36b | Caller is a Google User | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
+| AF-36b | Caller is not a person eligible for two-factor authentication — a Google User, or a token naming no live person (either operation) | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
 
