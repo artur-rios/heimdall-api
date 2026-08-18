@@ -79,6 +79,18 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/scopes/{{scopeId}}/owners?pageNumber=1&pageSize=20&includeDeleted=false
 Authorization: Bearer {{token}}
 
+### List Scope Admins for an owner picker (UC-07 read d, FR-PE-12) — System Admin or Scope Admin.
+# Live Scope Admins only, projected to id, name, and email. name and email filter by a
+# case-insensitive substring.
+GET {{host}}/api/persons/scope-admins?pageNumber=1&pageSize=10
+Authorization: Bearer {{token}}
+
+### List scope admins excluding a scope's current owners (UI-14 AF-14c) — System Admin or owning Scope Admin.
+# excludeOwnersOfScopeId drops that scope's current owners from the results. The caller must be
+# entitled to manage the named scope: unknown or deleted answers 404, not entitled answers 403.
+GET {{host}}/api/persons/scope-admins?pageNumber=1&pageSize=10&excludeOwnersOfScopeId={{scopeId}}
+Authorization: Bearer {{token}}
+
 ### Update a person (UC-08) — any authenticated caller, subject to the handler's rules.
 # roleId may only be changed by a System Admin; omit it entirely for a self-service name/email edit.
 PUT {{host}}/api/persons/{{personId}}

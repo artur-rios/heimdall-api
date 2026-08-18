@@ -1,0 +1,19 @@
+meta {
+  name: List scope admins
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{host}}/api/persons/scope-admins?pageNumber=1&pageSize=10
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-07 read d, FR-PE-12. System Admin or Scope Admin.
+
+  Backs the owner pickers: UI-11 selects a new scope's first owners, UI-14 adds an existing Scope Admin as a co-owner. Returns identifier, name, and email only.
+
+  Add &excludeOwnersOfScopeId={{scopeId}} to drop the scope's current owners from the results. That parameter requires the caller to own the named scope.
+}
