@@ -78,8 +78,6 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
         // stronger property and the one asserted here.
         var person = await SeedPersonWithActiveTwoFactorAsync();
 
-        var issuedAt = DateTime.UtcNow;
-
         var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
             "/api/auth/login", new LoginCommand { Email = person.Email, Password = Password });
 
@@ -88,12 +86,14 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
 
         var token = new JwtSecurityTokenHandler().ReadJwtToken(login.Body.Data.ChallengeToken);
 
-        // Then — five minutes. Measured against this test's own clock, so the bound allows for the
-        // moment between taking the reading and the token being minted; the lifetime itself is a
-        // constant, not a configured value that could drift.
-        var lifetime = token.ValidTo - issuedAt;
+        // Then — five minutes exactly. Measured between the token's own iat and exp rather than
+        // against this test's clock: both are stamped from the same instant inside the issuer, so
+        // their difference is the lifetime it chose and nothing else. Reading the clock here and
+        // subtracting would instead measure five minutes plus however long the login round trip
+        // took — which is latency, not lifetime, and which on a loaded runner is unbounded.
+        var lifetime = token.ValidTo - token.IssuedAt;
 
-        Assert.InRange(lifetime.TotalSeconds, 295, 305);
+        Assert.Equal(TimeSpan.FromMinutes(5), lifetime);
 
         // Then — and it says what it is, which is what MfaPendingGuardFilter reads
         Assert.Contains(token.Claims, claim => claim.Type == "mfaPending" && claim.Value == "true");
