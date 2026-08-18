@@ -1080,6 +1080,46 @@
         ]
       }
     },
+    "/api/auth/2fa": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Reports the caller's own two-factor authentication status (FR-2F-15): whether it is\nactive, which methods are configured, and how many recovery codes remain unused. The\nperson read is always the caller themselves — taken from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) — so a configuration is never addressed by an\nidentifier in a path.",
+        "description": "No `RoleRequirement`, for the same reason its `POST` siblings have none: the\nauthorization matrix grants two-factor management to all three person roles and withholds\nit from anonymous callers, which authentication alone enforces. A caller with no\nconfiguration is answered 200 with every flag false; a Google User is answered 403, since\nFR-2F-01 makes them permanently ineligible.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "operationId": "Auth_GetTwoFactorStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes/{scopeId}/google-users": {
       "get": {
         "tags": [
@@ -2227,6 +2267,89 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeletePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/persons/scope-admins": {
+      "get": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Lists the system's `ScopeAdmin` persons (UC-07 read d, FR-PE-12), projected to\nidentifier, name, and email — the source for an owner picker. A System Admin or a Scope\nAdmin may call it. Optionally excludes the current owners of a named scope, in which case\nthe handler requires the caller to be entitled to manage that scope.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Person_ListScopeAdmins",
+        "parameters": [
+          {
+            "name": "Name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Email",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ExcludeOwnersOfScopeId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
                 }
               }
             }
@@ -4705,6 +4828,9 @@
           "emailVerified": {
             "type": "boolean"
           },
+          "twoFactorEnabled": {
+            "type": "boolean"
+          },
           "isDeleted": {
             "type": "boolean"
           },
@@ -4792,6 +4918,76 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PersonOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PersonSummaryOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PersonSummaryOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonSummaryOutput"
             },
             "nullable": true
           },
@@ -5436,6 +5632,56 @@
           "data": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TwoFactorStatusOutput": {
+        "type": "object",
+        "properties": {
+          "isActive": {
+            "type": "boolean"
+          },
+          "appEnabled": {
+            "type": "boolean"
+          },
+          "emailEnabled": {
+            "type": "boolean"
+          },
+          "remainingRecoveryCodes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TwoFactorStatusOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/TwoFactorStatusOutput"
           }
         },
         "additionalProperties": false
