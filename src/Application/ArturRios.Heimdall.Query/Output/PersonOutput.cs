@@ -24,6 +24,15 @@ public class PersonOutput : QueryOutput
     /// <summary>Whether the person's email has been verified.</summary>
     public bool EmailVerified { get; set; }
 
+    /// <summary>
+    ///     Whether the person has an active two-factor authentication configuration (FR-2F-15). The
+    ///     configured methods are deliberately not published here — an administrator reading a
+    ///     listing learns whether an account is protected, which is what makes coverage visible,
+    ///     but not how, which would otherwise map out which accounts fall back to email.
+    ///     <c>GET /api/auth/2fa</c> is where a person reads the detail, and only for themselves.
+    /// </summary>
+    public bool TwoFactorEnabled { get; set; }
+
     /// <summary>Whether the person is logically deleted.</summary>
     public bool IsDeleted { get; set; }
 

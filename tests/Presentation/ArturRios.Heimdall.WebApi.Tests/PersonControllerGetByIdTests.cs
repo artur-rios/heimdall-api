@@ -88,6 +88,7 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
         Assert.Equal(person.Email, response.Body?.Data?.Email);
         Assert.Equal((int)Roles.User, response.Body?.Data?.Role);
         Assert.Equal(scope.PublicId, response.Body?.Data?.ScopeId);
+        Assert.False(response.Body?.Data?.TwoFactorEnabled);
 
         // Then — the row exists in the database; PersonOutput has no field for the hash or salt, so
         // neither can have travelled with the response
@@ -218,5 +219,29 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenPersonWithActiveTwoFactor_WhenGetPersonById_ThenTwoFactorEnabledIsTrue()
+    {
+        // Given a person whose two-factor configuration has been confirmed
+        var scope = await SeedScopeAsync();
+        var person = await SeedUserAsync(scope);
+        await using var context = db.CreateContext();
+        context.TwoFactorAuths.Add(new TwoFactorAuth
+        {
+            PersonId = person.Id,
+            AppEnabled = true,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body?.Data?.TwoFactorEnabled);
     }
 }

@@ -293,4 +293,72 @@ public class GetPersonByIdQueryHandlerTests
         Assert.True(output.Success);
         Assert.True(output.Data!.IsDeleted);
     }
+
+    [UnitFact]
+    public async Task GivenPersonWithActiveTwoFactor_WhenHandlingGetPersonById_ThenTwoFactorEnabledIsTrue()
+    {
+        // Given a person whose two-factor configuration UC-37 has confirmed
+        var scope = Scope(1);
+        var target = User(10, scope);
+        target.TwoFactorAuth = new TwoFactorAuth
+        {
+            Id = 1, PersonId = target.Id, AppEnabled = true, IsActive = true
+        };
+        var repository = await RepositoryWith(target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When the person reads themselves
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.TwoFactorEnabled);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithPendingTwoFactor_WhenHandlingGetPersonById_ThenTwoFactorEnabledIsFalse()
+    {
+        // Given a configuration row UC-36 created and UC-37 has not confirmed
+        var scope = Scope(1);
+        var target = User(10, scope);
+        target.TwoFactorAuth = new TwoFactorAuth
+        {
+            Id = 1, PersonId = target.Id, AppEnabled = true, IsActive = false
+        };
+        var repository = await RepositoryWith(target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When the person reads themselves
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+        });
+
+        // Then — the flag tracks IsActive, not the mere existence of a row
+        Assert.True(output.Success);
+        Assert.False(output.Data!.TwoFactorEnabled);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithNoTwoFactor_WhenHandlingGetPersonById_ThenTwoFactorEnabledIsFalse()
+    {
+        // Given a person who never enabled two-factor authentication
+        var scope = Scope(1);
+        var target = User(10, scope);
+        var repository = await RepositoryWith(target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When the person reads themselves
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.User
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.TwoFactorEnabled);
+    }
 }
