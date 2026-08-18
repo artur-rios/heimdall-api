@@ -241,4 +241,29 @@ public class ListScopeOwnersQueryHandlerTests
         Assert.Equal(1, output.TotalItems);
         Assert.Equal(bruno.PublicId, Assert.Single(output.Data!).Id);
     }
+
+    [UnitFact]
+    public async Task GivenOwnersWithDifferentTwoFactorStates_WhenHandlingListScopeOwners_ThenEachReportsItsOwnState()
+    {
+        // Given an active, a pending, and an unconfigured owner in the same scope
+        var scope = Scope(1);
+        var active = Owner(10, scope, "Ana", "ana@test.local");
+        active.TwoFactorAuth = new TwoFactorAuth { PersonId = active.Id, IsActive = true, AppEnabled = true };
+        var pending = Owner(11, scope, "Bruno", "bruno@test.local");
+        pending.TwoFactorAuth = new TwoFactorAuth { PersonId = pending.Id, IsActive = false, AppEnabled = true };
+        var none = Owner(12, scope, "Carla", "carla@test.local");
+        var scopes = await ScopesWith(scope);
+        var persons = await PersonsWith(active, pending, none);
+        var handler = new ListScopeOwnersQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopeOwnersQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(QueryFor(scope));
+
+        // Then
+        Assert.Equal(3, output.TotalItems);
+        var byId = output.Data!.ToDictionary(x => x.Id);
+        Assert.True(byId[active.PublicId].TwoFactorEnabled);
+        Assert.False(byId[pending.PublicId].TwoFactorEnabled);
+        Assert.False(byId[none.PublicId].TwoFactorEnabled);
+    }
 }

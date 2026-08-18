@@ -53,8 +53,18 @@ public class GetTwoFactorStatusQueryHandler(
             return output.WithError(TwoFactorMessages.NotEligible);
         }
 
+        // Only these four fields are ever read below; projecting keeps the encrypted TOTP secret
+        // out of process memory and off the change tracker entirely.
         var configuration = await twoFactorReader.Query()
-            .FirstOrDefaultAsync(x => x.PersonId == personId.Value);
+            .Where(x => x.PersonId == personId.Value)
+            .Select(x => new
+            {
+                x.Id,
+                x.IsActive,
+                x.AppEnabled,
+                x.EmailEnabled
+            })
+            .FirstOrDefaultAsync();
 
         if (configuration is null)
         {
