@@ -496,9 +496,10 @@ sequenceDiagram
 | AF-07b | Actor not authorized to view the requested person (read a); actor is not an owner of the target scope (reads b, c); actor is not an owner of the scope named for exclusion (read d) | Return `403 Forbidden` |
 
 > **On read d being open to a Scope Admin.** Read a's visibility rule lets a Scope Admin see only
-> the Scope Admins co-owning the scopes they own. Read d is deliberately wider: UI-14 has a Scope
-> Admin add a co-owner who, by definition, does not own the scope yet, so under read a's rule that
-> person could never be found and the flow could not be completed at all. What makes the widening
+> the Scope Admins co-owning the scopes they own. Read d is deliberately wider: the client's UI-14
+> (Manage scope owners, specified in the `heimdall-ui` repository) has a Scope Admin add a co-owner
+> through UC-21, and that person by definition does not own the scope yet, so under read a's rule
+> that person could never be found and the flow could not be completed at all. What makes the widening
 > safe is the projection, not the audience — identifier, name, and email, and nothing else. A Scope
 > Admin learns that an administrator with a given address exists, which they can already establish
 > by submitting that address to UC-06 path c and reading the duplicate-email refusal. The
@@ -1585,7 +1586,7 @@ sequenceDiagram
 | **Name** | Enable Two-Factor Authentication (Initiate Setup and Read Status) |
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Begin opting an authenticated person into two-factor authentication, selecting an authenticator-app method, an email method, or both; and read a person's own current two-factor state. Setup is inactive until confirmed by UC-37. There are two operations: (a) initiate setup, via `POST /api/auth/2fa/enable`; and (b) read the caller's own status, via `GET /api/auth/2fa` |
-| **Preconditions** | Actor is authenticated; the person has no active two-factor configuration (`TWO_FACTOR_AUTH.IsActive` is not already `true`) |
+| **Preconditions** | Actor is authenticated; for (a), the person has no active two-factor configuration (`TWO_FACTOR_AUTH.IsActive` is not already `true`); for (b), none beyond authentication |
 | **Postconditions** | For (a): a `TWO_FACTOR_AUTH` row exists for the person with `IsActive = false`; for the App method, a TOTP secret has been generated and returned; for the Email method, a first code has been emailed. For (b): nothing is changed |
 
 **Main Flow (a — initiate setup):**
@@ -1827,7 +1828,7 @@ sequenceDiagram
 | UC-04: Logical Delete Scope | FR-SC-05, FR-SC-07 |
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
-| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08 |
+| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12 |
 | UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
@@ -1855,7 +1856,7 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
-| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15 |
 | UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05 |
 | UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10 |
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
