@@ -1,0 +1,17 @@
+meta {
+  name: Get two factor status
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{host}}/api/auth/2fa
+  body: none
+  auth: inherit
+}
+
+docs {
+  FR-2F-15. Any authenticated person, for themselves only.
+
+  Returns whether two-factor authentication is active, which methods are configured, and how many recovery codes remain unused. A caller who never enabled it gets a 200 with every flag false; a Google User gets a 403.
+}

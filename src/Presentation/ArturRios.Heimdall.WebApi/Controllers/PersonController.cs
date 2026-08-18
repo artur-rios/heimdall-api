@@ -244,4 +244,23 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Lists the system's <c>ScopeAdmin</c> persons (UC-07 read d, FR-PE-12), projected to
+    ///     identifier, name, and email — the source for an owner picker. A System Admin or a Scope
+    ///     Admin may call it. Optionally excludes the current owners of a named scope, in which case
+    ///     the handler requires the caller to be entitled to manage that scope.
+    /// </summary>
+    [HttpGet("persons/scope-admins")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PersonSummaryOutput>>> ListScopeAdmins(
+        [FromQuery] ListScopeAdminsQuery query)
+    {
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+    }
 }

@@ -103,4 +103,11 @@ public static class TwoFactorMessages
     ///     new refusal message is invented for either.
     /// </summary>
     public const string RecoveryCodesRegenerated = "Recovery codes have been regenerated.";
+
+    /// <summary>
+    ///     FR-2F-15 main flow: the caller's own two-factor status was read. Returned whether or not
+    ///     any configuration exists — "never enabled" is the ordinary state of most accounts and is
+    ///     reported as a success with every flag false, not as a refusal.
+    /// </summary>
+    public const string StatusRetrieved = "Two-factor authentication status retrieved.";
 }

@@ -122,7 +122,7 @@ graph LR
 | FR-PE-01 | The system shall allow creation of a person with: `Id`, `Name`, `Email`, `PasswordHash`, `Salt`, `RoleId`, `IsDeleted`. A person has no direct `ScopeId` attribute | High |
 | FR-PE-02 | A person with the `User` role must be associated with exactly **one** scope, via scope membership, at creation time | High |
 | FR-PE-03 | The system shall allow reading a person's details by ID | High |
-| FR-PE-04 | The system shall allow listing persons (Users) within a scope, and listing owners (Scope Admins) of a scope, with pagination and optional case-insensitive name and email filters | High |
+| FR-PE-04 | The system shall allow listing persons (Users) within a scope, and listing owners (Scope Admins) of a scope, with pagination and optional case-insensitive name and email filters. The person projection reports whether the person has an active two-factor configuration, but never which methods are configured (see FR-2F-15) | High |
 | FR-PE-05 | The system shall allow updating person information (name, email, role) | High |
 | FR-PE-06 | The system shall allow **logical deletion** of a person by setting `IsDeleted = true` | High |
 | FR-PE-07 | The system shall allow **hard deletion** of a person, permanently removing the record | High |
@@ -130,6 +130,7 @@ graph LR
 | FR-PE-09 | A `User` person's email must be unique among the `User`s of their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique among all `ScopeAdmin` and `SystemAdmin` persons system-wide. The two namespaces are independent: an admin address and a scoped `User` address never collide with each other, because login resolves them by different lookups (FR-AU-01/02). Comparison is case-insensitive | High |
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
+| FR-PE-12 | The system shall allow listing the `ScopeAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
 
 ### 3.3 Role Assignment
 
@@ -246,6 +247,7 @@ graph LR
 | FR-2F-12 | Regenerating recovery codes shall require a valid second factor, shall invalidate every previously issued recovery code for the person, and shall return ten new codes in plaintext exactly once, per FR-2F-05 | High |
 | FR-2F-13 | The system shall count failed verification attempts against an issued email code and retire the code on the fifth, so a six-digit code cannot be exhausted by guessing. Obtaining a further code shall require a fresh authentication attempt | High |
 | FR-2F-14 | The system shall accept an authenticator-app code at most once: the time step of an accepted code shall be recorded, and a code from that step or any earlier one shall be refused, so a code observed in transit cannot be replayed within the verification window | High |
+| FR-2F-15 | The system shall allow an authenticated person to read their own two-factor authentication state: whether it is active, which methods are configured, and how many issued recovery codes remain unused. A person with no configuration shall be answered successfully with every flag false and a zero count, since never having enabled it is an ordinary state rather than a fault. A Google User shall be refused, as under FR-2F-01. No secret is returned — never the TOTP secret, never a recovery code | High |
 
 ---
 
@@ -970,7 +972,7 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-11 |
+| Person CRUD | FR-PE-01 through FR-PE-12 |
 | Application CRUD | FR-AP-01 through FR-AP-09 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
@@ -979,6 +981,6 @@ Notes on cascading behavior:
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
-| Two-Factor Authentication | FR-2F-01 through FR-2F-14 |
+| Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20&%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
 | Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

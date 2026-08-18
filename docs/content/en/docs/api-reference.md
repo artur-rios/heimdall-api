@@ -43,6 +43,7 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /2fa/verify` | Anonymous | UC-38 — redeem the challenge token with a second factor |
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |
 | `POST /2fa/recovery-codes/regenerate` | Authenticated (self) | UC-40 — issue a fresh set of ten |
+| `GET /2fa` | Any authenticated | FR-2F-15 — the caller's own two-factor status; 403 for a Google User |
 
 Every **anonymous** endpoint here is rate-limited to **10 requests per minute per IP**. Each of them
 checks a credential, and none is protected by a token — see
@@ -75,6 +76,7 @@ so a caller can only ever act on their own configuration.
 | `GET /persons/{id}` | Any authenticated | UC-07 — read one person (a person may read themselves) |
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
+| `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list Scope Admins for an owner picker; optionally excludes a scope's current owners |
 | `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |

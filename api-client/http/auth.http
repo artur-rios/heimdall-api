@@ -176,3 +176,9 @@ Content-Type: application/json
 {
   "code": "000000"
 }
+
+### Get two-factor status (FR-2F-15) — authenticated, always on the caller themselves.
+# Answers whether 2FA is active, which methods are configured, and how many recovery codes remain
+# unused. A caller who never enabled it gets a 200 with every flag false; a Google User gets a 403.
+GET {{host}}/api/auth/2fa
+Authorization: Bearer {{token}}

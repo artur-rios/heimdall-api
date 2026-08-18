@@ -56,6 +56,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
                     Email = x.Email,
                     Role = (int)x.RoleId,
                     EmailVerified = x.EmailVerified,
+                    TwoFactorEnabled = x.TwoFactorAuth != null && x.TwoFactorAuth.IsActive,
                     IsDeleted = x.IsDeleted,
                     ScopeId = x.ScopeMembership != null ? x.ScopeMembership.Scope.PublicId : null,
                     OwnedScopeIds = x.ScopeOwnerships.Select(ownership => ownership.Scope.PublicId).ToList(),
