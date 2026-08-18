@@ -45,6 +45,8 @@ public static class TwoFactorMessageMap
             // AF-39b — the submitted password did not match.
             [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized,
             // UC-40 main flow — every existing recovery code was replaced with ten new ones.
-            [TwoFactorMessages.RecoveryCodesRegenerated] = HttpStatusCodes.Ok
+            [TwoFactorMessages.RecoveryCodesRegenerated] = HttpStatusCodes.Ok,
+            // FR-2F-15 main flow — status read, including the all-false "never enabled" state.
+            [TwoFactorMessages.StatusRetrieved] = HttpStatusCodes.Ok
         });
 }

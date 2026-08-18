@@ -1,7 +1,10 @@
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command;
+using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.WebApi.AspNetCore;
@@ -12,7 +15,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
 [Route("api/auth")]
-public class AuthController(CommandMediator commandMediator) : Controller
+public class AuthController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
 {
     /// <summary>
     ///     Authenticates a person by email and password and returns a token (UC-11, FR-AU-01…07). A
@@ -316,6 +319,32 @@ public class AuthController(CommandMediator commandMediator) : Controller
 
         var result = await commandMediator
             .ExecuteCommandAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Reports the caller's own two-factor authentication status (FR-2F-15): whether it is
+    ///     active, which methods are configured, and how many recovery codes remain unused. The
+    ///     person read is always the caller themselves — taken from the bearer token, the same as
+    ///     <see cref="EnableTwoFactorAuth" /> — so a configuration is never addressed by an
+    ///     identifier in a path.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, for the same reason its <c>POST</c> siblings have none: the
+    ///     authorization matrix grants two-factor management to all three person roles and withholds
+    ///     it from anonymous callers, which authentication alone enforces. A caller with no
+    ///     configuration is answered 200 with every flag false; a Google User is answered 403, since
+    ///     FR-2F-01 makes them permanently ineligible.
+    /// </remarks>
+    [HttpGet("2fa")]
+    public async Task<ActionResult<DataOutput<TwoFactorStatusOutput?>>> GetTwoFactorStatus()
+    {
+        var query = new GetTwoFactorStatusQuery();
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecuteQueryAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>(query);
 
         return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
     }

@@ -232,6 +232,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>,
                 ListScopeGoogleUsersQueryHandler>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>,
+                GetTwoFactorStatusQueryHandler>();
 
         // NFR-10: pagination/filter validation for every paginated list query.
         Builder.Services.AddScoped<IValidator<ListScopesQuery>, ListScopesQueryValidator>();
