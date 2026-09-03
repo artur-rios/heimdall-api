@@ -150,7 +150,7 @@ graph LR
 | FR-AU-01 | The system shall authenticate a `User` using email, password, and scope ID (email is only unique within a scope for Users) | High |
 | FR-AU-02 | The system shall authenticate a `ScopeAdmin` or `SystemAdmin` using email and password only, without a scope ID (email is unique system-wide for these roles) | High |
 | FR-AU-03 | Upon successful authentication, the system shall return an authentication token (e.g., JWT) | High |
-| FR-AU-04 | The authentication token shall contain the person's `PublicId` and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin`; no scope claim for a `SystemAdmin`. Internal `bigint` Ids are never placed in a token | High |
+| FR-AU-04 | The authentication token shall contain the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin`; no scope claim for a `SystemAdmin`. Internal `bigint` Ids are never placed in a token | High |
 | FR-AU-05 | The system shall reject authentication attempts for logically deleted persons | High |
 | FR-AU-06 | The system shall reject authentication attempts for a `User` whose scope is logically deleted | High |
 | FR-AU-07 | The system shall reject authentication attempts for a `ScopeAdmin` if all scopes they own are logically deleted | High |

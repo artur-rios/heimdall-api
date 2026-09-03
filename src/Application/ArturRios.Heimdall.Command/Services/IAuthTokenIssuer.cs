@@ -5,6 +5,7 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     a <c>PublicId</c>: internal <c>bigint</c> Ids never reach a token (NFR-15).
 /// </summary>
 /// <param name="PersonId">The authenticated person's <c>PublicId</c>.</param>
+/// <param name="DisplayName">Their display name, included for downstream profile provisioning.</param>
 /// <param name="RoleId">Their role value (see <c>Roles</c>).</param>
 /// <param name="ScopeId">
 ///     The <c>PublicId</c> of the scope a <c>User</c> belongs to; <c>null</c> for a
@@ -15,6 +16,7 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </param>
 public record AuthTokenSubject(
     Guid PersonId,
+    string DisplayName,
     int RoleId,
     Guid? ScopeId,
     IReadOnlyCollection<Guid> OwnedScopeIds);

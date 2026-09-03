@@ -42,6 +42,7 @@ public class PersonAuthTokenService(IAuthTokenIssuer tokenIssuer)
 
         subject = new AuthTokenSubject(
             person.PublicId,
+            person.Name,
             (int)person.RoleId,
             person.RoleId == (long)Roles.User ? person.ScopeMembership!.Scope.PublicId : null,
             liveOwnedScopeIds);

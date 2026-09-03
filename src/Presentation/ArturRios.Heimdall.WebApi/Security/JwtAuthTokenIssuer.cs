@@ -37,6 +37,7 @@ public class JwtAuthTokenIssuer(
         var user = new IdentityUser(
             subject.PersonId, subject.RoleId, subject.ScopeId, subject.OwnedScopeIds)
         {
+            DisplayName = subject.DisplayName,
             ScopePermissionClaims = permissionClaims
         };
 
