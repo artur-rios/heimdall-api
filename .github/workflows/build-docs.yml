@@ -4,6 +4,11 @@ name: Build Docs
 # successful Tests run on main and unpacks it into docs/coverage-report, which hugo.toml mounts at
 # static/coverage-report. That is why Tests completing is a trigger here: a change under src/ moves
 # the coverage numbers without touching docs/, and the push trigger below would never notice.
+#
+# Publishing goes through the GitHub Pages deployment API (configure-pages / upload-pages-artifact /
+# deploy-pages) rather than committing the built site to a gh-pages branch. The site is then a
+# deployment of a run rather than a commit somebody could push to by hand, the build output never
+# enters the repository's history, and the Pages source setting is "GitHub Actions".
 
 on:
   push:
@@ -25,11 +30,12 @@ on:
         required: false
         default: 'Test run from GitHub UI'
 
+# contents: read is enough now that nothing pushes a branch. pages/id-token are what the deployment
+# API needs; actions: read is for reading another workflow's runs and downloading its artifact.
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
-  # Reading another workflow's runs and downloading its artifact.
   actions: read
 
 concurrency:
@@ -37,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     # A workflow_run trigger fires on completion, failed runs included. A failed Tests run has no
     # coverage artifact and nothing worth publishing, so only a successful one continues.
@@ -76,6 +82,12 @@ jobs:
         with:
           hugo-version: 'latest'
           extended: true
+
+      - name: Setup Pages
+        # Only for the base URL it resolves; the build step below uses it instead of a hardcoded
+        # address, so a rename of the repository or a custom domain does not need an edit here.
+        id: pages
+        uses: actions/configure-pages@v6
 
       - name: Download coverage report
         # Always the latest successful Tests run pushed to main, whatever triggered this build: on a
@@ -118,11 +130,24 @@ jobs:
           fi
 
       - name: Build Hugo site
-        run: hugo -s docs --environment production --minify --cleanDestinationDir --gc --baseURL "https://artur-rios.github.io/heimdall-api/"
+        run: hugo -s docs --environment production --minify --cleanDestinationDir --gc --baseURL "${{ steps.pages.outputs.base_url }}/"
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Pages artifact
+        # The single artifact deploy-pages consumes below. This is the whole published site; there
+        # is no branch holding it between runs.
+        uses: actions/upload-pages-artifact@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/public
-          publish_branch: gh-pages
+          path: docs/public
+
+  # Separate job so the deployment shows as its own step with the resulting URL, and so a failure to
+  # publish is distinguishable from a failure to build.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
