@@ -710,7 +710,7 @@ sequenceDiagram
 3. The system hashes the provided password using the person's stored `Salt` and compares it to the stored `PasswordHash`.
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
-6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId` and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
+6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
 
 **Alternative Flows:**
 
@@ -1287,7 +1287,7 @@ sequenceDiagram
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
 6. If none exists: the system verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
 7. If one exists: the system confirms it is not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
-8. The system issues an authentication token containing the Google User's ID, `role = User`, and the scope ID.
+8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
 **Alternative Flows:**
 

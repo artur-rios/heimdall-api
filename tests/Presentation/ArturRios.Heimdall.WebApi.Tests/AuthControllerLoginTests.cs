@@ -118,6 +118,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // Then — the token's claims (FR-AU-04)
         var claims = ClaimsOf(response.Body.Data.Token!);
         Assert.Equal(person.PublicId, claims.Id);
+        Assert.Equal(person.Name, claims.DisplayName);
         Assert.Equal((int)Roles.User, claims.RoleId);
         Assert.Equal(scope.PublicId, claims.ScopeId);
         Assert.Empty(claims.OwnedScopeIds);

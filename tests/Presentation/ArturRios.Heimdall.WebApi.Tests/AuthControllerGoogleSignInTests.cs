@@ -142,6 +142,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // Then — the token's claims (UC-25 step 8, FR-GO-04)
         var claims = ClaimsOf(response.Body.Data.Token);
         Assert.Equal(stored.PublicId, claims.Id);
+        Assert.Equal(stored.Name, claims.DisplayName);
         Assert.Equal((int)Roles.User, claims.RoleId);
         Assert.Equal(scope.PublicId, claims.ScopeId);
         Assert.Empty(claims.OwnedScopeIds);
@@ -186,6 +187,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         var stored = Assert.Single(await StoredAsync(scope));
         Assert.Equal(string.Empty, stored.Name);
         Assert.Null(stored.ProfilePictureUrl);
+        Assert.Equal(stored.Email, ClaimsOf(response.Body!.Data!.Token).DisplayName);
     }
 
     [FunctionalFact]

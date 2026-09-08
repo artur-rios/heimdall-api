@@ -18,6 +18,9 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// </remarks>
 public class IdentityUserMapper : IAuthenticatedUserMapper
 {
+    /// <summary>The claim carrying the caller's display name for downstream profile provisioning.</summary>
+    public const string DisplayNameClaim = "name";
+
     /// <summary>The claim holding the scope a <c>User</c> belongs to.</summary>
     public const string ScopeIdClaim = "scopeId";
 
@@ -47,6 +50,11 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
         if (user is not IdentityUser identityUser)
         {
             return claims;
+        }
+
+        if (!string.IsNullOrWhiteSpace(identityUser.DisplayName))
+        {
+            claims[DisplayNameClaim] = identityUser.DisplayName;
         }
 
         // FR-AU-04: a User carries their scope, a ScopeAdmin the scopes they own, a SystemAdmin
@@ -102,6 +110,7 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
 
         return new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims))
         {
+            DisplayName = claims.GetValueOrDefault(DisplayNameClaim),
             ScopePermissionClaims = ReadScopePermissionClaims(claims),
             MfaPending = claims.TryGetValue(MfaPendingClaim, out var rawMfaPending) &&
                          bool.TryParse(rawMfaPending, out var parsedMfaPending) &&

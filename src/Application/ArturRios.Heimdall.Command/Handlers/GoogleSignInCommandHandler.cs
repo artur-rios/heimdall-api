@@ -97,6 +97,7 @@ public class GoogleSignInCommandHandler(
         // ownership is a ScopeAdmin concept.
         var token = await tokenIssuer.IssueAsync(new AuthTokenSubject(
             googleUser.PublicId,
+            string.IsNullOrWhiteSpace(googleUser.Name) ? googleUser.Email : googleUser.Name,
             (int)Roles.User,
             scope.PublicId,
             []));

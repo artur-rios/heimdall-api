@@ -17,13 +17,17 @@ public class IdentityUserMapperTests
     public void GivenUserIdentity_WhenRoundTrippingClaims_ThenScopeIsPreserved()
     {
         // Given
-        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), []);
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), [])
+        {
+            DisplayName = "Ada Lovelace"
+        };
 
         // When
         var restored = Mapper.FromClaims(Mapper.ToClaims(user));
 
         // Then
         Assert.Equal(user, restored);
+        Assert.Equal("Ada Lovelace", Mapper.ToClaims(user)[IdentityUserMapper.DisplayNameClaim]);
     }
 
     [UnitFact]
