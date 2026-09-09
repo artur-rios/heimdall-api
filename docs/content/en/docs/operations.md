@@ -166,10 +166,17 @@ processing, not an erasure — the name, the address and the credential material
 A second pass gives it a terminal state: once the retention window has elapsed, the record is
 anonymised in place, and the person's single-use tokens and two-factor configuration go with it.
 
-The window depends on why the record was deleted. Where the data subject asked, it is 30 days —
-GDPR Art. 12(3)'s outer limit rather than a chosen period, and refused if configured higher. Where
-an administrator deleted it, it is 90 days, a reversal window. Records deleted before this existed
-carry no reason and take the longer one.
+The window depends on why the record was deleted. Where the data subject asked (UC-42), it is 30
+days — GDPR Art. 12(3)'s outer limit rather than a chosen period, and refused if configured higher.
+Where an administrator deleted it, it is 90 days, a reversal window. Records deleted before this
+existed carry no reason and take the longer one.
+
+A subject's request stores its own deadline when it is made, and that stored value wins over the
+configured window: a later change to the setting must not move an obligation already owed. Where
+NFR-12 blocked a request — the subject was a scope's last owner — the pass retries it once ownership
+has been transferred, dating the suspension from the request rather than from the moment the block
+cleared, so a long-blocked request is due immediately rather than handed a fresh deadline.
+`GET /api/auth/erasure-requests` is the queue that surfaces those before they are late.
 
 Anonymisation overwrites rather than removes, because NFR-07 requires every foreign key to keep
 resolving and the audit trail, the scope join rows and an owner's applications all point at the
