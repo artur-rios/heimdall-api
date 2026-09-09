@@ -256,12 +256,12 @@ breach detection — is
 
 | Right | LGPD | GDPR | Where |
 | --- | --- | --- | --- |
-| Confirmation and access | Art. 18 I–II | Art. 15 | ⚠️ [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
-| Portability | Art. 18 V | Art. 20 | ⚠️ [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
+| Confirmation and access | Art. 18 I–II | Art. 15 | ✅ UC-41, self-service |
+| Portability | Art. 18 V | Art. 20 | ✅ UC-41 — structured JSON, machine-readable |
 | Correction | Art. 18 III | Art. 16 | ✅ UC-08, self-service |
 | Erasure / elimination | Art. 18 VI | Art. 17 | ✅ UC-42, completed by NFR-20 |
 | Restriction of processing | Art. 18 IV | Art. 18 | ⚠️ [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
-| Information about sharing | Art. 18 VII | Art. 15(1)(c) | §6 of this document; in the export at [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
+| Information about sharing | Art. 18 VII | Art. 15(1)(c) | ✅ §6 of this document, and in every UC-41 export |
 | Objection | Art. 18 § | Art. 21 | ⚠️ [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
 
 Deadlines: **LGPD Art. 19 §2 — 15 days** for confirmation and access; **GDPR Art. 12(3) — one
