@@ -13,11 +13,13 @@ using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
+using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
 using ArturRios.Messaging.Email;
@@ -202,6 +204,8 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddAuditedCommandHandler<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput, UpdateScopePermissionCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput, DeleteScopePermissionCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput, HardDeleteScopePermissionCommandHandler>();
+
+        AddDataRetention();
 
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
@@ -684,6 +688,45 @@ public class Startup(string[] args) : WebApiStartup(args)
             ModelBindingConfiguration.Configure(options);
         });
         Builder.Services.AddEndpointsApiExplorer();
+    }
+
+    /// <summary>
+    ///     Registers the retention schedule (NFR-19) and the pass that enforces it.
+    /// </summary>
+    /// <remarks>
+    ///     The options are a singleton because they are a deployment-wide policy read once at
+    ///     start-up, and the purge is registered as a hosted service unless it has been switched
+    ///     off — which is a deployment decision an operator has to take deliberately, since keeping
+    ///     personal data past its retention period is the thing NFR-19 forbids. The handler is
+    ///     registered audited like every other command: the entry recording that the schedule was
+    ///     enforced is as much the point as the deletion is.
+    /// </remarks>
+    private void AddDataRetention()
+    {
+        var retention = DataRetentionOptions.FromEnvironment();
+
+        if (retention.InvalidVariables.Count > 0)
+        {
+            Log.Warning(
+                "Ignoring unusable retention settings and applying the documented defaults: {Variables}",
+                retention.InvalidVariables);
+        }
+
+        Builder.Services.AddSingleton(retention);
+        Builder.Services
+            .AddAuditedCommandHandler<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput,
+                PurgeExpiredTokensCommandHandler>();
+
+        if (!retention.PurgeEnabled)
+        {
+            Log.Warning(
+                "The token retention purge is switched off by {Variable}; expired tokens will not be removed",
+                DataRetentionOptions.PurgeEnabledVariable);
+
+            return;
+        }
+
+        Builder.Services.AddHostedService<TokenRetentionService>();
     }
 
     private static void ConfigureLogging()

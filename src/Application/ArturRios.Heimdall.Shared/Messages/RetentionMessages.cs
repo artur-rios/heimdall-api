@@ -1,0 +1,14 @@
+namespace ArturRios.Heimdall.Shared.Messages;
+
+/// <summary>
+///     Canonical messages produced by the retention passes (NFR-19). Unlike every other message
+///     class here there is no matching <c>MessageMap</c>: these never reach a controller, because
+///     the passes are dispatched by a scheduler rather than by a caller, so there is no response for
+///     a status code to describe. They exist for the same reason the others do — the audit trail
+///     records the application's own messages and never provider text or caller input.
+/// </summary>
+public static class RetentionMessages
+{
+    /// <summary>The purge ran to completion. Reported whether or not it removed anything.</summary>
+    public const string ExpiredTokensPurged = "Expired single-use tokens purged.";
+}
