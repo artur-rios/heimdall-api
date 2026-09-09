@@ -14,4 +14,7 @@ public static class RetentionMessages
 
     /// <summary>The anonymisation pass ran to completion. Reported whether or not it changed anything.</summary>
     public const string ExpiredDeletionsAnonymised = "Logically deleted identities past their retention window anonymised.";
+
+    /// <summary>The audit pseudonymisation pass ran to completion.</summary>
+    public const string AuditActorsPseudonymised = "Audit entries past their attribution period pseudonymised.";
 }

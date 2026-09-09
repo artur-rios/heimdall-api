@@ -47,15 +47,15 @@ own record is covered below.
 | Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **30 days** where the subject asked, **90 days** where an administrator did — §4 | A soft delete is a restriction of processing, not an erasure, so it needs a terminal state. The shorter deadline is the law's, not a choice; the longer one is a reversal window. Both end in anonymisation | ✅ Scheduled anonymisation (§4.4) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
-| Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
+| Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
 | Application logs | Serilog file sink | **12 months** — conditional, see §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
 | Database backups | The backup store, outside the schema | **No number of its own** — bounded by §9 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Every period is decided, and two are now enforced. Three rows are decided but **not yet enforced**,
-and each says so with the issue that will enforce it: the audit trail (§7), the application logs
-(§8), and the backups (§9). That is the rule in §1 working, not an oversight — the alternative is a
+Every period is decided, and three are now enforced. Two rows are decided but **not yet enforced**,
+and each says so with the issue that will enforce it: the application logs (§8) and the backups
+(§9). That is the rule in §1 working, not an oversight — the alternative is a
 document that reads as though the system already did these things.
 
 Backups are the one row still carrying no number, and deliberately: their period follows from a
@@ -243,6 +243,42 @@ are pseudonymised at eighteen months while they are still an active person. That
 current account can be investigated. It is the intended trade-off of storage limitation, and it is
 recorded here so it is a decision rather than a surprise.
 
+### 7.1 How the pseudonymisation runs, and why the database enforces it
+
+`AuditRetentionService` dispatches `PseudonymiseAuditActorsCommand` on the same interval as the
+other passes, selecting entries whose attribution period has elapsed **or** whose actor has been
+anonymised. It shares the other passes' properties: bounded per run, needing no coordination between
+instances, audited, and treating an empty run as a success.
+
+What is different is where the rule lives. The pass does not decide what it is allowed to write —
+**the database does**, through the trigger installed by `AllowClearingAuditActor`:
+
+| Operation | Permitted |
+| --- | --- |
+| `DELETE`, `TRUNCATE` | Never |
+| `UPDATE` changing any column other than the attribution | Never |
+| `UPDATE` setting the attribution to a *different* identity | Never |
+| `UPDATE` clearing the attribution, entry older than 30 days | Yes |
+| `UPDATE` clearing the attribution, actor anonymised | Yes, at any age |
+| `UPDATE` clearing the attribution, recent entry, live actor | Never |
+
+The application cannot clear an attribution early, reassign one, or alter anything else, because the
+database refuses all three whatever the code asks. That matters more here than elsewhere: this is
+the one table whose immutability was a security control (Threat Model TH-18), and a control the
+application could talk its way around would not be one.
+
+The thirty-day floor is an **anti-tamper backstop, not a retention period**. The retention period is
+eighteen months and lives in configuration; the floor exists so that somebody who has just acted
+cannot immediately clear their own attribution to cover it. The erasure branch carries no age
+condition, because a subject-requested erasure completes thirty days after the request and the
+entries it produced days earlier have to go with it.
+
+**What this narrows, stated honestly.** Before, nothing could change in this table at all. Now one
+thing can. The guarantee that remains is narrower but still precise: *an action can never be denied,
+and who took it can never be reassigned — only forgotten.* Non-repudiation of the act survives
+intact; attribution is what becomes time-limited, which is exactly what storage limitation requires
+of it.
+
 ## 8. Application logs: why 12 months, and on what condition
 
 Twelve months rather than the ninety days an operational-debugging period would justify, because
@@ -312,6 +348,8 @@ Backup encryption belongs to the same issue and is not restated here.
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
+| `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | `548` (18 months) | 30 to 3650 | Days an audit entry stays attributed |
+| `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling it |
 
 The erasure deadline is the one setting with a ceiling that is not a sanity check: 30 days is the
 statutory limit, so a larger value is not a policy choice but a compliance failure, and it is

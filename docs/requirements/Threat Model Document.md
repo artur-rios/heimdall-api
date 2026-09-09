@@ -171,7 +171,7 @@ one asks is what that reader can do with what they find.
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
-| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09), and a database trigger refuses `UPDATE`, `DELETE` and `TRUNCATE` on the table | Test | Low — but see below on DDL |
+| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly one `UPDATE` — clearing the actor attribution once due (NFR-21) | Test | Low — but see below on DDL and §6.1 |
 
 **TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
 `EmailVerificationService` both used to write the token they had just generated straight into the
@@ -220,6 +220,33 @@ It does not defend against somebody who can also run DDL: a superuser can drop t
 rewrite history. That is smaller than the hole it closes — it leaves a schema change behind, where an
 `UPDATE` left nothing — but it is not zero, which is why the row above is qualified rather than
 simply Low.
+
+### 6.1 The one write the trail now permits, and why it is still Low
+
+NFR-21 narrowed the rule. `AUDIT_LOG` no longer refuses every `UPDATE`: it permits the actor
+attribution to be cleared, and nothing else. That is a real reduction in what the triggers guarantee,
+and it is recorded here rather than left for a reader to discover in a migration.
+
+**Why it was necessary.** `actor_person_id` holds a person's `PublicId`. An indefinitely retained,
+unalterable row naming somebody who has exercised their right to erasure is personal data processed
+with no remaining basis, so a table that refused every write made erasure impossible by
+construction. The two obligations were in direct conflict, and one of them had to give ground.
+
+**Why the ground given is narrow.** The trigger permits a write only when every column except
+`actor_person_id` and `actor_role` is identical, the attribution is being set to `NULL` rather than
+to another identity, and the clearing is due — the entry is older than thirty days, or the identity
+it names has been anonymised. `DELETE` and `TRUNCATE` remain refused outright, per statement.
+
+**What an attacker gains.** Somebody holding the application's database credentials can clear an
+attribution older than thirty days, or one of any age belonging to an identity they have first
+managed to anonymise. They cannot remove an entry, alter what it says, reassign it to somebody else,
+or clear their own attribution for something they did this week. Anonymising an identity is itself
+an audited write, and doing it to their own account destroys their access.
+
+**Residual risk: Low, unchanged.** The property this threat is about — that an action cannot be
+denied — is intact. What became time-limited is attribution, which is what storage limitation
+requires of it. `AuditActorClearingTests` pins every row of that table against real PostgreSQL,
+including the four refusals.
 
 ## 7. TB-4 — The API to Google
 
@@ -345,7 +372,7 @@ this document has been worth.
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
-| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | A trigger refusing `UPDATE`, `DELETE` and `TRUNCATE`, per statement so an empty `DELETE` is refused too |
+| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the one `UPDATE` NFR-21 requires — see §6.1 |
 | TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 |
 
 TH-14 and TH-08 were found by reading the code while writing this document, and neither was visible

@@ -17,7 +17,9 @@ public class DataRetentionOptionsTests
         DataRetentionOptions.PurgeEnabledVariable,
         DataRetentionOptions.SubjectErasureDeadlineDaysVariable,
         DataRetentionOptions.AdministrativeDeletionWindowDaysVariable,
-        DataRetentionOptions.AnonymisationEnabledVariable
+        DataRetentionOptions.AnonymisationEnabledVariable,
+        DataRetentionOptions.AuditActorRetentionDaysVariable,
+        DataRetentionOptions.AuditPseudonymisationEnabledVariable
     ];
 
     private static void ClearAll()
@@ -42,9 +44,12 @@ public class DataRetentionOptionsTests
         Assert.Equal(
             DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
 
-        // Both passes are on unless an operator switches them off: silence must not mean "keep forever"
+        Assert.Equal(DataRetentionOptions.DefaultAuditActorRetention, options.AuditActorRetention);
+
+        // Every pass is on unless an operator switches it off: silence must not mean "keep forever"
         Assert.True(options.PurgeEnabled);
         Assert.True(options.AnonymisationEnabled);
+        Assert.True(options.AuditPseudonymisationEnabled);
 
         // An absent variable is the default being chosen, not a fallback from a bad value
         Assert.Empty(options.InvalidVariables);
@@ -198,6 +203,29 @@ public class DataRetentionOptionsTests
 
         Assert.Equal(
             DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
+
+        ClearAll();
+    }
+
+    [UnitTheory]
+    [InlineData("29")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("4000")]
+    [InlineData("forever")]
+    public void GivenAnAuditRetentionOutsideTheAcceptedRange_WhenReadFromEnvironment_ThenTheDefaultApplies(
+        string value)
+    {
+        // The floor matches the one the database trigger enforces. Configured below it, the pass
+        // would select rows the trigger then refuses — turning a configuration mistake into a run
+        // that fails every time rather than one that quietly does the wrong thing.
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.AuditActorRetentionDaysVariable, value);
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Equal(DataRetentionOptions.DefaultAuditActorRetention, options.AuditActorRetention);
+        Assert.Contains(DataRetentionOptions.AuditActorRetentionDaysVariable, options.InvalidVariables);
 
         ClearAll();
     }

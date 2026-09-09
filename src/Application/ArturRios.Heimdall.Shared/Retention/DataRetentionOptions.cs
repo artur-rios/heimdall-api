@@ -44,6 +44,12 @@ public sealed record DataRetentionOptions
     /// <summary>Environment variable switching the scheduled anonymisation off.</summary>
     public const string AnonymisationEnabledVariable = "HEIMDALL_RETENTION_ANONYMISATION_ENABLED";
 
+    /// <summary>Environment variable holding how long an audit entry stays attributed, in days.</summary>
+    public const string AuditActorRetentionDaysVariable = "HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS";
+
+    /// <summary>Environment variable switching the scheduled audit pseudonymisation off.</summary>
+    public const string AuditPseudonymisationEnabledVariable = "HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED";
+
     /// <summary>Seven days — see <see cref="SingleUseTokenGrace" /> for why it is not zero.</summary>
     public static readonly TimeSpan DefaultSingleUseTokenGrace = TimeSpan.FromDays(7);
 
@@ -58,6 +64,20 @@ public sealed record DataRetentionOptions
 
     /// <summary>Ninety days — the reversal window for an administrative deletion.</summary>
     public static readonly TimeSpan DefaultAdministrativeDeletionWindow = TimeSpan.FromDays(90);
+
+    /// <summary>548 days — eighteen months, the period the retention schedule sets.</summary>
+    public static readonly TimeSpan DefaultAuditActorRetention = TimeSpan.FromDays(548);
+
+    /// <summary>
+    ///     Shortest accepted audit attribution retention, in days. Matches the floor the database
+    ///     trigger enforces: below it the pass would select rows the trigger then refuses, turning a
+    ///     configuration mistake into a run that fails every time rather than one that quietly does
+    ///     the wrong thing.
+    /// </summary>
+    private const double MinimumAuditActorRetentionDays = 30;
+
+    /// <summary>Longest accepted audit attribution retention, in days.</summary>
+    private const double MaximumAuditActorRetentionDays = 3650;
 
     /// <summary>
     ///     Longest accepted erasure deadline, in days. Thirty is the statutory limit, so a value
@@ -161,6 +181,23 @@ public sealed record DataRetentionOptions
     public bool AnonymisationEnabled { get; init; } = true;
 
     /// <summary>
+    ///     How long an audit entry stays attributed to the identity that produced it, before the
+    ///     attribution is cleared (NFR-21).
+    /// </summary>
+    /// <remarks>
+    ///     Eighteen months by default. Most security baselines settle on twelve — PCI DSS requires a
+    ///     year of audit history — and breach discovery lag routinely exceeds it, so twelve is a
+    ///     floor rather than a comfortable answer; eighteen covers a compliance cycle plus that lag.
+    ///     Past it the accountability value of <em>who</em> falls away sharply while the value of
+    ///     what happened, when and how often does not, and that half survives the attribution being
+    ///     cleared.
+    /// </remarks>
+    public TimeSpan AuditActorRetention { get; init; } = DefaultAuditActorRetention;
+
+    /// <summary>Whether the scheduled audit pseudonymisation is registered at start-up.</summary>
+    public bool AuditPseudonymisationEnabled { get; init; } = true;
+
+    /// <summary>
     ///     Names the variables whose values were unusable and fell back to a default, so the caller
     ///     can say so in the log. Empty when every variable was absent or valid — an absent variable
     ///     is not a fallback, it is the documented default being chosen.
@@ -189,6 +226,11 @@ public sealed record DataRetentionOptions
                 AdministrativeDeletionWindowDaysVariable, DefaultAdministrativeDeletionWindow,
                 TimeSpan.FromDays, minimum: 0, MaximumDeletionWindowDays, invalid),
             AnonymisationEnabled = ReadBool(AnonymisationEnabledVariable, defaultValue: true, invalid),
+            AuditActorRetention = ReadBoundedTimeSpan(
+                AuditActorRetentionDaysVariable, DefaultAuditActorRetention, TimeSpan.FromDays,
+                MinimumAuditActorRetentionDays, MaximumAuditActorRetentionDays, invalid),
+            AuditPseudonymisationEnabled = ReadBool(
+                AuditPseudonymisationEnabledVariable, defaultValue: true, invalid),
             InvalidVariables = invalid
         };
     }

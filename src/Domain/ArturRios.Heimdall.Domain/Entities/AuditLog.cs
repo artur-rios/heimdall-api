@@ -5,18 +5,52 @@ namespace ArturRios.Heimdall.Domain.Entities;
 
 /// <summary>
 ///     One audit trail entry per attempted write operation (NFR-09), whether it succeeded or not.
-///     Append-only: never updated or logically deleted after creation. <see cref="ActorPersonId" />
-///     is a bare <c>PublicId</c>, not a foreign key, so an entry survives a hard-deleted person.
+///     <see cref="ActorPersonId" /> is a bare <c>PublicId</c>, not a foreign key, so an entry
+///     survives a hard-deleted person.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Append-only, with exactly one exception.</b> Database triggers refuse every
+///         <c>DELETE</c> and <c>TRUNCATE</c>, and refuse any <c>UPDATE</c> other than clearing
+///         <see cref="ActorPersonId" /> and <see cref="ActorRole" /> — which may be set to
+///         <c>null</c>, never to somebody else, and only once due (NFR-21). The resulting guarantee
+///         is precise: an action can never be denied, and who took it can never be reassigned — only
+///         forgotten, on schedule or on erasure.
+///     </para>
+///     <para>
+///         That exception exists because the trail holds personal data. An indefinitely retained,
+///         unalterable row naming a person who has exercised their right to erasure is personal data
+///         processed with no remaining basis. Clearing the attribution leaves what happened, when and
+///         how often intact while the entry stops relating to an identifiable person at all.
+///     </para>
+/// </remarks>
 public class AuditLog : Entity
 {
     /// <summary>External identifier of this entry.</summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 
-    /// <summary>The acting person's <c>PublicId</c>; <c>null</c> for an anonymous write.</summary>
+    /// <summary>
+    ///     The acting person's <c>PublicId</c>; <c>null</c> for an anonymous write, and <c>null</c>
+    ///     again once the attribution has been cleared (NFR-21).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the one column on this entity that may change after creation, and it may only
+    ///         ever change to <c>null</c>. Everything else is immutable, and the row can never be
+    ///         deleted — see the remarks on the class.
+    ///     </para>
+    ///     <para>
+    ///         Two grounds make a clearing due: the entry is past the configured attribution period,
+    ///         or the identity it names has been anonymised. Both are enforced by the database, not
+    ///         here.
+    ///     </para>
+    /// </remarks>
     public Guid? ActorPersonId { get; set; }
 
-    /// <summary>The acting person's role value (see <c>Roles</c>); <c>null</c> for an anonymous write.</summary>
+    /// <summary>
+    ///     The acting person's role value (see <c>Roles</c>); <c>null</c> for an anonymous write, and
+    ///     cleared alongside <see cref="ActorPersonId" />.
+    /// </summary>
     public int? ActorRole { get; set; }
 
     /// <summary>The command's CLR type name, e.g. <c>"CreateApplicationCommand"</c>.</summary>
