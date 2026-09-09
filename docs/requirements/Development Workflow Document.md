@@ -103,6 +103,24 @@ architecture and technology stack. All commits for the use case go on its featur
 When the implementation is finished, set the issue `Status` to **Testing**. This signals that the
 feature is code-complete and the testing gate is now in progress.
 
+### Step 4.1 — If the change touches personal data
+
+A migration that adds a column holding personal data is not finished when it compiles. Before the
+testing gate:
+
+1. **State the column's purpose** in §5.1 of the
+   [Data Protection Document](Data%20Protection%20Document.md). `PersonalDataPurposeTests` fails the
+   build if a column is missing, so this is enforced rather than remembered.
+2. **Give it a retention period** in the
+   [Data Retention Schedule](Data%20Retention%20Schedule%20Document.md), or say which existing row
+   covers it. A column with no period is one kept forever, which NFR-19 forbids.
+3. **Check whether it changes the record of processing** — a new category of data, recipient, or
+   transfer means the Data Protection Document needs more than a table row.
+
+The order matters: a column that cannot be given a purpose in step 1 is a column not to add. That is
+what data protection by design (GDPR Art. 25, LGPD Art. 6 III) asks for, applied at the only moment
+it is cheap.
+
 ### Step 5 — Test until green
 
 Following the [Testing Specification Document](Testing%20Specification%20Document.md):

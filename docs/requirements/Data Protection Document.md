@@ -97,6 +97,68 @@ which basis applies to a given identity at creation is [#94](https://github.com/
 No special categories of personal data (GDPR Art. 9, LGPD Art. 5 II) are processed. There is no
 automated decision-making producing legal effects (GDPR Art. 22, LGPD Art. 20).
 
+## 5.1 Every column, and why it is held
+
+§5 groups the data by category. This is the same data at the granularity a minimisation review needs
+(GDPR Art. 5(1)(c) and Art. 25, LGPD Art. 6 III): one row per column that holds personal data, each
+with the purpose that justifies holding it. A column with no purpose is a column to remove.
+
+### `PERSON`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId` | The identifier every other table and every token refers to. Random, so it discloses nothing by itself |
+| `Name` | Addressing the person in email, and downstream profile provisioning by client systems |
+| `Email` | The address the account is reached at, and the identifier a person signs in with |
+| `PasswordHash`, `Salt` | Verifying the person is present. Never reversible to the password |
+| `IsDeleted` | Suspending an identity without destroying it |
+| `EmailVerified` | Whether the address has been proven reachable (FR-EV-01) |
+| `FailedLoginAttempts`, `LockedOutUntil` | Bounding credential guessing per account (FR-AU-09) |
+| `RoleId`, `ScopeId` | Authorisation, and the per-scope uniqueness index FR-PE-09 needs |
+| `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |
+| `DeletedAt`, `DeletionKind`, `AnonymisedAt` | Measuring and enforcing the retention window (NFR-20) |
+| `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honouring an erasure request within its deadline, and showing that it was honoured (UC-42, UC-43) |
+
+### `GOOGLE_USER`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId`, `ScopeId`, `IsDeleted`, `CreatedAt`, `UpdatedAt` | As above |
+| `GoogleId` | Google's `sub`. The only stable way to resolve a returning sign-in to a stored identity (FR-GO-08) |
+| `Name`, `Email`, `EmailVerified` | As on `PERSON` |
+| `ProfilePictureUrl` | Downstream profile provisioning — see the decision below |
+| `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | As above |
+
+### `AUDIT_LOG`
+
+| Column | Purpose |
+| --- | --- |
+| `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
+| `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
+
+### Two decisions this review settled
+
+**`ProfilePictureUrl` stays, and it is the weakest case here.** The issue that prompted this review
+proposed dropping it unless a consumer could be identified. One can: the same downstream
+profile-provisioning purpose that puts `DisplayName` in the auth token. A client system rendering a
+signed-in user wants a name and an avatar, and serving both from the identity provider is why the
+identity provider holds them.
+
+It is recorded as the weakest case because the reasoning is thinner than for any other column. It is
+a URL to a photograph of a person, held for a convenience a client system could satisfy by asking
+Google itself, and required by FR-GO-05 rather than by anything the API does with it. **If no client
+system reads it, it should be dropped** — that is a question about deployments rather than about
+code, and it belongs to the controller. Removing it would change FR-GO-05 and break the two Google
+User read endpoints' contract, which is why this review does not do it unilaterally.
+
+**The display name in the auth token is confirmed, with its consequence stated.** A JWT travels
+further than a response body: client systems store it, put it in headers, and log it. Putting a name
+in one spreads that name into places this system does not control and cannot clean up. The purpose —
+letting a client provision a profile without a second call — is real, and the alternative of a
+profile endpoint would mean every client making an extra request on every sign-in. The decision
+stands; the consequence is recorded so that a future proposal to add anything *else* to the token is
+weighed against the same test.
+
 ## 6. Recipients
 
 | Recipient | What reaches them | Why |
@@ -189,3 +251,8 @@ month**. The shorter one governs where both apply.
 Reviewed when a migration adds or removes a column holding personal data; when a recipient or
 sub-processor changes; when the hosting region changes; when a transfer mechanism is executed or
 lapses; and when §7.2's EEA determination is made or changes.
+
+**§5.1 is enforced rather than trusted.** `PersonalDataPurposeTests` reflects over the entities that
+hold personal data and fails if a property is missing from the table above. A record of processing
+that silently falls behind the schema is worse than none, because it is relied on; this makes a new
+column arrive with a stated purpose or not arrive at all.
