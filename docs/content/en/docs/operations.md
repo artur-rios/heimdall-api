@@ -182,6 +182,17 @@ Anonymisation overwrites rather than removes, because NFR-07 requires every fore
 resolving and the audit trail, the scope join rows and an owner's applications all point at the
 record. Hard deletion (UC-10) remains available for callers that want the row gone.
 
+**The audit trail stops naming people on its own schedule.** A third pass clears the actor
+attribution from entries past their attribution period, and immediately from entries naming an
+identity that has been anonymised. The entry itself is never removed and never altered — what
+happened, when and how often all survive.
+
+The rule is enforced by a database trigger rather than by the pass, because this is the one table
+whose immutability is a security control. It permits the attribution to be set to null and nothing
+else: no deletion, no truncation, no change to any other column, and no reassignment to a different
+identity. A thirty-day floor stops somebody clearing their own attribution for something they did
+this week; it is an anti-tamper backstop, not the retention period, which is eighteen months.
+
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
@@ -191,6 +202,8 @@ record. Hard deletion (UC-10) remains available for callers that want the row go
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
+| `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | `548` (18 months) | 30 to 3650 | Days an audit entry stays attributed |
+| `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling it |
 
 A deployment that sets none of these still gets the published periods — an unset variable must not
 mean "keep forever". A malformed or out-of-range value falls back to the default and is named in a
@@ -312,6 +325,8 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | | `30` |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | | `90` |
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | | `true` |
+| `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | | `548` |
+| `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |

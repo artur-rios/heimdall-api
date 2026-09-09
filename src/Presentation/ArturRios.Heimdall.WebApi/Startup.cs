@@ -728,6 +728,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddAuditedCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput,
                 AnonymiseExpiredDeletionsCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<PseudonymiseAuditActorsCommand, PseudonymiseAuditActorsCommandOutput,
+                PseudonymiseAuditActorsCommandHandler>();
 
         if (retention.PurgeEnabled)
         {
@@ -750,6 +753,18 @@ public class Startup(string[] args) : WebApiStartup(args)
                 "Identity anonymisation is switched off by {Variable}; logically deleted identities " +
                 "will be kept past their retention window",
                 DataRetentionOptions.AnonymisationEnabledVariable);
+        }
+
+        if (retention.AuditPseudonymisationEnabled)
+        {
+            Builder.Services.AddHostedService<AuditRetentionService>();
+        }
+        else
+        {
+            Log.Warning(
+                "Audit attribution pseudonymisation is switched off by {Variable}; the trail will " +
+                "keep naming people past its attribution period, including erased ones",
+                DataRetentionOptions.AuditPseudonymisationEnabledVariable);
         }
     }
 
