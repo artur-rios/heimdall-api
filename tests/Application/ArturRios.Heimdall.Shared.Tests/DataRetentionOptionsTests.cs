@@ -14,7 +14,10 @@ public class DataRetentionOptionsTests
         DataRetentionOptions.SingleUseTokenGraceDaysVariable,
         DataRetentionOptions.PurgeIntervalMinutesVariable,
         DataRetentionOptions.PurgeBatchSizeVariable,
-        DataRetentionOptions.PurgeEnabledVariable
+        DataRetentionOptions.PurgeEnabledVariable,
+        DataRetentionOptions.SubjectErasureDeadlineDaysVariable,
+        DataRetentionOptions.AdministrativeDeletionWindowDaysVariable,
+        DataRetentionOptions.AnonymisationEnabledVariable
     ];
 
     private static void ClearAll()
@@ -35,9 +38,13 @@ public class DataRetentionOptionsTests
         Assert.Equal(DataRetentionOptions.DefaultSingleUseTokenGrace, options.SingleUseTokenGrace);
         Assert.Equal(DataRetentionOptions.DefaultPurgeInterval, options.PurgeInterval);
         Assert.Equal(DataRetentionOptions.DefaultPurgeBatchSize, options.PurgeBatchSize);
+        Assert.Equal(DataRetentionOptions.DefaultSubjectErasureDeadline, options.SubjectErasureDeadline);
+        Assert.Equal(
+            DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
 
-        // The purge is on unless an operator switches it off: silence must not mean "keep forever"
+        // Both passes are on unless an operator switches them off: silence must not mean "keep forever"
         Assert.True(options.PurgeEnabled);
+        Assert.True(options.AnonymisationEnabled);
 
         // An absent variable is the default being chosen, not a fallback from a bad value
         Assert.Empty(options.InvalidVariables);
@@ -136,6 +143,61 @@ public class DataRetentionOptionsTests
         var options = DataRetentionOptions.FromEnvironment();
 
         Assert.Equal(DataRetentionOptions.DefaultPurgeBatchSize, options.PurgeBatchSize);
+
+        ClearAll();
+    }
+
+    [UnitTheory]
+    [InlineData("31")]
+    [InlineData("90")]
+    [InlineData("3650")]
+    public void GivenAnErasureDeadlineAboveTheStatutoryLimit_WhenReadFromEnvironment_ThenItIsRefused(
+        string value)
+    {
+        // The one ceiling here that is not a sanity check. GDPR Art. 12(3) allows at most a month,
+        // so a larger value is not a policy choice an operator gets to make — it is a compliance
+        // failure, and configuration must not be able to express it.
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.SubjectErasureDeadlineDaysVariable, value);
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Equal(DataRetentionOptions.DefaultSubjectErasureDeadline, options.SubjectErasureDeadline);
+        Assert.Contains(DataRetentionOptions.SubjectErasureDeadlineDaysVariable, options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitFact]
+    public void GivenAShorterErasureDeadline_WhenReadFromEnvironment_ThenItIsApplied()
+    {
+        // Below the limit is always allowed: the statutory deadline is an outer bound, and acting
+        // sooner is what the law actually asks for.
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.SubjectErasureDeadlineDaysVariable, "7");
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Equal(TimeSpan.FromDays(7), options.SubjectErasureDeadline);
+        Assert.Empty(options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitTheory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("1000")]
+    [InlineData("whenever")]
+    public void GivenAnUnusableDeletionWindow_WhenReadFromEnvironment_ThenTheDefaultApplies(string value)
+    {
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.AdministrativeDeletionWindowDaysVariable, value);
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Equal(
+            DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
 
         ClearAll();
     }

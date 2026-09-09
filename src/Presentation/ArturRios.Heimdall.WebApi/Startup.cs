@@ -716,17 +716,32 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddAuditedCommandHandler<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput,
                 PurgeExpiredTokensCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput,
+                AnonymiseExpiredDeletionsCommandHandler>();
 
-        if (!retention.PurgeEnabled)
+        if (retention.PurgeEnabled)
+        {
+            Builder.Services.AddHostedService<TokenRetentionService>();
+        }
+        else
         {
             Log.Warning(
                 "The token retention purge is switched off by {Variable}; expired tokens will not be removed",
                 DataRetentionOptions.PurgeEnabledVariable);
-
-            return;
         }
 
-        Builder.Services.AddHostedService<TokenRetentionService>();
+        if (retention.AnonymisationEnabled)
+        {
+            Builder.Services.AddHostedService<IdentityAnonymisationService>();
+        }
+        else
+        {
+            Log.Warning(
+                "Identity anonymisation is switched off by {Variable}; logically deleted identities " +
+                "will be kept past their retention window",
+                DataRetentionOptions.AnonymisationEnabledVariable);
+        }
     }
 
     private static void ConfigureLogging()

@@ -3,6 +3,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -59,6 +60,11 @@ public class DeleteScopeCommandHandler(
             var now = DateTime.UtcNow;
 
             // Step 4: flip the scope itself.
+            // The cascade is an administrative deletion like any other (NFR-20): nobody asked to be
+            // erased, so the identities it sweeps up get the reversal window rather than the
+            // statutory deadline.
+            const int administrative = (int)DeletionKinds.Administrative;
+
             scope.IsDeleted = true;
             scope.UpdatedAt = now;
 
@@ -71,9 +77,11 @@ public class DeleteScopeCommandHandler(
 
             // Step 5: cascade to the members that are not already deleted.
             var cascadeErrors = (await CascadeAsync(users, p => p.IsDeleted,
-                    p => { p.IsDeleted = true; p.UpdatedAt = now; }, personWriter))
+                    p => { p.IsDeleted = true; p.DeletedAt = now; p.DeletionKind = administrative; p.UpdatedAt = now; },
+                    personWriter))
                 .Concat(await CascadeAsync(googleUsers, g => g.IsDeleted,
-                    g => { g.IsDeleted = true; g.UpdatedAt = now; }, googleUserWriter))
+                    g => { g.IsDeleted = true; g.DeletedAt = now; g.DeletionKind = administrative; g.UpdatedAt = now; },
+                    googleUserWriter))
                 .Concat(await CascadeAsync(applications, a => a.IsDeleted,
                     a => { a.IsDeleted = true; a.UpdatedAt = now; }, applicationWriter))
                 .ToList();

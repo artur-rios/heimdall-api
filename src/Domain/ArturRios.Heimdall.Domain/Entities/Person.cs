@@ -38,6 +38,30 @@ public class Person : Entity
     /// <summary>Logical deletion flag. Logically deleted persons are excluded from default queries.</summary>
     public bool IsDeleted { get; set; }
 
+    /// <summary>
+    ///     When the record was logically deleted, or <c>null</c> while it is live. The retention
+    ///     window that ends in anonymisation is measured from here (NFR-20).
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="UpdatedAt" /> cannot serve: it moves on any later write, so a record touched
+    ///     after its deletion would have its window silently restarted. This one is written once, by
+    ///     the logical deletion, and never again.
+    /// </remarks>
+    public DateTime? DeletedAt { get; set; }
+
+    /// <summary>
+    ///     Why the record was deleted (see <c>DeletionKinds</c>), or <c>null</c> while it is live.
+    ///     Decides which of the schedule's two deadlines applies.
+    /// </summary>
+    public int? DeletionKind { get; set; }
+
+    /// <summary>
+    ///     When the record was anonymised, or <c>null</c> if it has not been. Set by the scheduled
+    ///     pass, and the reason a second pass over the same row is a no-op rather than a repeated
+    ///     overwrite.
+    /// </summary>
+    public DateTime? AnonymisedAt { get; set; }
+
     /// <summary>Email verification status.</summary>
     public bool EmailVerified { get; set; }
 

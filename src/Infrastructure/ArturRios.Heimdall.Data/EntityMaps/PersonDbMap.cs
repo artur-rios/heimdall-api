@@ -44,6 +44,16 @@ internal static class PersonDbMap
         person.Property(x => x.Salt).IsRequired();
 
         person.Property(x => x.IsDeleted).HasDefaultValue(false);
+
+        // NFR-20's retention window is measured from DeletedAt, so the anonymisation pass reads it
+        // on every run: indexed, and filtered to the rows that can possibly be due, which is a small
+        // fraction of the table.
+        person.Property(x => x.DeletedAt);
+        person.Property(x => x.DeletionKind);
+        person.Property(x => x.AnonymisedAt);
+
+        person.HasIndex(x => x.DeletedAt)
+            .HasFilter("is_deleted = true AND anonymised_at IS NULL");
         person.Property(x => x.EmailVerified).HasDefaultValue(false);
 
         // Deliberately not a foreign key and not a navigation. It carries no relationship of its own

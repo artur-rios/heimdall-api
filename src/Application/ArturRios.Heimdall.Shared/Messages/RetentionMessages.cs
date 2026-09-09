@@ -11,4 +11,7 @@ public static class RetentionMessages
 {
     /// <summary>The purge ran to completion. Reported whether or not it removed anything.</summary>
     public const string ExpiredTokensPurged = "Expired single-use tokens purged.";
+
+    /// <summary>The anonymisation pass ran to completion. Reported whether or not it changed anything.</summary>
+    public const string ExpiredDeletionsAnonymised = "Logically deleted identities past their retention window anonymised.";
 }

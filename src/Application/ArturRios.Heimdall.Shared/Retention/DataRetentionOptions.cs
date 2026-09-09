@@ -35,6 +35,15 @@ public sealed record DataRetentionOptions
     /// <summary>Environment variable switching the scheduled purge off (<c>false</c> disables it).</summary>
     public const string PurgeEnabledVariable = "HEIMDALL_RETENTION_PURGE_ENABLED";
 
+    /// <summary>Environment variable holding the statutory erasure deadline, in days.</summary>
+    public const string SubjectErasureDeadlineDaysVariable = "HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS";
+
+    /// <summary>Environment variable holding the administrative reversal window, in days.</summary>
+    public const string AdministrativeDeletionWindowDaysVariable = "HEIMDALL_RETENTION_DELETION_WINDOW_DAYS";
+
+    /// <summary>Environment variable switching the scheduled anonymisation off.</summary>
+    public const string AnonymisationEnabledVariable = "HEIMDALL_RETENTION_ANONYMISATION_ENABLED";
+
     /// <summary>Seven days — see <see cref="SingleUseTokenGrace" /> for why it is not zero.</summary>
     public static readonly TimeSpan DefaultSingleUseTokenGrace = TimeSpan.FromDays(7);
 
@@ -43,6 +52,24 @@ public sealed record DataRetentionOptions
 
     /// <summary>Rows removed from one table in one run, by default.</summary>
     public const int DefaultPurgeBatchSize = 500;
+
+    /// <summary>Thirty days — the outer limit GDPR Art. 12(3) allows, not a chosen period.</summary>
+    public static readonly TimeSpan DefaultSubjectErasureDeadline = TimeSpan.FromDays(30);
+
+    /// <summary>Ninety days — the reversal window for an administrative deletion.</summary>
+    public static readonly TimeSpan DefaultAdministrativeDeletionWindow = TimeSpan.FromDays(90);
+
+    /// <summary>
+    ///     Longest accepted erasure deadline, in days. Thirty is the statutory limit, so a value
+    ///     above it is not a policy choice but a compliance failure, and the ceiling refuses it.
+    /// </summary>
+    private const double MaximumErasureDeadlineDays = 30;
+
+    /// <summary>
+    ///     Longest accepted administrative window, in days. Two years is already far past any
+    ///     reversal purpose; beyond it the window has stopped being a window.
+    /// </summary>
+    private const double MaximumDeletionWindowDays = 730;
 
     /// <summary>
     ///     Longest accepted grace period, in days. Ten years is far past any purpose these tokens
@@ -104,6 +131,36 @@ public sealed record DataRetentionOptions
     public bool PurgeEnabled { get; init; } = true;
 
     /// <summary>
+    ///     How long a logically deleted identity is kept before anonymisation when the data subject
+    ///     asked to be erased (NFR-20).
+    /// </summary>
+    /// <remarks>
+    ///     An outer limit rather than a target. GDPR Art. 12(3) allows at most one month to act on
+    ///     an erasure request, so this is the deadline the erasure must not exceed — it completes as
+    ///     soon as it can. Raising it above thirty days is refused, because no configuration can
+    ///     make a longer period lawful.
+    /// </remarks>
+    public TimeSpan SubjectErasureDeadline { get; init; } = DefaultSubjectErasureDeadline;
+
+    /// <summary>
+    ///     How long a logically deleted identity is kept before anonymisation when an administrator
+    ///     deleted it and no subject asked (NFR-20).
+    /// </summary>
+    /// <remarks>
+    ///     A reversal window: an administrator who deleted the wrong person needs to undo it, and
+    ///     the client systems in that person's scope need time to notice. Ninety days rather than
+    ///     the thirty most consumer services use, because a deletion here is not confined to one
+    ///     product — every client system authenticates against this one.
+    /// </remarks>
+    public TimeSpan AdministrativeDeletionWindow { get; init; } = DefaultAdministrativeDeletionWindow;
+
+    /// <summary>
+    ///     Whether the scheduled anonymisation is registered at start-up. On by default, for the
+    ///     same reason the purge is.
+    /// </summary>
+    public bool AnonymisationEnabled { get; init; } = true;
+
+    /// <summary>
     ///     Names the variables whose values were unusable and fell back to a default, so the caller
     ///     can say so in the log. Empty when every variable was absent or valid — an absent variable
     ///     is not a fallback, it is the documented default being chosen.
@@ -125,6 +182,13 @@ public sealed record DataRetentionOptions
                 MinimumIntervalMinutes, MaximumIntervalMinutes, invalid),
             PurgeBatchSize = ReadPositiveInt(PurgeBatchSizeVariable, DefaultPurgeBatchSize, invalid),
             PurgeEnabled = ReadBool(PurgeEnabledVariable, defaultValue: true, invalid),
+            SubjectErasureDeadline = ReadBoundedTimeSpan(
+                SubjectErasureDeadlineDaysVariable, DefaultSubjectErasureDeadline, TimeSpan.FromDays,
+                minimum: 0, MaximumErasureDeadlineDays, invalid),
+            AdministrativeDeletionWindow = ReadBoundedTimeSpan(
+                AdministrativeDeletionWindowDaysVariable, DefaultAdministrativeDeletionWindow,
+                TimeSpan.FromDays, minimum: 0, MaximumDeletionWindowDays, invalid),
+            AnonymisationEnabled = ReadBool(AnonymisationEnabledVariable, defaultValue: true, invalid),
             InvalidVariables = invalid
         };
     }

@@ -22,6 +22,16 @@ internal static class GoogleUserDbMap
         googleUser.Property(x => x.EmailVerified).HasDefaultValue(false);
         googleUser.Property(x => x.IsDeleted).HasDefaultValue(false);
 
+        // NFR-20's retention window is measured from DeletedAt, so the anonymisation pass reads it
+        // on every run: indexed, and filtered to the rows that can possibly be due, which is a small
+        // fraction of the table.
+        googleUser.Property(x => x.DeletedAt);
+        googleUser.Property(x => x.DeletionKind);
+        googleUser.Property(x => x.AnonymisedAt);
+
+        googleUser.HasIndex(x => x.DeletedAt)
+            .HasFilter("is_deleted = true AND anonymised_at IS NULL");
+
         googleUser.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         googleUser.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
 
