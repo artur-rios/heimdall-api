@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Shared.Messages;
@@ -81,5 +82,72 @@ public class UpdateScopeCommandValidatorTests
         var result = _validator.TestValidate(command);
 
         result.ShouldNotHaveValidationErrorFor(x => x.Description);
+    }
+
+    [UnitFact]
+    public void GivenConsentAsTheBasis_WhenValidated_ThenItIsRefused()
+    {
+        // Refused rather than accepted-and-ignored: a tenant that asked for consent and was silently
+        // given contract performance would believe a basis applied that did not. Consent needs a
+        // withdrawal path as easy as giving it (GDPR Art. 7(3)), and none exists.
+        var result = new UpdateScopeCommandValidator().Validate(
+            new UpdateScopeCommand { Name = "Acme", DefaultLegalBasis = (int)LegalBases.Consent });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == ScopeMessages.ConsentBasisNotSupported);
+    }
+
+    [UnitFact]
+    public void GivenUnrecordedAsTheBasis_WhenValidated_ThenItIsRefused()
+    {
+        // Unrecorded describes rows predating the mechanism; allowing it to be chosen would stop the
+        // marker meaning what it says.
+        var result = new UpdateScopeCommandValidator().Validate(
+            new UpdateScopeCommand { Name = "Acme", DefaultLegalBasis = (int)LegalBases.Unrecorded });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == ScopeMessages.LegalBasisUnknown);
+    }
+
+    [UnitTheory]
+    [InlineData((int)LegalBases.ContractPerformance)]
+    [InlineData((int)LegalBases.LegitimateInterests)]
+    [InlineData((int)LegalBases.LegalObligation)]
+    [InlineData(null)]
+    public void GivenAUsableBasis_WhenValidated_ThenItIsAccepted(int? basis)
+    {
+        var result = new UpdateScopeCommandValidator().Validate(
+            new UpdateScopeCommand { Name = "Acme", DefaultLegalBasis = basis });
+
+        Assert.DoesNotContain(
+            result.Errors,
+            e => e.ErrorMessage == ScopeMessages.ConsentBasisNotSupported
+                 || e.ErrorMessage == ScopeMessages.LegalBasisUnknown);
+    }
+
+    [UnitTheory]
+    [InlineData("not a uri")]
+    [InlineData("/relative/only")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://acme.test/privacy")]
+    public void GivenAnUnusablePrivacyNoticeUri_WhenValidated_ThenItIsRefused(string uri)
+    {
+        // "/relative/only" is the one that caught a real flaw: on Unix, Uri.TryCreate parses a
+        // leading-slash path as an absolute file:// URI, so checking absoluteness alone accepted a
+        // local filesystem path as a tenant's published notice. The rule checks the scheme.
+        var result = new UpdateScopeCommandValidator().Validate(
+            new UpdateScopeCommand { Name = "Acme", PrivacyNoticeUri = uri });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == ScopeMessages.PrivacyNoticeUriInvalid);
+    }
+
+    [UnitFact]
+    public void GivenAnAbsolutePrivacyNoticeUri_WhenValidated_ThenItIsAccepted()
+    {
+        var result = new UpdateScopeCommandValidator().Validate(
+            new UpdateScopeCommand { Name = "Acme", PrivacyNoticeUri = "https://acme.test/privacy" });
+
+        Assert.DoesNotContain(result.Errors, e => e.ErrorMessage == ScopeMessages.PrivacyNoticeUriInvalid);
     }
 }

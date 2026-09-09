@@ -60,6 +60,10 @@ public class CreateAdminCommandHandler(
             RoleId = command.Role
         };
 
+        // NFR-23. No scope: an administrator exists to operate Heimdall itself, which is Heimdall's
+        // own purpose rather than a tenant's, so the deployment default applies.
+        LegalBasisRecorder.Record(newPerson, scope: null, DateTime.UtcNow);
+
         var creation = await personWriter.CreateAsync(newPerson);
 
         if (!creation.Success)

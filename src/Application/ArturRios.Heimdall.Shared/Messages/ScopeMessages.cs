@@ -62,4 +62,18 @@ public static class ScopeMessages
 
     /// <summary>UC-24 (NFR-10): the Google Sign-In request did not say which value to set.</summary>
     public const string EnabledRequired = "Enabled is required.";
+
+    /// <summary>
+    ///     AF-03e (NFR-23): the tenant asked for consent as its lawful basis. Refused because
+    ///     consent must be withdrawable as easily as it is given (GDPR Art. 7(3)) and no withdrawal
+    ///     path exists — recording it would be recording a basis the system cannot honour.
+    /// </summary>
+    public const string ConsentBasisNotSupported =
+        "Consent is not available as a lawful basis: no withdrawal mechanism exists.";
+
+    /// <summary>AF-03f: the privacy notice URI is not a well-formed absolute URI.</summary>
+    public const string PrivacyNoticeUriInvalid = "The privacy notice URI must be an absolute URL.";
+
+    /// <summary>AF-03g: the lawful basis value names no member of the enum.</summary>
+    public const string LegalBasisUnknown = "The lawful basis is not one this system recognises.";
 }

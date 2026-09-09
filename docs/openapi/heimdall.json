@@ -5564,6 +5564,15 @@
           "googleSignInEnabled": {
             "type": "boolean"
           },
+          "defaultLegalBasis": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "privacyNoticeUri": {
+            "type": "string",
+            "nullable": true
+          },
           "isDeleted": {
             "type": "boolean"
           },
@@ -6141,6 +6150,15 @@
             "nullable": true
           },
           "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "defaultLegalBasis": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "privacyNoticeUri": {
             "type": "string",
             "nullable": true
           }

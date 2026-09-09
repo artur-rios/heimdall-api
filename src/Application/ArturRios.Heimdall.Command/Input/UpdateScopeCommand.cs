@@ -21,4 +21,21 @@ public class UpdateScopeCommand : BaseCommand
 
     /// <summary>New description of the scope's purpose. Null clears any existing description.</summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
+    ///     <c>null</c> to take the deployment default of contract performance (NFR-23).
+    /// </summary>
+    /// <remarks>
+    ///     <c>Consent</c> is refused. It is withdrawable at any moment and withdrawal must be as
+    ///     easy as giving it, which needs a path that does not exist here — accepting the value
+    ///     would let a tenant record a basis the system could not honour.
+    /// </remarks>
+    public int? DefaultLegalBasis { get; set; }
+
+    /// <summary>
+    ///     Where this tenant publishes its own privacy notice, or <c>null</c> if it has none
+    ///     distinct from Heimdall's.
+    /// </summary>
+    public string? PrivacyNoticeUri { get; set; }
 }

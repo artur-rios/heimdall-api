@@ -18,10 +18,9 @@ It is written to be read by the person it is about. The formal record behind it 
 recipients, transfer mechanisms — is the
 [Data Protection Document](Data%20Protection%20Document.md).
 
-> **The version matters.** This notice is versioned so that the version you were shown when your
-> account was created can be recorded against it. Recording it is
-> [#94](https://github.com/artur-rios/heimdall-api/issues/94); until that lands, the current version
-> is the only one published.
+> **The version matters.** This notice is versioned, and the version in force when your account was
+> created is recorded against it, so it is always possible to say what you were actually told rather
+> than what you would be told today.
 
 ## 2. Who is responsible
 
@@ -121,8 +120,7 @@ appoints another administrator. You will be told if that applies to you.
 ## 8. Changes
 
 This notice is versioned. Material changes raise the version, and the version you were shown is
-recorded against your account once
-[#94](https://github.com/artur-rios/heimdall-api/issues/94) lands.
+recorded against your account.
 
 | Version | Date | Change |
 | --- | --- | --- |
