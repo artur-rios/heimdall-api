@@ -101,6 +101,9 @@ public class CreateUserCommandHandler(
             ScopeId = scope.Id
         };
 
+        // NFR-23: the basis the tenant declares for its own users, or contract performance.
+        LegalBasisRecorder.Record(newPerson, scope, DateTime.UtcNow);
+
         var creation = await personWriter.CreateAsync(newPerson);
 
         if (!creation.Success)

@@ -91,8 +91,23 @@ system. Its `OwnerId` names a person, but the row describes the system.
 **Consent is not a basis anywhere in this table**, and that is deliberate. Every processing operation
 here is necessary to run an identity service the account holder is a party to, or is required of the
 controller by law. Consent would be the wrong basis for all of it: it is withdrawable, and an
-identity provider that stopped verifying passwords on withdrawal would simply be broken. Recording
-which basis applies to a given identity at creation is [#94](https://github.com/artur-rios/heimdall-api/issues/94).
+identity provider that stopped verifying passwords on withdrawal would simply be broken.
+
+It is also **not selectable**, not merely unused. A scope that declared consent would be recording a
+basis this system cannot honour — GDPR Art. 7(3) requires withdrawal to be as easy as giving it, and
+there is no withdrawal path. The validators refuse the value and the recorder refuses it again on
+the way out, because a guard in one direction only is one migration from being bypassed.
+
+**The basis is recorded per identity** at creation, with the privacy notice version then in force
+(NFR-23). The version is stored rather than looked up later: what a person was told is a fact about
+a moment, and reading the current notice would answer a different question. A scope may declare the
+basis for identities within it, since the tenant is usually their controller (§3); where it declares
+none, contract performance applies.
+
+**Identities created before NFR-23 read `Unrecorded`.** Contract performance almost certainly applied
+to all of them, and the migration deliberately did not write it: asserting in this record something
+nobody checked for those rows would demonstrate that a migration ran, not that a basis applied.
+They are visibly a thing to fix rather than silently indistinguishable from a row recorded properly.
 
 No special categories of personal data (GDPR Art. 9, LGPD Art. 5 II) are processed. There is no
 automated decision-making producing legal effects (GDPR Art. 22, LGPD Art. 20).
@@ -118,6 +133,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |
 | `DeletedAt`, `DeletionKind`, `AnonymisedAt` | Measuring and enforcing the retention window (NFR-20) |
 | `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honouring an erasure request within its deadline, and showing that it was honoured (UC-42, UC-43) |
+| `LegalBasis`, `PrivacyNoticeVersion`, `BasisRecordedAt` | Demonstrating the lawful basis and what the person was told when the account was created (NFR-23). Not data *about* the person so much as about the processing of them, and held for the same accountability duty that requires this document |
 
 ### `GOOGLE_USER`
 
@@ -127,7 +143,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `GoogleId` | Google's `sub`. The only stable way to resolve a returning sign-in to a stored identity (FR-GO-08) |
 | `Name`, `Email`, `EmailVerified` | As on `PERSON` |
 | `ProfilePictureUrl` | Downstream profile provisioning — see the decision below |
-| `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | As above |
+| `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason`, `LegalBasis`, `PrivacyNoticeVersion`, `BasisRecordedAt` | As above |
 
 ### `AUDIT_LOG`
 
@@ -135,6 +151,11 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | --- | --- |
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
 | `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
+
+> **This table is why NFR-23's columns are here.** They were added after the table existed, and
+> `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
+> working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
+> deliberately: a scope is an organisation, not a person, so neither is personal data.
 
 ### Two decisions this review settled
 

@@ -52,6 +52,12 @@ internal static class PersonDbMap
         person.Property(x => x.DeletionKind);
         person.Property(x => x.AnonymisedAt);
 
+        // NFR-23: the basis is required and defaults to Unrecorded, so a row can never be silent
+        // about it — a null would be indistinguishable from "nobody has looked at this yet".
+        person.Property(x => x.LegalBasis).HasDefaultValue(0);
+        person.Property(x => x.PrivacyNoticeVersion);
+        person.Property(x => x.BasisRecordedAt);
+
         person.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
         person.Property(x => x.EmailVerified).HasDefaultValue(false);

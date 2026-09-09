@@ -201,6 +201,11 @@ public class GoogleSignInCommandHandler(
             ScopeId = scope.Id
         };
 
+        // NFR-23: recorded here as everywhere else. UC-25 creates an identity without any
+        // administrator involved, so it is the path where an unrecorded basis would be easiest to
+        // end up with and hardest to notice.
+        LegalBasisRecorder.Record(newGoogleUser, scope, DateTime.UtcNow);
+
         var creation = await googleUserWriter.CreateAsync(newGoogleUser);
 
         return creation.Success

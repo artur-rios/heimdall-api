@@ -43,6 +43,10 @@ public static class ScopeMessageMap
             // UC-02 read b (NFR-10) — invalid pagination or an over-length name filter.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
-            [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
+            [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest,
+            // AF-03e/f/g (NFR-23) — the tenant's declared basis or notice URI is not usable.
+            [ScopeMessages.ConsentBasisNotSupported] = HttpStatusCodes.BadRequest,
+            [ScopeMessages.PrivacyNoticeUriInvalid] = HttpStatusCodes.BadRequest,
+            [ScopeMessages.LegalBasisUnknown] = HttpStatusCodes.BadRequest
         });
 }

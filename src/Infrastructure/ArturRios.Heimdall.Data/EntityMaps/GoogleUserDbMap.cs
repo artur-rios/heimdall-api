@@ -29,6 +29,12 @@ internal static class GoogleUserDbMap
         googleUser.Property(x => x.DeletionKind);
         googleUser.Property(x => x.AnonymisedAt);
 
+        // NFR-23: the basis is required and defaults to Unrecorded, so a row can never be silent
+        // about it — a null would be indistinguishable from "nobody has looked at this yet".
+        googleUser.Property(x => x.LegalBasis).HasDefaultValue(0);
+        googleUser.Property(x => x.PrivacyNoticeVersion);
+        googleUser.Property(x => x.BasisRecordedAt);
+
         googleUser.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
 

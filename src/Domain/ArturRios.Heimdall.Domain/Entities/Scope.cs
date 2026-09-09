@@ -33,6 +33,31 @@ public class Scope : Entity
     /// </summary>
     public bool GoogleSignInEnabled { get; set; }
 
+
+    /// <summary>
+    ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
+    ///     <c>null</c> to take the deployment default of contract performance.
+    /// </summary>
+    /// <remarks>
+    ///     The scope is where this belongs because the scope is the tenant boundary, and in most
+    ///     deployments the tenant organisation is the controller for the identities inside it (Data
+    ///     Protection Document §3). One deployment-wide basis would assert something about every
+    ///     tenant that only each tenant can know.
+    /// </remarks>
+    public int? DefaultLegalBasis { get; set; }
+
+    /// <summary>
+    ///     Where this tenant's own privacy notice is published, or <c>null</c> if it has none
+    ///     distinct from Heimdall's.
+    /// </summary>
+    /// <remarks>
+    ///     GDPR Art. 13 and LGPD Art. 9 oblige the controller to inform the data subject, and for a
+    ///     scope's users that controller is the tenant. Carrying the URI here lets a client system
+    ///     show the right notice at sign-up without hard-coding it.
+    /// </remarks>
+    [MaxLength(2048)]
+    public string? PrivacyNoticeUri { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

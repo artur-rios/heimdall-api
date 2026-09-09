@@ -102,6 +102,28 @@ public class GoogleUser : Entity
     /// <summary>Foreign key to the associated <see cref="Scope" /> (internal Id). Required.</summary>
     public long ScopeId { get; set; }
 
+
+    /// <summary>
+    ///     The lawful basis this identity's data is processed on (see <c>LegalBases</c>), recorded
+    ///     when the identity was created (GDPR Art. 5(2), LGPD Art. 8 §2).
+    /// </summary>
+    public int LegalBasis { get; set; }
+
+    /// <summary>
+    ///     The version of the privacy notice in force when the identity was created, or <c>null</c>
+    ///     for identities predating the mechanism.
+    /// </summary>
+    /// <remarks>
+    ///     Stored rather than looked up, for the same reason the erasure deadline is: what the
+    ///     person was told is a fact about a moment, and reading the current version later would
+    ///     answer a different question — what they would be told today.
+    /// </remarks>
+    [MaxLength(50)]
+    public string? PrivacyNoticeVersion { get; set; }
+
+    /// <summary>When the basis and notice version were recorded.</summary>
+    public DateTime? BasisRecordedAt { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

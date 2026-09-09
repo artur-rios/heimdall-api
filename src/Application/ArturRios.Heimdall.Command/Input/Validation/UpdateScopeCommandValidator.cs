@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using FluentValidation;
 
@@ -25,5 +26,30 @@ public class UpdateScopeCommandValidator : AbstractValidator<UpdateScopeCommand>
         RuleFor(command => command.Description)
             .MaximumLength(500)
             .WithMessage(ScopeMessages.DescriptionTooLong);
+
+        // NFR-23. Consent is refused rather than accepted-and-ignored: a tenant that asked for it
+        // and was silently given contract performance would believe a basis applied that did not.
+        RuleFor(command => command.DefaultLegalBasis)
+            .Must(basis => basis != (int)LegalBases.Consent)
+            .WithMessage(ScopeMessages.ConsentBasisNotSupported);
+
+        RuleFor(command => command.DefaultLegalBasis)
+            .Must(basis => basis is null || (Enum.IsDefined((LegalBases)basis.Value)
+                                             && basis.Value != (int)LegalBases.Unrecorded))
+            .WithMessage(ScopeMessages.LegalBasisUnknown);
+
+        // The scheme is checked, not just absoluteness. On Unix, Uri.TryCreate parses "/some/path"
+        // as an absolute file:// URI, so an absoluteness check alone accepts a local filesystem path
+        // as a tenant's published privacy notice — worse than the relative link it was meant to
+        // refuse, because it looks valid and points at the host's disk.
+        RuleFor(command => command.PrivacyNoticeUri)
+            .Must(uri => string.IsNullOrWhiteSpace(uri) ||
+                         (Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+                          && (parsed.Scheme == Uri.UriSchemeHttps || parsed.Scheme == Uri.UriSchemeHttp)))
+            .WithMessage(ScopeMessages.PrivacyNoticeUriInvalid);
+
+        RuleFor(command => command.PrivacyNoticeUri)
+            .MaximumLength(2048)
+            .WithMessage(ScopeMessages.PrivacyNoticeUriInvalid);
     }
 }

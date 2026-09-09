@@ -66,6 +66,8 @@ public class UpdateScopeCommandHandler(
         // Step 4 (main flow): apply the updates and stamp UpdatedAt (no DB trigger maintains it).
         scope.Name = command.Name;
         scope.Description = command.Description;
+        scope.DefaultLegalBasis = command.DefaultLegalBasis;
+        scope.PrivacyNoticeUri = command.PrivacyNoticeUri;
         scope.UpdatedAt = DateTime.UtcNow;
 
         var update = await scopeWriter.UpdateAsync(scope);

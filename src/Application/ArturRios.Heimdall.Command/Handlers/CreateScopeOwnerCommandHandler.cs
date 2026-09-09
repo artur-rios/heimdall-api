@@ -80,6 +80,9 @@ public class CreateScopeOwnerCommandHandler(
             ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]
         };
 
+        // NFR-23: recorded against the scope they will own.
+        LegalBasisRecorder.Record(newPerson, scope, DateTime.UtcNow);
+
         var creation = await personWriter.CreateAsync(newPerson);
 
         if (!creation.Success)
