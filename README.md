@@ -122,6 +122,8 @@ so either place is authoritative:
   how long each category of personal data is kept and why (NFR-19).
 - [Data Protection Document](docs/requirements/Data%20Protection%20Document.md) — the record of
   processing activities, the controller/processor allocation, and the international transfers.
+- [Data Protection Impact Assessment](docs/requirements/Data%20Protection%20Impact%20Assessment.md) —
+  the risks the system creates for data subjects, and what is done about them.
 - [Privacy Notice](docs/requirements/Privacy%20Notice.md) — what is held and what a data subject can
   make the system do, with the Encarregado's published contact.
 - [Data Processing Agreement](docs/requirements/Data%20Processing%20Agreement.md) — the terms a

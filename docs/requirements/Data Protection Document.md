@@ -244,6 +244,10 @@ This is written as an open question rather than an assumption because guessing e
 worse than asking: assuming "no" understates an obligation, and assuming "yes" would have this
 repository claim safeguards it does not have.
 
+> **The risks this processing creates for the people in it**, rated for them rather than for the
+> system, are the [Data Protection Impact Assessment](Data%20Protection%20Impact%20Assessment.md).
+> §7.1's unexecuted transfer mechanisms are the highest residual risk it records.
+
 ## 8. Security measures
 
 Not restated here. LGPD Art. 46 and GDPR Art. 32 are addressed by the controls the

@@ -336,6 +336,12 @@ automating the declaration would put the notification clock in the hands of a th
 
 ## 9. What this model does not cover
 
+- **Risk to the data subject.** This model asks what an attacker can do to the system. What the
+  system does to the people in it — including where a control works exactly as designed and is still
+  a harm, as an account lockout is — is the
+  [Data Protection Impact Assessment](Data%20Protection%20Impact%20Assessment.md). The two are
+  complementary and neither substitutes for the other.
+
 - **No dynamic testing.** Nothing here was found by attacking a running deployment. A design review
   finds missing and mismatched controls; it does not find the ones that are present and broken.
 - **Denial of service beyond TH-03.** The load runs (SRD §6.3) establish what the API delivers under
