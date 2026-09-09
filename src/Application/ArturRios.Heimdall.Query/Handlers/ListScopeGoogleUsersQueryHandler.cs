@@ -61,6 +61,13 @@ public class ListScopeGoogleUsersQueryHandler(
         var googleUsers = googleUserReader.Query().Where(x => x.ScopeId == scope.Id);
 
         // UC-27 step 3 (FR-GO-17).
+        // NFR-24: a restricted identity is withheld from tenant-facing listings, whatever
+        // IncludeDeleted says — the two states are independent. Not hidden from everyone: the
+        // subject's own export still returns it, and a System Admin resolving the dispute can still
+        // reach it by id. But a scope's administrator working through their user list has no
+        // business acting on a record whose processing is suspended.
+        googleUsers = googleUsers.Where(x => x.ProcessingRestrictedAt == null);
+
         if (!query.IncludeDeleted)
         {
             googleUsers = googleUsers.Where(x => !x.IsDeleted);

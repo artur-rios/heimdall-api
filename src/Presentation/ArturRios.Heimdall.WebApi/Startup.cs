@@ -185,6 +185,12 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddAuditedCommandHandler<ExportMyDataCommand, DataExportCommandOutput,
                 ExportMyDataCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<RestrictProcessingCommand, RestrictProcessingCommandOutput,
+                RestrictProcessingCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<LiftProcessingRestrictionCommand,
+                LiftProcessingRestrictionCommandOutput, LiftProcessingRestrictionCommandHandler>();
         // No validator: UC-15's request carries no caller-supplied input at all — the person comes
         // from the bearer token — so there is nothing for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput, ResendVerificationEmailCommandHandler>();
@@ -530,6 +536,7 @@ public class Startup(string[] args) : WebApiStartup(args)
             Builder.Services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
             Builder.Services.AddScoped<IPasswordResetSender, LoggingPasswordResetSender>();
             Builder.Services.AddScoped<ITwoFactorEmailSender, LoggingTwoFactorEmailSender>();
+            Builder.Services.AddScoped<IRestrictionLiftNotifier, LoggingRestrictionLiftNotifier>();
 
             return;
         }
@@ -540,6 +547,7 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
         Builder.Services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
         Builder.Services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();
+        Builder.Services.AddScoped<IRestrictionLiftNotifier, MailgunRestrictionLiftNotifier>();
     }
 
     /// <summary>

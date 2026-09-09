@@ -114,7 +114,8 @@ public class ActorLivenessFilter(
         // Nullable so "no live person with this id" is distinguishable from a role value. No role is
         // zero — Roles runs from 1 — but relying on that would be relying on an enum's numbering.
         var personRole = await personReader.Query()
-            .Where(person => person.PublicId == actorPublicId && !person.IsDeleted)
+            .Where(person => person.PublicId == actorPublicId && !person.IsDeleted
+                             && person.ProcessingRestrictedAt == null)
             .Select(person => (long?)person.RoleId)
             .FirstOrDefaultAsync();
 
@@ -124,7 +125,8 @@ public class ActorLivenessFilter(
         }
 
         var googleUserIsLive = await googleUserReader.Query()
-            .AnyAsync(googleUser => googleUser.PublicId == actorPublicId && !googleUser.IsDeleted);
+            .AnyAsync(googleUser => googleUser.PublicId == actorPublicId && !googleUser.IsDeleted
+                                    && googleUser.ProcessingRestrictedAt == null);
 
         if (!googleUserIsLive)
         {

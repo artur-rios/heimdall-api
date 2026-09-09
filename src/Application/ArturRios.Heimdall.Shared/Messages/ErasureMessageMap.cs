@@ -24,6 +24,16 @@ public static class ErasureMessageMap
             [ErasureMessages.ErasureAlreadyRequested] = HttpStatusCodes.Conflict,
             // UC-41 — the copy was produced.
             [ErasureMessages.DataExported] = HttpStatusCodes.Ok,
+            // UC-44 — restriction imposed.
+            [ErasureMessages.ProcessingRestricted] = HttpStatusCodes.Ok,
+            [ErasureMessages.ProcessingAlreadyRestricted] = HttpStatusCodes.Conflict,
+            [ErasureMessages.RestrictionGroundUnknown] = HttpStatusCodes.BadRequest,
+            // UC-45 — restriction lifted.
+            [ErasureMessages.RestrictionLifted] = HttpStatusCodes.Ok,
+            [ErasureMessages.NotRestricted] = HttpStatusCodes.NotFound,
+            // Art. 18(3) makes the notification a precondition, so a delivery failure is a refusal
+            // rather than something to swallow.
+            [ErasureMessages.RestrictionLiftNotificationFailed] = HttpStatusCodes.ServiceUnavailable,
             // UC-43 read.
             [ErasureMessages.ErasureRequestsRetrieved] = HttpStatusCodes.Ok
         });

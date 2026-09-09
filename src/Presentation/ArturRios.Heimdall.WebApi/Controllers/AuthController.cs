@@ -408,6 +408,50 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     }
 
     /// <summary>
+    ///     Restricts processing of the caller's own identity (UC-44, GDPR Art. 18, LGPD Art. 18
+    ///     III–IV) — suspended without being deleted, while something about it is disputed.
+    /// </summary>
+    /// <remarks>
+    ///     No credential is required, unlike UC-42's erasure request. A restriction destroys
+    ///     nothing and is liftable, and somebody asking for one may be doing so precisely because
+    ///     they believe the account is compromised — demanding the password of a person in that
+    ///     position would be the wrong way round.
+    /// </remarks>
+    [HttpPost("processing-restriction")]
+    public async Task<ActionResult<DataOutput<RestrictProcessingCommandOutput?>>> RestrictProcessing(
+        [FromBody] RestrictProcessingCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lifts a restriction on processing (UC-45, GDPR Art. 18(3)).
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, because the rule is data-dependent: a subject of any role may
+    ///     lift their own, and only a System Admin may lift somebody else's. The handler decides,
+    ///     and it informs the subject first in the second case — Art. 18(3) makes that a
+    ///     precondition of the act rather than a courtesy afterwards, so a failed notification
+    ///     refuses the lift.
+    /// </remarks>
+    [HttpPost("processing-restriction/lift")]
+    public async Task<ActionResult<DataOutput<LiftProcessingRestrictionCommandOutput?>>>
+        LiftProcessingRestriction([FromBody] LiftProcessingRestrictionCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists the erasure requests that have not yet been carried out (UC-43). System Admin only.
     /// </summary>
     /// <remarks>

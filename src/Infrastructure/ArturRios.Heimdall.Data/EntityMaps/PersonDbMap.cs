@@ -58,6 +58,15 @@ internal static class PersonDbMap
         person.Property(x => x.PrivacyNoticeVersion);
         person.Property(x => x.BasisRecordedAt);
 
+        // NFR-24: indexed because every listing filters on it, and the restricted set is a small
+        // fraction of the table.
+        person.Property(x => x.ProcessingRestrictedAt);
+        person.Property(x => x.RestrictionGround);
+        person.Property(x => x.RestrictionLiftNotifiedAt);
+
+        person.HasIndex(x => x.ProcessingRestrictedAt)
+            .HasFilter("processing_restricted_at IS NOT NULL");
+
         person.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
         person.Property(x => x.EmailVerified).HasDefaultValue(false);

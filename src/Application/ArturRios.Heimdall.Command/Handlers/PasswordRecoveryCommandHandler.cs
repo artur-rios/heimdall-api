@@ -73,6 +73,15 @@ public class PasswordRecoveryCommandHandler(
     /// </summary>
     private static bool MayRecover(Person person)
     {
+        // NFR-24: sending to a restricted identity would be processing it, and the address may be
+        // the very thing whose accuracy is contested. Refusing here rather than at the top means the
+        // caller still gets UC-12's uniform answer, which is what keeps this endpoint from becoming
+        // a directory of which accounts exist or which are under dispute.
+        if (person.ProcessingRestrictedAt is not null)
+        {
+            return false;
+        }
+
         if (person.IsDeleted)
         {
             return false;
