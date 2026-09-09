@@ -1080,13 +1080,53 @@
         ]
       }
     },
-    "/api/auth/erasure-request": {
+    "/api/auth/data-export": {
       "post": {
         "tags": [
           "Auth"
         ],
         "summary": "Reports the caller's own two-factor authentication status (FR-2F-15): whether it is\nactive, which methods are configured, and how many recovery codes remain unused. The\nperson read is always the caller themselves — taken from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) — so a configuration is never addressed by an\nidentifier in a path.",
         "description": "No `RoleRequirement`, for the same reason its `POST` siblings have none: the\nauthorization matrix grants two-factor management to all three person roles and withholds\nit from anonymous callers, which authentication alone enforces. A caller with no\nconfiguration is answered 200 with every flag false; a Google User is answered 403, since\nFR-2F-01 makes them permanently ineligible.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "operationId": "Auth_ExportMyData",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataExportCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataExportCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataExportCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/erasure-request": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Requests erasure of the caller's own identity (UC-42, GDPR Art. 17, LGPD Art. 18 VI).",
+        "description": "\nNo `RoleRequirement`: every role, and a Google User, may ask to be erased — it is\n                    a right of the data subject rather than a privilege of a role. Authentication alone\n                    enforces what matters, which is that somebody is asking for themselves.\n\nThe subject is never named in the request. There is no path parameter and no body\n                    field for it, so the endpoint has no shape in which one identity could ask for\n                    another's erasure.\n\nThe body carries a credential, and which one depends on the caller: a person presents\n                    their password, a Google User a freshly issued Google ID token. A bearer token alone\n                    is not enough for an irreversible operation. Because it verifies a password, this\n                    endpoint is governed by NFR-18 rather than NFR-05.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_RequestErasure",
         "requestBody": {
           "content": {
@@ -3947,6 +3987,356 @@
             "nullable": true
           },
           "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportApplication": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isDeleted": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportAuditEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportCommandOutput": {
+        "required": [
+          "processing",
+          "security",
+          "subject"
+        ],
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/DataExportSubject"
+          },
+          "security": {
+            "$ref": "#/components/schemas/DataExportSecurity"
+          },
+          "processing": {
+            "$ref": "#/components/schemas/DataExportProcessing"
+          },
+          "erasure": {
+            "$ref": "#/components/schemas/DataExportErasure"
+          },
+          "scopeMemberships": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "scopeOwnerships": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "applications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportApplication"
+            },
+            "nullable": true
+          },
+          "auditEntries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportAuditEntry"
+            },
+            "nullable": true
+          },
+          "auditEntriesTruncated": {
+            "type": "boolean"
+          },
+          "withheld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportWithheld"
+            },
+            "nullable": true
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportRecipient"
+            },
+            "nullable": true
+          },
+          "retention": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportRetention"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/DataExportCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportErasure": {
+        "type": "object",
+        "properties": {
+          "isDeleted": {
+            "type": "boolean"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deletionKind": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "anonymisedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "erasureRequestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "erasureDueAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "erasureBlockedReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportProcessing": {
+        "type": "object",
+        "properties": {
+          "legalBasis": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "legalBasisName": {
+            "type": "string",
+            "nullable": true
+          },
+          "privacyNoticeVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportRecipient": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "purpose": {
+            "type": "string",
+            "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportRetention": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "period": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportSecurity": {
+        "type": "object",
+        "properties": {
+          "passwordSet": {
+            "type": "boolean"
+          },
+          "twoFactorActive": {
+            "type": "boolean"
+          },
+          "twoFactorAppEnabled": {
+            "type": "boolean"
+          },
+          "twoFactorEmailEnabled": {
+            "type": "boolean"
+          },
+          "unusedRecoveryCodes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedLoginAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lockedOutUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportSubject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "googleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "profilePictureUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDeleted": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportWithheld": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
             "type": "string",
             "nullable": true
           }

@@ -1818,6 +1818,41 @@ sequenceDiagram
 
 ---
 
+## UC-41: Export Own Personal Data
+
+| | |
+| --- | --- |
+| **ID** | UC-41 |
+| **Name** | Export Own Personal Data |
+| **Actor** | Any authenticated identity — a person of any role, or a Google User |
+| **Description** | A data subject obtains a copy of everything held about them, with the context that makes it intelligible (GDPR Art. 15 and 20, LGPD Art. 18 II and V). |
+| **Preconditions** | The caller holds a valid authentication token. |
+| **Postconditions** | None; the use case discloses. One audit entry records that it did. |
+
+**Main flow**
+
+1. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
+2. The system assembles the identity, the security state, the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject.
+3. The system adds the context Art. 15 requires alongside the data: who else receives it, how long each category is kept, and what is held but not reproduced.
+4. The system returns the document with `Cache-Control: no-store`.
+
+**Alternative flows**
+
+| ID | Condition | Outcome |
+| --- | --- | --- |
+| AF-41a | The token names no person and no Google User | `NotEligible` (403) |
+| AF-41b | More audit entries exist than the document carries | The copy is returned with `auditEntriesTruncated` set. A silently truncated copy is not the copy Art. 15 asks for |
+
+**Notes**
+
+- **`POST`, for something that reads.** A `GET` response is cacheable, and this one is a document containing everything about a person — exactly what must not sit in a proxy or browser cache. The export is also the highest-value action a stolen token can take, so it must reach the audit trail, which here means being a command.
+- **One endpoint, not one per identity type.** The subject is the token's, so a second endpoint would be a second way to say the same thing and a second place to get authorization wrong.
+- **Secret material is named, not reproduced.** Art. 15(4) says the right to a copy must not adversely affect others' rights, and reproducing a password hash or a TOTP secret would hand whoever holds the document the material to attack the account. Each is listed with the reason, so the subject learns what exists.
+- **A suspended identity can still export.** The lookups omit the `!IsDeleted` filter most handlers apply: somebody suspended pending erasure has more reason to want a copy than anyone, and Art. 15 is not conditional on the account being in good standing.
+- **Cleared audit attributions cannot appear.** Once NFR-21 clears an attribution, nothing connects the entry to the person; reporting it would itself be a re-identification.
+
+---
+
 ## UC-42: Request Erasure of Own Identity
 
 | | |

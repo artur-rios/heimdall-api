@@ -43,6 +43,9 @@ public static class ErasureMessages
     public const string BlockedByLastScopeOwnership =
         "The account owns a scope that would be left without an owner; ownership must be transferred first.";
 
+    /// <summary>UC-41: the subject's copy of their data was produced.</summary>
+    public const string DataExported = "Your data has been exported.";
+
     /// <summary>UC-43 read: the pending erasure requests were listed.</summary>
     public const string ErasureRequestsRetrieved = "Erasure requests retrieved.";
 }

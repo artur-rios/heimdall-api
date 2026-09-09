@@ -44,6 +44,7 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |
 | `POST /2fa/recovery-codes/regenerate` | Authenticated (self) | UC-40 — issue a fresh set of ten |
 | `GET /2fa` | Any authenticated | FR-2F-15 — the caller's own two-factor status; 403 for a Google User |
+| `POST /data-export` | Any authenticated (self) | UC-41 — a copy of everything held about you, with recipients and retention |
 | `POST /erasure-request` | Any authenticated (self) | UC-42 — ask for your own erasure; requires a password or a fresh Google ID token |
 | `GET /erasure-requests` | System Admin | UC-43 — the outstanding erasure requests, soonest deadline first |
 

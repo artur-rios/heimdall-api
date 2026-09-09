@@ -22,6 +22,8 @@ public static class ErasureMessageMap
             [ErasureMessages.NotEligible] = HttpStatusCodes.Forbidden,
             // AF-42c — already requested.
             [ErasureMessages.ErasureAlreadyRequested] = HttpStatusCodes.Conflict,
+            // UC-41 — the copy was produced.
+            [ErasureMessages.DataExported] = HttpStatusCodes.Ok,
             // UC-43 read.
             [ErasureMessages.ErasureRequestsRetrieved] = HttpStatusCodes.Ok
         });

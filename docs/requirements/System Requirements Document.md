@@ -925,6 +925,7 @@ block-beta
 | Delete Scope Permission (hard) | ✅ | ❌ | ❌ | ❌ |
 | Enable / Confirm / Disable / Regenerate 2FA | ✅ (self) | ✅ (self) | ✅ (self) | ❌ |
 | Verify 2FA Challenge | N/A | N/A | N/A | ✅ (holds a valid challenge token) |
+| Export Own Personal Data | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | Request Erasure of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | List Outstanding Erasure Requests | ✅ | ❌ | ❌ | ❌ |
 

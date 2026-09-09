@@ -102,11 +102,11 @@ row itself stays, because other records point at it, but nothing in it refers to
 | --- | --- | --- |
 | **Be erased** | `POST /api/auth/erasure-request` — you will be asked for your password, or a fresh Google sign-in, because it cannot be undone | 30 days |
 | **Correct your details** | Update your own record | Immediately |
-| **Get a copy of your data** | Not yet available — [#90](https://github.com/artur-rios/heimdall-api/issues/90) | 15 days once available |
+| **Get a copy of your data** | `POST /api/auth/data-export` — everything held about you, plus who else sees it and how long it is kept | Immediately |
 | **Have processing restricted, or object** | Not yet available — [#93](https://github.com/artur-rios/heimdall-api/issues/93) | — |
 | **Ask anything, or complain** | <arturdev@duck.com> | 15 days |
 
-Two of those are honestly marked unavailable. Publishing a notice that promised rights the system
+One of those is honestly marked unavailable. Publishing a notice that promised rights the system
 cannot yet deliver would be worse than admitting the gap: it is the kind of claim a regulator checks.
 
 **You can also complain to a supervisory authority.** In Brazil that is the

@@ -182,6 +182,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddAuditedCommandHandler<RequestErasureCommand, RequestErasureCommandOutput,
                 RequestErasureCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<ExportMyDataCommand, DataExportCommandOutput,
+                ExportMyDataCommandHandler>();
         // No validator: UC-15's request carries no caller-supplied input at all — the person comes
         // from the bearer token — so there is nothing for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput, ResendVerificationEmailCommandHandler>();

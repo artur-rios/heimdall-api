@@ -339,6 +339,42 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     FR-2F-01 makes them permanently ineligible.
     /// </remarks>
     /// <summary>
+    ///     Returns a copy of everything held about the caller (UC-41, GDPR Art. 15 and 20, LGPD Art.
+    ///     18 II and V).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         No <c>RoleRequirement</c>: access and portability are rights of the data subject
+    ///         rather than privileges of a role, and a Google User has them as much as a person.
+    ///     </para>
+    ///     <para>
+    ///         <b><c>POST</c>, for a read.</b> Two reasons. A <c>GET</c> response is cacheable, and
+    ///         this one is a document containing everything about a person — exactly what must never
+    ///         sit in a proxy or browser cache. And the export is the highest-value action a stolen
+    ///         token can take, so it has to reach the audit trail, which in this codebase means
+    ///         being a command.
+    ///     </para>
+    ///     <para>
+    ///         The subject is the token's. There is no path parameter and no body field naming an
+    ///         identity, so one caller cannot export another's data.
+    ///     </para>
+    /// </remarks>
+    [HttpPost("data-export")]
+    public async Task<ActionResult<DataOutput<DataExportCommandOutput?>>> ExportMyData()
+    {
+        var command = new ExportMyDataCommand();
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<ExportMyDataCommand, DataExportCommandOutput>(command);
+
+        // A copy of everything about one person must not be cached anywhere on its way back.
+        Response.Headers.CacheControl = "no-store";
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Requests erasure of the caller's own identity (UC-42, GDPR Art. 17, LGPD Art. 18 VI).
     /// </summary>
     /// <remarks>
