@@ -44,25 +44,70 @@ own record is covered below.
 | Category | Where it lives | Retention period | Why that period | Enforced |
 | --- | --- | --- | --- | --- |
 | Active identity | `PERSON`, `GOOGLE_USER` | Life of the account | Performance of the service the account exists for. An identity provider cannot authenticate an identity it has deleted | By deletion (UC-09/UC-10, UC-28/UC-29) |
-| Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **Not yet decided** | A soft delete is a restriction of processing, not an erasure; it needs a terminal state and has none | ❌ Not enforced — [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
+| Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **30 days** where the subject asked, **90 days** where an administrator did — §4 | A soft delete is a restriction of processing, not an erasure, so it needs a terminal state. The shorter deadline is the law's, not a choice; the longer one is a reversal window. Both end in anonymisation | ❌ Not enforced — [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
-| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §4 | ✅ Scheduled purge (§5) |
-| Audit trail | `AUDIT_LOG` | **Not yet decided** | Accountability (GDPR Art. 5(2)) against storage limitation, complicated by the append-only triggers | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
-| Application logs | Serilog file sink | **12 months** — conditional, see §6 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
-| Database backups | The backup store, outside the schema | **Not yet decided** — bounded by §7 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
+| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
+| Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
+| Application logs | Serilog file sink | **12 months** — conditional, see §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
+| Database backups | The backup store, outside the schema | **No number of its own** — bounded by §9 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Three rows still read "not yet decided" rather than carrying a number chosen here. Each is a
-decision for the controller, not for this document, and each has an issue where the decision and the
-mechanism are worked out together — a period fixed here while the mechanism is unresolved would be a
-promise this repository cannot keep.
+Every period is now decided. Four rows are decided but **not yet enforced**, and each says so with
+the issue that will enforce it: logically deleted identities (§4), the audit trail (§7), the
+application logs (§8), and the backups (§9). That is the rule in §1 working, not an oversight — the
+alternative is a document that reads as though the system already did these things.
 
-Two rows carry a period that is decided but not yet enforced, and both say so. Application logs are
-set at 12 months on a condition §6 states; database backups are bounded by §7 rather than by a
-number of their own.
+Backups are the one row still carrying no number, and deliberately: their period follows from a
+strategy choice §9 sets out, so a figure here would prejudge it.
 
-## 4. Single-use tokens: why the period is expiry plus a grace period
+## 4. Logically deleted identities: two deadlines, because there are two reasons
+
+Setting `IsDeleted` removes an identity from default queries and stops it authenticating. Under both
+laws that is a **restriction of processing**, not an erasure — a legitimate intermediate state, and
+one the system needs. It simply cannot be the terminal one, which is what it is today: nothing
+anywhere removes a soft-deleted row, so a person "deleted" in 2026 is still fully identifiable in
+2036.
+
+The terminal state depends on why the record was deleted, because the two cases rest on different
+legal footing.
+
+### The subject asked: 30 days
+
+Not a period chosen here. GDPR Art. 12(3) requires the controller to act on an erasure request
+without undue delay and **at most one month**; LGPD Art. 19 §2 sets 15 days for the confirmation and
+access response that usually accompanies it. Thirty days is the outer limit, not the target — the
+erasure completes as soon as it can, and the deadline is what it must not exceed.
+
+One consequence [#92](https://github.com/artur-rios/heimdall-api/issues/92) has to design around:
+NFR-12 refuses to strip a scope of its last owner, so an erasure can be **blocked** by a rule that
+needs a human to resolve, by transferring ownership. A blocked erasure is not an extended one. The
+deadline keeps running, which means the pending-request view has to surface what is overdue rather
+than merely what is queued.
+
+### An administrator did: 90 days
+
+No subject asked, so the deadline is the controller's own and the purpose is different: a reversal
+window. An administrator who deleted the wrong person needs to undo it, and the client systems in
+that person's scope need time to notice and reconcile.
+
+Ninety days rather than the thirty most consumer services use, because a deletion here is not
+confined to one product: Heimdall is the identity provider every client system authenticates
+against, so one deletion propagates everywhere at once and is correspondingly more expensive to
+discover late.
+
+### Both end in anonymisation, not deletion
+
+NFR-07 requires every foreign key in the schema to still resolve after a deletion, and removing the
+row breaks that. Anonymising in place does not: the identifying columns go — `Name` and `Email`
+overwritten, `PasswordHash` and `Salt` zeroed, `GoogleId` and `ProfilePictureUrl` cleared, the
+two-factor material removed by its existing cascade — while the row keeps its structural role.
+
+That satisfies erasure. GDPR Recital 26 and LGPD Art. 12 both put anonymised data outside the law's
+scope, so an anonymised row is no longer personal data being retained. Hard deletion stays available
+as UC-10 for the cases that genuinely want the row gone.
+
+## 5. Single-use tokens: why the period is expiry plus a grace period
 
 A password reset token, an email verification token, and a two-factor email code all stop serving
 their purpose the moment they expire or are consumed. Storage limitation says to remove them, and
@@ -94,7 +139,7 @@ is a sound proxy in any case, since each row is issued with a lifetime measured 
 **A live token is never at risk.** The cutoff is strictly in the past, so a token that has not yet
 expired cannot match however the grace period is configured.
 
-## 5. How the purge runs
+## 6. How the purge runs
 
 A hosted service (`TokenRetentionService`) dispatches `PurgeExpiredTokensCommand` on an interval,
 hourly by default. Three properties are worth stating, because each is a decision rather than an
@@ -127,7 +172,42 @@ A failed run is logged and the loop continues: the pass is maintenance, not part
 request, and the next tick retries whatever was missed, because a row past its retention period
 stays past it.
 
-## 6. Application logs: why 12 months, and on what condition
+## 7. The audit trail: 18 months identifiable, then pseudonymised and kept
+
+`AUDIT_LOG` is where two obligations pull hardest against each other. Accountability (GDPR Art.
+5(2), Art. 32; LGPD Art. 37) is why the trail exists, why it is append-only, and why
+`ActorPersonId` is a bare `PublicId` rather than a foreign key — so an entry survives a hard-deleted
+person. Storage limitation says an indefinitely retained record naming a person who has been erased
+is personal data processed with no remaining basis.
+
+The period settles the first half of that, and the mechanism settles the second.
+
+**Eighteen months identifiable.** Most security baselines land on twelve — PCI DSS requires a year
+of audit history — and breach discovery lag routinely exceeds it, so twelve is a floor rather than a
+comfortable answer. Eighteen covers a full compliance cycle plus that lag. Beyond it, the
+accountability value of *who acted* falls away sharply while the value of *what happened, when, and
+how often* does not — and that half survives pseudonymisation intact.
+
+**Then pseudonymised, and kept indefinitely.** Once `ActorPersonId` no longer resolves to a natural
+person the entry is not personal data (Recital 26, LGPD Art. 12), so storage limitation stops
+applying to it and the trail keeps its shape, ordering and correlation for as long as it is useful.
+
+**No row is updated or deleted to achieve that.** The pseudonym derives from a per-subject key, and
+it is the *key* that is destroyed — crypto-shredding. The append-only triggers installed by
+`20260817113453_MakeAuditLogAppendOnly` stay exactly as they are, and Threat Model TH-18's tests
+keep passing unchanged. A design that dropped or worked around those triggers would trade a closed
+threat for a compliance fix, which is not a trade this document is asking for.
+
+**Erasure does not wait for the clock.** When a data subject is erased under §4, their entries are
+pseudonymised immediately — the same mechanism, triggered by the erasure rather than by eighteen
+months elapsing.
+
+One consequence worth stating plainly rather than discovering later: an **active** person's entries
+are pseudonymised at eighteen months while they are still an active person. That caps how far back a
+current account can be investigated. It is the intended trade-off of storage limitation, and it is
+recorded here so it is a decision rather than a surprise.
+
+## 8. Application logs: why 12 months, and on what condition
 
 Twelve months rather than the ninety days an operational-debugging period would justify, because
 debugging is not what these logs are for. The audit trail is the record of what the API *did*; the
@@ -158,7 +238,7 @@ creates a *new sink per month*. A `retainedFileCountLimit` bounds files within o
 would bound each month's directory and never remove a month. Whatever #98 does has to survive that
 wrapper.
 
-## 7. Database backups: why the period is bounded, not chosen
+## 9. Database backups: why the period is bounded, not chosen
 
 A backup is a full copy of every category in §3, so it inherits all of their limits at once. It also
 creates the one failure that makes every other row in this document theoretical:
@@ -169,23 +249,23 @@ Backups are not edited. Editing them destroys the integrity that is their entire
 backup regime worth running permits it. That leaves exactly two workable answers, and
 [#106](https://github.com/artur-rios/heimdall-api/issues/106) has to pick one and implement it:
 
-1. **Backup retention shorter than the shortest erasure deadline.** An erased record cannot survive
-   in a backup past the deadline, because the backup holding it is gone first. Simple, and it needs
-   no reconciliation — but it caps disaster recovery at the erasure deadline, which for most
-   operators is far too short.
+1. **Backup retention shorter than the shortest erasure deadline**, which §4 now fixes at **30
+   days**. An erased record cannot survive in a backup past the deadline, because the backup holding
+   it is gone first. Simple, and it needs no reconciliation — but it caps disaster recovery at 30
+   days, which for most operators is far too short.
 2. **A restore re-applies every erasure completed since the backup was taken.** Keeps the backups as
    long as recovery needs, at the cost of a step that must run on every restore and must be tested
    like any other part of the recovery procedure.
 
 The choice determines the period rather than following from it, which is why this row carries no
-number of its own. Note the direction of the constraint: a regime keeping backups longer than the
-erasure deadline — which is nearly every regime, since recovery windows outlast a thirty-day
-deadline — makes the re-application step **mandatory, not optional**. Choosing (1) by default and
-discovering later that recovery needs ninety days is how an erasure quietly comes back.
+number of its own. Note the direction of the constraint: a regime keeping backups longer than 30
+days — which is nearly every regime — makes the re-application step **mandatory, not optional**.
+Choosing (1) by default and discovering later that recovery needs ninety days is how an erasure
+quietly comes back.
 
 Backup encryption belongs to the same issue and is not restated here.
 
-## 8. Configuration
+## 10. Configuration
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
@@ -214,7 +294,7 @@ ignored.
 Switching the purge off is a deliberate deployment decision and is logged as a warning, because it
 leaves personal data in place past its retention period.
 
-## 9. Reviewing this document
+## 11. Reviewing this document
 
 The schedule is reviewed when:
 
@@ -225,8 +305,8 @@ The schedule is reviewed when:
 - the record of processing activities is reviewed, since GDPR Art. 30(1)(f) requires the periods to
   appear there too;
 - a new store outside the schema starts holding personal data, or an existing one changes what it
-  holds — §6's twelve months rests on the logs no longer carrying addresses, and a change that put
+  holds — §8's twelve months rests on the logs no longer carrying addresses, and a change that put
   them back would invalidate the period without touching a single table;
-- the backup or recovery regime changes, since §7's two answers trade against the recovery window
+- the backup or recovery regime changes, since §9's two answers trade against the recovery window
   and a longer window can turn the reconciliation step from optional into mandatory.
 
