@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Command.Services;
 
 namespace ArturRios.Heimdall.WebApi.Email;
@@ -13,7 +14,7 @@ public class LoggingTwoFactorEmailSender(ILogger<LoggingTwoFactorEmailSender> lo
 {
     public Task SendAsync(string email, string code)
     {
-        logger.LogInformation("Two-factor email code issued for {Email}: {Code}", email, code);
+        logger.LogInformation("Two-factor email code issued for {EmailRef}: {Code}", LogSafeEmail.Reference(email), code);
 
         return Task.CompletedTask;
     }

@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Command.Services;
 
 namespace ArturRios.Heimdall.WebApi.Email;
@@ -13,7 +14,7 @@ public class LoggingPasswordResetSender(ILogger<LoggingPasswordResetSender> logg
 {
     public Task SendAsync(string email, string token)
     {
-        logger.LogInformation("Password reset token issued for {Email}: {Token}", email, token);
+        logger.LogInformation("Password reset token issued for {EmailRef}: {Token}", LogSafeEmail.Reference(email), token);
 
         return Task.CompletedTask;
     }

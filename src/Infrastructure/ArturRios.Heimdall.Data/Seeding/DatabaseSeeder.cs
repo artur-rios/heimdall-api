@@ -112,7 +112,10 @@ public class DatabaseSeeder(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Seeded the master system administrator {Email}", masterUser.Email);
+        // The address is deliberately not logged (NFR-22). It came from the environment the
+        // operator set, so the line tells them nothing they do not already know, and it would
+        // otherwise be written on every start-up for the life of the deployment.
+        logger.LogInformation("Seeded the master system administrator");
     }
 
     private static string DescriptionOf(Roles role) =>

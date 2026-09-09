@@ -19,7 +19,8 @@ public class DataRetentionOptionsTests
         DataRetentionOptions.AdministrativeDeletionWindowDaysVariable,
         DataRetentionOptions.AnonymisationEnabledVariable,
         DataRetentionOptions.AuditActorRetentionDaysVariable,
-        DataRetentionOptions.AuditPseudonymisationEnabledVariable
+        DataRetentionOptions.AuditPseudonymisationEnabledVariable,
+        DataRetentionOptions.LogRetentionDaysVariable
     ];
 
     private static void ClearAll()
@@ -45,6 +46,7 @@ public class DataRetentionOptionsTests
             DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
 
         Assert.Equal(DataRetentionOptions.DefaultAuditActorRetention, options.AuditActorRetention);
+        Assert.Equal(DataRetentionOptions.DefaultLogRetention, options.LogRetention);
 
         // Every pass is on unless an operator switches it off: silence must not mean "keep forever"
         Assert.True(options.PurgeEnabled);

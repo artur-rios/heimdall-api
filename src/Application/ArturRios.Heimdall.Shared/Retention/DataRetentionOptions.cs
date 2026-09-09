@@ -50,6 +50,9 @@ public sealed record DataRetentionOptions
     /// <summary>Environment variable switching the scheduled audit pseudonymisation off.</summary>
     public const string AuditPseudonymisationEnabledVariable = "HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED";
 
+    /// <summary>Environment variable holding how long application log files are kept, in days.</summary>
+    public const string LogRetentionDaysVariable = "HEIMDALL_RETENTION_LOG_DAYS";
+
     /// <summary>Seven days — see <see cref="SingleUseTokenGrace" /> for why it is not zero.</summary>
     public static readonly TimeSpan DefaultSingleUseTokenGrace = TimeSpan.FromDays(7);
 
@@ -67,6 +70,15 @@ public sealed record DataRetentionOptions
 
     /// <summary>548 days — eighteen months, the period the retention schedule sets.</summary>
     public static readonly TimeSpan DefaultAuditActorRetention = TimeSpan.FromDays(548);
+
+    /// <summary>365 days — twelve months, the period the retention schedule sets for logs.</summary>
+    public static readonly TimeSpan DefaultLogRetention = TimeSpan.FromDays(365);
+
+    /// <summary>Shortest accepted log retention, in days.</summary>
+    private const double MinimumLogRetentionDays = 1;
+
+    /// <summary>Longest accepted log retention, in days.</summary>
+    private const double MaximumLogRetentionDays = 3650;
 
     /// <summary>
     ///     Shortest accepted audit attribution retention, in days. Matches the floor the database
@@ -198,6 +210,17 @@ public sealed record DataRetentionOptions
     public bool AuditPseudonymisationEnabled { get; init; } = true;
 
     /// <summary>
+    ///     How long application log files are kept before the file sink removes them (NFR-22).
+    /// </summary>
+    /// <remarks>
+    ///     Twelve months, because these are the telemetry a breach is detected from rather than
+    ///     debugging output: breach discovery is measured in months, and a shorter period would
+    ///     delete the evidence before anyone knew to look. GDPR Art. 33's clock starts at awareness,
+    ///     which a log that had already expired never contributed to.
+    /// </remarks>
+    public TimeSpan LogRetention { get; init; } = DefaultLogRetention;
+
+    /// <summary>
     ///     Names the variables whose values were unusable and fell back to a default, so the caller
     ///     can say so in the log. Empty when every variable was absent or valid — an absent variable
     ///     is not a fallback, it is the documented default being chosen.
@@ -231,6 +254,9 @@ public sealed record DataRetentionOptions
                 MinimumAuditActorRetentionDays, MaximumAuditActorRetentionDays, invalid),
             AuditPseudonymisationEnabled = ReadBool(
                 AuditPseudonymisationEnabledVariable, defaultValue: true, invalid),
+            LogRetention = ReadBoundedTimeSpan(
+                LogRetentionDaysVariable, DefaultLogRetention, TimeSpan.FromDays,
+                MinimumLogRetentionDays, MaximumLogRetentionDays, invalid),
             InvalidVariables = invalid
         };
     }

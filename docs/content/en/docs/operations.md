@@ -99,6 +99,21 @@ Serilog, configured before anything else so that even configuration failures are
 `DetailedErrors` print parameter and column values — password hashes, salts, email addresses — so
 they stay off where those logs are retained.
 
+### Retention and redaction — NFR-22
+
+Log files are written flat under the log directory, one per day, and removed once older than
+`HEIMDALL_RETENTION_LOG_DAYS` (365 by default). They used to be nested in year/month directories via
+Serilog's `Map` sink, which created a new sink per month — a retention limit bounds files *within* a
+sink, so it bounded each month's directory and never removed a month. The flat sink is the shape
+where the limit applies.
+
+**No log statement writes an email address.** Where a line needs to refer to one so an operator can
+correlate, it writes a stable non-reversible reference (`{EmailRef}`) instead. `LogRedactionTests`
+scans the source and fails if an `{Email}` placeholder reappears anywhere.
+
+The reference is pseudonymisation, not anonymisation: somebody who already suspects an address can
+hash it and look for it. What it defeats is reading addresses out of the logs in bulk.
+
 ## Rate limiting and lockout
 
 Brute force is bounded in two independent places, because each covers what the other misses.
@@ -204,6 +219,7 @@ this week; it is an anti-tamper backstop, not the retention period, which is eig
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | `548` (18 months) | 30 to 3650 | Days an audit entry stays attributed |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling it |
+| `HEIMDALL_RETENTION_LOG_DAYS` | `365` (12 months) | 1 to 3650 | Days a log file is kept |
 
 A deployment that sets none of these still gets the published periods — an unset variable must not
 mean "keep forever". A malformed or out-of-range value falls back to the default and is named in a
@@ -327,6 +343,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | | `548` |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
+| `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
