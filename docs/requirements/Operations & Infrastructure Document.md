@@ -50,11 +50,16 @@ the server does not offer TLS — so a deployment can be sending credentials and
 text while looking correctly configured. Set `SSL Mode=Require`, `VerifyCA` or `VerifyFull` in
 `HEIMDALL_DATA_CONNECTIONSTRING`.
 
-It warns rather than refusing to start, deliberately, and that is a departure from how this codebase
-treats other security configuration — TH-23's email control fails start-up in Production. Failing
-here would take down a working deployment on upgrade over a setting the operator may not control
-directly. **Once TLS is confirmed in place, this should become a refusal**; it is a one-line change
-in `WarnIfDatabaseConnectionIsNotEncrypted`.
+It warns by default rather than refusing to start, and that is a departure from how this codebase
+treats other security configuration — TH-23's email control fails start-up in Production. Failing by
+default would take down a working deployment on upgrade over a setting the operator may not control
+directly.
+
+**Set `HEIMDALL_DATA_REQUIRE_TLS=true` to turn the warning into a refusal.** That is the right
+setting once TLS is confirmed in place: from that point a connection string that does not ask for
+encryption is a misconfiguration rather than a known state, and starting anyway would be starting in
+the one condition the check exists to prevent. It is opt-in rather than the default only so that
+enabling it is a decision somebody makes, not one that happens to them during an upgrade.
 
 ### The backup regime
 
