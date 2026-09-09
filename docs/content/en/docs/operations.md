@@ -144,6 +144,23 @@ The schedule marks which periods are enforced and which are not yet, so it never
 guarantee the code does not make. Read it there rather than inferring enforcement from the presence
 of a setting here.
 
+**Single-use tokens are purged on a schedule.** A hosted service dispatches a purge hourly by
+default, removing password reset tokens, email verification tokens, and two-factor email codes that
+are past their expiry by the grace period. Each run removes at most a bounded batch per table,
+oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
+delete pressure on the same tables the login and recovery paths write to, and the write path
+degrades with table size (SRD §6.3.2).
+
+The grace period is not zero, deliberately. UC-13 answers a presented token with `TokenInvalid`,
+`TokenExpired` or `TokenAlreadyUsed`, and purging the moment a token expires collapses the last two
+into the first — telling someone following a stale link that their token never existed. A live token
+is never at risk: the cutoff is strictly in the past.
+
+Every instance runs its own purge and none coordinates with the others (NFR-06). The delete re-reads
+its batch, so an instance whose rows another already removed simply deletes fewer than it selected.
+Each run writes one audit entry (NFR-09) as an anonymous write — the evidence that the schedule was
+enforced, and when. A run that removes nothing is a success; most runs find nothing to do.
+
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |

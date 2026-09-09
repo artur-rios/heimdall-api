@@ -41,7 +41,7 @@ own record is covered below.
 | Active identity | `PERSON`, `GOOGLE_USER` | Life of the account | Performance of the service the account exists for. An identity provider cannot authenticate an identity it has deleted | By deletion (UC-09/UC-10, UC-28/UC-29) |
 | Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **Not yet decided** | A soft delete is a restriction of processing, not an erasure; it needs a terminal state and has none | ❌ Not enforced — [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
-| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §4 | ❌ Not enforced — [#96](https://github.com/artur-rios/heimdall-api/issues/96) |
+| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §4 | ✅ Scheduled purge (§5) |
 | Audit trail | `AUDIT_LOG` | **Not yet decided** | Accountability (GDPR Art. 5(2)) against storage limitation, complicated by the append-only triggers | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
 | Application logs | Serilog file sink | **Not yet decided** | Operational necessity; currently unbounded, and the files contain email addresses | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
@@ -51,10 +51,6 @@ Three rows read "not yet decided" rather than carrying a number chosen here. Eac
 the controller, not for this document, and each has an issue where the decision and the mechanism
 are worked out together — a period fixed here while the mechanism is unresolved would be a promise
 this repository cannot keep.
-
-The single-use token row is the opposite case, and the first test of the rule above: its period *is*
-decided, and stated in §4, but nothing enforces it yet. It is marked accordingly until
-[#96](https://github.com/artur-rios/heimdall-api/issues/96) lands the pass that applies it.
 
 ## 4. Single-use tokens: why the period is expiry plus a grace period
 
@@ -80,16 +76,48 @@ comfortably longer than any link is useful and far shorter than any purpose coul
 them. It is configurable, and it cannot be set to zero or a negative value — the options type
 refuses both and falls back to the default.
 
-The rule a pass must apply is therefore `ExpiresAt <= now - grace`. That single condition covers a
-used row and an expired-unused row alike, and it is the only condition applicable to all three
-tables: neither token table records *when* it was consumed, and only `TWO_FACTOR_EMAIL_CODE` carries
-a `CreatedAt`. Expiry is a sound proxy in any case, since each row is issued with a lifetime
-measured in minutes.
+The purge selects on `ExpiresAt <= now - grace`. That single condition covers a used row and an
+expired-unused row alike, and it is the only condition applicable to all three tables: neither token
+table records *when* it was consumed, and only `TWO_FACTOR_EMAIL_CODE` carries a `CreatedAt`. Expiry
+is a sound proxy in any case, since each row is issued with a lifetime measured in minutes.
 
-**A live token must never be at risk.** The cutoff is strictly in the past, so a token that has not
-yet expired cannot match however the grace period is configured.
+**A live token is never at risk.** The cutoff is strictly in the past, so a token that has not yet
+expired cannot match however the grace period is configured.
 
-## 5. Configuration
+## 5. How the purge runs
+
+A hosted service (`TokenRetentionService`) dispatches `PurgeExpiredTokensCommand` on an interval,
+hourly by default. Three properties are worth stating, because each is a decision rather than an
+implementation detail.
+
+**It is bounded.** Each run removes at most `PurgeBatchSize` rows from any one table, oldest first.
+SRD §6.3.2 measured the write path degrading with the size of the table under sustained insert
+pressure, and a purge is sustained *delete* pressure on tables the login and recovery paths write
+to. A backlog drains over several runs instead of one long transaction competing with live traffic.
+
+**It needs no coordination between instances.** NFR-06 requires that no instance assume it is alone,
+and every instance runs its own copy. Nothing is claimed or locked: a run selects a batch, and the
+delete re-reads those ids and removes whatever still exists, so an instance whose rows another
+already removed simply deletes fewer than it selected and reports the true count. Deleting an
+already-deleted row is the only concurrent outcome this pass can have, and it is harmless. The
+alternative — electing one instance to purge — fails in the worse direction, because an instance
+that assumed another was purging would stop purging the moment it ran alone.
+
+**It is audited.** The command is registered like every other, so each run writes one audit entry
+(NFR-09). The entry is as much the point as the deletion: it is the evidence that the schedule was
+enforced, and when. The run is dispatched by a scheduler rather than a caller, so it is recorded as
+an anonymous write.
+
+A run that removes nothing is a success, not a failure — most runs find nothing to do, and treating
+a no-op as an error would fill the trail with refusals that never happened.
+
+The first tick falls one whole interval after start-up, which keeps the purge clear of migrations
+and seeding, and means a container restarting repeatedly never turns start-up into delete pressure.
+A failed run is logged and the loop continues: the pass is maintenance, not part of serving a
+request, and the next tick retries whatever was missed, because a row past its retention period
+stays past it.
+
+## 6. Configuration
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
@@ -115,13 +143,10 @@ running on the documented default for one interval. Falling back *silently* woul
 either, since an operator would believe a setting was applied, so the warning names each variable it
 ignored.
 
-`HEIMDALL_RETENTION_PURGE_*` configure the pass that
-[#96](https://github.com/artur-rios/heimdall-api/issues/96) adds; they are published here with the
-period they serve, so the schedule and the settings that implement it are read in one place rather
-than two. Switching a pass off is a deliberate deployment decision and is logged as a warning,
-because it leaves personal data in place past its retention period.
+Switching the purge off is a deliberate deployment decision and is logged as a warning, because it
+leaves personal data in place past its retention period.
 
-## 6. Reviewing this document
+## 7. Reviewing this document
 
 The schedule is reviewed when:
 
