@@ -284,7 +284,7 @@ FR-GO-07 would not expect it.
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
 | TH-22 | Minting a valid token for any identity, using the signing secret | The secret is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` keeps the retired key acceptable while the new one signs | Test + inspection | Low |
-| TH-23 | Reading a delivered verification, reset or 2FA code out of the logs | Production fails startup when email delivery is unconfigured, rather than falling back to logging the token | Inspection | Medium |
+| TH-23 | Reading a delivered verification, reset or 2FA code — or a recipient address — out of the logs | Production fails startup when email delivery is unconfigured, rather than falling back to logging the token; and no log statement writes an address in any environment, a reference to it instead (NFR-22) | Inspection + test | Medium |
 | TH-24 | Using the seeded master account | Credentials are supplied by environment and required at startup | Inspection | Medium |
 
 **TH-22 was Medium because there was no rotation story, and it now has one.** A leaked signing
@@ -306,7 +306,15 @@ this closes. Deriving stable identifiers from the secrets instead would publish 
 from a signing key on every token, a poor trade for saving one HMAC against two keys. Validation
 tries both.
 
-**TH-23's control covers Production and by design does not cover anything else.** A developer or
+**TH-23 now covers the address as well as the token, and the two halves differ in scope.** The
+token control is environmental: Production refuses to start with delivery unconfigured, so the
+logging senders that write a token never run there. The address control is not environmental — no
+statement writes an address in any environment, and `LogRedactionTests` fails the build if one
+reappears. That closes a gap the original entry did not name: the token was only ever logged outside
+Production, but `MailgunSender` wrote the recipient's address on every successful send *in*
+Production, into files that were then kept forever.
+
+**TH-23's token control covers Production and by design does not cover anything else.** A developer or
 staging deployment without Mailgun credentials logs verification tokens, reset tokens and 2FA codes
 in plaintext, which is deliberate and documented: the functional suite and a local run both need
 those flows to work without credentials or network. It is listed here because a staging deployment

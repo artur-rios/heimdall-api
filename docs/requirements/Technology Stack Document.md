@@ -84,7 +84,7 @@ The data access pattern is **repository-based**: application handlers depend on 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
 | Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
-| Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`, `Serilog.Sinks.Map`) | `4.4.0` / `10.0.0` / `2.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory is configurable via environment variable. |
+| Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`) | `4.4.0` / `10.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory and the retention period are configurable via environment variables (NFR-22). |
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `HEIMDALL_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
 | Google ID token verification | **Google.Apis.Auth** | `1.75.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
 | Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.19.2` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
@@ -135,7 +135,6 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Validation | FluentValidation | `12.1.1` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
-| Logging | Serilog.Sinks.Map | `2.0.0` |
 | Testing | xunit | `2.9.3` |
 | Testing | xunit.runner.visualstudio | `3.1.5` |
 | Testing | Microsoft.NET.Test.Sdk | `18.8.1` |

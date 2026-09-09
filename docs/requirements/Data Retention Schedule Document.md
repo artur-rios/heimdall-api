@@ -48,14 +48,13 @@ own record is covered below.
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
-| Application logs | Serilog file sink | **12 months** — conditional, see §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
+| Application logs | Serilog file sink | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
 | Database backups | The backup store, outside the schema | **No number of its own** — bounded by §9 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Every period is decided, and three are now enforced. Two rows are decided but **not yet enforced**,
-and each says so with the issue that will enforce it: the application logs (§8) and the backups
-(§9). That is the rule in §1 working, not an oversight — the alternative is a
+Every period is decided, and four are now enforced. One row is decided but **not yet enforced** —
+the backups (§9), which say so with the issue that will enforce it. That is the rule in §1 working, not an oversight — the alternative is a
 document that reads as though the system already did these things.
 
 Backups are the one row still carrying no number, and deliberately: their period follows from a
@@ -291,24 +290,30 @@ therefore delete the evidence of an incident before anyone knew to look for it, 
 outcome a security log must not have — and GDPR Art. 33's seventy-two-hour clock starts at
 *awareness*, so a log that expired before awareness never contributed to meeting it.
 
-**The condition.** Twelve months is defensible for logs that identify a person only by `PublicId`.
-It is not defensible for the logs as they stand, which carry raw email addresses:
-`MailgunSender` writes the recipient on every verification, reset and 2FA email, and
-`DatabaseSeeder` writes the master administrator's address at every start-up. Quadrupling the life
-of a file full of addresses is a larger exposure than the shorter period it replaces, not a smaller
-one.
+**The condition, and how it was met.** Twelve months is defensible for logs that identify a person
+only by `PublicId`. It was not defensible for the logs as they stood, which carried raw email
+addresses — `MailgunSender` wrote the recipient on every verification, reset and 2FA email, and
+`DatabaseSeeder` wrote the master administrator's address at every start-up. Quadrupling the life of
+a file full of addresses would have been a larger exposure than the shorter period it replaced, not
+a smaller one.
 
-So the two halves of [#98](https://github.com/artur-rios/heimdall-api/issues/98) are ordered, and
-the order is not negotiable: **the redaction lands before, or in the same change as, the retention
-limit.** Enforcing the limit first would mean the first thing this schedule achieved for logs was a
-longer life for identifiable data. Until the redaction lands, ninety days is the period that
-applies.
+So the two halves were ordered, and the order was not negotiable: **the redaction landed with the
+retention limit, in one change.** No log statement writes an address now. Where a line needs to
+refer to one so an operator can correlate — whether three failures are one address retrying or three
+people — it writes a stable, non-reversible reference instead (`LogSafeEmail`). That is
+pseudonymisation rather than anonymisation, and the honest limit is that somebody who already
+suspects a particular address can hash it and look; what it defeats is bulk harvesting.
 
-One implementation note, because it is the reason the row reads "not enforced" rather than
-"unbounded by oversight": the Serilog sink is wrapped in `WriteTo.Map` keyed per month, which
-creates a *new sink per month*. A `retainedFileCountLimit` bounds files within one sink, so it
-would bound each month's directory and never remove a month. Whatever #98 does has to survive that
-wrapper.
+The seeder simply stopped logging the address. It came from the environment the operator set, so the
+line told them nothing they did not know, and it was written on every start-up for the life of the
+deployment.
+
+**The sink shape had to change for the limit to mean anything.** It was wrapped in `WriteTo.Map`
+keyed per month, which creates a *new sink per month* — a retention limit bounds files within one
+sink, so it bounded each month's directory and never removed a month. Files from the first month a
+deployment ran were still on disk years later. It is now a flat rolling sink with
+`retainedFileTimeLimit`, which is the shape where the limit applies. The year/month directory layout
+is gone as a result.
 
 ## 9. Database backups: why the period is bounded, not chosen
 
@@ -350,6 +355,7 @@ Backup encryption belongs to the same issue and is not restated here.
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | `548` (18 months) | 30 to 3650 | Days an audit entry stays attributed |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling it |
+| `HEIMDALL_RETENTION_LOG_DAYS` | `365` (12 months) | 1 to 3650 | Days a log file is kept before the sink removes it |
 
 The erasure deadline is the one setting with a ceiling that is not a sanity check: 30 days is the
 statutory limit, so a larger value is not a policy choice but a compliance failure, and it is

@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Messaging.Email;
 
 namespace ArturRios.Heimdall.WebApi.Email;
@@ -35,20 +36,21 @@ public abstract class MailgunSender(IEmailService emailService, ILogger logger)
             if (!result.Success)
             {
                 logger.LogError(
-                    "Mailgun refused the {Purpose} email for {Email}: {Errors}",
-                    Purpose, email, string.Join(" | ", result.Errors));
+                    "Mailgun refused the {Purpose} email for {EmailRef}: {Errors}",
+                    Purpose, LogSafeEmail.Reference(email), string.Join(" | ", result.Errors));
 
                 return;
             }
 
-            logger.LogInformation("Sent the {Purpose} email to {Email}", Purpose, email);
+            logger.LogInformation("Sent the {Purpose} email to {EmailRef}", Purpose, LogSafeEmail.Reference(email));
         }
         catch (Exception exception)
         {
             // Reaching Mailgun is I/O: it can time out, refuse the connection, or fail DNS. None of
             // that is the caller's business, and none of it may change the response they get.
             logger.LogError(
-                exception, "Could not deliver the {Purpose} email to {Email}", Purpose, email);
+                exception, "Could not deliver the {Purpose} email to {EmailRef}",
+                Purpose, LogSafeEmail.Reference(email));
         }
     }
 }

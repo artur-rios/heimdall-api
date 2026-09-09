@@ -768,19 +768,40 @@ public class Startup(string[] args) : WebApiStartup(args)
         }
     }
 
+    /// <summary>
+    ///     Configures the console and file sinks, and bounds how long the files live (NFR-22).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>The year/month directory layout is gone, deliberately.</b> The sink used to be
+    ///         wrapped in <c>WriteTo.Map</c> keyed on <c>yyyy/MM</c>, which created a <em>new sink
+    ///         per month</em>. A retention limit bounds the files within one sink, so it would have
+    ///         bounded each month's directory and never removed a month — the files from the first
+    ///         month a deployment ran were still on disk years later. A flat rolling sink with
+    ///         <c>retainedFileTimeLimit</c> is the shape where the limit actually applies.
+    ///     </para>
+    ///     <para>
+    ///         Read straight from the environment rather than through the configured options,
+    ///         because this runs before <c>LoadConfiguration</c> — the same reason the log directory
+    ///         is read this way. An unusable value falls back to the documented default, silently
+    ///         here because there is no logger yet to warn with; <c>AddDataRetention</c> reads the
+    ///         same variable later and does warn.
+    ///     </para>
+    /// </remarks>
     private static void ConfigureLogging()
     {
         var logDirectory = Environment.GetEnvironmentVariable(LogDirectoryEnvironmentVariable)
                            ?? DefaultLogDirectory;
 
+        var retention = DataRetentionOptions.FromEnvironment().LogRetention;
+
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console(new JsonFormatter())
-            .WriteTo.Map(
-                keySelector: logEvent => logEvent.Timestamp.ToString("yyyy'/'MM"),
-                configure: (yearMonth, sink) => sink.File(
-                    new JsonFormatter(),
-                    Path.Combine(logDirectory, yearMonth, "log-.json"),
-                    rollingInterval: RollingInterval.Day))
+            .WriteTo.File(
+                new JsonFormatter(),
+                Path.Combine(logDirectory, "log-.json"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileTimeLimit: retention)
             .CreateLogger();
     }
 }

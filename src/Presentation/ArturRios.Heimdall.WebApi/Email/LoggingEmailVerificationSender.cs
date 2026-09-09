@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Command.Services;
 
 namespace ArturRios.Heimdall.WebApi.Email;
@@ -14,7 +15,7 @@ public class LoggingEmailVerificationSender(ILogger<LoggingEmailVerificationSend
 {
     public Task SendAsync(string email, string token)
     {
-        logger.LogInformation("Email verification token issued for {Email}: {Token}", email, token);
+        logger.LogInformation("Email verification token issued for {EmailRef}: {Token}", LogSafeEmail.Reference(email), token);
 
         return Task.CompletedTask;
     }
