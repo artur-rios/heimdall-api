@@ -37,7 +37,7 @@ api-client/                                     Ready-to-send requests for every
   http/                                         JetBrains HTTP Client (.http) files
   bruno/                                        Bruno collection
 docs/                                           Hugo (Docsy) documentation site — see Documentation
-  requirements/                                 Vision, requirements, use cases, tech stack, retention, testing
+  requirements/                                 Vision, requirements, use cases, tech stack, data protection, testing
   content/en/                                   The site's own pages (overview, architecture, flows…)
   openapi/                                      Generated OpenAPI document, published by the site
   themes/docsy/                                 The site theme, as a git submodule
@@ -120,6 +120,12 @@ so either place is authoritative:
   libraries, and versions the project is built on.
 - [Data Retention Schedule Document](docs/requirements/Data%20Retention%20Schedule%20Document.md) —
   how long each category of personal data is kept and why (NFR-19).
+- [Data Protection Document](docs/requirements/Data%20Protection%20Document.md) — the record of
+  processing activities, the controller/processor allocation, and the international transfers.
+- [Privacy Notice](docs/requirements/Privacy%20Notice.md) — what is held and what a data subject can
+  make the system do, with the Encarregado's published contact.
+- [Data Processing Agreement](docs/requirements/Data%20Processing%20Agreement.md) — the terms a
+  tenant organisation executes, and the sub-processor list.
 - [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) — how each
   use case is tested (unit + functional standards).
 - [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) — how a use

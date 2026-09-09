@@ -8,6 +8,18 @@ description: "The technical foundation and the health-check feature."
 
 # Operations & Infrastructure Document — Heimdall API
 
+## 0. Hosting region
+
+Personal data is stored in **Brazil**, and that is a constraint rather than an incidental fact: it
+determines which transfer rules apply to everything leaving the deployment. Moving the region means
+redoing the assessment in
+[§7 of the Data Protection Document](Data%20Protection%20Document.md), because the outbound flows to
+Mailgun and Google are measured from wherever the data sits.
+
+Note also that Brazil holds no EU adequacy decision. If any tenant scope serves data subjects in the
+EEA, hosting here is itself a restricted transfer under GDPR Chapter V — see §7.2 of that document,
+which records this as a question the controller must answer rather than an assumption.
+
 ## 1. Introduction
 
 ### 1.1 Purpose

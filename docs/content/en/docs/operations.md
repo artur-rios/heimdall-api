@@ -223,6 +223,14 @@ Server-to-server callers are unaffected: CORS is a browser rule, and non-browser
 
 ### Email delivery (Mailgun)
 
+> **Region: United States.** This is a deliberate choice, not an inherited default — Mailgun also
+> offers an EU region. Data is hosted in Brazil, so every send is an international transfer under
+> LGPD Art. 33 whichever region is picked; the choice is about which second jurisdiction is
+> involved. The mechanism relied on is recorded in
+> [§7 of the Data Protection Document](../requirements/data-protection-document/). Changing the
+> region means updating that section and the sub-processor list in the
+> [Data Processing Agreement](../requirements/data-processing-agreement/).
+
 Verification (UC-06) and password reset (UC-12) emails, and 2FA email codes, go out through Mailgun
 via [`ArturRios.Messaging`](https://github.com/artur-rios/dotnet-messaging). Delivery is enabled only
 when **both** credentials are present:

@@ -2,10 +2,10 @@
 title = 'Requirements'
 linkTitle = 'Requirements'
 weight = 90
-description = 'The specification: vision, system requirements, use cases, technology stack, data retention, testing, workflow, and operations.'
+description = 'The specification: vision, system requirements, use cases, technology stack, data protection, testing, workflow, and operations.'
 +++
 
-These eight documents are the **specification** for Heimdall. Everything else on this site describes
+These eleven documents are the **specification** for Heimdall. Everything else on this site describes
 what was built; these say what must be true.
 
 They are also the working documents of the project, not a retrospective write-up: a feature is
@@ -19,6 +19,9 @@ requirement identifiers in the code.
 | [Use Case Specification Document](use-case-specification-document/) | Every use case (`UC-…`) with its main flow and numbered alternative flows (`AF-11a`, `AF-11b`, …). |
 | [Technology Stack Document](technology-stack-document/) | The technologies, libraries, and **pinned versions**. The single source of truth for versions. |
 | [Data Retention Schedule Document](data-retention-schedule-document/) | How long each category of personal data is kept and why — the record NFR-19 requires, and the source of truth the retention passes are configured against. |
+| [Data Protection Document](data-protection-document/) | Who controls what, on what basis, shared with whom, and across which borders — the record LGPD Art. 37 and GDPR Art. 30 require. |
+| [Privacy Notice](privacy-notice/) | What Heimdall does with personal data, told to the people it belongs to. Versioned, and the Encarregado's published contact. |
+| [Data Processing Agreement](data-processing-agreement/) | The terms on which Heimdall processes a tenant's users' data, and the sub-processor list. |
 | [Testing Specification Document](testing-specification-document/) | What to test for each use case, the unit and functional standards, and the required coverage. |
 | [Development Workflow Document](development-workflow-document/) | How a use case goes from backlog to merged — branch, issue status, testing gate, pull request. |
 | [Operations & Infrastructure Document](operations-infrastructure-document/) | The technical foundation and the health-check feature. |
