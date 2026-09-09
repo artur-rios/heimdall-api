@@ -1818,6 +1818,69 @@ sequenceDiagram
 
 ---
 
+## UC-42: Request Erasure of Own Identity
+
+| | |
+| --- | --- |
+| **ID** | UC-42 |
+| **Name** | Request Erasure of Own Identity |
+| **Actor** | Any authenticated identity — a person of any role, or a Google User |
+| **Description** | A data subject asks for their own identity to be erased (GDPR Art. 17, LGPD Art. 18 VI). The request is recorded, the deadline starts, and the identity is suspended immediately; the anonymisation pass (NFR-20) carries the erasure out. |
+| **Preconditions** | The caller holds a valid authentication token and has not already requested erasure. |
+| **Postconditions** | The request and its deadline are recorded. The identity is suspended, unless something blocks it, in which case the blocking reason is recorded and the deadline still runs. |
+
+**Main flow**
+
+1. The caller submits their credential: a password if they are a person, a freshly issued Google ID token if they are a Google User.
+2. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
+3. The system verifies the credential against that identity.
+4. The system records `ErasureRequestedAt` and computes `ErasureDueAt` from the statutory deadline, storing it so a later configuration change cannot move an obligation that has already attached.
+5. The system suspends the identity, marking the deletion as subject-requested so the shorter deadline applies.
+6. The system returns the request timestamp and the deadline.
+
+**Alternative flows**
+
+| ID | Condition | Outcome |
+| --- | --- | --- |
+| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account | `CredentialNotAccepted` (401). Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
+| AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
+| AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation. |
+| AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. The anonymisation pass retries it once an owner has been transferred (UC-21). |
+
+**Notes**
+
+- The suspension is immediate and deliberate: a subject who has asked to be erased has withdrawn the basis on which the account operates, so continuing to authenticate them while the deadline runs would be processing they have objected to.
+- AF-42d is a success rather than a refusal. The subject's right does not depend on the scope's ownership arrangements, and GDPR Art. 12(3)'s clock starts at the request whether or not anything blocks it. Answering 4xx would tell the subject their right had been refused when it has not.
+- Because it verifies a password, this use case's endpoint is governed by NFR-18 rather than NFR-05.
+- This use case does **not** change UC-09 or UC-10. Those remain administrative operations and keep refusing self-deletion; this is a separate path with a different actor and a different meaning.
+
+---
+
+## UC-43: List Outstanding Erasure Requests
+
+| | |
+| --- | --- |
+| **ID** | UC-43 |
+| **Name** | List Outstanding Erasure Requests |
+| **Actor** | System Admin |
+| **Description** | Lists the erasure requests that have been made and not yet carried out, soonest deadline first, flagging those already overdue. |
+| **Preconditions** | The caller is a System Admin. |
+| **Postconditions** | None; the use case reads. |
+
+**Main flow**
+
+1. The system reads the outstanding requests from both identity tables — those with a request recorded and no anonymisation yet.
+2. The system marks each as overdue or not, against the moment the queue is read.
+3. The system returns them paginated, soonest deadline first, optionally filtered to the overdue ones.
+
+**Notes**
+
+- The listing exists because a deadline nobody can see is a deadline nobody meets. Most requests need no human at all — the anonymisation pass carries them out — but the ones AF-42d blocks need an owner transferred first, and without this they would sit unnoticed until the deadline had passed.
+- A Scope Admin is deliberately excluded, though they administer their scope's users: which of them has asked to be erased is not something the request entitles anyone to know.
+- The projection carries no name and no email address. The subject has asked to be erased; a queue an administrator works from is the last place to widen who sees their details.
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |

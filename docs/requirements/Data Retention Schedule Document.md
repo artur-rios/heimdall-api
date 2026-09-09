@@ -84,12 +84,16 @@ erasure can be **blocked** by a rule that needs a human to resolve, by transferr
 blocked erasure is not an extended one. The deadline keeps running, which means the pending-request
 view has to surface what is overdue rather than merely what is queued.
 
-**Nothing writes this kind yet.** The anonymisation pass applies this deadline to any record
-carrying it, and the deadline is enforced today — but the only way to be deleted at present is
-administratively, so in practice every record currently takes §4.2's window. The self-service
-erasure request is UC-42 ([#91](https://github.com/artur-rios/heimdall-api/issues/91)), and it
-writes through the seam this leaves. The mechanism is complete; the trigger for the shorter deadline
-is what is missing.
+**The deadline is stored when the request attaches, and the stored value wins.** UC-42 computes it
+at that moment and the anonymisation pass honours it in preference to the configured window, so a
+later change to the configuration cannot move an obligation already owed — forward, which would be
+unlawful, or backward, which would silently mark existing requests overdue.
+
+**A blocked request is still a running one.** Where the block clears, the pass suspends the record
+dated from the *request*, not from the moment the block lifted: dating it from now would hand back
+the whole deadline for a request already outstanding, which is exactly the breach the deadline
+exists to prevent. A long-blocked record is therefore due immediately, which is correct — it is
+already late. UC-43 is the queue that makes such a request visible before it gets there.
 
 ### 4.2 An administrator did: 90 days
 

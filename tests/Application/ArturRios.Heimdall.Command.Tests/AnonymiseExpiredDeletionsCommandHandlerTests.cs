@@ -47,7 +47,16 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     }
 
     private static async Task<Person> SeedPersonAsync(
-        Fakes fakes, DateTime? deletedAt, int? kind, bool isDeleted = true, DateTime? anonymisedAt = null)
+        Fakes fakes,
+        DateTime? deletedAt,
+        int? kind,
+        bool isDeleted = true,
+        DateTime? anonymisedAt = null,
+        DateTime? erasureRequestedAt = null,
+        DateTime? erasureDueAt = null,
+        string? erasureBlockedReason = null,
+        Roles role = Roles.User,
+        params long[] ownedScopeIds)
     {
         var person = new Person
         {
@@ -60,7 +69,11 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
             DeletedAt = deletedAt,
             DeletionKind = kind,
             AnonymisedAt = anonymisedAt,
-            RoleId = (long)Roles.User
+            ErasureRequestedAt = erasureRequestedAt,
+            ErasureDueAt = erasureDueAt,
+            ErasureBlockedReason = erasureBlockedReason,
+            RoleId = (long)role,
+            ScopeOwnerships = ownedScopeIds.Select(scopeId => new ScopeOwner { ScopeId = scopeId }).ToList()
         };
 
         await fakes.Persons.CreateAsync(person);
@@ -301,6 +314,98 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.All(
             (await fakes.Persons.GetAllAsync()).Data!,
             person => Assert.NotNull(person.AnonymisedAt));
+    }
+
+
+    [UnitFact]
+    public async Task GivenAStoredDeadlineAlreadyPassed_WhenAnonymising_ThenItWinsOverTheConfiguredWindow()
+    {
+        // UC-42 computes and stores the deadline when the request attaches. A later change to the
+        // configured window must not move an obligation already owed, so the stored value decides.
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(
+            fakes, DateTime.UtcNow.AddDays(-2), (int)DeletionKinds.SubjectRequested,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-2),
+            erasureDueAt: DateTime.UtcNow.AddMinutes(-1));
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Deleted only two days ago, so neither configured window has elapsed — the stored deadline
+        // is the only thing that makes it due
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+        Assert.Equal(IdentityAnonymiser.AnonymisedName, person.Name);
+    }
+
+    [UnitFact]
+    public async Task GivenAStoredDeadlineStillAhead_WhenAnonymising_ThenTheRecordIsKept()
+    {
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(
+            fakes, DateTime.UtcNow.AddDays(-200), (int)DeletionKinds.SubjectRequested,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-1),
+            erasureDueAt: DateTime.UtcNow.AddDays(29));
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Deleted 200 days ago, which both configured windows would call due — the stored deadline
+        // overrides in this direction too
+        Assert.Equal(0, output.Data!.TotalAnonymised);
+        Assert.Null(person.AnonymisedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenABlockedRequestThatIsNowClear_WhenAnonymising_ThenItIsSuspendedFromTheRequestDate()
+    {
+        // NFR-12 blocked the request when it was made; a co-owner has since been added (UC-21). The
+        // subject asked once, and the deadline has been running the whole time.
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var blocked = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+
+        // The co-owner that clears the block
+        await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false, role: Roles.ScopeAdmin, ownedScopeIds: 7);
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Suspended, dated from the request rather than from now — dating it from now would hand
+        // back the whole deadline for a request already 60 days outstanding
+        Assert.True(blocked.IsDeleted);
+        Assert.Equal(requestedAt, blocked.DeletedAt);
+        Assert.Equal((int)DeletionKinds.SubjectRequested, blocked.DeletionKind);
+        Assert.Null(blocked.ErasureBlockedReason);
+
+        // And already overdue, so the same run carries it out
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+    }
+
+    [UnitFact]
+    public async Task GivenABlockedRequestStillBlocked_WhenAnonymising_ThenItIsLeftAlone()
+    {
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var blocked = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Still the last owner: suspending them would leave the scope ownerless, which NFR-12
+        // forbids however overdue the request is
+        Assert.False(blocked.IsDeleted);
+        Assert.Equal(ErasureMessages.BlockedByLastScopeOwnership, blocked.ErasureBlockedReason);
+        Assert.Equal(0, output.Data!.TotalAnonymised);
+        Assert.Equal("Ada Lovelace", blocked.Name);
     }
 
     [UnitFact]

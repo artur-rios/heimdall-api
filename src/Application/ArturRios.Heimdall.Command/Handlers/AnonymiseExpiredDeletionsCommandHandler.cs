@@ -88,16 +88,35 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         var now = DateTime.UtcNow;
 
         // Two cutoffs rather than one, because the deadline depends on why the record was deleted.
+        // They are the fallback: where the subject made a request (UC-42), the deadline was computed
+        // and stored when the request attached, and that stored value wins — recomputing it from the
+        // current configuration would let a later change move an obligation already owed. The
+        // cutoffs still apply to an administrative deletion, which has no stored deadline, and to a
+        // subject-requested record that somehow lacks one, which would otherwise silently fall to
+        // the longer window.
         var erasureCutoff = now - retention.SubjectErasureDeadline;
         var administrativeCutoff = now - retention.AdministrativeDeletionWindow;
+
+        // A request NFR-12 blocked at the time it was made may have become possible since — an owner
+        // transferred, a co-owner added (UC-21). Re-checked here rather than requiring an
+        // administrator to resubmit anything: the subject asked once, and the deadline has been
+        // running the whole time.
+        var unblockErrors = await RetryBlockedRequestsAsync(now);
+
+        if (unblockErrors.Count > 0)
+        {
+            return output.WithErrors(unblockErrors);
+        }
 
         var persons = await personReader.Query()
             .Where(person => person.IsDeleted
                              && person.AnonymisedAt == null
-                             && person.DeletedAt != null
-                             && (person.DeletionKind == SubjectRequested
-                                 ? person.DeletedAt <= erasureCutoff
-                                 : person.DeletedAt <= administrativeCutoff))
+                             && ((person.ErasureDueAt != null && person.ErasureDueAt <= now)
+                                 || (person.ErasureDueAt == null
+                                     && person.DeletedAt != null
+                                     && (person.DeletionKind == SubjectRequested
+                                         ? person.DeletedAt <= erasureCutoff
+                                         : person.DeletedAt <= administrativeCutoff))))
             .OrderBy(person => person.DeletedAt)
             .Take(retention.PurgeBatchSize)
             .ToListAsync();
@@ -105,10 +124,12 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         var googleUsers = await googleUserReader.Query()
             .Where(googleUser => googleUser.IsDeleted
                                  && googleUser.AnonymisedAt == null
-                                 && googleUser.DeletedAt != null
-                                 && (googleUser.DeletionKind == SubjectRequested
-                                     ? googleUser.DeletedAt <= erasureCutoff
-                                     : googleUser.DeletedAt <= administrativeCutoff))
+                                 && ((googleUser.ErasureDueAt != null && googleUser.ErasureDueAt <= now)
+                                     || (googleUser.ErasureDueAt == null
+                                         && googleUser.DeletedAt != null
+                                         && (googleUser.DeletionKind == SubjectRequested
+                                             ? googleUser.DeletedAt <= erasureCutoff
+                                             : googleUser.DeletedAt <= administrativeCutoff))))
             .OrderBy(googleUser => googleUser.DeletedAt)
             .Take(retention.PurgeBatchSize)
             .ToListAsync();
@@ -141,6 +162,9 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         foreach (var person in persons)
         {
             IdentityAnonymiser.Anonymise(person, now);
+
+            // Nothing blocks it any more; it is done.
+            person.ErasureBlockedReason = null;
         }
 
         foreach (var googleUser in googleUsers)
@@ -154,6 +178,53 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         return errors.Count > 0
             ? output.WithErrors(errors)
             : Success(output, persons.Count, googleUsers.Count, dependentsRemoved);
+    }
+
+    /// <summary>
+    ///     Suspends the persons whose erasure request was blocked when it was made and is no longer
+    ///     blocked, so the anonymisation can proceed on the next selection.
+    /// </summary>
+    /// <remarks>
+    ///     The suspension is dated from the <em>request</em>, not from the moment the block cleared.
+    ///     Dating it from now would restart the retention window and hand back the whole deadline
+    ///     for a request that has already been outstanding — a record blocked for two months would
+    ///     get another month, which is exactly the breach the deadline exists to prevent. Dating it
+    ///     from the request means a long-blocked record is due immediately, which is correct: it is
+    ///     already late.
+    /// </remarks>
+    private async Task<List<string>> RetryBlockedRequestsAsync(DateTime now)
+    {
+        var blocked = await personReader.Query()
+            .Include(person => person.ScopeOwnerships)
+            .Where(person => !person.IsDeleted
+                             && person.ErasureRequestedAt != null
+                             && person.ErasureBlockedReason != null)
+            .ToListAsync();
+
+        if (blocked.Count == 0)
+        {
+            return [];
+        }
+
+        var cleared = new List<Person>();
+
+        foreach (var person in blocked)
+        {
+            if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
+            {
+                continue;
+            }
+
+            person.IsDeleted = true;
+            person.DeletedAt = person.ErasureRequestedAt;
+            person.DeletionKind = (int)DeletionKinds.SubjectRequested;
+            person.ErasureBlockedReason = null;
+            person.UpdatedAt = now;
+
+            cleared.Add(person);
+        }
+
+        return cleared.Count == 0 ? [] : (await SaveAsync(cleared, personWriter)).ToList();
     }
 
     /// <summary>

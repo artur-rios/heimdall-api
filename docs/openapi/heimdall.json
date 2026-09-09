@@ -1080,13 +1080,139 @@
         ]
       }
     },
-    "/api/auth/2fa": {
-      "get": {
+    "/api/auth/erasure-request": {
+      "post": {
         "tags": [
           "Auth"
         ],
         "summary": "Reports the caller's own two-factor authentication status (FR-2F-15): whether it is\nactive, which methods are configured, and how many recovery codes remain unused. The\nperson read is always the caller themselves — taken from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) — so a configuration is never addressed by an\nidentifier in a path.",
         "description": "No `RoleRequirement`, for the same reason its `POST` siblings have none: the\nauthorization matrix grants two-factor management to all three person roles and withholds\nit from anonymous callers, which authentication alone enforces. A caller with no\nconfiguration is answered 200 with every flag false; a Google User is answered 403, since\nFR-2F-01 makes them permanently ineligible.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "operationId": "Auth_RequestErasure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestErasureCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestErasureCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestErasureCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/erasure-requests": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Lists the erasure requests that have not yet been carried out (UC-43). System Admin only.",
+        "description": "A Scope Admin is deliberately excluded, though they administer their scope's users: which\nof them has asked to be erased is not something the request entitles anyone to know, and\nmost requests need no human at all. This queue exists for the ones NFR-12 blocks, which\nneed an owner transferred before they can proceed.\n\n**Requires role:** System Admin.",
+        "operationId": "Auth_ListErasureRequests",
+        "parameters": [
+          {
+            "name": "OverdueOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureRequestOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureRequestOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureRequestOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/2fa": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_GetTwoFactorStatus",
         "responses": {
           "200": {
@@ -4172,6 +4298,86 @@
         },
         "additionalProperties": false
       },
+      "ErasureRequestOutput": {
+        "type": "object",
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isGoogleUser": {
+            "type": "boolean"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "overdue": {
+            "type": "boolean"
+          },
+          "blockedReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ErasureRequestOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErasureRequestOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
       "GoogleSignInCommand": {
         "type": "object",
         "properties": {
@@ -5182,6 +5388,76 @@
           },
           "data": {
             "$ref": "#/components/schemas/RemoveScopeOwnerCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestErasureCommand": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "idToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestErasureCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "blockedReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestErasureCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/RequestErasureCommandOutput"
           }
         },
         "additionalProperties": false

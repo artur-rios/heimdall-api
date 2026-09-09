@@ -178,6 +178,10 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddAuditedCommandHandler<ResetPasswordCommand, ResetPasswordCommandOutput, ResetPasswordCommandHandler>();
         Builder.Services.AddScoped<IValidator<VerifyEmailCommand>, VerifyEmailCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<VerifyEmailCommand, VerifyEmailCommandOutput, VerifyEmailCommandHandler>();
+        Builder.Services.AddScoped<IValidator<RequestErasureCommand>, RequestErasureCommandValidator>();
+        Builder.Services
+            .AddAuditedCommandHandler<RequestErasureCommand, RequestErasureCommandOutput,
+                RequestErasureCommandHandler>();
         // No validator: UC-15's request carries no caller-supplied input at all — the person comes
         // from the bearer token — so there is nothing for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput, ResendVerificationEmailCommandHandler>();
@@ -239,6 +243,11 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>,
                 ListScopeGoogleUsersQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListErasureRequestsQuery, ErasureRequestOutput>,
+                ListErasureRequestsQueryHandler>();
+        Builder.Services
+            .AddScoped<IValidator<ListErasureRequestsQuery>, ListErasureRequestsQueryValidator>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>,
                 GetTwoFactorStatusQueryHandler>();

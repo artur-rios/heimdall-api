@@ -62,6 +62,37 @@ public class Person : Entity
     /// </summary>
     public DateTime? AnonymisedAt { get; set; }
 
+    /// <summary>
+    ///     When the data subject asked to be erased (UC-42), or <c>null</c> if they have not. Set
+    ///     once, by the request, and never moved: the statutory deadline runs from the request, not
+    ///     from any later event.
+    /// </summary>
+    public DateTime? ErasureRequestedAt { get; set; }
+
+    /// <summary>
+    ///     The deadline the erasure must not outlive, computed when the request is made.
+    /// </summary>
+    /// <remarks>
+    ///     Stored rather than derived on read, and that is the point. GDPR Art. 12(3) attaches an
+    ///     obligation at the moment of the request; recomputing it from the current configuration
+    ///     would let a later change to the deadline move an obligation that had already attached —
+    ///     forward, which is unlawful, or backward, which would silently mark existing requests
+    ///     overdue.
+    /// </remarks>
+    public DateTime? ErasureDueAt { get; set; }
+
+    /// <summary>
+    ///     Why the erasure could not be carried out yet, or <c>null</c> if nothing blocks it. One of
+    ///     the application's own canonical messages, never caller input.
+    /// </summary>
+    /// <remarks>
+    ///     A blocked request is still a request: the deadline keeps running, and this is what makes
+    ///     the reason visible to the administrator who has to clear it, rather than the request
+    ///     failing and leaving no trace.
+    /// </remarks>
+    [MaxLength(500)]
+    public string? ErasureBlockedReason { get; set; }
+
     /// <summary>Email verification status.</summary>
     public bool EmailVerified { get; set; }
 

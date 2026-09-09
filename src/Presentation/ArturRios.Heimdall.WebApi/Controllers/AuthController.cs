@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
@@ -337,6 +338,61 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     configuration is answered 200 with every flag false; a Google User is answered 403, since
     ///     FR-2F-01 makes them permanently ineligible.
     /// </remarks>
+    /// <summary>
+    ///     Requests erasure of the caller's own identity (UC-42, GDPR Art. 17, LGPD Art. 18 VI).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         No <c>RoleRequirement</c>: every role, and a Google User, may ask to be erased — it is
+    ///         a right of the data subject rather than a privilege of a role. Authentication alone
+    ///         enforces what matters, which is that somebody is asking for themselves.
+    ///     </para>
+    ///     <para>
+    ///         The subject is never named in the request. There is no path parameter and no body
+    ///         field for it, so the endpoint has no shape in which one identity could ask for
+    ///         another's erasure.
+    ///     </para>
+    ///     <para>
+    ///         The body carries a credential, and which one depends on the caller: a person presents
+    ///         their password, a Google User a freshly issued Google ID token. A bearer token alone
+    ///         is not enough for an irreversible operation. Because it verifies a password, this
+    ///         endpoint is governed by NFR-18 rather than NFR-05.
+    ///     </para>
+    /// </remarks>
+    [HttpPost("erasure-request")]
+    public async Task<ActionResult<DataOutput<RequestErasureCommandOutput?>>> RequestErasure(
+        [FromBody] RequestErasureCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<RequestErasureCommand, RequestErasureCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists the erasure requests that have not yet been carried out (UC-43). System Admin only.
+    /// </summary>
+    /// <remarks>
+    ///     A Scope Admin is deliberately excluded, though they administer their scope's users: which
+    ///     of them has asked to be erased is not something the request entitles anyone to know, and
+    ///     most requests need no human at all. This queue exists for the ones NFR-12 blocks, which
+    ///     need an owner transferred before they can proceed.
+    /// </remarks>
+    [HttpGet("erasure-requests")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<PaginatedOutput<ErasureRequestOutput>>> ListErasureRequests(
+        [FromQuery] ListErasureRequestsQuery query)
+    {
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListErasureRequestsQuery, ErasureRequestOutput>(query);
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
     [HttpGet("2fa")]
     public async Task<ActionResult<DataOutput<TwoFactorStatusOutput?>>> GetTwoFactorStatus()
     {
