@@ -19,6 +19,7 @@ using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
+using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
@@ -260,6 +261,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListErasureRequestsQuery, ErasureRequestOutput>,
                 ListErasureRequestsQueryHandler>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<DetectSecuritySignalsQuery, SecuritySignalsOutput>,
+                DetectSecuritySignalsQueryHandler>();
         Builder.Services
             .AddScoped<IValidator<ListErasureRequestsQuery>, ListErasureRequestsQueryValidator>();
         Builder.Services
@@ -769,6 +773,18 @@ public class Startup(string[] args) : WebApiStartup(args)
                 "Identity anonymisation is switched off by {Variable}; logically deleted identities " +
                 "will be kept past their retention window",
                 DataRetentionOptions.AnonymisationEnabledVariable);
+        }
+
+        if (retention.SecurityMonitoringEnabled)
+        {
+            Builder.Services.AddHostedService<SecurityMonitoringService>();
+        }
+        else
+        {
+            Log.Warning(
+                "Security signal detection is switched off by {Variable}; the audit trail and lockout " +
+                "counters will keep recording what happens and nobody will be told about it",
+                DataRetentionOptions.SecurityMonitoringEnabledVariable);
         }
 
         if (retention.AuditPseudonymisationEnabled)

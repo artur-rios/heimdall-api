@@ -13,14 +13,16 @@ public class AuditRetentionService(
     IServiceScopeFactory scopeFactory,
     DataRetentionOptions retention,
     ILogger<AuditRetentionService> logger)
-    : ScheduledRetentionService(scopeFactory, retention.PurgeInterval, logger)
+    : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
     protected override string StartupDescription =>
         $"Audit attribution pseudonymisation scheduled every {retention.PurgeInterval}, clearing " +
         $"attributions after {retention.AuditActorRetention} and immediately for erased identities";
 
-    protected override async Task<string?> RunAsync(CommandMediator mediator)
+    protected override async Task<string?> RunAsync(IServiceProvider scope)
     {
+        var mediator = scope.GetRequiredService<CommandMediator>();
+
         var result = await mediator
             .ExecuteCommandAsync<PseudonymiseAuditActorsCommand, PseudonymiseAuditActorsCommandOutput>(
                 new PseudonymiseAuditActorsCommand());

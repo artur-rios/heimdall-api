@@ -232,6 +232,39 @@ policy. An interval below a minute turns a purge into continuous delete pressure
 login path writes to; one above seven days is past what `PeriodicTimer` accepts, and the exception
 it would throw inside a hosted service stops the host by default.
 
+## Security signal detection — NFR-26
+
+The API records strong signals and, until now, nothing read them. `SecurityMonitoringService` reads
+them on a schedule and writes what exceeds its thresholds to the log at **warning** level.
+
+Every line carries the marker `SECURITY_SIGNAL` and a stable `Kind`. **Match on those, not on the
+prose** — the wording is written for whoever reads the line afterwards and will change.
+
+| Kind | Raised when |
+| --- | --- |
+| `REPEATED_REFUSALS` | One identity exceeds the refusal threshold within the window |
+| `LOCKOUT_SPIKE` | More accounts are locked out at once than the threshold |
+| `CREDENTIAL_VERIFICATION_SHEDDING` | The hash gate refuses more often than the threshold (TH-03) |
+
+| Variable | Default | Accepted range | Meaning |
+| --- | --- | --- | --- |
+| `HEIMDALL_MONITORING_ENABLED` | `true` | `true` / `false` | Set `false` to stop detecting |
+| `HEIMDALL_MONITORING_WINDOW_MINUTES` | `15` | 1 to 1440 | How far back each signal looks, and how often it runs |
+| `HEIMDALL_MONITORING_REFUSAL_THRESHOLD` | `20` | any positive integer | Refusals by one identity before alerting |
+| `HEIMDALL_MONITORING_LOCKOUT_THRESHOLD` | `10` | any positive integer | Accounts locked out at once before alerting |
+
+Every threshold is a **rate**, not a total: twenty refusals over a year is somebody who forgets their
+password, twenty in a quarter of an hour is somebody trying things.
+
+Signals repeat on every run while the condition persists. That is deliberate — an attack that
+continues is more interesting on its tenth tick than its first, and a detector that goes quiet while
+the thing it detects is still happening is worse than none. Deduplicate in the alerting rule if you
+want quiet, not here.
+
+**A signal is not a breach.** It is a reason to look. What follows one is the
+[Incident Response Document](../requirements/incident-response-document/), which carries the
+notification deadlines and the register.
+
 ## Cross-origin requests
 
 `HEIMDALL_CORS_ALLOWED_ORIGINS` lists the browser front ends allowed to call the API, comma
@@ -344,6 +377,10 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | | `548` |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
+| `HEIMDALL_MONITORING_ENABLED` | | `true` |
+| `HEIMDALL_MONITORING_WINDOW_MINUTES` | | `15` |
+| `HEIMDALL_MONITORING_REFUSAL_THRESHOLD` | | `20` |
+| `HEIMDALL_MONITORING_LOCKOUT_THRESHOLD` | | `10` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |

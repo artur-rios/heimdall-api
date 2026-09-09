@@ -17,15 +17,17 @@ public class IdentityAnonymisationService(
     IServiceScopeFactory scopeFactory,
     DataRetentionOptions retention,
     ILogger<IdentityAnonymisationService> logger)
-    : ScheduledRetentionService(scopeFactory, retention.PurgeInterval, logger)
+    : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
     protected override string StartupDescription =>
         $"Identity anonymisation scheduled every {retention.PurgeInterval}, anonymising records " +
         $"{retention.SubjectErasureDeadline} after a requested erasure and " +
         $"{retention.AdministrativeDeletionWindow} after an administrative deletion";
 
-    protected override async Task<string?> RunAsync(CommandMediator mediator)
+    protected override async Task<string?> RunAsync(IServiceProvider scope)
     {
+        var mediator = scope.GetRequiredService<CommandMediator>();
+
         var result = await mediator
             .ExecuteCommandAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>(
                 new AnonymiseExpiredDeletionsCommand());

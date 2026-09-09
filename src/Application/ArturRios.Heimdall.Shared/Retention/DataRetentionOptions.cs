@@ -53,6 +53,18 @@ public sealed record DataRetentionOptions
     /// <summary>Environment variable holding how long application log files are kept, in days.</summary>
     public const string LogRetentionDaysVariable = "HEIMDALL_RETENTION_LOG_DAYS";
 
+    /// <summary>Environment variable switching security signal detection off.</summary>
+    public const string SecurityMonitoringEnabledVariable = "HEIMDALL_MONITORING_ENABLED";
+
+    /// <summary>Environment variable holding the window each signal is measured over, in minutes.</summary>
+    public const string MonitoringWindowMinutesVariable = "HEIMDALL_MONITORING_WINDOW_MINUTES";
+
+    /// <summary>Environment variable holding how many refusals by one actor raise a signal.</summary>
+    public const string RefusalThresholdVariable = "HEIMDALL_MONITORING_REFUSAL_THRESHOLD";
+
+    /// <summary>Environment variable holding how many locked-out accounts raise a signal.</summary>
+    public const string LockoutThresholdVariable = "HEIMDALL_MONITORING_LOCKOUT_THRESHOLD";
+
     /// <summary>Seven days — see <see cref="SingleUseTokenGrace" /> for why it is not zero.</summary>
     public static readonly TimeSpan DefaultSingleUseTokenGrace = TimeSpan.FromDays(7);
 
@@ -73,6 +85,21 @@ public sealed record DataRetentionOptions
 
     /// <summary>365 days — twelve months, the period the retention schedule sets for logs.</summary>
     public static readonly TimeSpan DefaultLogRetention = TimeSpan.FromDays(365);
+
+    /// <summary>Fifteen minutes — long enough to see a pattern, short enough to still be news.</summary>
+    public static readonly TimeSpan DefaultMonitoringWindow = TimeSpan.FromMinutes(15);
+
+    /// <summary>Refusals by one actor in the window before it is worth telling somebody.</summary>
+    public const int DefaultRefusalThreshold = 20;
+
+    /// <summary>Accounts locked out at once before it is worth telling somebody.</summary>
+    public const int DefaultLockoutThreshold = 10;
+
+    /// <summary>Bounds on the monitoring window, in minutes.</summary>
+    private const double MinimumMonitoringWindowMinutes = 1;
+
+    /// <inheritdoc cref="MinimumMonitoringWindowMinutes" />
+    private const double MaximumMonitoringWindowMinutes = 1440;
 
     /// <summary>Shortest accepted log retention, in days.</summary>
     private const double MinimumLogRetentionDays = 1;
@@ -220,6 +247,22 @@ public sealed record DataRetentionOptions
     /// </remarks>
     public TimeSpan LogRetention { get; init; } = DefaultLogRetention;
 
+    /// <summary>Whether security signal detection is registered at start-up (NFR-26).</summary>
+    public bool SecurityMonitoringEnabled { get; init; } = true;
+
+    /// <summary>
+    ///     How far back each signal looks. A signal is about a rate, not a total: twenty refusals
+    ///     over a year is somebody who forgets their password, and twenty in a quarter of an hour is
+    ///     somebody trying things.
+    /// </summary>
+    public TimeSpan MonitoringWindow { get; init; } = DefaultMonitoringWindow;
+
+    /// <summary>Refusals by one actor within the window before a signal is raised.</summary>
+    public int RefusalThreshold { get; init; } = DefaultRefusalThreshold;
+
+    /// <summary>Accounts locked out at once before a signal is raised.</summary>
+    public int LockoutThreshold { get; init; } = DefaultLockoutThreshold;
+
     /// <summary>
     ///     Names the variables whose values were unusable and fell back to a default, so the caller
     ///     can say so in the log. Empty when every variable was absent or valid — an absent variable
@@ -257,6 +300,13 @@ public sealed record DataRetentionOptions
             LogRetention = ReadBoundedTimeSpan(
                 LogRetentionDaysVariable, DefaultLogRetention, TimeSpan.FromDays,
                 MinimumLogRetentionDays, MaximumLogRetentionDays, invalid),
+            SecurityMonitoringEnabled = ReadBool(
+                SecurityMonitoringEnabledVariable, defaultValue: true, invalid),
+            MonitoringWindow = ReadBoundedTimeSpan(
+                MonitoringWindowMinutesVariable, DefaultMonitoringWindow, TimeSpan.FromMinutes,
+                MinimumMonitoringWindowMinutes, MaximumMonitoringWindowMinutes, invalid),
+            RefusalThreshold = ReadPositiveInt(RefusalThresholdVariable, DefaultRefusalThreshold, invalid),
+            LockoutThreshold = ReadPositiveInt(LockoutThresholdVariable, DefaultLockoutThreshold, invalid),
             InvalidVariables = invalid
         };
     }
