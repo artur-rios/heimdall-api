@@ -177,7 +177,11 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
         return errors.Count > 0
             ? output.WithErrors(errors)
-            : Success(output, persons.Count, googleUsers.Count, dependentsRemoved);
+            : Success(
+                output, persons.Count, googleUsers.Count, dependentsRemoved,
+                persons.Select(person => person.PublicId)
+                    .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
+                    .ToList());
     }
 
     /// <summary>
@@ -305,13 +309,15 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         DataOutput<AnonymiseExpiredDeletionsCommandOutput?> output,
         int persons,
         int googleUsers,
-        int dependents) =>
+        int dependents,
+        IEnumerable<Guid>? anonymisedIds = null) =>
         output
             .WithData(new AnonymiseExpiredDeletionsCommandOutput
             {
                 PersonsAnonymised = persons,
                 GoogleUsersAnonymised = googleUsers,
-                DependentsRemoved = dependents
+                DependentsRemoved = dependents,
+                AnonymisedIds = anonymisedIds ?? []
             })
             .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
 }

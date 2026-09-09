@@ -87,11 +87,16 @@ NFR-16 and NFR-17. Specifically:
 - per-account lockout and per-IP rate limiting against credential guessing;
 - TLS on inbound connections.
 
-4.2 **Known gaps are disclosed rather than glossed.** As at this template version, encryption at rest
-for the database and its backups is not yet documented or verified
-([#106](https://github.com/artur-rios/heimdall-api/issues/106)), and there is no automated breach
-detection ([#105](https://github.com/artur-rios/heimdall-api/issues/105)). A Controller for whom
-either is material should not execute this agreement until they are closed.
+4.2 **Known gaps are disclosed rather than glossed.** As at this template version:
+
+- Encryption at rest for the database and its backups is **required and documented** (NFR-25) but
+  **not verified from the repository** — it is a property of the hosting, and the Controller should
+  ask the Processor to evidence it before executing.
+- The database connection warns at start-up when it does not require TLS, rather than refusing to
+  start. Confirming TLS and turning that into a refusal is outstanding.
+- There is no automated breach detection
+  ([#105](https://github.com/artur-rios/heimdall-api/issues/105)). A Controller for whom this is
+  material should not execute this agreement until it is closed.
 
 4.3 Every attempted write produces an audit entry recording the actor, the operation, the outcome and
 — on a refusal — the reason (NFR-09). The table is append-only, enforced by database triggers.
@@ -193,10 +198,10 @@ behalf unless instructed in writing.
 - **Audit entries** naming the scope's operations, for which the Processor is controller (Data
   Protection Document §3), retained for 18 months and then stripped of anything identifying a
   person.
-- **Backups** taken before termination, until they age out of the backup retention period. A restore
-  re-applies deletions completed since the backup was taken. This is subject to
-  [#106](https://github.com/artur-rios/heimdall-api/issues/106) and, until it is closed, is a stated
-  intention rather than a verified mechanism.
+- **Backups** taken before termination, until they age out of the backup retention period —
+  proposed at 35 days. A restore is followed by re-applying every erasure completed since the backup
+  was taken, from a ledger kept outside the database; the mechanism is implemented and tested
+  (NFR-25), and the retention figure awaits the Controller's confirmation.
 
 ---
 

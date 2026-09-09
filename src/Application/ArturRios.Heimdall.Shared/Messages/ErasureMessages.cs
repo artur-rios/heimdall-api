@@ -73,6 +73,18 @@ public static class ErasureMessages
     public const string RestrictionLiftNotificationFailed =
         "The restriction was not lifted: the account holder could not be notified first.";
 
+    /// <summary>NFR-25: the erasure ledger was re-applied after a restore.</summary>
+    public const string ErasuresReapplied = "Erasures re-applied.";
+
+    /// <summary>NFR-25: the reconciliation was called with an empty ledger.</summary>
+    /// <remarks>
+    ///     Refused rather than treated as a successful no-op. Running the restore runbook's
+    ///     reconciliation step with nothing to reconcile almost always means the ledger was not
+    ///     loaded, and reporting success would let a restore be signed off with erased people back
+    ///     in the database.
+    /// </remarks>
+    public const string NoSubjectsToReapply = "No identities were named for erasure re-application.";
+
     /// <summary>UC-43 read: the pending erasure requests were listed.</summary>
     public const string ErasureRequestsRetrieved = "Erasure requests retrieved.";
 }

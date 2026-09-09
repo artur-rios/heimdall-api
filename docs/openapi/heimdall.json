@@ -1238,6 +1238,68 @@
         ]
       }
     },
+    "/api/auth/erasure-reconciliation": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Re-applies erasure to identities a database restore brought back (NFR-25). System Admin\nonly.",
+        "description": "A step in the restore runbook rather than an everyday operation. The identifiers come\nfrom the erasure ledger the anonymisation pass writes to the logs, which is the only copy\na restore cannot roll back.\n\n**Requires role:** System Admin.",
+        "operationId": "Auth_ReapplyErasures",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReapplyErasuresCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReapplyErasuresCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReapplyErasuresCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/auth/processing-restriction/lift": {
       "post": {
         "tags": [
@@ -5852,6 +5914,73 @@
           },
           "data": {
             "$ref": "#/components/schemas/PromoteScopeUserCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReapplyErasuresCommand": {
+        "type": "object",
+        "properties": {
+          "subjectIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReapplyErasuresCommandOutput": {
+        "type": "object",
+        "properties": {
+          "anonymised": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "alreadyAnonymised": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "notFound": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReapplyErasuresCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ReapplyErasuresCommandOutput"
           }
         },
         "additionalProperties": false

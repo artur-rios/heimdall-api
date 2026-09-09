@@ -430,6 +430,28 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     }
 
     /// <summary>
+    ///     Re-applies erasure to identities a database restore brought back (NFR-25). System Admin
+    ///     only.
+    /// </summary>
+    /// <remarks>
+    ///     A step in the restore runbook rather than an everyday operation. The identifiers come
+    ///     from the erasure ledger the anonymisation pass writes to the logs, which is the only copy
+    ///     a restore cannot roll back.
+    /// </remarks>
+    [HttpPost("erasure-reconciliation")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<DataOutput<ReapplyErasuresCommandOutput?>>> ReapplyErasures(
+        [FromBody] ReapplyErasuresCommand command)
+    {
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lifts a restriction on processing (UC-45, GDPR Art. 18(3)).
     /// </summary>
     /// <remarks>

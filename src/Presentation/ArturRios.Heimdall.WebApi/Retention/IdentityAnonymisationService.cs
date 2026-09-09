@@ -37,10 +37,18 @@ public class IdentityAnonymisationService(
 
         var anonymised = result.Data!;
 
+        // The identifiers are named, not just counted: this line is the erasure ledger (NFR-25),
+        // and it is what makes a restore reconcilable. A backup taken before a subject asked
+        // reinstates them with no trace of the request, so the list has to survive somewhere the
+        // restore cannot roll back — which means outside the database, in the logs.
+        //
+        // Safe to write and to ship off the host precisely because these identities are now
+        // anonymised: a PublicId that resolves to nobody is not personal data.
         return anonymised.TotalAnonymised == 0
             ? null
             : $"Anonymised {anonymised.TotalAnonymised} identities past their retention window: " +
               $"{anonymised.PersonsAnonymised} persons, {anonymised.GoogleUsersAnonymised} Google Users, " +
-              $"removing {anonymised.DependentsRemoved} dependent rows";
+              $"removing {anonymised.DependentsRemoved} dependent rows. " +
+              $"Erasure ledger: {string.Join(",", anonymised.AnonymisedIds)}";
     }
 }
