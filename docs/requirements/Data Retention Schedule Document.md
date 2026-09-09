@@ -27,8 +27,13 @@ lives only in code is not stated to anybody.
 
 ## 2. Scope
 
-Every table in the `heimdall` schema that holds personal data, meaning data relating to an
-identified or identifiable natural person (GDPR Art. 4(1), LGPD Art. 5 I).
+Every store that holds personal data — meaning data relating to an identified or identifiable
+natural person (GDPR Art. 4(1), LGPD Art. 5 I). That is the tables in the `heimdall` schema, and
+the stores outside it that copy or record them: the application logs and the database backups.
+
+The two outside the schema are the easiest to forget and among the least bounded, which is why they
+are rows here rather than an operational footnote. A backup in particular is a full copy of every
+category below, and is subject to the same limits as the live database.
 
 `APPLICATION` is out of scope: an application is a non-human identity representing another system.
 Its `OwnerId` points at a person, but the row describes the system, not the owner, and the owner's
@@ -36,21 +41,26 @@ own record is covered below.
 
 ## 3. The schedule
 
-| Category | Table(s) | Retention period | Why that period | Enforced |
+| Category | Where it lives | Retention period | Why that period | Enforced |
 | --- | --- | --- | --- | --- |
 | Active identity | `PERSON`, `GOOGLE_USER` | Life of the account | Performance of the service the account exists for. An identity provider cannot authenticate an identity it has deleted | By deletion (UC-09/UC-10, UC-28/UC-29) |
 | Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **Not yet decided** | A soft delete is a restriction of processing, not an erasure; it needs a terminal state and has none | ❌ Not enforced — [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §4 | ✅ Scheduled purge (§5) |
 | Audit trail | `AUDIT_LOG` | **Not yet decided** | Accountability (GDPR Art. 5(2)) against storage limitation, complicated by the append-only triggers | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
-| Application logs | Serilog file sink | **Not yet decided** | Operational necessity; currently unbounded, and the files contain email addresses | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
+| Application logs | Serilog file sink | **12 months** — conditional, see §6 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ❌ Not enforced — [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
+| Database backups | The backup store, outside the schema | **Not yet decided** — bounded by §7 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Three rows read "not yet decided" rather than carrying a number chosen here. Each is a decision for
-the controller, not for this document, and each has an issue where the decision and the mechanism
-are worked out together — a period fixed here while the mechanism is unresolved would be a promise
-this repository cannot keep.
+Three rows still read "not yet decided" rather than carrying a number chosen here. Each is a
+decision for the controller, not for this document, and each has an issue where the decision and the
+mechanism are worked out together — a period fixed here while the mechanism is unresolved would be a
+promise this repository cannot keep.
+
+Two rows carry a period that is decided but not yet enforced, and both say so. Application logs are
+set at 12 months on a condition §6 states; database backups are bounded by §7 rather than by a
+number of their own.
 
 ## 4. Single-use tokens: why the period is expiry plus a grace period
 
@@ -117,7 +127,65 @@ A failed run is logged and the loop continues: the pass is maintenance, not part
 request, and the next tick retries whatever was missed, because a row past its retention period
 stays past it.
 
-## 6. Configuration
+## 6. Application logs: why 12 months, and on what condition
+
+Twelve months rather than the ninety days an operational-debugging period would justify, because
+debugging is not what these logs are for. The audit trail is the record of what the API *did*; the
+application logs are the telemetry a breach is detected from, and
+[#105](https://github.com/artur-rios/heimdall-api/issues/105) makes that explicit by reading them.
+
+Breach discovery is routinely measured in months rather than weeks. A ninety-day period would
+therefore delete the evidence of an incident before anyone knew to look for it, which is the one
+outcome a security log must not have — and GDPR Art. 33's seventy-two-hour clock starts at
+*awareness*, so a log that expired before awareness never contributed to meeting it.
+
+**The condition.** Twelve months is defensible for logs that identify a person only by `PublicId`.
+It is not defensible for the logs as they stand, which carry raw email addresses:
+`MailgunSender` writes the recipient on every verification, reset and 2FA email, and
+`DatabaseSeeder` writes the master administrator's address at every start-up. Quadrupling the life
+of a file full of addresses is a larger exposure than the shorter period it replaces, not a smaller
+one.
+
+So the two halves of [#98](https://github.com/artur-rios/heimdall-api/issues/98) are ordered, and
+the order is not negotiable: **the redaction lands before, or in the same change as, the retention
+limit.** Enforcing the limit first would mean the first thing this schedule achieved for logs was a
+longer life for identifiable data. Until the redaction lands, ninety days is the period that
+applies.
+
+One implementation note, because it is the reason the row reads "not enforced" rather than
+"unbounded by oversight": the Serilog sink is wrapped in `WriteTo.Map` keyed per month, which
+creates a *new sink per month*. A `retainedFileCountLimit` bounds files within one sink, so it
+would bound each month's directory and never remove a month. Whatever #98 does has to survive that
+wrapper.
+
+## 7. Database backups: why the period is bounded, not chosen
+
+A backup is a full copy of every category in §3, so it inherits all of their limits at once. It also
+creates the one failure that makes every other row in this document theoretical:
+
+> **An erasure that the next restore silently undoes is not an erasure.**
+
+Backups are not edited. Editing them destroys the integrity that is their entire purpose, and no
+backup regime worth running permits it. That leaves exactly two workable answers, and
+[#106](https://github.com/artur-rios/heimdall-api/issues/106) has to pick one and implement it:
+
+1. **Backup retention shorter than the shortest erasure deadline.** An erased record cannot survive
+   in a backup past the deadline, because the backup holding it is gone first. Simple, and it needs
+   no reconciliation — but it caps disaster recovery at the erasure deadline, which for most
+   operators is far too short.
+2. **A restore re-applies every erasure completed since the backup was taken.** Keeps the backups as
+   long as recovery needs, at the cost of a step that must run on every restore and must be tested
+   like any other part of the recovery procedure.
+
+The choice determines the period rather than following from it, which is why this row carries no
+number of its own. Note the direction of the constraint: a regime keeping backups longer than the
+erasure deadline — which is nearly every regime, since recovery windows outlast a thirty-day
+deadline — makes the re-application step **mandatory, not optional**. Choosing (1) by default and
+discovering later that recovery needs ninety days is how an erasure quietly comes back.
+
+Backup encryption belongs to the same issue and is not restated here.
+
+## 8. Configuration
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
@@ -146,7 +214,7 @@ ignored.
 Switching the purge off is a deliberate deployment decision and is logged as a warning, because it
 leaves personal data in place past its retention period.
 
-## 7. Reviewing this document
+## 9. Reviewing this document
 
 The schedule is reviewed when:
 
@@ -155,5 +223,10 @@ The schedule is reviewed when:
 - one of the "not yet enforced" rows is implemented, at which point its row states the period and
   the mechanism and drops the marker;
 - the record of processing activities is reviewed, since GDPR Art. 30(1)(f) requires the periods to
-  appear there too.
+  appear there too;
+- a new store outside the schema starts holding personal data, or an existing one changes what it
+  holds — §6's twelve months rests on the logs no longer carrying addresses, and a change that put
+  them back would invalidate the period without touching a single table;
+- the backup or recovery regime changes, since §7's two answers trade against the recovery window
+  and a longer window can turn the reconciliation step from optional into mandatory.
 
