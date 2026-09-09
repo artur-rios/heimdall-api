@@ -2,10 +2,10 @@
 title = 'Requirements'
 linkTitle = 'Requirements'
 weight = 90
-description = 'The specification: vision, system requirements, use cases, technology stack, testing, workflow, and operations.'
+description = 'The specification: vision, system requirements, use cases, technology stack, data retention, testing, workflow, and operations.'
 +++
 
-These seven documents are the **specification** for Heimdall. Everything else on this site describes
+These eight documents are the **specification** for Heimdall. Everything else on this site describes
 what was built; these say what must be true.
 
 They are also the working documents of the project, not a retrospective write-up: a feature is
@@ -18,6 +18,7 @@ requirement identifiers in the code.
 | [System Requirements Document](system-requirements-document/) | The functional (`FR-…`) and non-functional (`NFR-…`) requirements, the data model, the endpoints, the authorization matrix, and the deletion strategy. |
 | [Use Case Specification Document](use-case-specification-document/) | Every use case (`UC-…`) with its main flow and numbered alternative flows (`AF-11a`, `AF-11b`, …). |
 | [Technology Stack Document](technology-stack-document/) | The technologies, libraries, and **pinned versions**. The single source of truth for versions. |
+| [Data Retention Schedule Document](data-retention-schedule-document/) | How long each category of personal data is kept and why — the record NFR-19 requires, and the source of truth the retention passes are configured against. |
 | [Testing Specification Document](testing-specification-document/) | What to test for each use case, the unit and functional standards, and the required coverage. |
 | [Development Workflow Document](development-workflow-document/) | How a use case goes from backlog to merged — branch, issue status, testing gate, pull request. |
 | [Operations & Infrastructure Document](operations-infrastructure-document/) | The technical foundation and the health-check feature. |

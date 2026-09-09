@@ -2,7 +2,7 @@
 title = 'Operations'
 linkTitle = 'Operations'
 weight = 80
-description = 'Migrations, start-up guards, health checks, logging, rate limiting, and the integrations.'
+description = 'Migrations, start-up guards, health checks, logging, rate limiting, data retention, and the integrations.'
 +++
 
 ## Migrations
@@ -133,6 +133,35 @@ throttle — not a replacement for a WAF or an API gateway's own rate limiting i
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
 
+## Data retention — NFR-19
+
+Personal data is kept only as long as its purpose requires (GDPR Art. 5(1)(e), LGPD Art. 15). The
+schedule — every table holding personal data, its period, and the reason for it — is the
+[Data Retention Schedule Document](../requirements/data-retention-schedule-document/), and it is the
+source of truth these settings are configured against.
+
+The schedule marks which periods are enforced and which are not yet, so it never describes a
+guarantee the code does not make. Read it there rather than inferring enforcement from the presence
+of a setting here.
+
+| Variable | Default | Accepted range | Meaning |
+| --- | --- | --- | --- |
+| `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
+| `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
+| `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
+
+A deployment that sets none of these still gets the published periods — an unset variable must not
+mean "keep forever". A malformed or out-of-range value falls back to the default and is named in a
+start-up warning rather than failing start-up: a typo in a retention setting should not take down
+the identity provider every client system authenticates against. Falling back *silently* would be
+worse than either, since an operator would believe a setting was applied.
+
+Each bound is enforced for a reason. A grace period beyond ten years is a stray unit rather than a
+policy. An interval below a minute turns a purge into continuous delete pressure on the tables the
+login path writes to; one above seven days is past what `PeriodicTimer` accepts, and the exception
+it would throw inside a hosted service stops the host by default.
+
 ## Cross-origin requests
 
 `HEIMDALL_CORS_ALLOWED_ORIGINS` lists the browser front ends allowed to call the API, comma
@@ -227,6 +256,10 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
+| `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
+| `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
+| `HEIMDALL_RETENTION_PURGE_ENABLED` | | `true` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
