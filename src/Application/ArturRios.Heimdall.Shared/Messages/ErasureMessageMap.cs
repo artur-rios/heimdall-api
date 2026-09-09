@@ -34,6 +34,9 @@ public static class ErasureMessageMap
             // Art. 18(3) makes the notification a precondition, so a delivery failure is a refusal
             // rather than something to swallow.
             [ErasureMessages.RestrictionLiftNotificationFailed] = HttpStatusCodes.ServiceUnavailable,
+            // NFR-25 — restore reconciliation.
+            [ErasureMessages.ErasuresReapplied] = HttpStatusCodes.Ok,
+            [ErasureMessages.NoSubjectsToReapply] = HttpStatusCodes.BadRequest,
             // UC-43 read.
             [ErasureMessages.ErasureRequestsRetrieved] = HttpStatusCodes.Ok
         });

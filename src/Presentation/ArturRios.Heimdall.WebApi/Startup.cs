@@ -139,6 +139,8 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddPostgreSqlProvider();
         Builder.Services.AddDataConfigFromEnvironment<AppDbContext>("HEIMDALL_DATA");
 
+        WarnIfDatabaseConnectionIsNotEncrypted();
+
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
         Builder.Services.AddScoped<IActorAccessor, HttpContextActorAccessor>();
@@ -191,6 +193,9 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services
             .AddAuditedCommandHandler<LiftProcessingRestrictionCommand,
                 LiftProcessingRestrictionCommandOutput, LiftProcessingRestrictionCommandHandler>();
+        Builder.Services
+            .AddAuditedCommandHandler<ReapplyErasuresCommand, ReapplyErasuresCommandOutput,
+                ReapplyErasuresCommandHandler>();
         // No validator: UC-15's request carries no caller-supplied input at all — the person comes
         // from the bearer token — so there is nothing for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput, ResendVerificationEmailCommandHandler>();
@@ -776,6 +781,53 @@ public class Startup(string[] args) : WebApiStartup(args)
                 "Audit attribution pseudonymisation is switched off by {Variable}; the trail will " +
                 "keep naming people past its attribution period, including erased ones",
                 DataRetentionOptions.AuditPseudonymisationEnabledVariable);
+        }
+    }
+
+    /// <summary>
+    ///     Warns when the database connection string does not require TLS (NFR-25, GDPR Art. 32,
+    ///     LGPD Art. 46).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Everything this database holds is personal data, and Npgsql's default
+    ///         <c>SSL Mode</c> is <c>Prefer</c> — which silently falls back to an unencrypted
+    ///         connection when the server does not offer TLS. A deployment can therefore be sending
+    ///         credentials and addresses in clear text across the network while looking correctly
+    ///         configured, which is exactly the failure worth a start-up warning.
+    ///     </para>
+    ///     <para>
+    ///         It warns rather than refusing to start, which is a deliberate departure from how this
+    ///         codebase treats other security configuration — TH-23's email control fails start-up
+    ///         in Production. The difference is that failing here would take down a working
+    ///         deployment on upgrade over a setting the operator may not control directly. Once TLS
+    ///         is confirmed in place, turning this into a refusal is a one-line change and should be
+    ///         made.
+    ///     </para>
+    /// </remarks>
+    private static void WarnIfDatabaseConnectionIsNotEncrypted()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("HEIMDALL_DATA_CONNECTIONSTRING");
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var requiresTls = connectionString
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => part.Contains('='))
+            .Select(part => part.Split('=', 2))
+            .Where(pair => pair[0].Replace(" ", string.Empty)
+                .Equals("SSLMode", StringComparison.OrdinalIgnoreCase))
+            .Any(pair => pair[1].Trim() is "Require" or "VerifyCA" or "VerifyFull");
+
+        if (!requiresTls)
+        {
+            Log.Warning(
+                "The database connection does not require TLS. Npgsql defaults to SSL Mode=Prefer, " +
+                "which falls back to an unencrypted connection — every credential and address this " +
+                "API stores would cross the network in clear text. Set SSL Mode=Require or stronger");
         }
     }
 

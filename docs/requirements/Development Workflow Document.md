@@ -121,6 +121,21 @@ The order matters: a column that cannot be given a purpose in step 1 is a column
 what data protection by design (GDPR Art. 25, LGPD Art. 6 III) asks for, applied at the only moment
 it is cheap.
 
+### Step 4.2 — The periodic security review
+
+GDPR Art. 32(1)(d) requires a process for regularly testing and evaluating the technical and
+organisational measures, not merely having them. That process is:
+
+| When | What |
+| --- | --- |
+| **Every quarter** | Restore a backup into a scratch environment and run the erasure reconciliation against it (Operations & Infrastructure §0.1). A restore procedure that has never been run is a hypothesis |
+| **Every quarter** | Confirm encryption at rest is still in force for the database volume and its backups, and that the database connection still requires TLS |
+| **Every six months** | Re-read the [Threat Model](Threat%20Model%20Document.md) against the code. A threat closed by a control that has since been refactored away is worse than one still marked open |
+| **On any change to processing** | Revisit the [DPIA](Data%20Protection%20Impact%20Assessment.md), the record of processing, and the retention schedule |
+
+The cadence matters less than the fact that each item has one. An unscheduled review is one that
+happens after an incident.
+
 ### Step 5 — Test until green
 
 Following the [Testing Specification Document](Testing%20Specification%20Document.md):

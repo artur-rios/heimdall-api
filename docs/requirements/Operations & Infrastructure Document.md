@@ -20,6 +20,100 @@ Note also that Brazil holds no EU adequacy decision. If any tenant scope serves 
 EEA, hosting here is itself a restricted transfer under GDPR Chapter V — see §7.2 of that document,
 which records this as a question the controller must answer rather than an assumption.
 
+## 0.1 Encryption, backups, and restoring without undoing an erasure
+
+NFR-25. This section states what the deployment must provide and what the API does about it. Two of
+the three requirements are properties of the hosting rather than of this codebase, and are marked
+accordingly: **the controller must confirm them** — they cannot be verified from the repository.
+
+### Encryption at rest
+
+| | |
+| --- | --- |
+| **Database volume** | ⚠️ **Required, not verified.** Must be encrypted at rest by the hosting provider |
+| **Backups** | ⚠️ **Required, not verified.** Must be encrypted with a key not stored alongside them |
+| **Application-level** | ✅ Argon2id password hashes, encrypted TOTP secrets (NFR-16), hashed tokens and recovery codes |
+
+The application-level protections are real and tested, and they are not a substitute. The threat
+model's TB-3 covers what an attacker recovers from *stolen rows*, which presupposes the rows were
+read; it says nothing about a disk or a snapshot leaving the building. Everything not listed in the
+third row above — every name, every address, every audit entry — is stored in clear text within the
+database and is protected only by whatever the volume beneath it provides.
+
+### Encryption in transit
+
+`UseHttpsRedirection` covers the inbound edge. The database connection is the other half, and the
+API **warns at start-up** when the connection string does not require TLS.
+
+Npgsql's default `SSL Mode` is `Prefer`, which silently falls back to an unencrypted connection when
+the server does not offer TLS — so a deployment can be sending credentials and addresses in clear
+text while looking correctly configured. Set `SSL Mode=Require`, `VerifyCA` or `VerifyFull` in
+`HEIMDALL_DATA_CONNECTIONSTRING`.
+
+It warns rather than refusing to start, deliberately, and that is a departure from how this codebase
+treats other security configuration — TH-23's email control fails start-up in Production. Failing
+here would take down a working deployment on upgrade over a setting the operator may not control
+directly. **Once TLS is confirmed in place, this should become a refusal**; it is a one-line change
+in `WarnIfDatabaseConnectionIsNotEncrypted`.
+
+### The backup regime
+
+⚠️ **Proposed, and awaiting the controller's confirmation.** The repository cannot see the backup
+configuration, so these are the values the rest of this section is written against rather than
+observed facts:
+
+| | |
+| --- | --- |
+| **Schedule** | Daily full backup |
+| **Retention** | 35 days |
+| **Location** | Same region as the database — Brazil. A backup in another jurisdiction is an international transfer of every category at once |
+| **Encryption** | Required, key held separately |
+| **Restore testing** | Quarterly, including the reconciliation step below |
+
+35 days is chosen against the erasure deadline rather than against recovery convenience: it is
+longer than the 30 days §4 of the retention schedule allows an erasure to take, which is what makes
+the reconciliation step below **mandatory rather than optional**. A regime keeping backups for less
+than 30 days would not need it — but would also cap disaster recovery at under a month, which for
+most operators is unacceptable.
+
+### Restoring without undoing an erasure
+
+> An erasure that the next restore silently undoes is not an erasure.
+
+Backups are full copies and are never edited — editing one destroys the integrity that is its whole
+purpose. So a restore reinstates whatever the database held when the backup was taken, erased people
+included, and the runbook has to put them back.
+
+**Two cases, and only one needs a human.**
+
+Where the backup was taken **after** the subject asked, the restored row still carries its deletion
+and its deadline, and NFR-20's scheduled pass completes the erasure again by itself. Nothing is
+required.
+
+Where the backup **predates the request**, the row comes back with no trace of the request ever
+having been made. Nothing inside the database knows to act, because the evidence was rolled back
+along with everything else. This is the case the reconciliation exists for.
+
+**The erasure ledger.** Every run of the anonymisation pass logs the public identifiers it
+anonymised. That line is the ledger, and it works precisely because the logs are outside the
+database and a restore cannot roll them back. The identifiers are safe to keep and to ship off the
+host: a `PublicId` whose identity has been anonymised resolves to nobody, so it is not personal
+data.
+
+**The runbook step.** After any restore:
+
+1. Collect the anonymised identifiers from the logs, covering the period from the backup's timestamp
+   to now.
+2. `POST /api/auth/erasure-reconciliation` with that list, as a System Admin.
+3. Check the response: `anonymised` is what the restore had brought back, `alreadyAnonymised` is
+   what it had not, and `notFound` is the ordinary case for most of the ledger.
+4. Record the run. The reconciliation is itself audited.
+
+The step is safe to repeat — running it twice anonymises nothing extra — and it **refuses an empty
+list**, because a reconciliation with nothing to reconcile almost always means the ledger was not
+loaded, and reporting success there would let a restore be signed off with erased people back in the
+database.
+
 ## 1. Introduction
 
 ### 1.1 Purpose

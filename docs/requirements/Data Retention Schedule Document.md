@@ -49,12 +49,14 @@ own record is covered below.
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
 | Application logs | Serilog file sink | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
-| Database backups | The backup store, outside the schema | **No number of its own** — bounded by §9 | A backup is a full copy of every category above. Its period cannot be set independently of the erasure deadlines it would otherwise undo | ❌ Not enforced — [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
+| Database backups | The backup store, outside the schema | **35 days** (proposed) — §9 | A backup is a full copy of every category above. Longer than the 30-day erasure deadline, which is what makes restore-time reconciliation mandatory | ⚠️ Regime proposed, reconciliation implemented — §9 |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Every period is decided, and four are now enforced. One row is decided but **not yet enforced** —
-the backups (§9), which say so with the issue that will enforce it. That is the rule in §1 working, not an oversight — the alternative is a
+Every period is decided and every one is now enforced, with a single qualification: the backup
+regime in §9 is proposed rather than observed, because the repository cannot see the backup
+configuration. The mechanism that makes it safe — reconciling a restore against the erasure ledger —
+is implemented and tested regardless of which retention the controller confirms. That is the rule in §1 working, not an oversight — the alternative is a
 document that reads as though the system already did these things.
 
 Backups are the one row still carrying no number, and deliberately: their period follows from a
@@ -323,8 +325,7 @@ creates the one failure that makes every other row in this document theoretical:
 > **An erasure that the next restore silently undoes is not an erasure.**
 
 Backups are not edited. Editing them destroys the integrity that is their entire purpose, and no
-backup regime worth running permits it. That leaves exactly two workable answers, and
-[#106](https://github.com/artur-rios/heimdall-api/issues/106) has to pick one and implement it:
+backup regime worth running permits it. That left exactly two workable answers:
 
 1. **Backup retention shorter than the shortest erasure deadline**, which §4 now fixes at **30
    days**. An erased record cannot survive in a backup past the deadline, because the backup holding
@@ -334,11 +335,19 @@ backup regime worth running permits it. That leaves exactly two workable answers
    long as recovery needs, at the cost of a step that must run on every restore and must be tested
    like any other part of the recovery procedure.
 
-The choice determines the period rather than following from it, which is why this row carries no
-number of its own. Note the direction of the constraint: a regime keeping backups longer than 30
-days — which is nearly every regime — makes the re-application step **mandatory, not optional**.
-Choosing (1) by default and discovering later that recovery needs ninety days is how an erasure
-quietly comes back.
+**Option 2 was taken**, with a proposed 35-day retention. The direction of the constraint is why:
+a regime keeping backups longer than 30 days — which is nearly every regime — makes the
+re-application step mandatory rather than optional, and choosing option 1 by default and discovering
+later that recovery needs ninety days is how an erasure quietly comes back. Committing to the
+reconciliation up front means the retention can be whatever recovery actually needs.
+
+The mechanism is in
+[§0.1 of the Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md),
+along with the runbook step. In short: the anonymisation pass logs the identifiers it anonymised —
+a ledger that survives outside the database, which is what a restore cannot roll back — and a
+System Admin replays it afterwards. Only backups predating a request need it; where the backup was
+taken after, the restored row still carries its deadline and the scheduled pass finishes the job
+unaided.
 
 Backup encryption belongs to the same issue and is not restated here.
 
