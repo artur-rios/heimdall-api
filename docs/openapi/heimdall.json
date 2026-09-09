@@ -1179,6 +1179,124 @@
         ]
       }
     },
+    "/api/auth/processing-restriction": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Restricts processing of the caller's own identity (UC-44, GDPR Art. 18, LGPD Art. 18\nIII–IV) — suspended without being deleted, while something about it is disputed.",
+        "description": "No credential is required, unlike UC-42's erasure request. A restriction destroys\nnothing and is liftable, and somebody asking for one may be doing so precisely because\nthey believe the account is compromised — demanding the password of a person in that\nposition would be the wrong way round.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "operationId": "Auth_RestrictProcessing",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestrictProcessingCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestrictProcessingCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestrictProcessingCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/processing-restriction/lift": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Lifts a restriction on processing (UC-45, GDPR Art. 18(3)).",
+        "description": "No `RoleRequirement`, because the rule is data-dependent: a subject of any role may\nlift their own, and only a System Admin may lift somebody else's. The handler decides,\nand it informs the subject first in the second case — Art. 18(3) makes that a\nprecondition of the act rather than a courtesy afterwards, so a failed notification\nrefuses the lift.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "operationId": "Auth_LiftProcessingRestriction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiftProcessingRestrictionCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiftProcessingRestrictionCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiftProcessingRestrictionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/auth/erasure-requests": {
       "get": {
         "tags": [
@@ -5269,6 +5387,65 @@
         },
         "additionalProperties": false
       },
+      "LiftProcessingRestrictionCommand": {
+        "type": "object",
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LiftProcessingRestrictionCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "liftedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "subjectNotified": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LiftProcessingRestrictionCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "LoginCommand": {
         "type": "object",
         "properties": {
@@ -5932,6 +6109,65 @@
           },
           "data": {
             "$ref": "#/components/schemas/ResetPasswordCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestrictProcessingCommand": {
+        "type": "object",
+        "properties": {
+          "ground": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestrictProcessingCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "restrictedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ground": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestrictProcessingCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/RestrictProcessingCommandOutput"
           }
         },
         "additionalProperties": false

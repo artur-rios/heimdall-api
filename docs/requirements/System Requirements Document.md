@@ -639,6 +639,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-21 | Data Protection | An audit entry shall stop naming the identity that produced it once its attribution period has elapsed, or immediately once that identity has been anonymised (NFR-20), whichever comes first. Clearing the attribution is the only change `AUDIT_LOG` shall ever permit: every other column stays immutable, the attribution may be set to null but never to another identity, no row may be deleted or truncated, and the rule shall be enforced by the database rather than by the application. The resulting guarantee is that an action can never be denied, and who took it can never be reassigned — only forgotten |
 | NFR-22 | Data Protection | Application log files shall be removed once they are older than the configured retention period, and no log statement shall write an email address. Where a line needs to refer to an address so an operator can correlate, it shall write a stable non-reversible reference to it instead. The two halves are ordered: the redaction lands no later than the retention limit, since bounding the files without redacting them would give identifiable data a longer life than it had before |
 | NFR-23 | Data Protection | Every identity shall record, at creation, the lawful basis its data is processed on and the version of the privacy notice then in force (GDPR Art. 5(2) and 30(1)(c), LGPD Art. 8 §2). A scope may declare the basis for the identities within it, since the tenant is usually their controller; where it declares none, contract performance applies. Consent shall not be selectable while no withdrawal path exists, and identities predating this requirement shall be marked as unrecorded rather than backfilled with a guess |
+| NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate, shall not receive email, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)) |
 
 ### 6.1 The reference configuration
 
@@ -927,6 +928,8 @@ block-beta
 | Verify 2FA Challenge | N/A | N/A | N/A | ✅ (holds a valid challenge token) |
 | Export Own Personal Data | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | Request Erasure of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
+| Restrict Processing of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
+| Lift a Restriction | ✅ (self, or anyone) | ✅ (self only) | ✅ (self only) | ❌ |
 | List Outstanding Erasure Requests | ✅ | ❌ | ❌ | ❌ |
 
 ---

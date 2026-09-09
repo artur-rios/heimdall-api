@@ -46,6 +46,8 @@ Two rules apply everywhere and are not repeated per row:
 | `GET /2fa` | Any authenticated | FR-2F-15 — the caller's own two-factor status; 403 for a Google User |
 | `POST /data-export` | Any authenticated (self) | UC-41 — a copy of everything held about you, with recipients and retention |
 | `POST /erasure-request` | Any authenticated (self) | UC-42 — ask for your own erasure; requires a password or a fresh Google ID token |
+| `POST /processing-restriction` | Any authenticated (self) | UC-44 — suspend processing without deleting, on an Art. 18(1) ground |
+| `POST /processing-restriction/lift` | Self, or System Admin for another | UC-45 — lift it; an admin must inform the subject first |
 | `GET /erasure-requests` | System Admin | UC-43 — the outstanding erasure requests, soonest deadline first |
 
 Every **anonymous** endpoint here is rate-limited to **10 requests per minute per IP**. Each of them

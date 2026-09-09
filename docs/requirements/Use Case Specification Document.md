@@ -1891,6 +1891,73 @@ sequenceDiagram
 
 ---
 
+## UC-44: Restrict Processing of Own Identity
+
+| | |
+| --- | --- |
+| **ID** | UC-44 |
+| **Name** | Restrict Processing of Own Identity |
+| **Actor** | Any authenticated identity — a person of any role, or a Google User |
+| **Description** | A data subject suspends processing of their identity without anything being deleted (GDPR Art. 18, LGPD Art. 18 III–IV), while something about it is disputed. |
+| **Preconditions** | The caller holds a valid authentication token and is not already restricted. |
+| **Postconditions** | The identity is restricted. Nothing is deleted, and no retention window starts. |
+
+**Main flow**
+
+1. The caller names one of Art. 18(1)'s four grounds.
+2. The system resolves the subject from the authentication token — never from the request.
+3. The system records the restriction and the ground.
+4. From that moment the identity cannot authenticate, receives no email, and is withheld from tenant-facing listings.
+
+**Alternative flows**
+
+| ID | Condition | Outcome |
+| --- | --- | --- |
+| AF-44a | Already restricted | `ProcessingAlreadyRestricted` (409) |
+| AF-44b | The ground is not one of Art. 18(1)'s four | `RestrictionGroundUnknown` (400) |
+| AF-44c | The token names no live identity | `NotEligible` (403) |
+
+**Notes**
+
+- **Restriction is not deletion, and the two are independent states.** `IsDeleted` means the identity is on its way out — excluded from reads, cascaded by UC-04, eventually anonymised by NFR-20. A restriction means the opposite: the record is disputed and must be preserved exactly as it stands. Reusing the flag would start an erasure clock on data the subject has specifically asked be kept.
+- **No credential is required, unlike UC-42.** Erasure is irreversible and demands proof the person is present. A restriction destroys nothing and is liftable, and somebody asking for one may be doing so precisely because they believe the account is compromised — demanding the password of a person in that position would be the wrong way round.
+- **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them.
+- The grounds are an enum rather than free text: Art. 18(1) is exhaustive, so prose would add unbounded personal data with no purpose the ground does not already serve.
+
+---
+
+## UC-45: Lift a Restriction on Processing
+
+| | |
+| --- | --- |
+| **ID** | UC-45 |
+| **Name** | Lift a Restriction on Processing |
+| **Actor** | The subject, for their own; a System Admin, for anyone's |
+| **Description** | Ends a restriction, after informing the subject where the law requires it (GDPR Art. 18(3)). |
+| **Preconditions** | The named identity is restricted. |
+| **Postconditions** | The restriction is cleared. Where somebody else lifted it, the notification is recorded. |
+
+**Main flow**
+
+1. The system resolves the subject — the caller's own identity, or the one named where a System Admin is acting.
+2. Where the caller is not the subject, the system informs the subject **before** proceeding.
+3. The system clears the restriction and records that the notification happened.
+
+**Alternative flows**
+
+| ID | Condition | Outcome |
+| --- | --- | --- |
+| AF-45a | The identity is not restricted | `NotRestricted` (404) |
+| AF-45b | The subject could not be informed | `RestrictionLiftNotificationFailed` (503). The restriction stands |
+| AF-45c | A non-System-Admin names somebody else | `NotEligible` (403) |
+
+**Notes**
+
+- **AF-45b is the opposite of how every other delivery in this API behaves.** Elsewhere a failed send is deliberately not the caller's problem: a verification email that does not arrive is re-requested, and surfacing the failure would leak whether an address exists. Art. 18(3) makes this one a precondition — the subject "shall be informed before the restriction is lifted" — so a lift that proceeded after a failed send would be unlawful, and would look identical to one that worked.
+- **A subject lifting their own needs no notification.** They are the person Art. 18(3) exists to inform. Requiring an email to somebody standing in front of you, and refusing their request when it bounces, would be the article's letter against its purpose.
+
+---
+
 ## UC-43: List Outstanding Erasure Requests
 
 | | |

@@ -134,6 +134,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `DeletedAt`, `DeletionKind`, `AnonymisedAt` | Measuring and enforcing the retention window (NFR-20) |
 | `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honouring an erasure request within its deadline, and showing that it was honoured (UC-42, UC-43) |
 | `LegalBasis`, `PrivacyNoticeVersion`, `BasisRecordedAt` | Demonstrating the lawful basis and what the person was told when the account was created (NFR-23). Not data *about* the person so much as about the processing of them, and held for the same accountability duty that requires this document |
+| `ProcessingRestrictedAt`, `RestrictionGround`, `RestrictionLiftNotifiedAt` | Honouring a restriction of processing and evidencing that Art. 18(3)'s notification happened before it was lifted (NFR-24) |
 
 ### `GOOGLE_USER`
 
@@ -143,7 +144,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `GoogleId` | Google's `sub`. The only stable way to resolve a returning sign-in to a stored identity (FR-GO-08) |
 | `Name`, `Email`, `EmailVerified` | As on `PERSON` |
 | `ProfilePictureUrl` | Downstream profile provisioning — see the decision below |
-| `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason`, `LegalBasis`, `PrivacyNoticeVersion`, `BasisRecordedAt` | As above |
+| `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason`, `LegalBasis`, `PrivacyNoticeVersion`, `BasisRecordedAt`, `ProcessingRestrictedAt`, `RestrictionGround`, `RestrictionLiftNotifiedAt` | As above |
 
 ### `AUDIT_LOG`
 
@@ -260,9 +261,9 @@ breach detection — is
 | Portability | Art. 18 V | Art. 20 | ✅ UC-41 — structured JSON, machine-readable |
 | Correction | Art. 18 III | Art. 16 | ✅ UC-08, self-service |
 | Erasure / elimination | Art. 18 VI | Art. 17 | ✅ UC-42, completed by NFR-20 |
-| Restriction of processing | Art. 18 IV | Art. 18 | ⚠️ [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
+| Restriction of processing | Art. 18 IV | Art. 18 | ✅ UC-44, self-service |
 | Information about sharing | Art. 18 VII | Art. 15(1)(c) | ✅ §6 of this document, and in every UC-41 export |
-| Objection | Art. 18 § | Art. 21 | ⚠️ [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
+| Objection | Art. 18 § | Art. 21 | ✅ UC-44 with the `ObjectionPending` ground, which restricts processing while the objection is weighed |
 
 Deadlines: **LGPD Art. 19 §2 — 15 days** for confirmation and access; **GDPR Art. 12(3) — one
 month**. The shorter one governs where both apply.

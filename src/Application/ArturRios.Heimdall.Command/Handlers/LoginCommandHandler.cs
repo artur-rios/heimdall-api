@@ -116,6 +116,15 @@ public class LoginCommandHandler(
 
         await ClearFailedAttemptsAsync(person);
 
+        // AF-11h (NFR-24): processing is restricted, so authenticating would be processing it.
+        // Answered with the same message as every other refusal here, so the endpoint cannot be
+        // used to discover that an account is under dispute — and the subject who asked for the
+        // restriction already knows why.
+        if (person.ProcessingRestrictedAt is not null)
+        {
+            return output.WithError(AuthMessages.InvalidCredentials);
+        }
+
         // UC-11 step 4 (AF-11c, FR-AU-05).
         if (person.IsDeleted)
         {

@@ -35,6 +35,15 @@ internal static class GoogleUserDbMap
         googleUser.Property(x => x.PrivacyNoticeVersion);
         googleUser.Property(x => x.BasisRecordedAt);
 
+        // NFR-24: indexed because every listing filters on it, and the restricted set is a small
+        // fraction of the table.
+        googleUser.Property(x => x.ProcessingRestrictedAt);
+        googleUser.Property(x => x.RestrictionGround);
+        googleUser.Property(x => x.RestrictionLiftNotifiedAt);
+
+        googleUser.HasIndex(x => x.ProcessingRestrictedAt)
+            .HasFilter("processing_restricted_at IS NOT NULL");
+
         googleUser.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
 

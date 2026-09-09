@@ -45,6 +45,33 @@ public static class ErasureMessages
 
     /// <summary>UC-41: the subject's copy of their data was produced.</summary>
     public const string DataExported = "Your data has been exported.";
+    /// <summary>UC-44: processing of the caller's identity is now restricted.</summary>
+    public const string ProcessingRestricted =
+        "Processing of your data is restricted. Your account is suspended until it is lifted.";
+
+    /// <summary>UC-44 AF-44a: already restricted.</summary>
+    public const string ProcessingAlreadyRestricted = "Processing of this account is already restricted.";
+
+    /// <summary>UC-44 AF-44b: the ground named is not one Art. 18(1) recognises.</summary>
+    public const string RestrictionGroundUnknown =
+        "The ground given is not one the law recognises for restricting processing.";
+
+    /// <summary>UC-45: the restriction was lifted.</summary>
+    public const string RestrictionLifted = "The restriction on processing has been lifted.";
+
+    /// <summary>UC-45 AF-45a: nothing is restricted for that identity.</summary>
+    public const string NotRestricted = "Processing of this account is not restricted.";
+
+    /// <summary>
+    ///     UC-45 AF-45b: the subject could not be told the restriction was about to be lifted.
+    /// </summary>
+    /// <remarks>
+    ///     GDPR Art. 18(3) makes informing the subject a precondition of lifting, not a courtesy
+    ///     afterwards, so a failure to deliver stops the lift rather than being swallowed the way
+    ///     other delivery failures in this API are.
+    /// </remarks>
+    public const string RestrictionLiftNotificationFailed =
+        "The restriction was not lifted: the account holder could not be notified first.";
 
     /// <summary>UC-43 read: the pending erasure requests were listed.</summary>
     public const string ErasureRequestsRetrieved = "Erasure requests retrieved.";

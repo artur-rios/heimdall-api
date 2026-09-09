@@ -55,6 +55,13 @@ public class ListScopePersonsQueryHandler(
         var persons = personReader.Query()
             .Where(x => x.ScopeMembership != null && x.ScopeMembership.ScopeId == scope.Id);
 
+        // NFR-24: a restricted identity is withheld from tenant-facing listings, whatever
+        // IncludeDeleted says — the two states are independent. Not hidden from everyone: the
+        // subject's own export still returns it, and a System Admin resolving the dispute can still
+        // reach it by id. But a scope's administrator working through their user list has no
+        // business acting on a record whose processing is suspended.
+        persons = persons.Where(x => x.ProcessingRestrictedAt == null);
+
         if (!query.IncludeDeleted)
         {
             persons = persons.Where(x => !x.IsDeleted);

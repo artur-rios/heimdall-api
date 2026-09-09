@@ -103,7 +103,7 @@ row itself stays, because other records point at it, but nothing in it refers to
 | **Be erased** | `POST /api/auth/erasure-request` — you will be asked for your password, or a fresh Google sign-in, because it cannot be undone | 30 days |
 | **Correct your details** | Update your own record | Immediately |
 | **Get a copy of your data** | `POST /api/auth/data-export` — everything held about you, plus who else sees it and how long it is kept | Immediately |
-| **Have processing restricted, or object** | Not yet available — [#93](https://github.com/artur-rios/heimdall-api/issues/93) | — |
+| **Have processing restricted, or object** | `POST /api/auth/processing-restriction` — suspends your account without deleting anything, while something about it is disputed | Immediately |
 | **Ask anything, or complain** | <arturdev@duck.com> | 15 days |
 
 One of those is honestly marked unavailable. Publishing a notice that promised rights the system

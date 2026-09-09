@@ -124,6 +124,35 @@ public class GoogleUser : Entity
     /// <summary>When the basis and notice version were recorded.</summary>
     public DateTime? BasisRecordedAt { get; set; }
 
+    /// <summary>
+    ///     When processing of this identity was restricted (GDPR Art. 18, LGPD Art. 18 III–IV), or
+    ///     <c>null</c> if it is not restricted.
+    /// </summary>
+    /// <remarks>
+    ///     Independent of <see cref="IsDeleted" />, and necessarily so. Deletion means the identity
+    ///     is on its way out; restriction means it is disputed and must be preserved exactly as it
+    ///     is while that is resolved. Overloading the deletion flag would make a restricted record
+    ///     disappear from the administrator's view that has to resolve the dispute.
+    /// </remarks>
+    public DateTime? ProcessingRestrictedAt { get; set; }
+
+    /// <summary>
+    ///     Which of Art. 18(1)'s four grounds the restriction rests on (see
+    ///     <c>RestrictionGrounds</c>), or <c>null</c> if not restricted.
+    /// </summary>
+    public int? RestrictionGround { get; set; }
+
+    /// <summary>
+    ///     When the subject was told the restriction was about to be lifted, or <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    ///     GDPR Art. 18(3) requires the subject be informed <em>before</em> a restriction imposed at
+    ///     their request is lifted. This records that it happened, and the lift refuses to proceed
+    ///     without it.
+    /// </remarks>
+    public DateTime? RestrictionLiftNotifiedAt { get; set; }
+
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 
