@@ -5,7 +5,7 @@ weight = 90
 description = 'The specification: vision, system requirements, use cases, technology stack, data protection, testing, workflow, and operations.'
 +++
 
-These eleven documents are the **specification** for Heimdall. Everything else on this site describes
+These thirteen documents are the **specification** for Heimdall. Everything else on this site describes
 what was built; these say what must be true.
 
 They are also the working documents of the project, not a retrospective write-up: a feature is
@@ -22,6 +22,7 @@ requirement identifiers in the code.
 | [Data Protection Document](data-protection-document/) | Who controls what, on what basis, shared with whom, and across which borders — the record LGPD Art. 37 and GDPR Art. 30 require. |
 | [Privacy Notice](privacy-notice/) | What Heimdall does with personal data, told to the people it belongs to. Versioned, and the Encarregado's published contact. |
 | [Data Processing Agreement](data-processing-agreement/) | The terms on which Heimdall processes a tenant's users' data, and the sub-processor list. |
+| [Incident Response Document](incident-response-document/) | What counts as a personal data breach, who declares one, the clocks that start, and who has to be told. |
 | [Testing Specification Document](testing-specification-document/) | What to test for each use case, the unit and functional standards, and the required coverage. |
 | [Development Workflow Document](development-workflow-document/) | How a use case goes from backlog to merged — branch, issue status, testing gate, pull request. |
 | [Operations & Infrastructure Document](operations-infrastructure-document/) | The technical foundation and the health-check feature. |

@@ -94,9 +94,10 @@ NFR-16 and NFR-17. Specifically:
   ask the Processor to evidence it before executing.
 - The database connection warns at start-up when it does not require TLS, rather than refusing to
   start. Confirming TLS and turning that into a refusal is outstanding.
-- There is no automated breach detection
-  ([#105](https://github.com/artur-rios/heimdall-api/issues/105)). A Controller for whom this is
-  material should not execute this agreement until it is closed.
+- Breach detection is in place (NFR-26) and writes matchable signals to the log, but **where those
+  alerts are routed is the Processor's operational choice** and should be confirmed: a signal
+  nobody receives is a signal that has not been detected. The incident procedure, the deadlines and
+  the register are the [Incident Response Document](Incident%20Response%20Document.md).
 
 4.3 Every attempted write produces an audit entry recording the actor, the operation, the outcome and
 — on a refusal — the reason (NFR-09). The table is append-only, enforced by database triggers.
@@ -166,7 +167,9 @@ executed — see Data Protection Document §7.2.
 ## 8. Breach notification — Art. 28(3)(f), Art. 33(2), LGPD Art. 48
 
 8.1 The Processor notifies the Controller of a personal data breach affecting the Controller's data
-**without undue delay and in any event within 24 hours** of becoming aware of it.
+**without undue delay and in any event within 24 hours** of becoming aware of it. What counts as a
+breach, and when awareness is taken to begin, are defined in the
+[Incident Response Document](Incident%20Response%20Document.md) §3 and §4.
 
 8.2 The 24 hours is deliberately shorter than the Controller's own deadline. The Controller has 72
 hours under GDPR Art. 33 and 3 working days under ANPD Resolution CD/ANPD nº 15/2024, both counted

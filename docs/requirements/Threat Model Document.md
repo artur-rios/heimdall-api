@@ -321,6 +321,19 @@ those flows to work without credentials or network. It is listed here because a 
 with real users' addresses in it turns a convenience into an account-takeover primitive for anyone
 who can read a log.
 
+## 8.1 Detection
+
+Every control in this model is preventive. Until NFR-26 there was nothing that noticed a control
+being *tested* — the audit trail recorded each refusal with its reason, the lockout counters tracked
+per-account guessing, and the hash gate shed under load, and none of it reached anybody. A trail
+nobody reads does not make anyone aware of anything, and awareness is what starts GDPR Art. 33's
+seventy-two hours.
+
+`SecurityMonitoringService` now reads those signals on a schedule and writes what exceeds its
+thresholds to the log with a matchable marker. It is deliberately not a decision procedure: what
+follows a signal is the [Incident Response Document](Incident%20Response%20Document.md), because
+automating the declaration would put the notification clock in the hands of a threshold.
+
 ## 9. What this model does not cover
 
 - **No dynamic testing.** Nothing here was found by attacking a running deployment. A design review

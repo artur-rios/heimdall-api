@@ -13,14 +13,16 @@ public class TokenRetentionService(
     IServiceScopeFactory scopeFactory,
     DataRetentionOptions retention,
     ILogger<TokenRetentionService> logger)
-    : ScheduledRetentionService(scopeFactory, retention.PurgeInterval, logger)
+    : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
     protected override string StartupDescription =>
         $"Token retention purge scheduled every {retention.PurgeInterval}, removing tokens more than " +
         $"{retention.SingleUseTokenGrace} past expiry";
 
-    protected override async Task<string?> RunAsync(CommandMediator mediator)
+    protected override async Task<string?> RunAsync(IServiceProvider scope)
     {
+        var mediator = scope.GetRequiredService<CommandMediator>();
+
         var result = await mediator
             .ExecuteCommandAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>(
                 new PurgeExpiredTokensCommand());

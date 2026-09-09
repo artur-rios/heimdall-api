@@ -20,7 +20,11 @@ public class DataRetentionOptionsTests
         DataRetentionOptions.AnonymisationEnabledVariable,
         DataRetentionOptions.AuditActorRetentionDaysVariable,
         DataRetentionOptions.AuditPseudonymisationEnabledVariable,
-        DataRetentionOptions.LogRetentionDaysVariable
+        DataRetentionOptions.LogRetentionDaysVariable,
+        DataRetentionOptions.SecurityMonitoringEnabledVariable,
+        DataRetentionOptions.MonitoringWindowMinutesVariable,
+        DataRetentionOptions.RefusalThresholdVariable,
+        DataRetentionOptions.LockoutThresholdVariable
     ];
 
     private static void ClearAll()
@@ -47,6 +51,10 @@ public class DataRetentionOptionsTests
 
         Assert.Equal(DataRetentionOptions.DefaultAuditActorRetention, options.AuditActorRetention);
         Assert.Equal(DataRetentionOptions.DefaultLogRetention, options.LogRetention);
+        Assert.Equal(DataRetentionOptions.DefaultMonitoringWindow, options.MonitoringWindow);
+        Assert.Equal(DataRetentionOptions.DefaultRefusalThreshold, options.RefusalThreshold);
+        Assert.Equal(DataRetentionOptions.DefaultLockoutThreshold, options.LockoutThreshold);
+        Assert.True(options.SecurityMonitoringEnabled);
 
         // Every pass is on unless an operator switches it off: silence must not mean "keep forever"
         Assert.True(options.PurgeEnabled);

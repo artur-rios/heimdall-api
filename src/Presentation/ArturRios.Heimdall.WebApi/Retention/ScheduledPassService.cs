@@ -3,7 +3,7 @@ using ArturRios.Mediator.Command;
 namespace ArturRios.Heimdall.WebApi.Retention;
 
 /// <summary>
-///     Runs one retention pass on an interval. Subclasses supply the pass; everything about
+///     Runs one scheduled pass on an interval. Subclasses supply the pass; everything about
 ///     <em>when</em> it runs, and what happens when it fails, lives here.
 /// </summary>
 /// <remarks>
@@ -13,7 +13,7 @@ namespace ArturRios.Heimdall.WebApi.Retention;
 ///         never turns start-up into write pressure on the tables the login path uses.
 ///     </para>
 ///     <para>
-///         A failed run is logged and the loop continues. These are maintenance tasks, not part of
+///         A failed run is logged and the loop continues. These are background tasks, not part of
 ///         serving a request — a database blip must not take the service down, and the next tick
 ///         retries whatever was missed, because a row past its retention period stays past it.
 ///     </para>
@@ -23,7 +23,7 @@ namespace ArturRios.Heimdall.WebApi.Retention;
 ///         alone. Each pass documents why overlapping runs need no coordination.
 ///     </para>
 /// </remarks>
-public abstract class ScheduledRetentionService(
+public abstract class ScheduledPassService(
     IServiceScopeFactory scopeFactory,
     TimeSpan interval,
     ILogger logger) : BackgroundService
@@ -33,10 +33,14 @@ public abstract class ScheduledRetentionService(
 
     /// <summary>
     ///     Dispatches the pass and returns what it did, for the log — or <c>null</c> when there is
-    ///     nothing worth saying, so an hourly no-op does not bury the runs that matter. The audit
-    ///     trail records every run either way (NFR-09).
+    ///     nothing worth saying, so an hourly no-op does not bury the runs that matter.
     /// </summary>
-    protected abstract Task<string?> RunAsync(CommandMediator mediator);
+    /// <param name="scope">
+    ///     A fresh dependency-injection scope. The pass resolves what it needs from it — most
+    ///     resolve <see cref="CommandMediator" />, the security detector a <c>QueryMediator</c>,
+    ///     because it reads rather than writes.
+    /// </param>
+    protected abstract Task<string?> RunAsync(IServiceProvider scope);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -74,7 +78,7 @@ public abstract class ScheduledRetentionService(
             // its own — this service is a singleton and has none.
             using var scope = scopeFactory.CreateScope();
 
-            var summary = await RunAsync(scope.ServiceProvider.GetRequiredService<CommandMediator>());
+            var summary = await RunAsync(scope.ServiceProvider);
 
             if (summary is not null)
             {
@@ -83,7 +87,7 @@ public abstract class ScheduledRetentionService(
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "A retention pass threw");
+            logger.LogError(exception, "A scheduled pass threw");
         }
     }
 }

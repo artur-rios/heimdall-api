@@ -126,6 +126,8 @@ so either place is authoritative:
   make the system do, with the Encarregado's published contact.
 - [Data Processing Agreement](docs/requirements/Data%20Processing%20Agreement.md) — the terms a
   tenant organisation executes, and the sub-processor list.
+- [Incident Response Document](docs/requirements/Incident%20Response%20Document.md) — what counts
+  as a personal data breach, the notification clocks, and the register.
 - [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) — how each
   use case is tested (unit + functional standards).
 - [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) — how a use
