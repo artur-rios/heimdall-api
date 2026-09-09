@@ -44,7 +44,7 @@ own record is covered below.
 | Category | Where it lives | Retention period | Why that period | Enforced |
 | --- | --- | --- | --- | --- |
 | Active identity | `PERSON`, `GOOGLE_USER` | Life of the account | Performance of the service the account exists for. An identity provider cannot authenticate an identity it has deleted | By deletion (UC-09/UC-10, UC-28/UC-29) |
-| Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **30 days** where the subject asked, **90 days** where an administrator did — §4 | A soft delete is a restriction of processing, not an erasure, so it needs a terminal state. The shorter deadline is the law's, not a choice; the longer one is a reversal window. Both end in anonymisation | ❌ Not enforced — [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
+| Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **30 days** where the subject asked, **90 days** where an administrator did — §4 | A soft delete is a restriction of processing, not an erasure, so it needs a terminal state. The shorter deadline is the law's, not a choice; the longer one is a reversal window. Both end in anonymisation | ✅ Scheduled anonymisation (§4.4) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ❌ Not enforced — [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
@@ -53,10 +53,10 @@ own record is covered below.
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
-Every period is now decided. Four rows are decided but **not yet enforced**, and each says so with
-the issue that will enforce it: logically deleted identities (§4), the audit trail (§7), the
-application logs (§8), and the backups (§9). That is the rule in §1 working, not an oversight — the
-alternative is a document that reads as though the system already did these things.
+Every period is decided, and two are now enforced. Three rows are decided but **not yet enforced**,
+and each says so with the issue that will enforce it: the audit trail (§7), the application logs
+(§8), and the backups (§9). That is the rule in §1 working, not an oversight — the alternative is a
+document that reads as though the system already did these things.
 
 Backups are the one row still carrying no number, and deliberately: their period follows from a
 strategy choice §9 sets out, so a figure here would prejudge it.
@@ -72,20 +72,26 @@ anywhere removes a soft-deleted row, so a person "deleted" in 2026 is still full
 The terminal state depends on why the record was deleted, because the two cases rest on different
 legal footing.
 
-### The subject asked: 30 days
+### 4.1 The subject asked: 30 days
 
 Not a period chosen here. GDPR Art. 12(3) requires the controller to act on an erasure request
 without undue delay and **at most one month**; LGPD Art. 19 §2 sets 15 days for the confirmation and
 access response that usually accompanies it. Thirty days is the outer limit, not the target — the
 erasure completes as soon as it can, and the deadline is what it must not exceed.
 
-One consequence [#92](https://github.com/artur-rios/heimdall-api/issues/92) has to design around:
-NFR-12 refuses to strip a scope of its last owner, so an erasure can be **blocked** by a rule that
-needs a human to resolve, by transferring ownership. A blocked erasure is not an extended one. The
-deadline keeps running, which means the pending-request view has to surface what is overdue rather
-than merely what is queued.
+One consequence for the request path: NFR-12 refuses to strip a scope of its last owner, so an
+erasure can be **blocked** by a rule that needs a human to resolve, by transferring ownership. A
+blocked erasure is not an extended one. The deadline keeps running, which means the pending-request
+view has to surface what is overdue rather than merely what is queued.
 
-### An administrator did: 90 days
+**Nothing writes this kind yet.** The anonymisation pass applies this deadline to any record
+carrying it, and the deadline is enforced today — but the only way to be deleted at present is
+administratively, so in practice every record currently takes §4.2's window. The self-service
+erasure request is UC-42 ([#91](https://github.com/artur-rios/heimdall-api/issues/91)), and it
+writes through the seam this leaves. The mechanism is complete; the trigger for the shorter deadline
+is what is missing.
+
+### 4.2 An administrator did: 90 days
 
 No subject asked, so the deadline is the controller's own and the purpose is different: a reversal
 window. An administrator who deleted the wrong person needs to undo it, and the client systems in
@@ -96,16 +102,42 @@ confined to one product: Heimdall is the identity provider every client system a
 against, so one deletion propagates everywhere at once and is correspondingly more expensive to
 discover late.
 
-### Both end in anonymisation, not deletion
+### 4.3 Both end in anonymisation, not deletion
 
 NFR-07 requires every foreign key in the schema to still resolve after a deletion, and removing the
 row breaks that. Anonymising in place does not: the identifying columns go — `Name` and `Email`
-overwritten, `PasswordHash` and `Salt` zeroed, `GoogleId` and `ProfilePictureUrl` cleared, the
-two-factor material removed by its existing cascade — while the row keeps its structural role.
+overwritten, `PasswordHash` and `Salt` zeroed, the behavioural counters reset, and for a Google User
+`GoogleId` and `ProfilePictureUrl` cleared — while the row keeps its structural role. The person's
+single-use tokens and their two-factor configuration go with them, the latter taking its recovery
+codes and email codes by cascade.
 
 That satisfies erasure. GDPR Recital 26 and LGPD Art. 12 both put anonymised data outside the law's
 scope, so an anonymised row is no longer personal data being retained. Hard deletion stays available
 as UC-10 for the cases that genuinely want the row gone.
+
+### 4.4 How the anonymisation runs
+
+`IdentityAnonymisationService` dispatches `AnonymiseExpiredDeletionsCommand` on the same interval as
+the token purge, and the pass shares that one's properties: bounded to a batch per run, needing no
+coordination between instances, audited so each run leaves the evidence that erasure happened, and
+treating a run with nothing due as a success.
+
+Three things are specific to it.
+
+**The deadline comes from the record, not the pass.** Each row carries `DeletionKind`, and the
+cutoff applied is the one that kind names. A row with no kind — deleted before this mechanism
+existed, and backfilled by the migration — is treated as administrative, because guessing that
+somebody had requested erasure would invent a request that may never have been made and apply the
+shorter deadline to it.
+
+**A row with no `DeletedAt` is skipped, not taken.** A window that cannot be shown to have elapsed
+is not one to act on. The migration backfills `DeletedAt` from `UpdatedAt` for rows deleted before
+the column existed; that proxy is equal to or later than the true deletion, never earlier, so a
+backfilled window closes on time or late and can never erase a record early.
+
+**The dependents go first, and a failure there stops the run.** Anonymising the person while leaving
+their two-factor secret behind would erase the label and keep the material — and the next run would
+never return to it, because it selects on records not yet anonymised.
 
 ## 5. Single-use tokens: why the period is expiry plus a grace period
 
@@ -273,8 +305,15 @@ Backup encryption belongs to the same issue and is not restated here.
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
+| `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
+| `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
+| `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
 
-The ranges are enforced, and each bound is there for a reason. A grace period beyond ten years is a
+The erasure deadline is the one setting with a ceiling that is not a sanity check: 30 days is the
+statutory limit, so a larger value is not a policy choice but a compliance failure, and it is
+refused rather than applied.
+
+The other ranges are enforced too, and each bound is there for a reason. A grace period beyond ten years is a
 stray unit rather than a policy. An interval below a minute turns the purge into continuous delete
 pressure on the tables the login path writes to; one above seven days is past what `PeriodicTimer`
 accepts, and the exception it would throw inside the hosted service stops the host by default — so

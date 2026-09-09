@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -81,8 +82,15 @@ public class DeleteGoogleUserCommandHandler(
         }
 
         // UC-28 step 3: flip the flag and stamp UpdatedAt (no DB trigger maintains it).
+        // DeletedAt and DeletionKind are stamped for NFR-20, for the reasons given in
+        // DeletePersonCommandHandler: the anonymisation window is measured from the deletion, and
+        // UpdatedAt would restart it on any later write.
+        var deletedAt = DateTime.UtcNow;
+
         googleUser.IsDeleted = true;
-        googleUser.UpdatedAt = DateTime.UtcNow;
+        googleUser.DeletedAt = deletedAt;
+        googleUser.DeletionKind = (int)DeletionKinds.Administrative;
+        googleUser.UpdatedAt = deletedAt;
 
         var update = await googleUserWriter.UpdateAsync(googleUser);
 

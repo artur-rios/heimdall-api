@@ -75,8 +75,19 @@ public class DeletePersonCommandHandler(
         }
 
         // UC-09 step 3: flip the flag and stamp UpdatedAt (no DB trigger maintains it).
+        //
+        // DeletedAt and DeletionKind are stamped alongside it for NFR-20: the window that ends in
+        // anonymisation is measured from the deletion, and UpdatedAt cannot serve as that mark
+        // because any later write moves it and would silently restart the window. The kind is
+        // Administrative because this is an administrator's decision — no data subject asked — and
+        // that carries the longer of the schedule's two deadlines. UC-42 (#91) is what will write
+        // SubjectRequested.
+        var deletedAt = DateTime.UtcNow;
+
         person.IsDeleted = true;
-        person.UpdatedAt = DateTime.UtcNow;
+        person.DeletedAt = deletedAt;
+        person.DeletionKind = (int)DeletionKinds.Administrative;
+        person.UpdatedAt = deletedAt;
 
         var update = await personWriter.UpdateAsync(person);
 

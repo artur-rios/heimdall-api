@@ -161,12 +161,29 @@ its batch, so an instance whose rows another already removed simply deletes fewe
 Each run writes one audit entry (NFR-09) as an anonymous write — the evidence that the schedule was
 enforced, and when. A run that removes nothing is a success; most runs find nothing to do.
 
+**Logically deleted identities are anonymised on a schedule.** A soft delete is a restriction of
+processing, not an erasure — the name, the address and the credential material all stay in the row.
+A second pass gives it a terminal state: once the retention window has elapsed, the record is
+anonymised in place, and the person's single-use tokens and two-factor configuration go with it.
+
+The window depends on why the record was deleted. Where the data subject asked, it is 30 days —
+GDPR Art. 12(3)'s outer limit rather than a chosen period, and refused if configured higher. Where
+an administrator deleted it, it is 90 days, a reversal window. Records deleted before this existed
+carry no reason and take the longer one.
+
+Anonymisation overwrites rather than removes, because NFR-07 requires every foreign key to keep
+resolving and the audit trail, the scope join rows and an owner's applications all point at the
+record. Hard deletion (UC-10) remains available for callers that want the row gone.
+
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
+| `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
+| `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
+| `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the anonymisation |
 
 A deployment that sets none of these still gets the published periods — an unset variable must not
 mean "keep forever". A malformed or out-of-range value falls back to the default and is named in a
@@ -277,6 +294,9 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | | `true` |
+| `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | | `30` |
+| `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | | `90` |
+| `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |

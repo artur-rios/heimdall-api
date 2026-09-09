@@ -635,6 +635,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-17 | Security | A two-factor challenge token shall carry a distinct claim marking it as MFA-pending, expire **5 minutes** after issue — a fixed lifetime, not a configurable one — and be rejected by every endpoint except second-factor verification |
 | NFR-18 | Performance | An endpoint that verifies a password is bounded by the cost of the password hash, not by NFR-05, and that cost is deliberate: it is what makes an offline attack on a stolen hash expensive. Every outcome shall pay it, including a rejection for an address that belongs to nobody (FR-AU-10). On the reference configuration this measures **347–491 ms at the median and 534–582 ms at the slowest**, the spread being idle versus contended (§6.1). Concurrency moves it much further: the ten logins a minute the rate limiter admits from one IP are released together and measured **2.8 seconds** each (§6.3.1), because each is a 600 MB / 16-thread derivation competing with nine others. The figure moves with the hashing parameters, the hardware and the load, and is republished rather than held constant |
 | NFR-19 | Data Protection | Personal data shall be kept in identifiable form only as long as its purpose requires (GDPR Art. 5(1)(e), LGPD Art. 15). Every table holding personal data shall carry a stated retention period, published in the [Data Retention Schedule Document](Data%20Retention%20Schedule%20Document.md) together with the reason for it, and each period the API enforces itself shall be enforced by a scheduled pass rather than by hand. A single-use token — password reset, email verification, two-factor email code — shall be removed once it is past its expiry by the configured grace period, and never before: the grace period is what keeps UC-13's `TokenExpired` and `TokenAlreadyUsed` answers truthful. A period the schedule states but nothing enforces shall be marked as such, so the document never claims a guarantee the code does not make |
+| NFR-20 | Data Protection | A logically deleted identity shall reach a terminal state. Once the retention window its deletion kind carries has elapsed ([Data Retention Schedule](Data%20Retention%20Schedule%20Document.md) §4), the record shall retain no value identifying a natural person — name, address, credential material and behavioural counters, and for a Google User the Google subject identifier and profile picture — and the material its dependents hold, the single-use tokens and the two-factor configuration, shall be removed with it. Every foreign key shall still resolve (NFR-07) and no `SCOPE_OWNER` row shall change, so NFR-12 is undisturbed. The record is anonymised in place rather than removed, because removing it is what breaks NFR-07; hard deletion (UC-10) remains available for callers that want the row gone |
 
 ### 6.1 The reference configuration
 
@@ -952,6 +953,31 @@ flowchart TD
     I --> J
 ```
 
+### 8.1 What each strategy means under GDPR and LGPD
+
+The two strategies are not merely different mechanics; they discharge different obligations, and §8
+described only the mechanics.
+
+**Logical deletion is a restriction of processing, not an erasure.** It removes the identity from
+default queries and stops it authenticating, which is what GDPR Art. 18 and LGPD Art. 18 IV
+describe. It is a legitimate state and the system needs it — an administrator must be able to undo a
+mistake, and a contested record must be suspendable without being destroyed. What it is not is an
+answer to GDPR Art. 17 or LGPD Art. 16: the name, the address and the credential material are all
+still there.
+
+**Anonymisation is the terminal state, and the one that discharges erasure.** After the retention
+window (NFR-20), the record retains no value identifying a natural person. GDPR Recital 26 and LGPD
+Art. 12 both place anonymised data outside the law's scope, so an anonymised row is no longer
+personal data being retained. It is reached automatically by a scheduled pass, not by a caller.
+
+Anonymisation overwrites rather than removes, and that is a consequence of NFR-07 rather than a
+preference: the audit trail, the scope membership and ownership rows, and the applications an owner
+held all point at the record, and deleting it breaks every one of those references.
+
+**Hard deletion removes the row**, along with the cascades §8 lists. It remains available (UC-05,
+UC-10, UC-20, UC-29, UC-35) for callers that want the record gone rather than emptied, and it is the
+right answer when nothing needs the reference to keep resolving.
+
 Notes on cascading behavior:
 
 - Logically deleting a scope logically deletes its `SCOPE_USER` persons (Users), its Google Users, and its applications, but does **not** affect Scope Admins who own it — they may own other, active scopes.
@@ -962,6 +988,9 @@ Notes on cascading behavior:
 - Hard deleting a scope permission simply removes its record. A scope permission is a leaf in the data model — no entity carries a foreign key to it — so nothing further cascades (FR-SP-08).
 - Logically deleting a scope permission flips only its own `IsDeleted` flag (FR-SP-07); nothing cascades, for the same leaf reason.
 - Hard deleting a person permanently removes their `TWO_FACTOR_AUTH` row and its `TWO_FACTOR_RECOVERY_CODE` rows, via the `two_factor_recovery_code → two_factor_auth → person` foreign keys' `ON DELETE CASCADE`. Logical deletion of a person does not touch two-factor state — a restored person keeps whatever 2FA configuration they had.
+
+- Logical deletion of a person or a Google User now records **when** it happened and **why** (`DeletedAt`, `DeletionKind`), because NFR-20's window is measured from the deletion and the two kinds carry different deadlines. `UpdatedAt` cannot serve: any later write moves it, which would silently restart the window.
+- Anonymisation removes the person's single-use tokens and their `TWO_FACTOR_AUTH` row, whose `ON DELETE CASCADE` foreign keys take the recovery codes and email codes with it. It does **not** touch `SCOPE_USER`, `SCOPE_OWNER`, the applications an owner held, or the audit trail — all are references NFR-07 requires to keep resolving, and none identifies a person once the record it points at has been anonymised. The audit trail's own actor reference is governed separately (see the retention schedule).
 
 > **On scope permissions and a logically deleted scope.** Unlike applications, scope permissions are **not** cascaded when their scope is logically deleted (UC-04): the scope's permissions are left with whatever `IsDeleted` state they already had. They become unreachable through the listing endpoint, which gates on the scope's `IsDeleted` (AF-31a reused), and they are excluded from the JWT-claim fold at login (FR-AU-08), which reads only permissions of non-deleted scopes. They are not purged, so a restored scope recovers its permission set unchanged; and a hard delete of the scope (UC-05) does purge them, via the cascade above.
 
