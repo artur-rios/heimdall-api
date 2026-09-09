@@ -37,7 +37,7 @@ api-client/                                     Ready-to-send requests for every
   http/                                         JetBrains HTTP Client (.http) files
   bruno/                                        Bruno collection
 docs/                                           Hugo (Docsy) documentation site — see Documentation
-  requirements/                                 Vision, requirements, use cases, tech stack, testing
+  requirements/                                 Vision, requirements, use cases, tech stack, retention, testing
   content/en/                                   The site's own pages (overview, architecture, flows…)
   openapi/                                      Generated OpenAPI document, published by the site
   themes/docsy/                                 The site theme, as a git submodule
@@ -118,6 +118,8 @@ so either place is authoritative:
   technical foundation and the health-check feature.
 - [Technology Stack Document](docs/requirements/Technology%20Stack%20Document.md) — the technologies,
   libraries, and versions the project is built on.
+- [Data Retention Schedule Document](docs/requirements/Data%20Retention%20Schedule%20Document.md) —
+  how long each category of personal data is kept and why (NFR-19).
 - [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) — how each
   use case is tested (unit + functional standards).
 - [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md) — how a use
