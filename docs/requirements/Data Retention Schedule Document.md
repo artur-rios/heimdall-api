@@ -345,8 +345,9 @@ The schedule is reviewed when:
 - a new category of data subject or recipient appears;
 - one of the "not yet enforced" rows is implemented, at which point its row states the period and
   the mechanism and drops the marker;
-- the record of processing activities is reviewed, since GDPR Art. 30(1)(f) requires the periods to
-  appear there too;
+- the [record of processing activities](Data%20Protection%20Document.md) is reviewed, since GDPR Art.
+  30(1)(f) requires the periods to appear there too — that document satisfies it by reference to this
+  one, so the two are reviewed together;
 - a new store outside the schema starts holding personal data, or an existing one changes what it
   holds — §8's twelve months rests on the logs no longer carrying addresses, and a change that put
   them back would invalidate the period without touching a single table;
