@@ -72,13 +72,19 @@ happening.
 | | |
 | --- | --- |
 | **Mailgun** (United States) | Receives your email address to deliver verification, password reset and two-factor messages |
-| **Google** (United States) | Only if you sign in with Google; the sign-in token is checked with them |
 | **The organisation whose system you use** | Sees the accounts in its own scope |
 | **The hosting provider** (Brazil) | Stores the database |
 
-Data is held in **Brazil** and sent to the **United States** for the two services above. Those are
-international transfers, and the mechanism relied on for each is recorded in
+Data is held in **Brazil**, and your email address is sent to the **United States** to deliver the
+messages above. That is an international transfer, made because sending you the email that activates
+or restores your account is part of running the account you asked for — LGPD Art. 33 IX with Art. 7
+V, and where it applies, the standard contractual clauses in Sinch's own terms. The detail is in
 [§7 of the Data Protection Document](Data%20Protection%20Document.md).
+
+**If you sign in with Google, nothing about you is sent to Google by us.** Google is where your name,
+address and picture *came from* — the token it issues when you sign in is checked here against
+Google's published certificates, on this server. Your sign-in at Google itself is between you and
+Google, under their terms.
 
 ## 6. How long it is kept
 

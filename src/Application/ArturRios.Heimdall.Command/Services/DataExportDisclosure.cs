@@ -40,12 +40,6 @@ public static class DataExportDisclosure
         },
         new()
         {
-            Name = "Google",
-            Purpose = "Verifying a Google sign-in, where the account uses one",
-            Location = "United States"
-        },
-        new()
-        {
             Name = "The organisation whose system this account belongs to",
             Purpose = "Administering the identities within its own scope",
             Location = "Varies by tenant"
@@ -55,6 +49,31 @@ public static class DataExportDisclosure
             Name = "Hosting provider",
             Purpose = "Storing the database",
             Location = "Brazil"
+        }
+    ];
+
+    /// <summary>
+    ///     Where data that did not come from the subject came from (GDPR Art. 14(2)(f) and Art.
+    ///     15(1)(g), LGPD Art. 9).
+    /// </summary>
+    /// <remarks>
+    ///     Google was listed as a <em>recipient</em> until the transfer assessment was corrected,
+    ///     and it is not one: the ID token is validated offline against cached public certificates
+    ///     and nothing about the person is ever sent to Google. It belongs here, where the direction
+    ///     is right — and telling the subject where their data came from is an obligation in its own
+    ///     right when it did not come from them.
+    /// </remarks>
+    public static IEnumerable<DataExportSource> Sources =>
+    [
+        new()
+        {
+            Name = "Google",
+            Provides =
+                "Your name, email address, profile picture and Google account identifier, if you "
+                + "signed in with Google. They come from the token Google issues when you sign in.",
+            DataSentThere =
+                "Nothing. The token is checked against Google's published certificates on this "
+                + "server; it is never sent to Google."
         }
     ];
 

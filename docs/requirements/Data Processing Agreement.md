@@ -148,14 +148,17 @@ consultation (Art. 35, 36) by supplying the documentation in this repository, wh
 
 | Sub-processor | Purpose | Location | Transfer mechanism |
 | --- | --- | --- | --- |
-| **Mailgun** (Sinch) | Transactional email delivery | United States | ⚠️ ANPD standard contractual clauses to be executed — Data Protection Document §7.1 |
-| **Google** | Google ID token verification | United States | ⚠️ ANPD standard contractual clauses to be executed — Data Protection Document §7.1 |
+| **Mailgun** (Sinch) | Transactional email delivery | United States | LGPD Art. 33 IX with Art. 7 V; EU SCCs incorporated by Sinch's own DPA — Data Protection Document §7.1 |
 | **Hosting provider** | Database and API hosting | Brazil | No transfer; data remains in Brazil |
 
-Personal data is stored in **Brazil**. The two outbound flows leave Brazil for the United States; the
-mechanism for each is being executed and is recorded in
-[§7 of the Data Protection Document](Data%20Protection%20Document.md), which is the live version of
-this table.
+**Google is not a sub-processor.** It was listed as one until the transfer assessment was corrected:
+the ID token is validated offline against Google's cached public certificates and nothing about the
+data subject is ever sent to Google. It is a *source* of personal data, not a recipient — see Data
+Protection Document §6.1.
+
+Personal data is stored in **Brazil**. One outbound flow leaves Brazil — email delivery — and its
+ground is recorded in [§7 of the Data Protection Document](Data%20Protection%20Document.md), which
+is the live version of this table.
 
 **If the Controller is established in the EEA, or its users are**, note that Brazil holds no EU
 adequacy decision, so the Controller's transfer to the Processor is itself a restricted transfer

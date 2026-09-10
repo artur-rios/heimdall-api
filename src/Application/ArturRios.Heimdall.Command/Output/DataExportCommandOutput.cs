@@ -67,6 +67,18 @@ public class DataExportCommandOutput : CommandOutput
     /// <summary>Who else receives this data (GDPR Art. 15(1)(c), LGPD Art. 18 VII).</summary>
     public IEnumerable<DataExportRecipient> Recipients { get; set; } = [];
 
+    /// <summary>
+    ///     Where data that did not come from the subject came from instead (GDPR Art. 14(2)(f) and
+    ///     Art. 15(1)(g), LGPD Art. 9).
+    /// </summary>
+    /// <remarks>
+    ///     Separate from <see cref="Recipients" /> because the direction is opposite and conflating
+    ///     them misleads in both directions. Google is the clearest case: it is where a Google
+    ///     User's name and address came from, and nothing about them is ever sent to it — the ID
+    ///     token is validated offline against cached public certificates.
+    /// </remarks>
+    public IEnumerable<DataExportSource> Sources { get; set; } = [];
+
     /// <summary>How long each category is kept (GDPR Art. 15(1)(d)).</summary>
     public IEnumerable<DataExportRetention> Retention { get; set; } = [];
 }
@@ -184,6 +196,18 @@ public class DataExportRecipient
     public string Name { get; set; } = string.Empty;
     public string Purpose { get; set; } = string.Empty;
     public string Location { get; set; } = string.Empty;
+}
+
+/// <summary>Somewhere data about the subject came from, other than the subject.</summary>
+public class DataExportSource
+{
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>What came from there.</summary>
+    public string Provides { get; set; } = string.Empty;
+
+    /// <summary>Whether anything about the subject is sent back to it.</summary>
+    public string DataSentThere { get; set; } = string.Empty;
 }
 
 /// <summary>How long a category of data is kept.</summary>

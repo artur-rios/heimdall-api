@@ -4295,6 +4295,13 @@
             },
             "nullable": true
           },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataExportSource"
+            },
+            "nullable": true
+          },
           "retention": {
             "type": "array",
             "items": {
@@ -4455,6 +4462,24 @@
           "lockedOutUntil": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DataExportSource": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "provides": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataSentThere": {
+            "type": "string",
             "nullable": true
           }
         },

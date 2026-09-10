@@ -155,7 +155,7 @@ is the one you can read without leaving the repository.
 | --- | --- | --- |
 | [MVP](https://github.com/artur-rios/heimdall-api/milestone/1) | ✅ 18 / 18 | Scopes, persons, roles, authentication, password recovery, email verification |
 | [Google Sign-In](https://github.com/artur-rios/heimdall-api/milestone/2) | ✅ 6 / 6 | Google-authenticated identities and their administration |
-| [LGPD & GDPR Compliance](https://github.com/artur-rios/heimdall-api/milestone/3) | 🚧 17 / 20 | Data subject rights, retention, records, breach response |
+| [LGPD & GDPR Compliance](https://github.com/artur-rios/heimdall-api/milestone/3) | 🚧 18 / 20 | Data subject rights, retention, records, breach response |
 
 The compliance milestone is **not complete**, and the three items outstanding are marked
 `controller-action`: they need a decision or a contract from the controller and cannot be closed by
@@ -285,15 +285,16 @@ infrastructure the repository cannot see.
 
 | Item | Status | Issue |
 | --- | --- | --- |
-| Execute the ANPD standard contractual clauses with Mailgun and Google | ⬜ | [#123](https://github.com/artur-rios/heimdall-api/issues/123) |
 | Determine whether any scope serves EEA data subjects | ⬜ | [#124](https://github.com/artur-rios/heimdall-api/issues/124) |
 | Confirm encryption at rest, backup regime, and alert routing | ⬜ | [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
 
-**#123 is the highest residual risk in the
-[DPIA](docs/requirements/Data%20Protection%20Impact%20Assessment.md)** (R-07), and the only one
-whose control is absent rather than imperfect: data is hosted in Brazil, Mailgun and Google are in
-the United States, and LGPD Art. 33 needs a mechanism for each transfer. Until the clauses are
-executed, every verification and password reset email is an international transfer with none.
+[#123](https://github.com/artur-rios/heimdall-api/issues/123) — executing contractual clauses with
+Mailgun and Google — is closed as **not planned**, and the transfer it covered is lawful anyway. Two
+things resolved it: the Google transfer turned out **not to exist**, because the ID token is
+validated offline against cached public certificates and is never sent to Google; and the email
+transfer rests on **LGPD Art. 33 IX with Art. 7 V**, a statutory ground needing no counterparty
+agreement. Nothing was signed. See §6.1 and §7.1 of the
+[Data Protection Document](docs/requirements/Data%20Protection%20Document.md).
 
 ### Platform
 
