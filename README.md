@@ -278,18 +278,36 @@ linked.
 | [Incident Response](docs/requirements/Incident%20Response%20Document.md) and breach register | ✅ | [#105](https://github.com/artur-rios/heimdall-api/issues/105) |
 | Data subject export (UC-41) | ✅ | [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
 
-#### Outstanding — controller actions
+#### Controller actions — all closed
 
-These three cannot be closed by code. Each needs a decision, a contract, or access to
-infrastructure the repository cannot see.
+None of these three could be closed by code. Each needed a decision, a contract, or knowledge of
+infrastructure the repository cannot see, and each is now answered.
 
 | Item | Status | Issue |
 | --- | --- | --- |
-| Determine whether any scope serves EEA data subjects | ⬜ | [#124](https://github.com/artur-rios/heimdall-api/issues/124) |
-| Confirm encryption at rest, backup regime, and alert routing | ⬜ | [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
+| Determine whether any scope serves EEA data subjects | ✅ | [#124](https://github.com/artur-rios/heimdall-api/issues/124) |
+| Confirm encryption at rest, backup regime, and alert routing | ✅ | [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
+| Execute contractual clauses with Mailgun and Google | ✅ Not needed | [#123](https://github.com/artur-rios/heimdall-api/issues/123) |
 
-[#123](https://github.com/artur-rios/heimdall-api/issues/123) — executing contractual clauses with
-Mailgun and Google — is closed as **not planned**, and the transfer it covered is lawful anyway. Two
+**#124** was answered yes — nothing restricts access by geography, so GDPR applies under Art. 3(2).
+That turned out to be narrower than it sounds: a person in the EEA signing up directly is not a
+Chapter V transfer, because there is no exporter (EDPB Guidelines 05/2021). Only an EEA *tenant*
+creates one, and the DPA now incorporates the EU SCCs Module Two, which is the tenant's own document
+to sign rather than an agreement to negotiate.
+
+**#125** was answered in three parts. The database volume and the backups are encrypted; backups are
+daily, kept 35 days, and held by **MEGA** — encrypted client-side, so MEGA holds no key that
+decrypts them. That last fact is what grounds the transfer, since a backup is a full copy of
+everything: LGPD Art. 33 IX with Art. 7 V, GDPR Art. 45 adequacy, and EDPB Recommendations 01/2020
+Use Case 1 as the supplementary measure that survives an adequacy decision being withdrawn. The
+alert-routing half is closed by `scripts/security_signals.py`, which collects `SECURITY_SIGNAL`
+lines on a schedule and mails what is new — see
+[Security signals](docs/content/en/docs/operations.md). Until it existed the detection built for
+NFR-26 wrote warnings nobody read, which for Art. 33's purpose is not detection at all: **both
+notification clocks run from awareness**.
+
+**#123** — executing contractual clauses with Mailgun and Google — is closed as **not planned**, and
+the transfer it covered is lawful anyway. Two
 things resolved it: the Google transfer turned out **not to exist**, because the ID token is
 validated offline against cached public certificates and is never sent to Google; and the email
 transfer rests on **LGPD Art. 33 IX with Art. 7 V**, a statutory ground needing no counterparty

@@ -120,8 +120,49 @@ while the thing it detects is still happening is worse than none.
 
 **Where the alerts go is the operator's choice.** This API has no opinion about pagers or SIEMs, and
 building an integration for one would be guessing. What it does is make the signal unmistakable and
-machine-matchable where the operator already collects — the logs, which have a retention period
-(NFR-22) and ship off the host. Match on `SECURITY_SIGNAL` and the `Kind`, not the prose.
+machine-matchable where the operator already collects — the logs. Match on `SECURITY_SIGNAL` and the
+`Kind`, not the prose, which is written for whoever reads the line afterwards.
+
+A signal is a warning-level line in the log, on stdout and in the log directory:
+
+```
+SECURITY_SIGNAL REPEATED_REFUSALS: One identity had 23 writes refused in the last
+00:15:00. ... (count 23, actor 3f2a91c4-7d55-4e1a-9b2f-08c7d1e6a934)
+```
+
+### What collects them
+
+`scripts/security_signals.py`, on a schedule. It reads the log files, finds the signals it has not
+reported before, and mails them to one address through the Mailgun account the API already uses.
+Setup — the environment variables, the cron line, and what to do about the log directory living in a
+Docker volume — is in the operations guide, under *Security signal detection*. This section records
+what the job means for §4.
+
+**It is the thing that makes somebody aware**, which is the moment every deadline in §4 starts. The
+alert says so in its own body, because the timestamp that goes in the register is when a person read
+the message — not when the signal was raised, and not when the job ran.
+
+Three properties are worth knowing before an incident rather than during one:
+
+- **Each signal is reported once.** The job keeps a watermark. Signals repeat on every monitoring
+  tick while a condition persists — deliberately, per above — and without a watermark every run
+  would resend the history until the alerts were filtered into a folder, which is the same
+  non-detection this closes, wearing a different hat.
+- **A delivery failure is loud.** The job exits non-zero and prints the signals it was holding to
+  stderr, so a broken collector announces itself. Give cron a `MAILTO`, or the failure of the thing
+  that catches failures is itself uncaught.
+- **The watermark only advances after delivery succeeds.** A Mailgun outage delays signals; it does
+  not consume them.
+
+**What is in the alert.** The marker, the kind, the count, the timestamp and the actor's `PublicId`.
+A `PublicId` is a pseudonym — it names an account to somebody holding the database and to nobody
+else — so the alert can be read on a phone without carrying anybody's address into a mailbox. NFR-22
+keeps addresses out of the logs in the first place; the alert inherits that rather than re-deciding
+it.
+
+> **The residual is the mailbox.** Delivery is verifiable and being read is not. Nothing here can
+> tell whether the message was opened, which is why R-08 in the [DPIA](Data%20Protection%20Impact%20Assessment.md)
+> is Low rather than closed. A signal that arrives and sits unread is still a signal nobody received.
 
 Detection is off only if `HEIMDALL_MONITORING_ENABLED=false`, which logs a warning saying what has
 been given up.

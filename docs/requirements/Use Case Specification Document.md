@@ -13,7 +13,7 @@ description: "The actor-facing use cases, each with its main flow and numbered a
 
 This document specifies the actor-facing use cases for the **Heimdall API** — UC-01 through UC-29 and UC-31 through UC-40. Each describes actor interactions, preconditions, postconditions, main flows, and alternative/exception flows.
 
-UC-30 (Check API Health) is specified in the [Operations & Infrastructure Document](Operations%20&%20Infrastructure%20Document.md), §3.5, alongside the FR-HC requirements it realises: it describes how the system is operated rather than what it does for an actor, and keeping it with the monitoring requirements keeps the two together.
+UC-30 (Check API Health) is specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.5, alongside the FR-HC requirements it realises: it describes how the system is operated rather than what it does for an actor, and keeping it with the monitoring requirements keeps the two together.
 
 Note on identifiers: every `{id}` / `{scopeId}` / `{personId}` referenced in these flows is the entity's `PublicId` (a GUID). Internally, each entity also has an auto-increment `bigint Id` used only for storage and joins — it is never seen by any actor in these use cases (see the System Requirements Document, §4.0).
 

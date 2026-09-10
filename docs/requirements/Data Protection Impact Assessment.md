@@ -7,11 +7,12 @@ description: "The risks this system creates for the people in it, and what is do
 
 # Data Protection Impact Assessment — Heimdall API
 
-**Version 1.2 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
+**Version 1.3 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
+| 1.3 | 10 September 2026 | Backup location and transfer ground established (MEGA — §7.3 of the Data Protection Document). R-08 re-rated Medium → Low: the signals are now collected and mailed. No open actions remain |
+| 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest, for the volume and the backups. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
 | 1.1 | 10 September 2026 | R-07 re-rated High → Low: the Google transfer was found not to exist, and the email transfer's ground established under LGPD Art. 33 IX |
 | 1.0 | 9 September 2026 | First assessment |
 
@@ -82,10 +83,20 @@ the controller on 10 September 2026, **encryption at rest for the database volum
 gap that held this at Medium: everything not protected at the application level sits in clear text
 within the database, and only the volume beneath it stands between a stolen disk and all of it.
 
-**Remaining:** whether the *backups* are separately encrypted is not established by that
-confirmation, and a regime that encrypts the live database while shipping plaintext dumps elsewhere
-is common enough to be worth ruling out. Tracked in
-[#125](https://github.com/artur-rios/heimdall-api/issues/125).
+Backup encryption was confirmed separately on the same date, so the copy of the database that lives
+outside the server is protected too.
+
+**Resolved, 10 September 2026.** The service is MEGA, and the copy is encrypted on this side before
+MEGA receives it — MEGA holds no key that decrypts it. The backups do leave Brazil, which is a
+transfer rather than a security question and is grounded in
+[§7.3 of the Data Protection Document](Data%20Protection%20Document.md).
+
+What that leaves is not a gap in this risk but a shift in where it lives: the whole argument that a
+full copy of the database is safe outside the country rests on the MEGA account credentials, because
+the keys are derived from the account password. That is now an operational control rather than an
+open question, recorded in
+[§0.1 of the Operations document](Operations%20%26%20Infrastructure%20Document.md) — unique password,
+two-factor authentication, held in the same custody as the production database credentials.
 
 *This is the risk the product's value creates. It cannot be designed out without abandoning the
 purpose, which is why the controls around it carry more weight than they would elsewhere.*
@@ -197,11 +208,25 @@ transfer. See [#124](https://github.com/artur-rios/heimdall-api/issues/124).
 | | |
 | --- | --- |
 | **Risk to the person** | Not being told their data was exposed, because nobody realised. Both notification clocks run from awareness, and until NFR-26 nothing read the signals the system recorded |
-| **Severity** | High · **Likelihood** Was Medium · **Residual** Medium |
+| **Severity** | High · **Likelihood** Was Medium · **Residual** **Low** |
 
-Controls: signal detection (NFR-26), the [Incident Response Document](Incident%20Response%20Document.md),
-the Art. 33(5) register. **Gap:** where alerts are routed is an operational choice not yet confirmed
-— a signal nobody receives has not been detected.
+Controls: signal detection (NFR-26), collection and alerting (`scripts/security_signals.py`), the [Incident Response Document](Incident%20Response%20Document.md),
+the Art. 33(5) register.
+
+**Closed, 10 September 2026.** `scripts/security_signals.py` collects the signals on a schedule and
+e-mails whatever is new to a named address, through the Mailgun account the API already uses. The
+detection now reaches a person, which is what Art. 33's clock needs it to do.
+
+Two properties of the collector matter to this rating rather than to its operation. It keeps a
+**watermark**, so each signal is reported once and the alert stays readable — an alert that resends
+its whole history is one that gets filtered, and a filtered alert is the same non-detection in a
+different costume. And it **exits non-zero when it cannot deliver**, printing the signals it was
+holding to stderr, so a broken collector is itself noticed rather than looking like a quiet week.
+
+**Residual, and why it is not zero.** Delivery depends on Mailgun and on somebody reading the
+mailbox. The first is visible — a failure exits non-zero where cron reports it. The second is not:
+nothing here can tell whether the message was opened. That is a control the controller operates, not
+one this repository can enforce, which is what keeps the residual at Low rather than removing it.
 
 ## 5. Summary
 
@@ -209,19 +234,24 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 | --- | --- |
 | R-02 · Lockout as denial of access | Medium (accepted) |
 | R-05 · Tenant administrator visibility | Medium |
-| R-08 · Breach detection routing unconfirmed | Medium |
 | R-01 · Concentration | Low |
 | R-03 · Behavioural record | Low |
 | R-04 · Erasure | Low |
 | R-06 · Exercising rights | Low |
 | R-07 · Cross-border email delivery | Low |
+| R-08 · A breach nobody notices | Low |
 
 **No residual risk is rated High**, and Art. 36 prior consultation is not required.
 
-**One action remains** ([#125](https://github.com/artur-rios/heimdall-api/issues/125)): confirm
-whether the backups are separately encrypted, their retention and location, the restore-testing
-cadence, and where `SECURITY_SIGNAL` lines are collected. The last of those is R-08's residual
-Medium — a signal nobody receives has not been detected.
+**No action remains open.** [#125](https://github.com/artur-rios/heimdall-api/issues/125)'s last two
+questions were answered on 10 September 2026. The backup service is MEGA, storing in Europe or an
+Art. 45-adequate country and holding no key that decrypts what it stores — grounded in §7.3 of the
+Data Protection Document. And `SECURITY_SIGNAL` lines are now collected by a scheduled job that
+mails them, which took R-08 from Medium to Low.
+
+**One control passed to the controller** rather than closed here: the MEGA account's credentials.
+They are what the backup encryption rests on, so they carry the confidentiality of a full copy of
+the database. Nothing in this repository can enforce that, which is why it is written down.
 
 **What changed since version 1.0.** R-07 was the highest risk and is now Low. Half of it was a
 factual error on my part — Google was recorded as a recipient when the ID token is validated offline

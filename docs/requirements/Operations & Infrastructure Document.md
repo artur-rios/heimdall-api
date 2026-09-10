@@ -31,13 +31,18 @@ accordingly: **the controller must confirm them** — they cannot be verified fr
 | | |
 | --- | --- |
 | **Database volume** | ✅ **Confirmed by the controller, 10 September 2026** — the data is encrypted at rest on the server |
-| **Backups** | ⚠️ **Not separately confirmed.** Encryption of the backups themselves, and where their key is held, is not established by the confirmation above |
+| **Backups** | ✅ **Confirmed, 10 September 2026** — encrypted client-side before upload, on a storage service that holds no key able to decrypt them |
 | **Application-level** | ✅ Argon2id password hashes, encrypted TOTP secrets (NFR-16), hashed tokens and recovery codes |
 
-The two rows are separated deliberately. "Encrypted on the server" establishes the volume; a backup
-written elsewhere is a different artefact with its own key management, and a regime that encrypts
-the live database while shipping plaintext dumps to object storage is common enough to be worth
-ruling out rather than assuming away.
+The two rows were confirmed separately, and deliberately so: "encrypted on the server" establishes
+the volume, and a backup written elsewhere is a different artefact with its own key management. A
+regime that encrypts the live database while shipping plaintext dumps to object storage is common
+enough to be worth ruling out rather than assuming away. Both are now confirmed.
+
+The service was identified as **MEGA** on 10 September 2026, which settles the jurisdiction question
+this section previously left open. It is answered below under *Where the backups actually are*, and
+the transfer ground is recorded in
+[§7.3 of the Data Protection Document](Data%20Protection%20Document.md).
 
 The application-level protections are real and tested, and they are not a substitute. The threat
 model's TB-3 covers what an attacker recovers from *stolen rows*, which presupposes the rows were
@@ -70,30 +75,78 @@ enabling it is a decision somebody makes, not one that happens to them during an
 
 | | | |
 | --- | --- | --- |
+| **Service** | MEGA — Mega Cloud Services Limited, Auckland, New Zealand | ✅ Confirmed 10 September 2026 |
 | **Schedule** | Daily full backup | ✅ Confirmed 10 September 2026 |
-| **Retention** | 35 days | ⚠️ Proposed |
-| **Location** | Same region as the database — Brazil | ⚠️ Not confirmed |
-| **Encryption** | Required, key held separately | ⚠️ Not confirmed |
-| **Restore testing** | Quarterly, including the reconciliation step below | ⚠️ Not confirmed |
+| **Encryption** | Client-side, zero-knowledge — MEGA holds no key that decrypts the contents | ✅ Confirmed 10 September 2026 |
+| **Retention** | 35 days | ✅ Confirmed 10 September 2026 |
+| **Location** | Europe, or a country the European Commission has ruled adequate under GDPR Art. 45. Never the United States | ✅ Per MEGA's policy — but ⚠️ the individual facility is not selectable, see below |
+| **Restore testing** | Quarterly, including the reconciliation step below | ⚠️ Proposed |
 
-The schedule is now an observed fact. The other four rows remain proposals, and each carries a
-consequence if the real value differs:
+**Why 35 days**, since the figure is a decision rather than a default. The backup worth having is
+usually the one from *before* the problem was noticed, and silent corruption is typically found days
+or weeks late — so a short window can mean every copy held is already spoiled. Below 30 days,
+recovery is capped at under a month. Above it, a backup can outlive the 30-day erasure deadline,
+which is what makes the restore reconciliation below **mandatory rather than optional**. Thirty-five
+clears the deadline with margin, at a cost already paid: the reconciliation is built and tested.
 
-- **Retention** decides whether restore reconciliation is mandatory. At 35 days it is, because a
-  backup can outlive the 30-day erasure deadline. Under 30 days it would not be — but disaster
-  recovery would be capped at under a month.
-- **Location** matters as much as the period: a backup in another jurisdiction is an international
-  transfer of every category in §3 at once, and would need its own ground in the
-  [Data Protection Document](Data%20Protection%20Document.md) §7.
-- **Encryption** of the backups is not established by the database volume being encrypted; see the
-  note above.
-- **Restore testing** is what turns the reconciliation below from a procedure into a capability.
+**One row remains.** **Restore testing** is what turns the reconciliation below from a procedure
+into a capability. A restore that has never been run is a hypothesis, and the reconciliation step
+that follows it has never had a real restore to reconcile.
 
 35 days is chosen against the erasure deadline rather than against recovery convenience: it is
 longer than the 30 days §4 of the retention schedule allows an erasure to take, which is what makes
 the reconciliation step below **mandatory rather than optional**. A regime keeping backups for less
 than 30 days would not need it — but would also cap disaster recovery at under a month, which for
 most operators is unacceptable.
+
+### Where the backups actually are
+
+The backups leave Brazil. That is an international transfer of **every category in §3 at once** —
+the whole database, not the single address the email flow sends — so it needs a ground of its own,
+which [§7.3 of the Data Protection Document](Data%20Protection%20Document.md) records. What follows
+is the factual basis that section rests on.
+
+**MEGA's stated position.** Files are held *"in secure facilities in Europe or in countries (such as
+New Zealand) that the European Commission has determined to have an adequate level of protection
+under Article 45 of the GDPR, depending where you are based"*, and *"none of your files are stored
+in, or made available from, the United States of America"*. New Zealand's adequacy is Commission
+Implementing Decision 2013/65/EU, confirmed still in force in the Commission's January 2024 review
+of all eleven pre-GDPR decisions.
+
+**Three caveats, none of which is glossed here.**
+
+1. **The facility is not selectable.** MEGA offers no region setting: "depending where you are
+   based" is its own routing decision, not the account holder's. So the destination is a *set* of
+   jurisdictions, not one that can be named — which is why the Location row above is marked
+   confirmed for the policy and not for the facility. The transfer ground in §7.3 is written to hold
+   for any member of that set rather than for a particular country, because pinning one is not
+   something this deployment can do.
+2. **Adequacy under Art. 45 is a GDPR finding, and the LGPD has no equivalent list.** The ANPD has
+   published no adequacy decision for any country, so LGPD Art. 33 I is unavailable here no matter
+   how many European Commission decisions apply. The LGPD ground is a different one, and §7.3 says
+   which.
+3. **Ownership is not location.** MEGA is New Zealand-incorporated and majority-held by a Hong
+   Kong-registered company. That does not move the data, and it is recorded because a control
+   question is worth writing down even when the answer does not change the analysis.
+
+**What actually carries the weight is the encryption, not the geography.** The backup is encrypted
+on this side before MEGA receives it, and MEGA holds no key that decrypts it. That is precisely EDPB
+Recommendations 01/2020 Use Case 1 — encrypted storage in a third country, for backup, where the
+data is never needed in the clear at the destination and the keys stay with the exporter — which the
+EDPB accepts as an effective supplementary measure. It is what makes the unpinnable facility
+tolerable: an adverse jurisdiction reaching the copy reaches ciphertext.
+
+> **This makes the MEGA account credentials a control on the whole database.** The encryption
+> argument above holds only while the keys do, and MEGA derives them from the account password.
+> Somebody who obtains that password obtains every backup in readable form — the one path by which a
+> full copy of the database becomes legible to an outsider. **The account must carry a unique
+> password and two-factor authentication**, and it belongs in the same custody as the production
+> database credentials rather than in a personal password manager.
+
+**What MEGA can see regardless.** File sizes, upload timestamps, and the account's IP addresses are
+visible to the service whatever the contents are encrypted with. That is unremarkable for backups —
+but it means **backup filenames must not carry personal data**. `heimdall-2026-09-10.dump` is fine;
+a filename naming a tenant or a person is a disclosure that the encryption does not cover.
 
 ### Restoring without undoing an erasure
 
