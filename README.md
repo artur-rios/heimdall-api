@@ -139,11 +139,28 @@ so either place is authoritative:
 
 Delivery tracker for the use cases in the
 [Use Case Specification Document](docs/requirements/Use%20Case%20Specification%20Document.md), plus
-the platform work that is not itself a use case. Each one ships on its own branch, issue, and pull
-request — see the
+the platform and compliance work that is not itself a use case. Each one ships on its own branch,
+issue, and pull request — see the
 [Development Workflow Document](docs/requirements/Development%20Workflow%20Document.md).
 
+Every item below is also on the
+[project board](https://github.com/users/artur-rios/projects/7), which is the live view; this table
+is the one you can read without leaving the repository.
+
 **Legend:** ✅ done and merged &nbsp;·&nbsp; 🚧 in progress &nbsp;·&nbsp; ⬜ not started
+
+### Milestones
+
+| Milestone | State | Covers |
+| --- | --- | --- |
+| [MVP](https://github.com/artur-rios/heimdall-api/milestone/1) | ✅ 18 / 18 | Scopes, persons, roles, authentication, password recovery, email verification |
+| [Google Sign-In](https://github.com/artur-rios/heimdall-api/milestone/2) | ✅ 6 / 6 | Google-authenticated identities and their administration |
+| [LGPD & GDPR Compliance](https://github.com/artur-rios/heimdall-api/milestone/3) | 🚧 17 / 20 | Data subject rights, retention, records, breach response |
+
+The compliance milestone is **not complete**, and the three items outstanding are marked
+`controller-action`: they need a decision or a contract from the controller and cannot be closed by
+writing code. Marking it complete while they stand would misrepresent the system's position — see
+[Data protection & compliance](#data-protection--compliance) below.
 
 ### Scope Management
 
@@ -218,6 +235,65 @@ request — see the
 | UC-27: View Google User | ✅ | [#28](https://github.com/artur-rios/heimdall-api/issues/28) |
 | UC-28: Logical Delete Google User | ✅ | [#29](https://github.com/artur-rios/heimdall-api/issues/29) |
 | UC-29: Hard Delete Google User | ✅ | [#30](https://github.com/artur-rios/heimdall-api/issues/30) |
+
+### Data Subject Rights
+
+The rights LGPD Art. 18 and GDPR Chapter III give the people whose data this holds. All
+self-service: none requires an administrator's cooperation.
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-41: Export Own Personal Data | ✅ | [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
+| UC-42: Request Erasure of Own Identity | ✅ | [#91](https://github.com/artur-rios/heimdall-api/issues/91) |
+| UC-43: List Outstanding Erasure Requests | ✅ | [#91](https://github.com/artur-rios/heimdall-api/issues/91) |
+| UC-44: Restrict Processing of Own Identity | ✅ | [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
+| UC-45: Lift a Restriction on Processing | ✅ | [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
+
+> UC-43 shipped with UC-42 and UC-45 with UC-44 — each pair is one right and its administrative
+> counterpart, and splitting them would have left a request path with nowhere to be resolved.
+
+### Data protection & compliance
+
+The [LGPD & GDPR Compliance](https://github.com/artur-rios/heimdall-api/milestone/3) milestone.
+Where an item added a requirement, the NFR is named; where it produced a document, the document is
+linked.
+
+| Item | Status | Issue |
+| --- | --- | --- |
+| Data retention schedule (NFR-19) | ✅ | [#95](https://github.com/artur-rios/heimdall-api/issues/95) |
+| Purge expired single-use tokens | ✅ | [#96](https://github.com/artur-rios/heimdall-api/issues/96) |
+| Erasure that actually erases — anonymisation (NFR-20) | ✅ | [#92](https://github.com/artur-rios/heimdall-api/issues/92) |
+| Audit attributions cleared once due (NFR-21) | ✅ | [#97](https://github.com/artur-rios/heimdall-api/issues/97) |
+| Log retention and address redaction (NFR-22) | ✅ | [#98](https://github.com/artur-rios/heimdall-api/issues/98) |
+| Lawful basis and notice version per identity (NFR-23) | ✅ | [#94](https://github.com/artur-rios/heimdall-api/issues/94) |
+| Restriction of processing (NFR-24) | ✅ | [#93](https://github.com/artur-rios/heimdall-api/issues/93) |
+| Encryption at rest, backups, restore reconciliation (NFR-25) | ✅ | [#106](https://github.com/artur-rios/heimdall-api/issues/106) |
+| Security signal detection (NFR-26) | ✅ | [#105](https://github.com/artur-rios/heimdall-api/issues/105) |
+| Data minimisation review | ✅ | [#99](https://github.com/artur-rios/heimdall-api/issues/99) |
+| [Record of processing activities](docs/requirements/Data%20Protection%20Document.md) | ✅ | [#100](https://github.com/artur-rios/heimdall-api/issues/100) |
+| [Privacy Notice](docs/requirements/Privacy%20Notice.md) and Encarregado | ✅ | [#101](https://github.com/artur-rios/heimdall-api/issues/101) |
+| [Data Processing Agreement](docs/requirements/Data%20Processing%20Agreement.md) and sub-processors | ✅ | [#102](https://github.com/artur-rios/heimdall-api/issues/102) |
+| International transfer assessment | ✅ | [#103](https://github.com/artur-rios/heimdall-api/issues/103) |
+| [Data Protection Impact Assessment](docs/requirements/Data%20Protection%20Impact%20Assessment.md) | ✅ | [#104](https://github.com/artur-rios/heimdall-api/issues/104) |
+| [Incident Response](docs/requirements/Incident%20Response%20Document.md) and breach register | ✅ | [#105](https://github.com/artur-rios/heimdall-api/issues/105) |
+| Data subject export (UC-41) | ✅ | [#90](https://github.com/artur-rios/heimdall-api/issues/90) |
+
+#### Outstanding — controller actions
+
+These three cannot be closed by code. Each needs a decision, a contract, or access to
+infrastructure the repository cannot see.
+
+| Item | Status | Issue |
+| --- | --- | --- |
+| Execute the ANPD standard contractual clauses with Mailgun and Google | ⬜ | [#123](https://github.com/artur-rios/heimdall-api/issues/123) |
+| Determine whether any scope serves EEA data subjects | ⬜ | [#124](https://github.com/artur-rios/heimdall-api/issues/124) |
+| Confirm encryption at rest, backup regime, and alert routing | ⬜ | [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
+
+**#123 is the highest residual risk in the
+[DPIA](docs/requirements/Data%20Protection%20Impact%20Assessment.md)** (R-07), and the only one
+whose control is absent rather than imperfect: data is hosted in Brazil, Mailgun and Google are in
+the United States, and LGPD Art. 33 needs a mechanism for each transfer. Until the clauses are
+executed, every verification and password reset email is an international transfer with none.
 
 ### Platform
 

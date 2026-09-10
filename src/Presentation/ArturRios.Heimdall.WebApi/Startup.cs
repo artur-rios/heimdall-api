@@ -43,6 +43,12 @@ namespace ArturRios.Heimdall.WebApi;
 
 public class Startup(string[] args) : WebApiStartup(args)
 {
+    /// <summary>
+    ///     Set to <c>true</c> to refuse start-up when the database connection does not require TLS,
+    ///     rather than warning. Opt-in: see <see cref="WarnIfDatabaseConnectionIsNotEncrypted" />.
+    /// </summary>
+    private const string RequireDatabaseTlsVariable = "HEIMDALL_DATA_REQUIRE_TLS";
+
     private const string LogDirectoryEnvironmentVariable = "HEIMDALL_LOG_DIRECTORY";
     private const string DefaultLogDirectory = "logs";
 
@@ -813,12 +819,18 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         configured, which is exactly the failure worth a start-up warning.
     ///     </para>
     ///     <para>
-    ///         It warns rather than refusing to start, which is a deliberate departure from how this
-    ///         codebase treats other security configuration — TH-23's email control fails start-up
-    ///         in Production. The difference is that failing here would take down a working
-    ///         deployment on upgrade over a setting the operator may not control directly. Once TLS
-    ///         is confirmed in place, turning this into a refusal is a one-line change and should be
-    ///         made.
+    ///         It warns by default rather than refusing to start, which is a deliberate departure
+    ///         from how this codebase treats other security configuration — TH-23's email control
+    ///         fails start-up in Production. The difference is that failing by default would take
+    ///         down a working deployment on upgrade over a setting the operator may not control
+    ///         directly.
+    ///     </para>
+    ///     <para>
+    ///         Setting <c>HEIMDALL_DATA_REQUIRE_TLS=true</c> turns the warning into a refusal. It is
+    ///         opt-in rather than the default for that reason, and it is the right setting for any
+    ///         deployment that has confirmed TLS is in place: from that point, a connection string
+    ///         that does not ask for encryption is a misconfiguration rather than a known state, and
+    ///         starting anyway would be starting in the one condition the check exists to prevent.
     ///     </para>
     /// </remarks>
     private static void WarnIfDatabaseConnectionIsNotEncrypted()
@@ -830,6 +842,11 @@ public class Startup(string[] args) : WebApiStartup(args)
             return;
         }
 
+        var required = string.Equals(
+            Environment.GetEnvironmentVariable(RequireDatabaseTlsVariable),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
         var requiresTls = connectionString
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(part => part.Contains('='))
@@ -838,13 +855,25 @@ public class Startup(string[] args) : WebApiStartup(args)
                 .Equals("SSLMode", StringComparison.OrdinalIgnoreCase))
             .Any(pair => pair[1].Trim() is "Require" or "VerifyCA" or "VerifyFull");
 
-        if (!requiresTls)
+        if (requiresTls)
         {
-            Log.Warning(
-                "The database connection does not require TLS. Npgsql defaults to SSL Mode=Prefer, " +
-                "which falls back to an unencrypted connection — every credential and address this " +
-                "API stores would cross the network in clear text. Set SSL Mode=Require or stronger");
+            return;
         }
+
+        const string explanation =
+            "The database connection does not require TLS. Npgsql defaults to SSL Mode=Prefer, " +
+            "which falls back to an unencrypted connection — every credential and address this " +
+            "API stores would cross the network in clear text. Set SSL Mode=Require or stronger";
+
+        if (required)
+        {
+            // Opted in, so the operator has said TLS is in place: a connection string that does not
+            // ask for it is then a misconfiguration to fail on rather than warn about.
+            throw new InvalidOperationException(
+                $"{explanation}. {RequireDatabaseTlsVariable} is set, so this is refused rather than warned about.");
+        }
+
+        Log.Warning("{Explanation}", explanation);
     }
 
     /// <summary>

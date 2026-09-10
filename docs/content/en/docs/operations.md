@@ -148,6 +148,21 @@ throttle — not a replacement for a WAF or an API gateway's own rate limiting i
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
 
+## Database connection encryption — NFR-25
+
+The API warns at start-up when `HEIMDALL_DATA_CONNECTIONSTRING` does not require TLS. Npgsql's
+default `SSL Mode` is `Prefer`, which **silently falls back to an unencrypted connection** when the
+server offers none — so a deployment can be sending every credential and address in clear text while
+looking correctly configured. Set `SSL Mode=Require`, `VerifyCA` or `VerifyFull`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `HEIMDALL_DATA_REQUIRE_TLS` | `false` | `true` refuses start-up instead of warning |
+
+Turn it on once TLS is confirmed. It is opt-in rather than the default so that enabling it is a
+decision somebody makes, not one that happens to them during an upgrade — but a deployment that has
+verified TLS and left this off is one warning away from not noticing when the setting is lost.
+
 ## Data retention — NFR-19
 
 Personal data is kept only as long as its purpose requires (GDPR Art. 5(1)(e), LGPD Art. 15). The
@@ -376,6 +391,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_RETENTION_ANONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | | `548` |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
+| `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
 | `HEIMDALL_MONITORING_ENABLED` | | `true` |
 | `HEIMDALL_MONITORING_WINDOW_MINUTES` | | `15` |
