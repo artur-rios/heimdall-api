@@ -30,9 +30,14 @@ accordingly: **the controller must confirm them** — they cannot be verified fr
 
 | | |
 | --- | --- |
-| **Database volume** | ⚠️ **Required, not verified.** Must be encrypted at rest by the hosting provider |
-| **Backups** | ⚠️ **Required, not verified.** Must be encrypted with a key not stored alongside them |
+| **Database volume** | ✅ **Confirmed by the controller, 10 September 2026** — the data is encrypted at rest on the server |
+| **Backups** | ⚠️ **Not separately confirmed.** Encryption of the backups themselves, and where their key is held, is not established by the confirmation above |
 | **Application-level** | ✅ Argon2id password hashes, encrypted TOTP secrets (NFR-16), hashed tokens and recovery codes |
+
+The two rows are separated deliberately. "Encrypted on the server" establishes the volume; a backup
+written elsewhere is a different artefact with its own key management, and a regime that encrypts
+the live database while shipping plaintext dumps to object storage is common enough to be worth
+ruling out rather than assuming away.
 
 The application-level protections are real and tested, and they are not a substitute. The threat
 model's TB-3 covers what an attacker recovers from *stolen rows*, which presupposes the rows were
@@ -63,17 +68,26 @@ enabling it is a decision somebody makes, not one that happens to them during an
 
 ### The backup regime
 
-⚠️ **Proposed, and awaiting the controller's confirmation.** The repository cannot see the backup
-configuration, so these are the values the rest of this section is written against rather than
-observed facts:
+| | | |
+| --- | --- | --- |
+| **Schedule** | Daily full backup | ✅ Confirmed 10 September 2026 |
+| **Retention** | 35 days | ⚠️ Proposed |
+| **Location** | Same region as the database — Brazil | ⚠️ Not confirmed |
+| **Encryption** | Required, key held separately | ⚠️ Not confirmed |
+| **Restore testing** | Quarterly, including the reconciliation step below | ⚠️ Not confirmed |
 
-| | |
-| --- | --- |
-| **Schedule** | Daily full backup |
-| **Retention** | 35 days |
-| **Location** | Same region as the database — Brazil. A backup in another jurisdiction is an international transfer of every category at once |
-| **Encryption** | Required, key held separately |
-| **Restore testing** | Quarterly, including the reconciliation step below |
+The schedule is now an observed fact. The other four rows remain proposals, and each carries a
+consequence if the real value differs:
+
+- **Retention** decides whether restore reconciliation is mandatory. At 35 days it is, because a
+  backup can outlive the 30-day erasure deadline. Under 30 days it would not be — but disaster
+  recovery would be capped at under a month.
+- **Location** matters as much as the period: a backup in another jurisdiction is an international
+  transfer of every category in §3 at once, and would need its own ground in the
+  [Data Protection Document](Data%20Protection%20Document.md) §7.
+- **Encryption** of the backups is not established by the database volume being encrypted; see the
+  note above.
+- **Restore testing** is what turns the reconciliation below from a procedure into a capability.
 
 35 days is chosen against the erasure deadline rather than against recovery convenience: it is
 longer than the 30 days §4 of the retention schedule allows an erasure to take, which is what makes

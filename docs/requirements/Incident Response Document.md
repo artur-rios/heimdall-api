@@ -68,9 +68,10 @@ The 24 hours to tenants is deliberately the shortest. A tenant's own 72-hour clo
 become aware, which our notification is what creates; a processor deadline equal to the controller's
 would leave the controller no time at all.
 
-**Whether GDPR applies at all** depends on the determination in §7.2 of the Data Protection Document,
-which is open. Until it is made, assume it does and work to the shorter of the two clocks — assuming
-otherwise makes a deadline unrecoverable if the assumption was wrong.
+**GDPR applies.** The determination was made on 10 September 2026 and is recorded in §7.2 of the
+Data Protection Document: the service is open to EEA data subjects. Both sets of deadlines are
+therefore live, and **the shorter of the two governs** — three working days to the ANPD, and, where
+a supervisory authority is also owed notice, seventy-two hours.
 
 ## 5. The procedure
 

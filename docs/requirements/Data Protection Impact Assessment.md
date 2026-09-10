@@ -7,10 +7,11 @@ description: "The risks this system creates for the people in it, and what is do
 
 # Data Protection Impact Assessment — Heimdall API
 
-**Version 1.1 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
+**Version 1.2 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
 | 1.1 | 10 September 2026 | R-07 re-rated High → Low: the Google transfer was found not to exist, and the email transfer's ground established under LGPD Art. 33 IX |
 | 1.0 | 9 September 2026 | First assessment |
 
@@ -73,12 +74,18 @@ Rated for the **person**, not the system. Likelihood and severity are the assess
 | | |
 | --- | --- |
 | **Risk to the person** | Credentials, addresses and a full action history disclosed. Because the same identity spans every client system, a single disclosure follows them everywhere they use it |
-| **Severity** | High · **Likelihood** Low · **Residual** Medium |
+| **Severity** | High · **Likelihood** Low · **Residual** **Low** |
 
 Controls: Argon2id with per-person salts, TOTP secrets encrypted at rest, tokens stored as digests,
-scope isolation re-read per request, `PublicId` values only across the boundary. **Gap:** encryption
-at rest for the volume and backups is required but unverified (NFR-25) — everything not listed above
-sits in clear text within the database.
+scope isolation re-read per request, `PublicId` values only across the boundary — and, confirmed by
+the controller on 10 September 2026, **encryption at rest for the database volume**. That was the
+gap that held this at Medium: everything not protected at the application level sits in clear text
+within the database, and only the volume beneath it stands between a stolen disk and all of it.
+
+**Remaining:** whether the *backups* are separately encrypted is not established by that
+confirmation, and a regime that encrypts the live database while shipping plaintext dumps elsewhere
+is common enough to be worth ruling out. Tracked in
+[#125](https://github.com/artur-rios/heimdall-api/issues/125).
 
 *This is the risk the product's value creates. It cannot be designed out without abandoning the
 purpose, which is why the controls around it carry more weight than they would elsewhere.*
@@ -200,10 +207,10 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 
 | Risk | Residual |
 | --- | --- |
-| R-01 · Concentration; encryption at rest unverified | Medium |
 | R-02 · Lockout as denial of access | Medium (accepted) |
 | R-05 · Tenant administrator visibility | Medium |
 | R-08 · Breach detection routing unconfirmed | Medium |
+| R-01 · Concentration | Low |
 | R-03 · Behavioural record | Low |
 | R-04 · Erasure | Low |
 | R-06 · Exercising rights | Low |
@@ -211,13 +218,10 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 
 **No residual risk is rated High**, and Art. 36 prior consultation is not required.
 
-**Two actions remain:**
-
-1. Determine and record whether any scope serves EEA data subjects
-   ([#124](https://github.com/artur-rios/heimdall-api/issues/124)). Brazil holds no EU adequacy
-   decision, so the answer decides whether the hosting itself is a restricted transfer.
-2. Confirm encryption at rest, backup configuration, and where security alerts are routed
-   ([#125](https://github.com/artur-rios/heimdall-api/issues/125)) — R-01 and R-08.
+**One action remains** ([#125](https://github.com/artur-rios/heimdall-api/issues/125)): confirm
+whether the backups are separately encrypted, their retention and location, the restore-testing
+cadence, and where `SECURITY_SIGNAL` lines are collected. The last of those is R-08's residual
+Medium — a signal nobody receives has not been detected.
 
 **What changed since version 1.0.** R-07 was the highest risk and is now Low. Half of it was a
 factual error on my part — Google was recorded as a recipient when the ID token is validated offline
