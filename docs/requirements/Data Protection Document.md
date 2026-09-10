@@ -186,7 +186,6 @@ weighed against the same test.
 | Recipient | What reaches them | Why |
 | --- | --- | --- |
 | **Mailgun** (Sinch) | Recipient email address, message body | Delivering verification, password reset and second-factor emails |
-| **Google** | The ID token presented by the caller | Verifying a Google sign-in; Google is the source of `GoogleId`, `Email`, `Name`, `ProfilePictureUrl` |
 | **Tenant scope organisations** | The identities within their own scope | They are the controller for those; see §3 |
 | **Hosting provider** | Everything, at rest | Running the database and the API |
 
@@ -194,34 +193,85 @@ The current sub-processor list is maintained in the
 [Data Processing Agreement](Data%20Processing%20Agreement.md) §7, which is also where the
 notification commitment for changing it lives.
 
-## 7. International transfers
+### 6.1 Google is a source, not a recipient
 
-This is the section the deployment facts make non-trivial, and it contains one finding that needs a
-decision.
+An earlier version of this document listed Google as a recipient. **That was wrong**, and the
+correction matters because it removes an international transfer that was recorded as needing a
+mechanism.
+
+`GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync`, which **validates the token
+offline**: it verifies the signature against Google's published certificates, which the library
+caches and refreshes hourly, and checks the issuer, audience and expiry locally. **The token is
+never sent to Google.** The only outbound request is for Google's public certificates, which carry
+no personal data.
+
+The direction of travel is the opposite of what a recipient means. Google *issues* the token to the
+person's browser, which passes it to a client system, which presents it here — so Google is where
+`GoogleId`, `Email`, `Name` and `ProfilePictureUrl` **come from**, and GDPR Art. 14 and LGPD Art. 9
+make that something the data subject is told. It is disclosed in the Privacy Notice and in every
+UC-41 export's `sources`.
+
+The person's own sign-in at Google is a separate matter, between them and Google under Google's own
+terms. Enabling Google Sign-In for a scope makes it possible; it does not make Heimdall the party
+transferring anything.
+
+## 7. International transfers
 
 | Leg | From | To | Governed by | Status |
 | --- | --- | --- | --- | --- |
-| Email delivery | Brazil | United States (Mailgun) | LGPD Art. 33 | ⚠️ Mechanism required — see §7.1 |
-| Google ID token verification | Brazil | United States (Google) | LGPD Art. 33 | ⚠️ Mechanism required — see §7.1 |
-| Serving EU data subjects, if any | EEA | Brazil (hosting) | GDPR Art. 44–49 | ⚠️ See §7.2 — **Brazil holds no EU adequacy decision** |
+| Email delivery | Brazil | United States (Mailgun) | LGPD Art. 33 IX + Art. 7 V | ✅ Ground established — §7.1 |
+| Email delivery, for EEA subjects if any | EEA | United States (Mailgun) | GDPR Art. 46(2)(c) | ✅ Sinch's SCCs — §7.1 |
+| Serving EU data subjects, if any | EEA | Brazil (hosting) | GDPR Art. 44–49 | ⚠️ §7.2 — **Brazil holds no EU adequacy decision** |
+| ~~Google ID token verification~~ | — | — | — | **Not a transfer** — §6.1 |
 
-### 7.1 Brazil → United States
+Mailgun is the only outbound flow carrying personal data. The Google leg was recorded here in
+error and is corrected in §6.1: the token is validated offline against cached public certificates
+and is never sent to Google.
 
-Both outbound flows leave Brazil. LGPD Art. 33 permits an international transfer only on one of its
-listed grounds; the workable one here is Art. 33 II — *cláusulas-padrão contratuais* — for which the
-ANPD approved standard clauses in **Resolution CD/ANPD nº 19 of 23 August 2024**.
+### 7.1 Email delivery to Mailgun
 
-Required, and not yet done:
+**LGPD: Art. 33 IX, resting on Art. 7 V.** Art. 33 IX permits a transfer *"quando necessário para
+atender as hipóteses previstas nos incisos II, V e VI do art. 7º desta Lei"*, and Art. 7 V is
+*"quando necessário para a execução de contrato ou de procedimentos preliminares relacionados a
+contrato do qual seja parte o titular, a pedido do titular dos dados"*.
 
-1. Execute the ANPD standard contractual clauses, or verify that the provider's own terms already
-   incorporate them, with **Mailgun** and with **Google**.
-2. Record the outcome in this section with the date and the version of the clauses relied on.
+Every email this API sends is one of exactly three things: the verification that activates an
+account somebody asked for, the reset that restores access to it, or the second factor that lets
+them in. Each is necessary to perform the service the person is party to, and each is sent at their
+own request. The address reaching a mail provider is not incidental to that service — it *is* the
+service being performed.
 
-Mailgun's US region is a **configuration choice**, not a given: Mailgun also offers an EU region.
-Moving to it would not remove the transfer — the data still leaves Brazil — so the choice is about
-which second jurisdiction is involved, and the US is the one this deployment has picked. That choice
-is recorded in `docs/content/en/docs/operations.md` next to `MAILGUN_API_KEY` so it is made
-deliberately rather than inherited.
+This is the same basis §5 already records for the underlying processing, which is what makes it
+coherent rather than opportunistic: the transfer rests on the ground the processing itself rests on,
+not on a different one found for the occasion.
+
+**Why not Art. 33 II.** The *cláusulas-padrão contratuais* route would require the ANPD's own
+clauses (Resolution CD/ANPD nº 19 of 23 August 2024) in the Mailgun contract. Sinch's published DPA
+is automatically incorporated and carries the **EU** Standard Contractual Clauses, with a Brazil
+annex that references the LGPD — but not the ANPD clauses. The ANPD may recognise foreign clauses as
+equivalent, and doing so requires a published Resolution of its Conselho Diretor; absent one for the
+EU SCCs, Art. 33 II would rest on an equivalence nobody has declared. The transition period for
+incorporating the ANPD clauses closed on **23 August 2025**.
+
+Art. 33 IX is a self-standing statutory ground that needs no counterparty agreement, which is why it
+is the one relied on.
+
+**GDPR, if it applies at all (§7.2).** Sinch's Data Processing Agreement forms part of the services
+agreement automatically, with no separate signature, and incorporates the EU Standard Contractual
+Clauses (Commission Decision 2021/914/EU, Modules 2 and 3) with Sinch as data importer. The EEA → US
+leg is therefore covered by Art. 46(2)(c) safeguards already in force.
+
+**Nothing needs to be signed.** Neither ground requires negotiating or executing an agreement:
+Art. 33 IX is statutory, and Sinch's SCCs are incorporated by their own terms.
+
+**The Mailgun region remains a configuration choice.** Mailgun offers an EU region; moving to it
+would not remove the transfer, since the data still leaves Brazil. It would change which second
+jurisdiction is involved. Recorded next to `MAILGUN_API_KEY` in the operations guide so the choice
+is made deliberately rather than inherited.
+
+> **Review trigger.** If the ANPD publishes a Resolution recognising the EU SCCs as equivalent, Art.
+> 33 II becomes available through Sinch's existing DPA with nothing to sign, and is the stronger
+> ground. Worth checking when this document is next reviewed.
 
 ### 7.2 The EEA question, which the controller must answer
 

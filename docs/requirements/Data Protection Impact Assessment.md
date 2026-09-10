@@ -7,7 +7,12 @@ description: "The risks this system creates for the people in it, and what is do
 
 # Data Protection Impact Assessment — Heimdall API
 
-**Version 1.0 — 9 September 2026** · Assessed by Artur Rios, controller and Encarregado
+**Version 1.1 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
+
+| Version | Date | Change |
+| --- | --- | --- |
+| 1.1 | 10 September 2026 | R-07 re-rated High → Low: the Google transfer was found not to exist, and the email transfer's ground established under LGPD Art. 33 IX |
+| 1.0 | 9 September 2026 | First assessment |
 
 ## 1. Why this exists, and why the Threat Model is not it
 
@@ -145,19 +150,40 @@ Controls: access and portability (UC-41), erasure (UC-42), restriction and objec
 self-service and none requiring an administrator. Blocked erasures are surfaced with deadlines
 (UC-43) rather than sitting unnoticed.
 
-### R-07 · Data crosses borders under mechanisms not yet executed
+### R-07 · Data crosses borders
 
 | | |
 | --- | --- |
-| **Risk to the person** | Their address reaches the United States on every transactional email, under a transfer for which the ANPD standard clauses are **not yet in place** |
-| **Severity** | Medium · **Likelihood** High (it happens on every send) · **Residual** **High** |
+| **Risk to the person** | Their address reaches the United States on every transactional email, into a jurisdiction whose protections differ from Brazil's |
+| **Severity** | Medium · **Likelihood** High (it happens on every send) · **Residual** **Low** |
 
-**This is the highest residual risk in this assessment, and the only one whose control is absent
-rather than imperfect.** Data Protection Document §7.1 sets out the two steps. Until they are done,
-every verification and reset email is an international transfer without a documented mechanism.
+Controls: LGPD **Art. 33 IX resting on Art. 7 V** — the transfer is necessary to perform the service
+the person is party to, since the email that activates or restores their account *is* the service
+being performed. Where GDPR applies, Sinch's Data Processing Agreement incorporates the EU Standard
+Contractual Clauses automatically, with no separate signature.
 
-Compounding it: whether EEA subjects are in scope is undetermined (§7.2), and Brazil holds no EU
-adequacy decision — so the hosting itself may be a restricted transfer nobody has assessed.
+**This was the highest residual risk in version 1.0, rated High, and it has come down for two
+reasons — one a correction and one a decision.**
+
+The correction: Google was recorded as a second transfer and is not one. The ID token is validated
+offline against cached public certificates and is never sent to Google, so there is nothing to
+transfer. Google is a *source* of personal data. That removed half the exposure by establishing it
+had never existed.
+
+The decision: the controller declined to pursue new contractual arrangements, which closed the Art.
+33 II route through the ANPD's own clauses. Art. 33 IX is a self-standing statutory ground requiring
+no counterparty agreement, and it rests on the same Art. 7 V basis §5 of the record already records
+for the underlying processing — which is what makes it coherent rather than a ground found for the
+occasion.
+
+*Residual is Low rather than absent because Art. 33 IX is a necessity test, and necessity is a
+judgement that could be read more narrowly than it is here. If the ANPD recognises the EU SCCs as
+equivalent, Art. 33 II becomes available through Sinch's existing DPA with nothing to sign, and is
+the stronger ground.*
+
+The EEA → Brazil question in R-07's original framing remains open and is tracked separately: Brazil
+holds no EU adequacy decision, so if any scope serves EEA subjects, the **hosting** is a restricted
+transfer. See [#124](https://github.com/artur-rios/heimdall-api/issues/124).
 
 ### R-08 · A breach nobody notices
 
@@ -174,7 +200,6 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 
 | Risk | Residual |
 | --- | --- |
-| R-07 · Transfers without executed mechanisms | **High** |
 | R-01 · Concentration; encryption at rest unverified | Medium |
 | R-02 · Lockout as denial of access | Medium (accepted) |
 | R-05 · Tenant administrator visibility | Medium |
@@ -182,17 +207,23 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 | R-03 · Behavioural record | Low |
 | R-04 · Erasure | Low |
 | R-06 · Exercising rights | Low |
+| R-07 · Cross-border email delivery | Low |
 
-**Art. 36 prior consultation is not required.** It applies where a high residual risk cannot be
-mitigated; R-07's is high because the mitigation is *not yet done*, not because none exists.
-Executing the clauses closes it.
+**No residual risk is rated High**, and Art. 36 prior consultation is not required.
 
-**Three actions, in order:**
+**Two actions remain:**
 
-1. Execute the ANPD standard contractual clauses with Mailgun and Google (R-07).
-2. Determine and record whether any scope serves EEA data subjects (R-07).
-3. Confirm encryption at rest, backup configuration, and where security alerts are routed
-   (R-01, R-08).
+1. Determine and record whether any scope serves EEA data subjects
+   ([#124](https://github.com/artur-rios/heimdall-api/issues/124)). Brazil holds no EU adequacy
+   decision, so the answer decides whether the hosting itself is a restricted transfer.
+2. Confirm encryption at rest, backup configuration, and where security alerts are routed
+   ([#125](https://github.com/artur-rios/heimdall-api/issues/125)) — R-01 and R-08.
+
+**What changed since version 1.0.** R-07 was the highest risk and is now Low. Half of it was a
+factual error on my part — Google was recorded as a recipient when the ID token is validated offline
+and never leaves the server — and the other half was resolved by relying on LGPD Art. 33 IX rather
+than on contractual clauses the controller had decided not to pursue. Nothing was signed, and
+nothing about the system changed; what changed was that the assessment now describes it accurately.
 
 ## 6. When this is revisited
 

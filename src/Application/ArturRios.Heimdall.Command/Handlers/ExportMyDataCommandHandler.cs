@@ -159,6 +159,7 @@ public class ExportMyDataCommandHandler(
             AuditEntriesTruncated = truncated,
             Withheld = DataExportDisclosure.Withheld,
             Recipients = DataExportDisclosure.Recipients,
+            Sources = DataExportDisclosure.Sources,
             Retention = DataExportDisclosure.Retention
         };
     }
@@ -209,6 +210,7 @@ public class ExportMyDataCommandHandler(
             AuditEntriesTruncated = truncated,
             Withheld = DataExportDisclosure.Withheld,
             Recipients = DataExportDisclosure.Recipients,
+            Sources = DataExportDisclosure.Sources,
             Retention = DataExportDisclosure.Retention
         };
     }
