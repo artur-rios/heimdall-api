@@ -85,6 +85,34 @@ services:
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.
       HEIMDALL_RUN_MIGRATIONS: ${HEIMDALL_RUN_MIGRATIONS:-true}
 
+      # Refuses to start when the connection string does not require TLS, instead of warning
+      # (NFR-25). Off by default so an upgrade cannot take down a deployment over a setting the
+      # operator may not control; turn it on once TLS to the database is confirmed, and put
+      # "SSL Mode=Require" in DB_CONNECTION_EXTRA above.
+      HEIMDALL_DATA_REQUIRE_TLS: ${HEIMDALL_DATA_REQUIRE_TLS:-}
+
+      # Retention (NFR-19 to NFR-22). Every value has a default that enforces the published
+      # schedule, so a deployment that sets none of these still keeps nothing forever. They are
+      # listed rather than omitted because a variable the container never receives cannot be tuned
+      # at all -- and the three *_ENABLED switches are how an operator turns a pass off, which is a
+      # decision worth being able to make deliberately.
+      HEIMDALL_RETENTION_TOKEN_GRACE_DAYS: ${HEIMDALL_RETENTION_TOKEN_GRACE_DAYS:-}
+      HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES: ${HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES:-}
+      HEIMDALL_RETENTION_PURGE_BATCH_SIZE: ${HEIMDALL_RETENTION_PURGE_BATCH_SIZE:-}
+      HEIMDALL_RETENTION_PURGE_ENABLED: ${HEIMDALL_RETENTION_PURGE_ENABLED:-}
+      HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS: ${HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS:-}
+      HEIMDALL_RETENTION_DELETION_WINDOW_DAYS: ${HEIMDALL_RETENTION_DELETION_WINDOW_DAYS:-}
+      HEIMDALL_RETENTION_ANONYMISATION_ENABLED: ${HEIMDALL_RETENTION_ANONYMISATION_ENABLED:-}
+      HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS: ${HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS:-}
+      HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED: ${HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED:-}
+      HEIMDALL_RETENTION_LOG_DAYS: ${HEIMDALL_RETENTION_LOG_DAYS:-}
+
+      # Security signal detection (NFR-26). Signals go to the log with a SECURITY_SIGNAL marker.
+      HEIMDALL_MONITORING_ENABLED: ${HEIMDALL_MONITORING_ENABLED:-}
+      HEIMDALL_MONITORING_WINDOW_MINUTES: ${HEIMDALL_MONITORING_WINDOW_MINUTES:-}
+      HEIMDALL_MONITORING_REFUSAL_THRESHOLD: ${HEIMDALL_MONITORING_REFUSAL_THRESHOLD:-}
+      HEIMDALL_MONITORING_LOCKOUT_THRESHOLD: ${HEIMDALL_MONITORING_LOCKOUT_THRESHOLD:-}
+
     volumes:
       - logs:/app/logs
 
