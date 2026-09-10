@@ -106,6 +106,10 @@ services:
       HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS: ${HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS:-}
       HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED: ${HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED:-}
       HEIMDALL_RETENTION_LOG_DAYS: ${HEIMDALL_RETENTION_LOG_DAYS:-}
+      # Where the log files are written. The default is ./logs inside the container, which the
+      # named volume below already backs — set this only if that mount changes. The signal
+      # collector reads the same variable.
+      HEIMDALL_LOG_DIRECTORY: ${HEIMDALL_LOG_DIRECTORY:-}
 
       # Security signal detection (NFR-26). Signals go to the log with a SECURITY_SIGNAL marker.
       HEIMDALL_MONITORING_ENABLED: ${HEIMDALL_MONITORING_ENABLED:-}

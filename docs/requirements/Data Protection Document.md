@@ -223,11 +223,15 @@ transferring anything.
 | Email delivery, for EEA subjects if any | EEA | United States (Mailgun) | GDPR Art. 46(2)(c) | ✅ Sinch's SCCs — §7.1 |
 | Direct sign-up by an EEA subject | — | Brazil (hosting) | Not a Chapter V transfer | ✅ No exporter — §7.2 |
 | An EEA tenant's users | EEA (tenant) | Brazil (hosting) | GDPR Art. 46(2)(c) | ✅ SCCs Module Two in the DPA — §7.2 |
+| Daily backups | Brazil | Europe or an Art. 45-adequate country (MEGA) | LGPD Art. 33 IX + Art. 7 V | ✅ Ground established — §7.3 |
+| Daily backups, for EEA subjects in the copy | EEA | Europe or an Art. 45-adequate country (MEGA) | GDPR Art. 45 | ✅ Adequacy — §7.3 |
 | ~~Google ID token verification~~ | — | — | — | **Not a transfer** — §6.1 |
 
-Mailgun is the only outbound flow carrying personal data. The Google leg was recorded here in
-error and is corrected in §6.1: the token is validated offline against cached public certificates
-and is never sent to Google.
+**Two outbound flows carry personal data: Mailgun and the backups.** They are not comparable in
+scale. Mailgun receives one address at a time, at the moment a person asks for something; the backup
+is a full copy of every category in §3, every day. The Google leg was recorded here in error and is
+corrected in §6.1: the token is validated offline against cached public certificates and is never
+sent to Google.
 
 ### 7.1 Email delivery to Mailgun
 
@@ -323,6 +327,59 @@ make it. §7.2 of the DPA sets out what Heimdall supplies to support one.
 
 > **The risks this processing creates for the people in it**, rated for them rather than for the
 > system, are the [Data Protection Impact Assessment](Data%20Protection%20Impact%20Assessment.md).
+
+### 7.3 Daily backups to MEGA
+
+The backups are held by **MEGA**, encrypted on this side before MEGA receives them. The factual
+basis — which countries, what MEGA can and cannot see, and why the facility cannot be pinned — is in
+[§0.1 of the Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md).
+This section records the grounds.
+
+**This is the largest transfer the system performs**, and it is worth stating plainly rather than
+letting it sit in a table row. Everything in §3 leaves the country daily: every name, every address,
+every audit entry, every hash. The email flow's exposure is one address at the moment somebody asks
+for a reset. These are different in kind, and the ground had to be established with that in mind.
+
+**LGPD: Art. 33 IX, resting on Art. 7 V** — the same construction §7.1 uses for Mailgun, and for the
+same reason. A backup is not a convenience separable from the service: an identity provider that
+cannot be restored is one that loses every account it holds on a single disk failure, and the
+contract the subject is party to is precisely that their identity will still exist tomorrow.
+Art. 7 V's *"necessário para a execução de contrato"* covers the durability of the thing being
+executed, not only its moment-to-moment operation.
+
+**Why not Art. 33 I, despite the adequacy decisions.** MEGA stores in Europe or in countries the
+European Commission has ruled adequate under GDPR Art. 45. That is a European finding and the LGPD
+does not import it. Art. 33 I requires a country recognised as adequate **by the ANPD**, and the
+ANPD has recognised none — the list does not exist yet. Relying on Art. 33 I here would mean citing
+one regulator's decision to satisfy another's statute.
+
+**Why not Art. 33 II.** The same obstacle as §7.1, and a firmer one: MEGA's terms are not negotiated
+per customer, so the ANPD's standard contractual clauses could only enter by MEGA choosing to adopt
+them. Nothing suggests they have.
+
+**GDPR: Art. 45 adequacy.** Where the copy contains EEA subjects' data — from an EEA tenant, per
+§7.2 — the destination is either inside the EEA or a country covered by a subsisting adequacy
+decision. New Zealand's is Commission Implementing Decision 2013/65/EU, which the Commission
+confirmed remains in force in its January 2024 review. Art. 45 transfers require no further
+authorisation, so **nothing needs to be signed for this leg either**.
+
+**And a supplementary measure that would carry it without adequacy.** The backup is encrypted before
+it leaves and MEGA holds no key that decrypts it, which is EDPB Recommendations 01/2020 **Use Case
+1** almost exactly: encrypted storage in a third country, for backup, where the importer never needs
+the data in the clear and the keys stay with the exporter. This is recorded because it is what makes
+the analysis robust to the thing most likely to change — an adequacy decision being suspended or
+annulled, as one has been before. If that happened, the encryption is the argument that survives it,
+and the review trigger below exists to make somebody check.
+
+> **Review trigger.** If any adequacy decision MEGA relies on is suspended or annulled, the GDPR leg
+> falls back on the encryption as its supplementary measure and needs re-documenting under Art.
+> 46 — not re-engineering. If the ANPD publishes an adequacy list, Art. 33 I becomes available for
+> whichever destinations appear on it, and is the stronger ground.
+
+**The residual exposure is the account password, not the jurisdiction.** Both grounds above assume
+MEGA cannot read the copy, and that assumption rests entirely on the account credentials. It is
+recorded as an operational control in §0.1 of the Operations document rather than left implicit
+here, because it is the one thing in this section that can fail quietly.
 
 ## 8. Security measures
 

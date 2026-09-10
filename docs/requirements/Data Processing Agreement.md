@@ -150,7 +150,13 @@ consultation (Art. 35, 36) by supplying the documentation in this repository, wh
 | --- | --- | --- | --- |
 | **Mailgun** (Sinch) | Transactional email delivery | United States | LGPD Art. 33 IX with Art. 7 V; EU SCCs incorporated by Sinch's own DPA — Data Protection Document §7.1 |
 | **Hosting provider** | Database and API hosting | Brazil | No transfer; data remains in Brazil |
-| **Backup service** | Encrypted off-server backups, daily | ⚠️ Not established | Confirmed encrypted; the jurisdiction is not yet recorded — [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
+| **MEGA** (Mega Cloud Services Limited) | Encrypted off-server backups, daily | Europe or an Art. 45-adequate country; never the US | LGPD Art. 33 IX with Art. 7 V; GDPR Art. 45 adequacy, with client-side encryption as a supplementary measure — Data Protection Document §7.3 |
+
+**MEGA cannot read what it holds.** The backup is encrypted before it is uploaded and MEGA has no
+key that decrypts it, so the sub-processor listed above receives ciphertext and metadata. It is
+listed anyway, and named: a controller assessing this chain is entitled to know who holds a copy of
+their users' data even when that holder cannot read it, and objecting to a sub-processor is a right
+that requires knowing there is one.
 
 **Google is not a sub-processor.** It was listed as one until the transfer assessment was corrected:
 the ID token is validated offline against Google's cached public certificates and nothing about the

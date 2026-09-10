@@ -35,6 +35,6 @@ public partial class PrivacyNoticeVersionTests
 
         Assert.True(match.Success, "The privacy notice has no '**Version x.y' header to compare against");
 
-        Assert.Equal(match.Groups[1].Value, LegalBasisRecorder.CurrentPrivacyNoticeVersion);
+        Assert.Equal(LegalBasisRecorder.CurrentPrivacyNoticeVersion, match.Groups[1].Value);
     }
 }

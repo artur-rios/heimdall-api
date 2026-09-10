@@ -300,18 +300,93 @@ docker logs heimdall-api 2>&1 | grep SECURITY_SIGNAL
 grep -h SECURITY_SIGNAL /path/to/logs/log-*.json
 ```
 
-### Where they are collected
+### Collecting them — `scripts/security_signals.py`
 
-⚠️ **Nothing collects them yet, as at 10 September 2026.** The signals are written; no shipper, mail
-relay or pager reads them. This is recorded rather than glossed because **both breach notification
-clocks run from awareness**, and a signal nobody receives has not been detected — it is
-[#125](https://github.com/artur-rios/heimdall-api/issues/125) and the residual risk R-08 in the
-[DPIA](../requirements/data-protection-impact-assessment/).
+Detection that tells nobody is not detection: **both breach notification clocks run from awareness**,
+so a signal sitting in a log file has not been detected. This job is what closes that. It reads the
+log files, finds the signals it has not reported before, and mails them to one address through the
+Mailgun account the API already uses.
 
-It does not need a SIEM. In rising order of effort: read the log when you think to; a scheduled job
-that greps the files and mails what it finds; a log shipper if alerting is ever wanted. For a
-service not yet published, the first is a defensible position — provided it is the one written down,
-which it now is.
+```bash
+python3 scripts/security_signals.py --stdout      # see what it would send, change nothing
+python3 scripts/security_signals.py               # report new signals by e-mail
+python3 scripts/security_signals.py --stdout --all  # ignore the watermark, print everything
+```
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `HEIMDALL_LOG_DIRECTORY` | If not `./logs` | Where the API writes `log-*.json` — the same variable the API reads |
+| `HEIMDALL_SIGNAL_ALERT_TO` | Yes, unless `--stdout` | Where alerts go |
+| `HEIMDALL_SIGNAL_ALERT_FROM` | No | Sender, default `heimdall-signals@$MAILGUN_DOMAIN` |
+| `HEIMDALL_SIGNAL_STATE_FILE` | No | The watermark, default `<log directory>/.security-signals-state` |
+| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN` | Yes, unless `--stdout` | The API's own credentials, unchanged |
+| `MAILGUN_API_BASE_URL` | No | Default `https://api.mailgun.net`. Set the EU endpoint here if the account is in the EU region |
+
+**Scheduling it.** Every fifteen minutes matches the monitoring window's default, so nothing waits
+longer to be reported than it waited to be detected:
+
+```cron
+MAILTO=you@example.com
+*/15 * * * * cd /srv/heimdall && /usr/bin/python3 scripts/security_signals.py --quiet
+```
+
+The `MAILTO` is not decoration. The job **exits non-zero when it cannot deliver**, and prints the
+signals it was holding to stderr — so a broken collector announces itself instead of looking like a
+quiet week. Without a `MAILTO`, the failure of the thing that catches failures is itself uncaught.
+`--quiet` keeps the ordinary no-signal run silent, so the only mail cron sends is a real problem.
+
+**It needs to read the log files.** `docker-compose.yml` keeps them in a *named* volume
+(`logs:/app/logs`), which the host cannot read directly — so run the job against that volume rather
+than against a host path:
+
+```bash
+docker run --rm \
+  --volumes-from heimdall-api \
+  -e HEIMDALL_LOG_DIRECTORY=/app/logs \
+  -e HEIMDALL_SIGNAL_ALERT_TO -e MAILGUN_API_KEY -e MAILGUN_DOMAIN \
+  -v "$PWD/scripts:/scripts:ro" python:3-slim \
+  python3 /scripts/security_signals.py --quiet
+```
+
+The alternative is to change the volume to a bind mount and run the job on the host, which is
+simpler to schedule and puts the logs somewhere a backup can reach them. Either works; what does not
+work is scheduling it on the host and pointing it at a path the container owns.
+
+The state file is written next to the logs by default, so it survives in the volume. Point
+`HEIMDALL_SIGNAL_STATE_FILE` somewhere writable if the log directory is read-only — and somewhere
+*persistent*, because losing it means the next run re-reports the history.
+
+**Exit codes:** `0` ran and delivered whatever it found · `1` signals were found and could **not** be
+delivered · `2` the collection itself could not run.
+
+### Why it keeps a watermark
+
+Signals repeat on every monitoring tick while a condition persists — that is deliberate in the
+service, and it would be intolerable in an inbox. The job records how far it has read, so each
+signal is reported once. An alert that resends its entire history is one that gets filtered into a
+folder within a week, and a filtered alert is the same non-detection the job exists to close.
+
+Two details follow from that, and both are the conservative direction:
+
+- **The watermark advances only after delivery succeeds.** A Mailgun outage delays signals rather
+  than consuming them.
+- **An unreadable state file is treated as a first run**, so the history is re-reported. Noisy, and
+  the alternative — a truncated file silently meaning "everything is already handled" — is detection
+  switching itself off without saying so.
+
+Signals raised in the same monitoring tick share a timestamp exactly, so the watermark carries the
+digests of everything at its own instant. Without that, one of a pair raised together would be lost.
+
+### What is in the alert
+
+The marker, the kind, the count, the timestamp, and the actor's `PublicId`. That is a pseudonym — it
+identifies an account to somebody holding the database and to nobody else — so the alert can be read
+on a phone without carrying anybody's e-mail address into a mailbox. NFR-22 keeps addresses out of
+the logs to begin with; the alert inherits that rather than re-deciding it. **Do not extend the job
+to include addresses.**
+
+The alert also says, in its own body, that the moment you read it is when awareness happened — the
+timestamp that goes in the Art. 33(5) register, not the time the signal was raised.
 
 ## Cross-origin requests
 
