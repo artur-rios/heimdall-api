@@ -221,7 +221,8 @@ transferring anything.
 | --- | --- | --- | --- | --- |
 | Email delivery | Brazil | United States (Mailgun) | LGPD Art. 33 IX + Art. 7 V | ✅ Ground established — §7.1 |
 | Email delivery, for EEA subjects if any | EEA | United States (Mailgun) | GDPR Art. 46(2)(c) | ✅ Sinch's SCCs — §7.1 |
-| Serving EU data subjects, if any | EEA | Brazil (hosting) | GDPR Art. 44–49 | ⚠️ §7.2 — **Brazil holds no EU adequacy decision** |
+| Direct sign-up by an EEA subject | — | Brazil (hosting) | Not a Chapter V transfer | ✅ No exporter — §7.2 |
+| An EEA tenant's users | EEA (tenant) | Brazil (hosting) | GDPR Art. 46(2)(c) | ✅ SCCs Module Two in the DPA — §7.2 |
 | ~~Google ID token verification~~ | — | — | — | **Not a transfer** — §6.1 |
 
 Mailgun is the only outbound flow carrying personal data. The Google leg was recorded here in
@@ -273,30 +274,55 @@ is made deliberately rather than inherited.
 > 33 II becomes available through Sinch's existing DPA with nothing to sign, and is the stronger
 > ground. Worth checking when this document is next reviewed.
 
-### 7.2 The EEA question, which the controller must answer
+### 7.2 GDPR applies — determined 10 September 2026
 
-**Brazil has no adequacy decision from the European Commission.** If Heimdall processes the data of
-people in the EEA, hosting in Brazil is itself a restricted transfer under GDPR Chapter V, and
-requires Art. 46 safeguards — Standard Contractual Clauses plus a transfer impact assessment — before
-it is lawful.
+**The controller has determined that the service is open to EEA data subjects.** Nothing restricts
+access by geography once it is published, so GDPR is treated as applying under Art. 3(2). Recorded
+here with its date, and revisited if the service's reach changes.
 
-Whether that applies is a question about the service, not the code: GDPR Art. 3(2) reaches a
-controller outside the EU only where it offers goods or services to people in the EU, or monitors
-their behaviour. **The controller must determine and record whether any tenant scope serves EEA data
-subjects.**
+That settles the question this section was opened for. What follows is the consequence, and it is
+narrower than it first appears.
 
-- **If no**, GDPR does not apply, this document's GDPR columns are informative rather than binding,
-  and §7.2 closes with that determination recorded and a date.
-- **If yes**, SCCs and a transfer impact assessment are required for the EEA → Brazil leg, and the
-  onward Brazil → US legs in §7.1 must be covered too.
+#### Hosting in Brazil is not, by itself, a restricted transfer
 
-This is written as an open question rather than an assumption because guessing either way would be
-worse than asking: assuming "no" understates an obligation, and assuming "yes" would have this
-repository claim safeguards it does not have.
+Brazil holds no adequacy decision, so the instinct is that storing EEA subjects' data here needs
+Art. 46 safeguards. For **the people who sign up directly**, it does not.
+
+EDPB Guidelines 05/2021 set three cumulative criteria for a Chapter V transfer: an exporter subject
+to the GDPR, disclosing to a separate importer, in a third country. The guidelines are explicit that
+*"there will not be a transfer when the data are disclosed directly by the data subject to the
+recipient as there will be no exporter"*. A person in the EEA creating an account here is sending
+their own data; they are not an exporter, and the first criterion fails.
+
+So GDPR applies to that processing in full under Art. 3(2) — every right, every obligation in this
+document — but Chapter V does not engage, and no safeguard is required for the hosting itself.
+
+#### A tenant established in the EEA *is* an exporter
+
+Where a tenant organisation subject to the GDPR uses a scope for its own users, all three criteria
+are met: the tenant is the exporter and controller, Heimdall is the importer and processor, and the
+importer is in a third country. That is a restricted transfer and needs Art. 46 safeguards.
+
+**The safeguard belongs in the [Data Processing Agreement](Data%20Processing%20Agreement.md)**,
+which is Heimdall's own template rather than a third party's, so it requires no negotiation with
+anybody: §7.1 of that agreement now incorporates the EU Standard Contractual Clauses, **Module Two
+(controller to processor)**, with the tenant as exporter and Heimdall as importer. An EEA tenant
+executing the DPA receives the safeguard by doing so.
+
+A transfer impact assessment remains the exporting tenant's to make — it is an assessment of the
+importer's jurisdiction from the exporter's position, and the exporter is the only party who can
+make it. §7.2 of the DPA sets out what Heimdall supplies to support one.
+
+#### Consequences elsewhere
+
+- The **Brazil → United States** email flow (§7.1) is unaffected: Art. 33 IX carries it under the
+  LGPD, and Sinch's own DPA carries the EU leg under Art. 46(2)(c).
+- The [Incident Response Document](Incident%20Response%20Document.md) §4 no longer needs its
+  provisional instruction to assume GDPR applies. It does apply, and the shorter of the two
+  notification clocks governs.
 
 > **The risks this processing creates for the people in it**, rated for them rather than for the
 > system, are the [Data Protection Impact Assessment](Data%20Protection%20Impact%20Assessment.md).
-> §7.1's unexecuted transfer mechanisms are the highest residual risk it records.
 
 ## 8. Security measures
 

@@ -160,10 +160,56 @@ Personal data is stored in **Brazil**. One outbound flow leaves Brazil — email
 ground is recorded in [§7 of the Data Protection Document](Data%20Protection%20Document.md), which
 is the live version of this table.
 
-**If the Controller is established in the EEA, or its users are**, note that Brazil holds no EU
-adequacy decision, so the Controller's transfer to the Processor is itself a restricted transfer
-requiring Art. 46 safeguards. That has to be resolved between the parties before this agreement is
-executed — see Data Protection Document §7.2.
+### 7.1 Transfers from the EEA — Standard Contractual Clauses
+
+Brazil holds no EU adequacy decision. Where the **Controller is subject to the GDPR**, its
+disclosure of personal data to the Processor in Brazil is a restricted transfer under Chapter V and
+requires Art. 46 safeguards.
+
+**The European Commission's Standard Contractual Clauses (Implementing Decision (EU) 2021/914),
+Module Two — controller to processor — are incorporated into this agreement by reference**, with:
+
+| | |
+| --- | --- |
+| **Data exporter** | The Controller named in §1 |
+| **Data importer** | The Processor named in §1 |
+| **Docking clause (18)** | Applies |
+| **Clause 9 — sub-processors** | Option 2, general authorisation, with the 30 days' notice §5.2 sets |
+| **Clause 11 — redress** | The optional independent dispute resolution body is not selected |
+| **Clause 17 — governing law** | The law of an EEA Member State allowing third-party beneficiary rights; Ireland, absent another choice by the parties |
+| **Clause 18(b) — forum** | The courts of that Member State |
+| **Annexes I, II, III** | §1 (parties, subject matter, categories), §4 (technical and organisational measures), and §7's sub-processor list respectively |
+
+Where §11's choice of Brazilian law would otherwise conflict, the Clauses prevail for the transfer
+they govern — Clause 5 requires that, and the Clauses cannot be varied in a way that contradicts
+them.
+
+**No separate signature is needed.** Executing this agreement executes the Clauses, which is the
+point of incorporating them here rather than sending them separately.
+
+### 7.2 The transfer impact assessment is the Controller's
+
+Schrems II requires the exporter to assess whether the importer's jurisdiction undermines the
+Clauses in practice. That assessment is the **Controller's** to make: it is an evaluation of Brazil
+from the exporter's position, and the exporter is the only party who can make it.
+
+The Processor supplies, on request and without charge, what an assessment needs: the location of
+processing and of backups, the sub-processors and their locations, the technical measures in §4, and
+a record of any government access request received. To the date of this template version, **no
+government or law enforcement authority has requested access to any personal data processed under
+this agreement.**
+
+### 7.3 Direct sign-up is not a transfer
+
+Where a person in the EEA creates an account with Heimdall themselves, there is no restricted
+transfer: EDPB Guidelines 05/2021 require an *exporter* subject to the GDPR, and a data subject
+sending their own data is not one. GDPR still applies to that processing under Art. 3(2) — every
+right in this agreement and in the Privacy Notice — but Chapter V does not engage, and §7.1's
+Clauses are not needed for it.
+
+This matters for a Controller deciding whether §7.1 applies to them: it turns on whether **the
+Controller** is subject to the GDPR and discloses its users' data to the Processor, not on where the
+users happen to live.
 
 ---
 

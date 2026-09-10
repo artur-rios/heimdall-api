@@ -27,7 +27,13 @@ public static class LegalBasisRecorder
     ///     The version of the privacy notice this build ships. Bumped whenever the notice changes
     ///     materially, so an identity records the version actually in force when it was created.
     /// </summary>
-    public const string CurrentPrivacyNoticeVersion = "1.0";
+    /// <remarks>
+    ///     Must match the version header of <c>docs/requirements/Privacy Notice.md</c>.
+    ///     <c>PrivacyNoticeVersionTests</c> fails the build if the two drift, because a recorded
+    ///     version that names a document nobody can produce is worse than no record: it looks like
+    ///     evidence of what somebody was told while pointing at the wrong text.
+    /// </remarks>
+    public const string CurrentPrivacyNoticeVersion = "1.1";
 
     /// <summary>The basis applied when a scope declares none, and for identities outside any scope.</summary>
     public const LegalBases DefaultBasis = LegalBases.ContractPerformance;

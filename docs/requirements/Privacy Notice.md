@@ -7,7 +7,7 @@ description: "What Heimdall does with personal data, told to the people it belon
 
 # Privacy Notice — Heimdall API
 
-**Version 1.0 — 9 September 2026**
+**Version 1.1 — 10 September 2026**
 
 ## 1. What this is
 
@@ -117,7 +117,8 @@ cannot yet deliver would be worse than admitting the gap: it is the kind of clai
 
 **You can also complain to a supervisory authority.** In Brazil that is the
 [ANPD](https://www.gov.br/anpd/). If you are in the EEA, it is your national data protection
-authority.
+authority — the GDPR applies to this service, and the rights in this notice are yours under it as
+well as under the LGPD.
 
 If you ask to be erased and you are the last administrator of an organisation's scope, the request
 is still recorded and the clock still runs, but it cannot be completed until that organisation
@@ -130,4 +131,5 @@ recorded against your account.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1 | 10 September 2026 | Confirmed the GDPR applies; corrected Google's role from recipient to source |
 | 1.0 | 9 September 2026 | First published |
