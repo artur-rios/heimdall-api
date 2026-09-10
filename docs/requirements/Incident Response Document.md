@@ -120,8 +120,22 @@ while the thing it detects is still happening is worse than none.
 
 **Where the alerts go is the operator's choice.** This API has no opinion about pagers or SIEMs, and
 building an integration for one would be guessing. What it does is make the signal unmistakable and
-machine-matchable where the operator already collects — the logs, which have a retention period
-(NFR-22) and ship off the host. Match on `SECURITY_SIGNAL` and the `Kind`, not the prose.
+machine-matchable where the operator already collects — the logs. Match on `SECURITY_SIGNAL` and the
+`Kind`, not the prose, which is written for whoever reads the line afterwards.
+
+A signal is a warning-level line in the log, on stdout and in the log directory:
+
+```
+SECURITY_SIGNAL REPEATED_REFUSALS: One identity had 23 writes refused in the last
+00:15:00. ... (count 23, actor 3f2a91c4-7d55-4e1a-9b2f-08c7d1e6a934)
+```
+
+> ⚠️ **Nothing collects them yet, as at 10 September 2026.** They are written; no shipper, mail
+> relay or pager reads them. That is recorded rather than glossed, because §4's clocks run from
+> awareness and a signal nobody receives has not been detected. Until it changes, the honest
+> description of detection here is "written down, read when somebody thinks to look" — which for a
+> service not yet published is defensible, and only while it is the thing actually written down.
+> Tracked in [#125](https://github.com/artur-rios/heimdall-api/issues/125).
 
 Detection is off only if `HEIMDALL_MONITORING_ENABLED=false`, which logs a warning saying what has
 been given up.

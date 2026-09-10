@@ -11,7 +11,7 @@ description: "The risks this system creates for the people in it, and what is do
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
+| 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest, for the volume and the backups. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
 | 1.1 | 10 September 2026 | R-07 re-rated High → Low: the Google transfer was found not to exist, and the email transfer's ground established under LGPD Art. 33 IX |
 | 1.0 | 9 September 2026 | First assessment |
 
@@ -82,10 +82,13 @@ the controller on 10 September 2026, **encryption at rest for the database volum
 gap that held this at Medium: everything not protected at the application level sits in clear text
 within the database, and only the volume beneath it stands between a stolen disk and all of it.
 
-**Remaining:** whether the *backups* are separately encrypted is not established by that
-confirmation, and a regime that encrypts the live database while shipping plaintext dumps elsewhere
-is common enough to be worth ruling out. Tracked in
-[#125](https://github.com/artur-rios/heimdall-api/issues/125).
+Backup encryption was confirmed separately on the same date, so the copy of the database that lives
+outside the server is protected too.
+
+**Remaining:** *where* the backup service holds them. A backup is a full copy of every category in
+the record, so if it leaves Brazil the exposure is not a single address in transit but the whole
+database in another jurisdiction. That is a transfer question rather than a security one, and it is
+tracked in [#125](https://github.com/artur-rios/heimdall-api/issues/125).
 
 *This is the risk the product's value creates. It cannot be designed out without abandoning the
 purpose, which is why the controls around it carry more weight than they would elsewhere.*
@@ -200,8 +203,13 @@ transfer. See [#124](https://github.com/artur-rios/heimdall-api/issues/124).
 | **Severity** | High · **Likelihood** Was Medium · **Residual** Medium |
 
 Controls: signal detection (NFR-26), the [Incident Response Document](Incident%20Response%20Document.md),
-the Art. 33(5) register. **Gap:** where alerts are routed is an operational choice not yet confirmed
-— a signal nobody receives has not been detected.
+the Art. 33(5) register.
+
+**Gap, and it is the live one.** As at 10 September 2026 **nothing collects the signals**: they are
+written to the log and no shipper, mail relay or pager reads them. The detection therefore notices
+and tells nobody, which for the purpose of Art. 33's clock is indistinguishable from not detecting.
+Closing it needs no new code — a scheduled grep that mails what it finds is enough — but it does
+need somebody to receive the result.
 
 ## 5. Summary
 
@@ -218,10 +226,11 @@ the Art. 33(5) register. **Gap:** where alerts are routed is an operational choi
 
 **No residual risk is rated High**, and Art. 36 prior consultation is not required.
 
-**One action remains** ([#125](https://github.com/artur-rios/heimdall-api/issues/125)): confirm
-whether the backups are separately encrypted, their retention and location, the restore-testing
-cadence, and where `SECURITY_SIGNAL` lines are collected. The last of those is R-08's residual
-Medium — a signal nobody receives has not been detected.
+**One action remains** ([#125](https://github.com/artur-rios/heimdall-api/issues/125)), now down to
+two questions: **where the backup service holds the copies** — the only one that could change an
+obligation rather than a practice — and **where `SECURITY_SIGNAL` lines are collected**, which is
+R-08's residual Medium. Nothing collects them today, so the detection built for NFR-26 currently
+notices things and tells nobody; that is the gap, not the detecting.
 
 **What changed since version 1.0.** R-07 was the highest risk and is now Low. Half of it was a
 factual error on my part — Google was recorded as a recipient when the ID token is validated offline

@@ -150,6 +150,7 @@ consultation (Art. 35, 36) by supplying the documentation in this repository, wh
 | --- | --- | --- | --- |
 | **Mailgun** (Sinch) | Transactional email delivery | United States | LGPD Art. 33 IX with Art. 7 V; EU SCCs incorporated by Sinch's own DPA — Data Protection Document §7.1 |
 | **Hosting provider** | Database and API hosting | Brazil | No transfer; data remains in Brazil |
+| **Backup service** | Encrypted off-server backups, daily | ⚠️ Not established | Confirmed encrypted; the jurisdiction is not yet recorded — [#125](https://github.com/artur-rios/heimdall-api/issues/125) |
 
 **Google is not a sub-processor.** It was listed as one until the transfer assessment was corrected:
 the ID token is validated offline against Google's cached public certificates and nothing about the

@@ -31,13 +31,20 @@ accordingly: **the controller must confirm them** — they cannot be verified fr
 | | |
 | --- | --- |
 | **Database volume** | ✅ **Confirmed by the controller, 10 September 2026** — the data is encrypted at rest on the server |
-| **Backups** | ⚠️ **Not separately confirmed.** Encryption of the backups themselves, and where their key is held, is not established by the confirmation above |
+| **Backups** | ✅ **Confirmed, 10 September 2026** — encrypted, and held on a private cloud service |
 | **Application-level** | ✅ Argon2id password hashes, encrypted TOTP secrets (NFR-16), hashed tokens and recovery codes |
 
-The two rows are separated deliberately. "Encrypted on the server" establishes the volume; a backup
-written elsewhere is a different artefact with its own key management, and a regime that encrypts
-the live database while shipping plaintext dumps to object storage is common enough to be worth
-ruling out rather than assuming away.
+The two rows were confirmed separately, and deliberately so: "encrypted on the server" establishes
+the volume, and a backup written elsewhere is a different artefact with its own key management. A
+regime that encrypts the live database while shipping plaintext dumps to object storage is common
+enough to be worth ruling out rather than assuming away. Both are now confirmed.
+
+> **Still open: where the backup service holds them.** A private cloud service is a *how*, not a
+> *where*, and the jurisdiction is what decides whether the backups are themselves an international
+> transfer — of every category in §3 at once, since a backup is a full copy. If they leave Brazil
+> the transfer needs its own ground in
+> [§7 of the Data Protection Document](Data%20Protection%20Document.md), alongside the email flow.
+> Tracked in [#125](https://github.com/artur-rios/heimdall-api/issues/125).
 
 The application-level protections are real and tested, and they are not a substitute. The threat
 model's TB-3 covers what an attacker recovers from *stolen rows*, which presupposes the rows were
@@ -71,23 +78,28 @@ enabling it is a decision somebody makes, not one that happens to them during an
 | | | |
 | --- | --- | --- |
 | **Schedule** | Daily full backup | ✅ Confirmed 10 September 2026 |
-| **Retention** | 35 days | ⚠️ Proposed |
-| **Location** | Same region as the database — Brazil | ⚠️ Not confirmed |
-| **Encryption** | Required, key held separately | ⚠️ Not confirmed |
-| **Restore testing** | Quarterly, including the reconciliation step below | ⚠️ Not confirmed |
+| **Encryption** | Encrypted, on a private cloud service | ✅ Confirmed 10 September 2026 |
+| **Retention** | 35 days | ✅ Confirmed 10 September 2026 |
+| **Location** | Same region as the database — Brazil | ⚠️ **Not confirmed** |
+| **Restore testing** | Quarterly, including the reconciliation step below | ⚠️ Proposed |
 
-The schedule is now an observed fact. The other four rows remain proposals, and each carries a
-consequence if the real value differs:
+**Why 35 days**, since the figure is a decision rather than a default. The backup worth having is
+usually the one from *before* the problem was noticed, and silent corruption is typically found days
+or weeks late — so a short window can mean every copy held is already spoiled. Below 30 days,
+recovery is capped at under a month. Above it, a backup can outlive the 30-day erasure deadline,
+which is what makes the restore reconciliation below **mandatory rather than optional**. Thirty-five
+clears the deadline with margin, at a cost already paid: the reconciliation is built and tested.
 
-- **Retention** decides whether restore reconciliation is mandatory. At 35 days it is, because a
-  backup can outlive the 30-day erasure deadline. Under 30 days it would not be — but disaster
-  recovery would be capped at under a month.
-- **Location** matters as much as the period: a backup in another jurisdiction is an international
-  transfer of every category in §3 at once, and would need its own ground in the
-  [Data Protection Document](Data%20Protection%20Document.md) §7.
-- **Encryption** of the backups is not established by the database volume being encrypted; see the
-  note above.
-- **Restore testing** is what turns the reconciliation below from a procedure into a capability.
+Two rows remain, and each carries a consequence if the real value differs:
+
+- **Location is the one that changes obligations rather than practice.** A backup outside Brazil is
+  an international transfer of every category in §3 at once — the whole database, not the single
+  address the email flow sends. It would need its own ground in
+  [§7 of the Data Protection Document](Data%20Protection%20Document.md), and where an EEA tenant's
+  users are in the copy, its own Chapter V safeguard. "Private cloud service" describes the
+  arrangement, not the jurisdiction.
+- **Restore testing** is what turns the reconciliation below from a procedure into a capability. A
+  restore that has never been run is a hypothesis.
 
 35 days is chosen against the erasure deadline rather than against recovery convenience: it is
 longer than the 30 days §4 of the retention schedule allows an erasure to take, which is what makes

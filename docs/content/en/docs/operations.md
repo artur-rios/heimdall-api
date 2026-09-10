@@ -280,6 +280,39 @@ want quiet, not here.
 [Incident Response Document](../requirements/incident-response-document/), which carries the
 notification deadlines and the register.
 
+### What a signal actually looks like
+
+A warning-level log line, written to stdout and to the files in the log directory:
+
+```
+SECURITY_SIGNAL REPEATED_REFUSALS: One identity had 23 writes refused in the last
+00:15:00. Sustained refusals are what somebody probing for what they may do looks
+like. (count 23, actor 3f2a91c4-7d55-4e1a-9b2f-08c7d1e6a934)
+```
+
+To see what has been raised so far:
+
+```bash
+docker logs heimdall-api 2>&1 | grep SECURITY_SIGNAL
+```
+
+```bash
+grep -h SECURITY_SIGNAL /path/to/logs/log-*.json
+```
+
+### Where they are collected
+
+⚠️ **Nothing collects them yet, as at 10 September 2026.** The signals are written; no shipper, mail
+relay or pager reads them. This is recorded rather than glossed because **both breach notification
+clocks run from awareness**, and a signal nobody receives has not been detected — it is
+[#125](https://github.com/artur-rios/heimdall-api/issues/125) and the residual risk R-08 in the
+[DPIA](../requirements/data-protection-impact-assessment/).
+
+It does not need a SIEM. In rising order of effort: read the log when you think to; a scheduled job
+that greps the files and mails what it finds; a log shipper if alerting is ever wanted. For a
+service not yet published, the first is a defensible position — provided it is the one written down,
+which it now is.
+
 ## Cross-origin requests
 
 `HEIMDALL_CORS_ALLOWED_ORIGINS` lists the browser front ends allowed to call the API, comma
