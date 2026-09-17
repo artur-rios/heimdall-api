@@ -962,6 +962,58 @@
         "security": [ ]
       }
     },
+    "/api/auth/2fa/challenge/resend": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Reissues the email code for a two-factor challenge that is still outstanding (UC-46,\nFR-2F-16), so someone who never received the code UC-11 mailed can ask for another\nwithout starting sign-in over. Open to anonymous callers and authorized by the challenge\ntoken alone, submitted as a request body field exactly as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.VerifyTwoFactorAuth(ArturRios.Heimdall.Command.Input.VerifyTwoFactorAuthCommand) takes it — never as an `Authorization` header\n(FR-2F-10).",
+        "description": "\nAnswers `200 OK` with the same message and no data on every path — a valid\n                    challenge, an unknown one, a forged one, an expired one, one naming a person with no\n                    email method, and one whose reissues are spent (AF-46a…AF-46e). A response that varied\n                    would tell an anonymous caller whether an address is registered and has email\n                    two-factor enabled, which is the question UC-11 and UC-38 collapse their own answers\n                    to refuse.\n\nThe reissue lands inside the existing challenge's window and never lengthens it: a\n                    new challenge token could only be returned for a challenge that was real, which would\n                    be exactly that oracle.\n\nRate-limited like every other anonymous auth route. The address is never the caller's\n                    to choose — it is read from the person the challenge token names — and FR-2F-13's cap\n                    already bounds how many codes one challenge can produce, so the limiter is not what\n                    stops this being a mail cannon. What it bounds is the unauthenticated request volume\n                    itself, which is the same thing it bounds on M:ArturRios.Heimdall.WebApi.Controllers.AuthController.Login(ArturRios.Heimdall.Command.Input.LoginCommand) and\n                    M:ArturRios.Heimdall.WebApi.Controllers.AuthController.PasswordRecovery(ArturRios.Heimdall.Command.Input.PasswordRecoveryCommand).\n\n**Anonymous** — no bearer token required.",
+        "operationId": "Auth_ResendTwoFactorChallengeCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
     "/api/auth/2fa/disable": {
       "post": {
         "tags": [
@@ -6179,6 +6231,51 @@
           },
           "data": {
             "$ref": "#/components/schemas/RequestErasureCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResendTwoFactorChallengeCodeCommand": {
+        "type": "object",
+        "properties": {
+          "challengeToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResendTwoFactorChallengeCodeCommandOutput": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "ResendTwoFactorChallengeCodeCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutput"
           }
         },
         "additionalProperties": false

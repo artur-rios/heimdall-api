@@ -1,8 +1,8 @@
 namespace ArturRios.Heimdall.Shared.Messages;
 
 /// <summary>
-///     Canonical messages produced by the two-factor authentication use cases (UC-36 – UC-40). Each
-///     is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />.
+///     Canonical messages produced by the two-factor authentication use cases (UC-36 – UC-40 and
+///     UC-46). Each is mapped to an HTTP status code in <see cref="TwoFactorMessageMap" />.
 /// </summary>
 public static class TwoFactorMessages
 {
@@ -60,6 +60,14 @@ public static class TwoFactorMessages
     ///     does not carry the MFA-pending claim (FR-2F-10).
     /// </summary>
     public const string ChallengeTokenInvalid = "The two-factor challenge is invalid or has expired. Log in again.";
+
+    /// <summary>
+    ///     UC-46's only answer (FR-2F-16), returned on every path — the main flow and AF-46a…AF-46e
+    ///     alike. Worded so it is true whether or not anything was sent: an anonymous caller must not
+    ///     learn from it whether the challenge was real, whether the address is registered, whether
+    ///     the email method is enabled, or how much of the reissue budget is left.
+    /// </summary>
+    public const string ChallengeCodeResent = "If the challenge is still valid, a new code has been sent.";
 
     /// <summary>
     ///     UC-38 step 5 (FR-2F-09): the second factor checked out, but the person's scope eligibility —

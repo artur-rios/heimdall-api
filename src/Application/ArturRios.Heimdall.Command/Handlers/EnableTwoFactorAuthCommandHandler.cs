@@ -4,11 +4,8 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
-using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
-using ArturRios.Util.Random;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using OtpNet;
@@ -46,10 +43,8 @@ public class EnableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person> personReader,
     IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
     IAsyncRepository<TwoFactorAuth> twoFactorWriter,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    ITotpSecretProtector totpSecretProtector,
-    ITwoFactorEmailSender emailSender)
+    ITwoFactorEmailCodeIssuer emailCodeIssuer,
+    ITotpSecretProtector totpSecretProtector)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
 {
     private const string Issuer = "Heimdall";
@@ -120,7 +115,7 @@ public class EnableTwoFactorAuthCommandHandler(
         {
             twoFactorAuth.EmailEnabled = false;
 
-            var retirement = await RetireOutstandingCodesAsync(twoFactorAuth.Id);
+            var retirement = await emailCodeIssuer.RetireOutstandingAsync(twoFactorAuth.Id);
 
             if (retirement is not null)
             {
@@ -141,50 +136,19 @@ public class EnableTwoFactorAuthCommandHandler(
             responseData.OtpAuthUri = BuildOtpAuthUri(person.Email, base32Secret);
         }
 
-        // UC-36 step 4 (FR-2F-03): a fresh 6-digit code every time Email is (re)selected. Prior
-        // outstanding codes are retired first, the same way ResendVerificationEmailCommandHandler
-        // retires prior verification tokens, so only the code just mailed can ever be confirmed.
+        // UC-36 step 4 (FR-2F-03): a fresh 6-digit code every time Email is (re)selected, through
+        // the same issuer UC-11's AF-11g and UC-46 use — prior outstanding codes retired first, so
+        // only the code just mailed can ever be confirmed.
         if (wantsEmail)
         {
-            var retirement = await RetireOutstandingCodesAsync(twoFactorAuth.Id);
+            var reissue = await emailCodeIssuer.ReissueAsync(twoFactorAuth, person.Email);
 
-            if (retirement is not null)
+            if (reissue is not null)
             {
-                return output.WithErrors(retirement);
-            }
-
-            var code = CustomRandom.Text(new RandomStringOptions
-            {
-                Length = 6,
-                IncludeDigits = true,
-                IncludeLowercase = false,
-                IncludeUppercase = false,
-                IncludeSpecialCharacters = false
-            });
-
-            var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
-
-            var emailCodeCreation = await emailCodeWriter.CreateAsync(new TwoFactorEmailCode
-            {
-                TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = codeHash,
-                Salt = salt,
-                ExpiresAt = DateTime.UtcNow.Add(TwoFactorLifetimes.EmailCode),
-                Used = false
-            });
-
-            if (!emailCodeCreation.Success)
-            {
-                return output.WithErrors(emailCodeCreation.Errors);
+                return output.WithErrors(reissue);
             }
 
             twoFactorAuth.EmailEnabled = true;
-
-            // Delivery failures are not this endpoint's business to surface — the code is already
-            // persisted by the time delivery is attempted, so a caller who receives nothing can call
-            // this endpoint again, exactly as UC-15's resend does for verification email.
-            await emailSender.SendAsync(person.Email, code);
-
             responseData.EmailCodeSent = true;
         }
 
@@ -198,34 +162,6 @@ public class EnableTwoFactorAuthCommandHandler(
         return output
             .WithData(responseData)
             .WithMessage(TwoFactorMessages.SetupInitiated);
-    }
-
-    /// <summary>
-    ///     Marks every not-yet-used, not-yet-expired email code for this configuration as used, so a
-    ///     freshly mailed code is the only one that can confirm setup — the same shape as
-    ///     <see cref="ResendVerificationEmailCommandHandler" />'s token retirement.
-    /// </summary>
-    private async Task<IEnumerable<string>?> RetireOutstandingCodesAsync(long twoFactorAuthId)
-    {
-        var now = DateTime.UtcNow;
-
-        var live = await emailCodeReader.Query()
-            .Where(x => x.TwoFactorAuthId == twoFactorAuthId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
-        {
-            outstanding.Used = true;
-
-            var update = await emailCodeWriter.UpdateAsync(outstanding);
-
-            if (!update.Success)
-            {
-                return update.Errors;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

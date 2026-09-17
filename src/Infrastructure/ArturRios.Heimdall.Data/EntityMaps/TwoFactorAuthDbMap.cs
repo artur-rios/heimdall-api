@@ -21,6 +21,8 @@ internal static class TwoFactorAuthDbMap
 
         twoFactorAuth.Property(x => x.IsActive).HasDefaultValue(false);
 
+        twoFactorAuth.Property(x => x.EmailCodeReissueCount).HasDefaultValue(0);
+
         twoFactorAuth.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         twoFactorAuth.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
 
