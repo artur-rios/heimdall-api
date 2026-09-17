@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -68,14 +69,14 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
     // ---------------------------------------------------------------- NFR-17
 
     [FunctionalFact]
-    public async Task GivenNFR17_WhenAChallengeTokenIsIssued_ThenItExpiresInFiveMinutesAndIsMarkedPending()
+    public async Task GivenNFR17_WhenAChallengeTokenIsIssued_ThenItExpiresInTenMinutesAndIsMarkedPending()
     {
-        // NFR-17: the challenge token carries a distinct MFA-pending claim, expires quickly, and is
-        // rejected everywhere but second-factor verification.
+        // NFR-17: the challenge token carries a distinct MFA-pending claim, expires on a fixed
+        // schedule, and is rejected everywhere but second-factor verification.
         //
-        // "Quickly" was written as a target of five minutes. It is not a target — the lifetime is
-        // fixed in JwtTwoFactorChallengeTokenIssuer and no configuration can move it, which is the
-        // stronger property and the one asserted here.
+        // The lifetime was written as a target. It is not a target — it is fixed in
+        // TwoFactorLifetimes and no configuration can move it, which is the stronger property and
+        // the one asserted here.
         var person = await SeedPersonWithActiveTwoFactorAsync();
 
         var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
@@ -86,14 +87,14 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
 
         var token = new JwtSecurityTokenHandler().ReadJwtToken(login.Body.Data.ChallengeToken);
 
-        // Then — five minutes exactly. Measured between the token's own iat and exp rather than
+        // Then — ten minutes exactly. Measured between the token's own iat and exp rather than
         // against this test's clock: both are stamped from the same instant inside the issuer, so
         // their difference is the lifetime it chose and nothing else. Reading the clock here and
-        // subtracting would instead measure five minutes plus however long the login round trip
+        // subtracting would instead measure ten minutes plus however long the login round trip
         // took — which is latency, not lifetime, and which on a loaded runner is unbounded.
         var lifetime = token.ValidTo - token.IssuedAt;
 
-        Assert.Equal(TimeSpan.FromMinutes(5), lifetime);
+        Assert.Equal(TimeSpan.FromMinutes(10), lifetime);
 
         // Then — and it says what it is, which is what MfaPendingGuardFilter reads
         Assert.Contains(token.Claims, claim => claim.Type == "mfaPending" && claim.Value == "true");
@@ -103,9 +104,65 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
     }
 
     [FunctionalFact]
+    public async Task GivenNFR17AndFR2F03_WhenOneLoginIssuesBoth_ThenTheChallengeOutlivesItsEmailCode()
+    {
+        // The property the two requirements only have together, and the one neither states on its
+        // own: a login attempt has one deadline. FR-2F-03 gives the emailed code ten minutes because
+        // that is the delivery latency the specification chose to tolerate; NFR-17 used to give the
+        // token that carries it five, and FR-2F-10 makes second-factor verification the only place a
+        // challenge token is accepted — so for the second half of every code's life the code was
+        // genuinely correct and there was nowhere left to present it.
+        //
+        // Asserted against the two artefacts a real login actually produced, rather than against the
+        // constants, so it holds whatever either of them is later changed to.
+        var person = await SeedPersonWithActiveTwoFactorAsync();
+
+        var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
+            "/api/auth/login", new LoginCommand { Email = person.Email, Password = Password });
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(login.Body!.Data!.ChallengeToken);
+
+        await using var context = db.CreateContext();
+
+        var emailCode = await context.TwoFactorEmailCodes
+            .Where(code => code.TwoFactorAuth.PersonId == person.Id)
+            .OrderByDescending(code => code.Id)
+            .FirstAsync();
+
+        // Then — there is no instant at which the code is still live and the token is not. This is
+        // the whole of the defect: which one expires first, not by how much.
+        //
+        // The two are stamped a moment apart rather than together — the code first, then an Argon2id
+        // hash and two round trips to the database, then the token — so the token's expiry is
+        // naturally the later of the two. The one second of slack is for the opposite case: a JWT's
+        // `exp` is whole seconds, so `ValidTo` is truncated where `ExpiresAt` is not, and on a fast
+        // path that truncation could put the token a fraction behind. It is a bounded artefact of
+        // the format, not an allowance for how long the request took.
+        Assert.True(
+            token.ValidTo >= emailCode.ExpiresAt.AddSeconds(-1),
+            $"the challenge expires at {token.ValidTo:O}, before its code does at {emailCode.ExpiresAt:O} " +
+            "— the dead zone this requirement pair exists to rule out");
+
+        // Then — and it is not bought by making the token long-lived instead, which would give the
+        // same agreement at the cost of NFR-17's short window.
+        //
+        // Measured as the token's own lifetime, between its iat and its exp, rather than against the
+        // code's expiry. The gap between the two artefacts is the work the request did between
+        // stamping them, which is latency — unbounded on a loaded runner, and nothing to do with the
+        // lifetime either was given.
+        Assert.True(
+            token.ValidTo - token.IssuedAt <= TwoFactorLifetimes.EmailCode,
+            $"the challenge is given {token.ValidTo - token.IssuedAt}, longer than the " +
+            $"{TwoFactorLifetimes.EmailCode} its code gets — NFR-17 asks for a short fixed lifetime, " +
+            "not merely one long enough to cover FR-2F-03");
+    }
+
+    [FunctionalFact]
     public async Task GivenNFR17_WhenAChallengeTokenIsUsedAsABearerCredential_ThenEveryOtherEndpointRefusesIt()
     {
-        // The third clause of NFR-17, and the one an expiry alone would not give: within its five
+        // The third clause of NFR-17, and the one an expiry alone would not give: within its ten
         // minutes the token is still valid, so what stops it being a login is that every endpoint
         // except UC-38's rejects it.
         var person = await SeedPersonWithActiveTwoFactorAsync();

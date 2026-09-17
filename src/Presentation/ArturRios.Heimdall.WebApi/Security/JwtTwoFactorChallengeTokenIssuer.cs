@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Jwt;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Interfaces;
@@ -13,12 +14,23 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Expiry.</b> Hardcoded to <see cref="ChallengeTokenLifetime" /> (5 minutes, NFR-17's
-///         target) rather than added to <see cref="JwtConfiguration" /> as a second environment
+///         <b>Expiry.</b> Taken from <see cref="TwoFactorLifetimes.ChallengeToken" /> (10 minutes,
+///         NFR-17) rather than added to <see cref="JwtConfiguration" /> as a second environment
 ///         variable: a full login token's lifetime is meant to be tuned per deployment, but a
-///         challenge token's is a security property of the use case itself — a caller is expected to
-///         finish UC-38 within moments of UC-11 returning it — so there is no legitimate reason an
-///         operator would want it longer, and every reason to keep it fixed and short.
+///         challenge token's is a security property of the use case itself, so there is no
+///         legitimate reason an operator would want it longer, and every reason to keep it fixed.
+///     </para>
+///     <para>
+///         It is read from that shared type rather than written here because the number is not this
+///         class's to choose. The App method would be served by a much shorter window — an
+///         authenticator generates a code on demand, so its holder really can finish UC-38 within
+///         moments of UC-11 returning the token. The Email method cannot: "within moments" is a
+///         claim about someone else's mail infrastructure, and FR-2F-03 already committed to
+///         tolerating ten minutes of it. Both methods share one challenge token, so its lifetime has
+///         to be the longer of the two, and it has to be the <em>same</em> ten minutes the code it
+///         was issued with gets — a shorter one silently retracted that tolerance and left a
+///         correct, unexpired code with nowhere to be presented, since FR-2F-10 makes second-factor
+///         verification the only endpoint that will take a challenge token.
 ///     </para>
 ///     <para>
 ///         <b>Claims.</b> Built directly rather than through <see cref="IdentityUserMapper" />'s
@@ -39,20 +51,19 @@ public class JwtTwoFactorChallengeTokenIssuer(
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
 {
-    private static readonly TimeSpan ChallengeTokenLifetime = TimeSpan.FromMinutes(5);
-
     public Task<AuthToken> IssueAsync(Guid personId, int roleId)
     {
         var identity = new IdentityUser(personId, roleId) { MfaPending = true };
 
         var challengeConfiguration = configuration with
         {
-            Claims = mapper.ToClaims(identity), ExpirationInSeconds = ChallengeTokenLifetime.TotalSeconds
+            Claims = mapper.ToClaims(identity),
+            ExpirationInSeconds = TwoFactorLifetimes.ChallengeToken.TotalSeconds
         };
 
         var token = jwtHandler.CreateToken(challengeConfiguration);
 
-        return Task.FromResult(new AuthToken(token, DateTime.UtcNow.Add(ChallengeTokenLifetime)));
+        return Task.FromResult(new AuthToken(token, DateTime.UtcNow.Add(TwoFactorLifetimes.ChallengeToken)));
     }
 
     public async Task<TwoFactorChallengePrincipal?> ValidateAsync(string? token)

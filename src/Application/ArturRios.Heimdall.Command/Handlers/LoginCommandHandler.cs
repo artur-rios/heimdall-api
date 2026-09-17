@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -53,7 +54,6 @@ public class LoginCommandHandler(
 {
     private const int MaxFailedLoginAttempts = 10;
 
-    private static readonly TimeSpan EmailCodeLifetime = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
     // A hash of a random secret nobody knows, used only to spend the same Argon2id work on AF-11a
@@ -302,7 +302,7 @@ public class LoginCommandHandler(
             TwoFactorAuthId = twoFactorAuth.Id,
             CodeHash = codeHash,
             Salt = salt,
-            ExpiresAt = now.Add(EmailCodeLifetime),
+            ExpiresAt = now.Add(TwoFactorLifetimes.EmailCode),
             Used = false
         });
 

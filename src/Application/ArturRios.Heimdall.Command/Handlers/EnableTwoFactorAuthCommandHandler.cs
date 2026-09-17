@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -53,7 +54,6 @@ public class EnableTwoFactorAuthCommandHandler(
 {
     private const string Issuer = "Heimdall";
     private const int TotpSecretLengthInBytes = 20; // 160 bits, the RFC 6238-recommended minimum.
-    private static readonly TimeSpan EmailCodeLifetime = TimeSpan.FromMinutes(10);
 
     public async Task<DataOutput<EnableTwoFactorAuthCommandOutput?>> HandleAsync(
         EnableTwoFactorAuthCommand command)
@@ -169,7 +169,7 @@ public class EnableTwoFactorAuthCommandHandler(
                 TwoFactorAuthId = twoFactorAuth.Id,
                 CodeHash = codeHash,
                 Salt = salt,
-                ExpiresAt = DateTime.UtcNow.Add(EmailCodeLifetime),
+                ExpiresAt = DateTime.UtcNow.Add(TwoFactorLifetimes.EmailCode),
                 Used = false
             });
 
