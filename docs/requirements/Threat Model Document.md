@@ -83,7 +83,7 @@ expensive work is.
 | TH-01 | Password guessing against a known address | Per-account lockout after 10 failures for 15 minutes (FR-AU-09); per-IP fixed window of 10 requests a minute | Test | Low |
 | TH-02 | Enumerating which addresses and scopes exist, from the response or its timing | One message for every rejection, and a decoy Argon2id verification when no person matches (FR-AU-10) | Test + measurement (SRD §6.1) | Low |
 | TH-03 | Exhausting the API's memory through login | `PasswordHashGate` bounds concurrent Argon2id derivations process-wide and sheds with `503`, behind the per-IP rate limiter | Test + measurement (SRD §6.3.1) | Low |
-| TH-04 | Guessing a 6-digit second-factor code | Five attempts per code, hashed at rest, short lifetime (FR-2F-13) | Test | Low |
+| TH-04 | Guessing a 6-digit second-factor code | Five attempts per code, hashed at rest, short lifetime, and at most three reissues per challenge — twenty attempts per authentication, after which a further code costs a fresh password check (FR-2F-13, FR-2F-16) | Test | Low |
 | TH-05 | Guessing a password-reset or verification token | 48 characters from a CSPRNG, single-use, expiring | Inspection | Low |
 | TH-06 | Using an MFA-pending challenge token as a full token | Distinct claim, 10-minute fixed lifetime matching the email code it is issued with, rejected everywhere but second-factor verification (NFR-17) | Test | Low |
 

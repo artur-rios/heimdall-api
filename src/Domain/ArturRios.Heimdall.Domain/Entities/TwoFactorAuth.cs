@@ -43,6 +43,20 @@ public class TwoFactorAuth : Entity
     /// </summary>
     public long? LastTotpTimeStepUsed { get; set; }
 
+    /// <summary>
+    ///     How many times the current challenge has had its email code reissued (UC-46, FR-2F-13).
+    ///     Reset to zero every time UC-11 issues a challenge, so the cap counts reissues per
+    ///     authentication attempt rather than per account — a fresh budget costs a fresh password
+    ///     check, which is the price FR-2F-13 charged before a resend existed.
+    /// </summary>
+    /// <remarks>
+    ///     Kept here rather than as a claim on the challenge token because UC-46 must never return a
+    ///     new token: one could only be returned for a genuine challenge, so returning it would tell
+    ///     an anonymous caller that the challenge they presented was real. A claim that cannot be
+    ///     reissued cannot be incremented, which leaves the count on the server.
+    /// </remarks>
+    public int EmailCodeReissueCount { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

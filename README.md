@@ -199,6 +199,7 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-38: Verify Second Factor | ✅ | [#70](https://github.com/artur-rios/heimdall-api/issues/70) |
 | UC-39: Disable Two-Factor Authentication | ✅ | [#71](https://github.com/artur-rios/heimdall-api/issues/71) |
 | UC-40: Regenerate Recovery Codes | ✅ | [#72](https://github.com/artur-rios/heimdall-api/issues/72) |
+| UC-46: Resend Second-Factor Email Code | ✅ | [#133](https://github.com/artur-rios/heimdall-api/issues/133) |
 
 ### Application Management
 

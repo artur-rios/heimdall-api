@@ -34,10 +34,11 @@ public class EnableTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 TwoFactorAuths,
-                EmailCodes,
-                EmailCodes,
-                Protector.Object,
-                EmailSender.Object);
+                // The real issuer over the fake repositories and the recording sender, so the
+                // assertions about what lands in EmailCodes — and about the address the code went
+                // to — keep testing the behaviour rather than the call.
+                new TwoFactorEmailCodeIssuer(EmailCodes, EmailCodes, EmailSender.Object),
+                Protector.Object);
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {

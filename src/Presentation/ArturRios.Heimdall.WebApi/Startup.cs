@@ -333,6 +333,15 @@ public class Startup(string[] args) : WebApiStartup(args)
         // shape UC-13's ResetPasswordCommand uses.
         Builder.Services.AddAuditedCommandHandler<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput, VerifyTwoFactorAuthCommandHandler>();
 
+        // UC-46 (FR-2F-16): no validator — the challenge token is the whole of the input and is
+        // validated inside the handler, the same shape UC-38 uses.
+        Builder.Services.AddAuditedCommandHandler<ResendTwoFactorChallengeCodeCommand, ResendTwoFactorChallengeCodeCommandOutput, ResendTwoFactorChallengeCodeCommandHandler>();
+
+        // Shared by UC-11's AF-11g, UC-36's Email method and UC-46's reissue: retire-then-issue is
+        // one step in one place, so the three cannot drift and leave two live codes for one
+        // configuration — the retirement is what makes a code single-use in practice.
+        Builder.Services.AddScoped<ITwoFactorEmailCodeIssuer, TwoFactorEmailCodeIssuer>();
+
         // Shared by VerifyTwoFactorAuthCommandHandler (UC-38), DisableTwoFactorAuthCommandHandler
         // (UC-39), and RegenerateRecoveryCodesCommandHandler (UC-40) — the "code against TOTP, or
         // against the current email code, or against an unused recovery code" comparison lives in

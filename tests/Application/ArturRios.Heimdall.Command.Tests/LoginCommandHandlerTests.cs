@@ -127,9 +127,11 @@ public class LoginCommandHandlerTests
                 Persons,
                 Persons,
                 TwoFactorAuths,
-                EmailCodes,
-                EmailCodes,
-                Mock.Of<ITwoFactorEmailSender>(),
+                TwoFactorAuths,
+                // The real issuer over the fake repositories, not a mock of it: these tests assert
+                // what lands in EmailCodes — that the prior code was retired and a fresh one written
+                // — which is the behaviour the issuer owns. A mock would only prove it was called.
+                new TwoFactorEmailCodeIssuer(EmailCodes, EmailCodes, Mock.Of<ITwoFactorEmailSender>()),
                 ChallengeTokenIssuer,
                 new PersonAuthTokenService(TokenIssuer));
     }
@@ -139,17 +141,21 @@ public class LoginCommandHandlerTests
             new RecordingIssuer(), new RecordingChallengeTokenIssuer());
 
     private static LoginCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons, IAuthTokenIssuer issuer) =>
-        new(
+        AsyncFakeRepository<Person> persons, IAuthTokenIssuer issuer)
+    {
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
+        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+
+        return new LoginCommandHandler(
             ValidValidator().Object,
             persons,
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            Mock.Of<ITwoFactorEmailSender>(),
+            twoFactorAuths,
+            twoFactorAuths,
+            new TwoFactorEmailCodeIssuer(emailCodes, emailCodes, Mock.Of<ITwoFactorEmailSender>()),
             new RecordingChallengeTokenIssuer(),
             new PersonAuthTokenService(issuer));
+    }
 
     private static LoginCommand Command(string email, string password = Password, Guid? scopeId = null) =>
         new() { Email = email, Password = password, ScopeId = scopeId };
@@ -469,14 +475,15 @@ public class LoginCommandHandlerTests
             .ReturnsAsync(new ValidationResult([
                 new ValidationFailure(nameof(LoginCommand.Email), AuthMessages.EmailRequired)
             ]));
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
+        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
         var handler = new LoginCommandHandler(
             validator.Object,
             persons,
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            Mock.Of<ITwoFactorEmailSender>(),
+            twoFactorAuths,
+            twoFactorAuths,
+            new TwoFactorEmailCodeIssuer(emailCodes, emailCodes, Mock.Of<ITwoFactorEmailSender>()),
             new RecordingChallengeTokenIssuer(),
             new PersonAuthTokenService(issuer));
 

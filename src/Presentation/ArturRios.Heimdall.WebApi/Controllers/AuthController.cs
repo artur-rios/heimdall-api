@@ -268,6 +268,50 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     }
 
     /// <summary>
+    ///     Reissues the email code for a two-factor challenge that is still outstanding (UC-46,
+    ///     FR-2F-16), so someone who never received the code UC-11 mailed can ask for another
+    ///     without starting sign-in over. Open to anonymous callers and authorized by the challenge
+    ///     token alone, submitted as a request body field exactly as
+    ///     <see cref="VerifyTwoFactorAuth" /> takes it — never as an <c>Authorization</c> header
+    ///     (FR-2F-10).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Answers <c>200 OK</c> with the same message and no data on every path — a valid
+    ///         challenge, an unknown one, a forged one, an expired one, one naming a person with no
+    ///         email method, and one whose reissues are spent (AF-46a…AF-46e). A response that varied
+    ///         would tell an anonymous caller whether an address is registered and has email
+    ///         two-factor enabled, which is the question UC-11 and UC-38 collapse their own answers
+    ///         to refuse.
+    ///     </para>
+    ///     <para>
+    ///         The reissue lands inside the existing challenge's window and never lengthens it: a
+    ///         new challenge token could only be returned for a challenge that was real, which would
+    ///         be exactly that oracle.
+    ///     </para>
+    ///     <para>
+    ///         Rate-limited like every other anonymous auth route. The address is never the caller's
+    ///         to choose — it is read from the person the challenge token names — and FR-2F-13's cap
+    ///         already bounds how many codes one challenge can produce, so the limiter is not what
+    ///         stops this being a mail cannon. What it bounds is the unauthenticated request volume
+    ///         itself, which is the same thing it bounds on <see cref="Login" /> and
+    ///         <see cref="PasswordRecovery" />.
+    ///     </para>
+    /// </remarks>
+    [HttpPost("2fa/challenge/resend")]
+    [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    public async Task<ActionResult<DataOutput<ResendTwoFactorChallengeCodeCommandOutput?>>>
+        ResendTwoFactorChallengeCode([FromBody] ResendTwoFactorChallengeCodeCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<ResendTwoFactorChallengeCodeCommand,
+                ResendTwoFactorChallengeCodeCommandOutput>(command);
+
+        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Turns off the caller's own two-factor authentication (UC-39, FR-2F-11), requiring both the
     ///     caller's current password and a valid second factor — an app/email code or a recovery
     ///     code — exactly as hard to satisfy as a login. On success, permanently removes the

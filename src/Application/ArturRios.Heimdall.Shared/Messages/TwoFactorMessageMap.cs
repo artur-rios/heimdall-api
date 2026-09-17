@@ -31,6 +31,8 @@ public static class TwoFactorMessageMap
             [TwoFactorMessages.VerificationSuccessful] = HttpStatusCodes.Ok,
             // AF-38a — challenge token missing, invalid, or expired.
             [TwoFactorMessages.ChallengeTokenInvalid] = HttpStatusCodes.Unauthorized,
+            // UC-46 — the one answer every flow gives, main and alternative alike (FR-2F-16).
+            [TwoFactorMessages.ChallengeCodeResent] = HttpStatusCodes.Ok,
             // UC-38 step 5 — the second factor checked out but scope eligibility no longer holds.
             [TwoFactorMessages.ScopeNoLongerEligible] = HttpStatusCodes.Unauthorized,
             // AF-38b and AF-38c — collapsed to the same 401 so a wrong code and a reused recovery code

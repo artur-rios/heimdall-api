@@ -1818,6 +1818,62 @@ sequenceDiagram
 
 ---
 
+### UC-46: Resend Second-Factor Email Code
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-46 |
+| **Name** | Resend Second-Factor Email Code |
+| **Actors** | Anonymous (holding a challenge token from UC-11) |
+| **Description** | Reissue the email code for a challenge that is still outstanding, so a person who never received the first one can ask for another without restarting sign-in |
+| **Preconditions** | UC-11 issued a challenge token for a person whose `TWO_FACTOR_AUTH` has `EmailEnabled = true`, and that token has not yet expired |
+| **Postconditions** | The person's outstanding email codes are retired and a fresh one is mailed to them; the challenge's reissue count is incremented. The challenge token itself is unchanged and its expiry is not moved |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor U as Anonymous
+    participant API as Heimdall API
+    participant DB as Database
+    participant M as Mail
+
+    U->>API: POST /api/auth/2fa/challenge/resend { challengeToken }
+    API->>API: Validate challengeToken (signature, not expired, MFA-pending claim)
+    API->>DB: Load the person and their active TWO_FACTOR_AUTH row
+    API->>DB: Increment the challenge's reissue count (refuse past the cap)
+    API->>DB: Mark outstanding email codes Used = true
+    API->>DB: Store a fresh 6-digit code, hashed, expiring per FR-2F-03
+    API->>M: Send the code to the person's stored address
+    API-->>U: 200 OK
+```
+
+1. Caller sends the challenge token UC-11's login response returned. Nothing else — no address, no scope, no credential.
+2. The system validates the challenge token exactly as UC-38 step 2 does: signature, expiration, and the MFA-pending claim (FR-2F-10).
+3. The system resolves the person the token names and their active two-factor configuration, and confirms the email method is enabled for them.
+4. The system confirms the challenge has reissues left (FR-2F-13) and charges one against it.
+5. The system retires the person's outstanding email codes and stores a fresh one, hashed, expiring per FR-2F-03.
+6. The system mails the code to the person's stored address.
+7. The system answers `200 OK`, carrying no data.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46b | The challenge names a person who no longer exists, is logically deleted, or is under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46c | The person has no active two-factor configuration, or has one without the email method — an authenticator-app holder has no code to resend | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46d | The challenge has already authorized its maximum reissues (FR-2F-13) | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46e | A full authentication token is presented in place of a challenge token | Treated as AF-46a — the MFA-pending claim is absent, so it is not a challenge token (FR-2F-10) |
+
+> **On the single answer.** Every flow above, and the main flow, return the same `200 OK` with the same message and no data. That is the point of the endpoint's design rather than an economy in writing it: this route is anonymous, and an answer that varied would say whether an address is registered, whether it has email two-factor enabled, and how much of its guessing budget is left. It is the same reasoning behind UC-11's AF-11a…AF-11e and UC-38's AF-38a…AF-38c, with the sign flipped — those collapse to one `401` because the caller asked to be let in; this collapses to one `200` because they asked for something to be sent, and "we have sent it if there was anything to send" is the most that can be said without answering a question they did not earn the right to ask.
+>
+> **On the challenge not being extended.** A reissue puts a fresh code inside the existing challenge's window; it never lengthens it and never returns a new challenge token. This is forced rather than chosen: a new token could only be returned for a challenge that was genuine, so returning one would be precisely the oracle the paragraph above rules out. The window's ceiling is therefore NFR-17's, which is the same ten minutes FR-2F-03 gives the code — so a reissue inside the window is worth having rather than a formality.
+>
+> **On the reissue cap.** FR-2F-13 retires an email code after five wrong guesses. Without a cap, this use case would turn that bound into five guesses times however many reissues a caller could obtain, which would make it a property of the rate limiter's configuration rather than of the specification. Three reissues per challenge keeps it stated: at most twenty guesses at a six-digit code per authentication, after which a further code costs a fresh password check — which is what FR-2F-13 always charged.
+
+---
+
 ## UC-41: Export Own Personal Data
 
 | | |
@@ -2026,6 +2082,7 @@ sequenceDiagram
 | UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10 |
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12 |
+| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16 |
 
 ---
 

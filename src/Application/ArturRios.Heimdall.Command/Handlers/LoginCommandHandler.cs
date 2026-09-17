@@ -5,7 +5,6 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
-using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -45,9 +44,8 @@ public class LoginCommandHandler(
     IAsyncReadOnlyRepository<Person> personReader,
     IAsyncRepository<Person> personWriter,
     IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    ITwoFactorEmailSender twoFactorEmailSender,
+    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITwoFactorChallengeTokenIssuer challengeTokenIssuer,
     PersonAuthTokenService personAuthTokenService)
     : ICommandHandlerAsync<LoginCommand, LoginCommandOutput>
@@ -221,16 +219,31 @@ public class LoginCommandHandler(
 
     /// <summary>
     ///     AF-11g: issues the short-lived challenge token instead of a full one, and — per FR-2F-08 —
-    ///     a fresh email code when the Email method is enabled, the same way
-    ///     <c>EnableTwoFactorAuthCommandHandler</c> retires prior outstanding codes before issuing a
-    ///     new one.
+    ///     a fresh email code when the Email method is enabled, through the same
+    ///     <see cref="ITwoFactorEmailCodeIssuer" /> UC-36 and UC-46 use, so the retire-then-issue step
+    ///     cannot drift between them.
     /// </summary>
     private async Task<DataOutput<LoginCommandOutput?>> IssueChallengeAsync(
         DataOutput<LoginCommandOutput?> output, Person person, TwoFactorAuth twoFactorAuth)
     {
+        // UC-46's reissue budget is per authentication attempt (FR-2F-13): this challenge starts
+        // with all of its reissues available, whatever the previous one spent. Written before the
+        // code goes out, so a send that fails cannot leave the budget overstating what was used.
+        if (twoFactorAuth.EmailCodeReissueCount != 0)
+        {
+            twoFactorAuth.EmailCodeReissueCount = 0;
+
+            var reset = await twoFactorWriter.UpdateAsync(twoFactorAuth);
+
+            if (!reset.Success)
+            {
+                return output.WithErrors(reset.Errors);
+            }
+        }
+
         if (twoFactorAuth.EmailEnabled)
         {
-            var emailCodeErrors = await IssueFreshEmailCodeAsync(twoFactorAuth, person.Email);
+            var emailCodeErrors = await emailCodeIssuer.ReissueAsync(twoFactorAuth, person.Email);
 
             if (emailCodeErrors is not null)
             {
@@ -258,65 +271,6 @@ public class LoginCommandHandler(
                 RequiresTwoFactor = true, ChallengeToken = challenge.Token, AvailableMethods = methods
             })
             .WithMessage(AuthMessages.TwoFactorRequired);
-    }
-
-    /// <summary>
-    ///     Marks every not-yet-used, not-yet-expired email code for this configuration as used, then
-    ///     issues and mails a fresh 6-digit one — mirroring
-    ///     <c>EnableTwoFactorAuthCommandHandler.RetireOutstandingCodesAsync</c> and its code-issuing
-    ///     step, so only the code just mailed for this login attempt can confirm it (FR-2F-08).
-    /// </summary>
-    private async Task<IEnumerable<string>?> IssueFreshEmailCodeAsync(TwoFactorAuth twoFactorAuth, string email)
-    {
-        var now = DateTime.UtcNow;
-
-        var live = await emailCodeReader.Query()
-            .Where(x => x.TwoFactorAuthId == twoFactorAuth.Id && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
-        {
-            outstanding.Used = true;
-
-            var retirement = await emailCodeWriter.UpdateAsync(outstanding);
-
-            if (!retirement.Success)
-            {
-                return retirement.Errors;
-            }
-        }
-
-        var code = CustomRandom.Text(new RandomStringOptions
-        {
-            Length = 6,
-            IncludeDigits = true,
-            IncludeLowercase = false,
-            IncludeUppercase = false,
-            IncludeSpecialCharacters = false
-        });
-
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
-
-        var creation = await emailCodeWriter.CreateAsync(new TwoFactorEmailCode
-        {
-            TwoFactorAuthId = twoFactorAuth.Id,
-            CodeHash = codeHash,
-            Salt = salt,
-            ExpiresAt = now.Add(TwoFactorLifetimes.EmailCode),
-            Used = false
-        });
-
-        if (!creation.Success)
-        {
-            return creation.Errors;
-        }
-
-        // Delivery failures are not this endpoint's business to surface, the same way
-        // EnableTwoFactorAuthCommandHandler treats them: the code is already persisted, and a caller
-        // who receives nothing can try to log in again.
-        await twoFactorEmailSender.SendAsync(email, code);
-
-        return null;
     }
 
     /// <summary>
