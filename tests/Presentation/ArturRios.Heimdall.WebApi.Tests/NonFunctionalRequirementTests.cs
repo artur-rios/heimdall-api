@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Hashing;
@@ -130,20 +131,32 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
             .OrderByDescending(code => code.Id)
             .FirstAsync();
 
-        // Then — there is no instant at which the code is still live and the token is not. `ValidTo`
-        // is second-resolution (a JWT `exp` is whole seconds) while ExpiresAt is not, so the
-        // comparison is made a second either side rather than exactly.
+        // Then — there is no instant at which the code is still live and the token is not. This is
+        // the whole of the defect: which one expires first, not by how much.
+        //
+        // The two are stamped a moment apart rather than together — the code first, then an Argon2id
+        // hash and two round trips to the database, then the token — so the token's expiry is
+        // naturally the later of the two. The one second of slack is for the opposite case: a JWT's
+        // `exp` is whole seconds, so `ValidTo` is truncated where `ExpiresAt` is not, and on a fast
+        // path that truncation could put the token a fraction behind. It is a bounded artefact of
+        // the format, not an allowance for how long the request took.
         Assert.True(
             token.ValidTo >= emailCode.ExpiresAt.AddSeconds(-1),
             $"the challenge expires at {token.ValidTo:O}, before its code does at {emailCode.ExpiresAt:O} " +
             "— the dead zone this requirement pair exists to rule out");
 
-        // Then — and it is not fixed by making the token long-lived instead, which would buy the
-        // same agreement at the cost of NFR-17's short window. They expire together.
+        // Then — and it is not bought by making the token long-lived instead, which would give the
+        // same agreement at the cost of NFR-17's short window.
+        //
+        // Measured as the token's own lifetime, between its iat and its exp, rather than against the
+        // code's expiry. The gap between the two artefacts is the work the request did between
+        // stamping them, which is latency — unbounded on a loaded runner, and nothing to do with the
+        // lifetime either was given.
         Assert.True(
-            token.ValidTo <= emailCode.ExpiresAt.AddSeconds(1),
-            $"the challenge outlives its code by {token.ValidTo - emailCode.ExpiresAt} — NFR-17 " +
-            "asks for a short fixed lifetime, not merely one long enough to cover FR-2F-03");
+            token.ValidTo - token.IssuedAt <= TwoFactorLifetimes.EmailCode,
+            $"the challenge is given {token.ValidTo - token.IssuedAt}, longer than the " +
+            $"{TwoFactorLifetimes.EmailCode} its code gets — NFR-17 asks for a short fixed lifetime, " +
+            "not merely one long enough to cover FR-2F-03");
     }
 
     [FunctionalFact]
