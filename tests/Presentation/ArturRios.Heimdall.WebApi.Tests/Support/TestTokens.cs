@@ -43,13 +43,22 @@ public static class TestTokens
     ///     for tests proving <see cref="MfaPendingGuardFilter" /> rejects one everywhere except
     ///     <c>POST /api/auth/2fa/verify</c> (FR-2F-10).
     /// </summary>
-    public static string ForMfaPending(Guid personId, int role) =>
-        Create(new IdentityUser(personId, role) { MfaPending = true });
+    /// <param name="personId">The <c>PublicId</c> the challenge names.</param>
+    /// <param name="role">The role value the challenge carries.</param>
+    /// <param name="lifetime">
+    ///     How long the token stays valid, for tests that pin the edges of the window rather than
+    ///     what is inside it. The production lifetime is
+    ///     <c>TwoFactorLifetimes.ChallengeToken</c>; a test that cares about the edge cannot wait ten
+    ///     minutes to reach it, so it mints a token already that close to its own. Omitted, the token
+    ///     behaves like any other test credential and outlives the test.
+    /// </param>
+    public static string ForMfaPending(Guid personId, int role, TimeSpan? lifetime = null) =>
+        Create(new IdentityUser(personId, role) { MfaPending = true }, lifetime);
 
-    private static string Create(IdentityUser user)
+    private static string Create(IdentityUser user, TimeSpan? lifetime = null)
     {
         var configuration = new JwtConfiguration(
-            3600,
+            lifetime?.TotalSeconds ?? 3600,
             Environment.GetEnvironmentVariable(IssuerVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(AudienceVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(SecretVariable) ?? string.Empty,

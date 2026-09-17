@@ -748,7 +748,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-14 (hard delete cascades Google Users) | Test | `HardDeleteScopeCommandHandlerTests` | Verified |
 | NFR-15 (no internal ids exposed) | Test | `OpenApiContractTests` over the published document; `SchemaTests` on the shape | Verified |
 | NFR-16 (secrets at rest) | Test | `AuthControllerEnableTwoFactorAuthTests` — the secret is stored encrypted and never returned twice; recovery codes stored as hashes | Verified |
-| NFR-17 (challenge token) | Test | `NonFunctionalRequirementTests` — lifetime, the pending claim, and rejection elsewhere | Verified |
+| NFR-17 (challenge token) | Test | `NonFunctionalRequirementTests` — lifetime, the pending claim, rejection elsewhere, and that the token a login issues expires with the FR-2F-03 code it was issued with rather than before it; `TwoFactorLifetimesTests` pins the same agreement at its source; `AuthControllerVerifyTwoFactorAuthTests` pins the window's two edges and redeems a code in its final seconds | Verified |
 | NFR-18 (password verification cost) | Measurement | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
 
 ### 11.2 What this does not cover

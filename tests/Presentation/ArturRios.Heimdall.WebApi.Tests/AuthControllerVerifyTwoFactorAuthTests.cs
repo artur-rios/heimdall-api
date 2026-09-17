@@ -71,7 +71,8 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         return twoFactorAuth;
     }
 
-    private async Task SeedEmailCodeAsync(long twoFactorAuthId, string code, bool used = false)
+    private async Task SeedEmailCodeAsync(
+        long twoFactorAuthId, string code, bool used = false, TimeSpan? remainingLife = null)
     {
         await using var context = db.CreateContext();
         var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
@@ -80,7 +81,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
             TwoFactorAuthId = twoFactorAuthId,
             CodeHash = codeHash,
             Salt = salt,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            ExpiresAt = DateTime.UtcNow.Add(remainingLife ?? TimeSpan.FromMinutes(10)),
             Used = used
         });
         await context.SaveChangesAsync();
@@ -320,6 +321,79 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnEmailCodeInTheFinalSecondsOfItsLife_WhenPostVerify_ThenItIsStillRedeemable()
+    {
+        // The gap this closes, and the one a future change to either lifetime would silently
+        // reopen. FR-2F-03 gives an emailed code ten minutes; NFR-17 used to give the challenge
+        // token that carries it five, and FR-2F-10 makes this endpoint the only one that accepts
+        // such a token — so someone whose mail landed at minute six held a correct, unexpired,
+        // unused code and had nowhere to present it.
+        //
+        // The scenario is reproduced by its remaining life rather than by waiting out nine and a
+        // half minutes: both artefacts are seeded with the same thirty seconds left, which is what
+        // AF-11g actually produces now that the two lifetimes are one. Before the fix the token
+        // would have been dead for four and a half minutes at this point.
+        var remaining = TimeSpan.FromSeconds(30);
+
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("far-end"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
+        await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode, remainingLife: remaining);
+
+        var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin, remaining);
+
+        // When
+        var response = await VerifyAsync(challengeToken, EmailCode);
+
+        // Then — accepted, because nothing about the code or the challenge has run out yet
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(response.Body!.Data!.Token));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAChallengeTokenJustInsideItsWindow_WhenPostVerify_ThenAccepted()
+    {
+        // The inside half of the boundary. A few seconds of life left is still life.
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("inside-window"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
+        await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
+
+        var challengeToken = TestTokens.ForMfaPending(
+            person.PublicId, (int)Roles.SystemAdmin, TimeSpan.FromSeconds(30));
+
+        // When
+        var response = await VerifyAsync(challengeToken, EmailCode);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAChallengeTokenJustOutsideItsWindow_WhenPostVerify_ThenUnauthorized()
+    {
+        // The outside half (AF-38a). The token is allowed to expire on the wall clock rather than
+        // being minted already expired, so what is asserted is the lifetime check itself — the
+        // validator runs with no clock skew, so a lapsed token is lapsed the instant it lapses.
+        //
+        // The code is deliberately left live: the only thing that has run out is the challenge, and
+        // that alone must be enough to refuse.
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("outside-window"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
+        await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
+
+        var challengeToken = TestTokens.ForMfaPending(
+            person.PublicId, (int)Roles.SystemAdmin, TimeSpan.FromSeconds(1));
+
+        await Task.Delay(TimeSpan.FromSeconds(2));
+
+        // When
+        var response = await VerifyAsync(challengeToken, EmailCode);
+
+        // Then — AF-38a's indistinguishable 401, unchanged
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, response.Body!.Errors);
     }
 
     [FunctionalFact]
