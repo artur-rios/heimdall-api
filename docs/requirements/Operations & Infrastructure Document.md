@@ -195,7 +195,7 @@ This document captures **cross-cutting platform concerns** for the **Heimdall AP
 It covers two areas:
 
 - The **technical foundation** — the project scaffolding, solution architecture, and initial data infrastructure the domain features are built on.
-- **Health & monitoring** — the operational endpoints used to observe that the API and its dependencies are up.
+- **Health & monitoring** — the operational endpoints used to observe that the API and its dependencies are up, and the Prometheus metrics that show how it is performing.
 
 These are functional/operational capabilities of the *platform* rather than the identity domain, so they are documented here to keep the domain documents focused while still tracking the work formally. The specific technologies and versions this platform is built on are defined once in the [Technology Stack Document](Technology%20Stack%20Document.md) and referenced from here rather than duplicated.
 
@@ -389,6 +389,22 @@ sequenceDiagram
 ### 3.7 Extensibility
 
 The detailed health check is designed so that additional service verifications can be registered over time. Each new verification contributes one entry to the `services` array and is folded into the same aggregate rule (any unhealthy service ⇒ `Unhealthy`). Candidate future checks include the email delivery service, caching layer, and the Google Identity Platform integration. Adding them requires no change to the response contract or to consumers that already read `status` + `services`.
+
+### 3.8 Metrics
+
+The health endpoints answer "is it up"; metrics answer "how is it doing". The API exposes them for **Prometheus** at `GET /metrics`, collected in-process with **OpenTelemetry** (see the [Technology Stack Document](Technology%20Stack%20Document.md)).
+
+| Property | Value |
+| -------- | ----- |
+| Endpoint | `GET /metrics`, Prometheus text format |
+| Port | `9464` — `HEIMDALL_METRICS_PORT`; blank means the default, `0` disables the exporter entirely |
+| Authentication | None — the port is the access control, see below |
+| Collected | ASP.NET Core request metrics and Kestrel connections, outbound `HttpClient` calls, the built-in `System.Runtime` meter (GC, heap, thread pool, exceptions), EF Core, and the Npgsql connection pool |
+| Resource | `service.name = heimdall-api` |
+
+**Access control is the port, not the host name.** The API runs behind Traefik, which forwards the client's own `Host` header, so any check on it is a check on an attacker-chosen value. The scrape endpoint is instead answered only when the connection arrived on the metrics port (`HttpContext.Connection.LocalPort`), which the socket decides. Traefik forwards to 8080; Prometheus scrapes 9464 directly over a private Docker network; Compose never publishes 9464. A request for `/metrics` on 8080 falls through to the API, which has no such route.
+
+The endpoint is the first branch in the request pipeline, so authentication, authorization, rate limiting and CORS never apply to it, and it is not part of the OpenAPI document.
 
 ---
 

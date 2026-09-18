@@ -371,6 +371,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
+| `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 
 ### Email delivery
 
@@ -578,6 +579,20 @@ and only then starts the API, which is what lets a container be pointed at an em
 API itself never migrates, and refuses to start while migrations are pending. Set
 `HEIMDALL_RUN_MIGRATIONS=false` to apply them out of band instead (`python scripts/migrations.py`),
 which is required if the environment ever runs more than one replica.
+
+### Metrics
+
+The container serves Prometheus metrics at `/metrics` on **port 9464**, and only there — on the
+API's port 8080 the path is not served. Prometheus is meant to scrape the container directly over a
+Docker network it shares with it (`api:9464`), so Compose deliberately does **not** publish 9464:
+the endpoint is told apart by the port a connection arrives on rather than by the `Host` header,
+which Traefik forwards from the client and an attacker therefore controls. Publishing the port
+would undo that.
+
+`HEIMDALL_METRICS_PORT` moves the endpoint (blank = 9464) or, set to `0`, switches metrics off. A
+port other than 9464 must also be added to `ASPNETCORE_HTTP_PORTS` (the image sets `8080;9464`).
+What is collected, and the rules for keeping the port private behind Traefik, are in
+[Operations → Metrics](https://artur-rios.github.io/heimdall-api/docs/operations/#metrics--prometheus).
 
 ### What the host's Postgres needs
 
