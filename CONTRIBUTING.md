@@ -31,4 +31,20 @@ on `develop` and `main`.
 4. If the production deploy fails, Jenkins rolls back to the previous image and the pull request
    stays open. Fix on `develop`, then cut a new release.
 
+Follow a release in the **yggdrasil console** (`https://yggdrasil.<domain>`, or the Android app).
+The system card shows this application's version, commit, deploy time and health in each
+environment.
+
 The repository owner can bypass these rules. That is for emergencies, not for routine work.
+
+## Where this is deployed from
+
+Deployment is managed by [yggdrasil](https://github.com/artur-rios/yggdrasil). This repository is
+the application `heimdall-api` in its `catalog.yaml`, which is what gives it:
+- its Jenkins deploy job
+- its GitHub rulesets and required checks (the catalog's `checks`)
+- its Prometheus scraping
+- its place in the console
+
+If a required check is renamed or added here, update the catalog entry, then run
+`python github/rulesets.py heimdall-api` in yggdrasil.
