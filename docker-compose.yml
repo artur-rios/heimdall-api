@@ -117,12 +117,25 @@ services:
       HEIMDALL_MONITORING_REFUSAL_THRESHOLD: ${HEIMDALL_MONITORING_REFUSAL_THRESHOLD:-}
       HEIMDALL_MONITORING_LOCKOUT_THRESHOLD: ${HEIMDALL_MONITORING_LOCKOUT_THRESHOLD:-}
 
+      # Prometheus metrics, served at /metrics on this port and on no other (Dockerfile). Blank
+      # means the default, 9464 -- the port the image's ASPNETCORE_HTTP_PORTS already listens on --
+      # and 0 switches metrics off entirely. A different port must be added to
+      # ASPNETCORE_HTTP_PORTS as well, or Kestrel never listens where the endpoint waits.
+      #
+      # Deliberately absent from "ports" below. Prometheus scrapes the container over a Docker
+      # network it shares with it (api:9464); publishing the port would hand the metrics to anyone
+      # who can reach the host, and they describe the API's traffic, its failures and its database
+      # pool closely enough to be worth keeping to the operator.
+      HEIMDALL_METRICS_PORT: ${HEIMDALL_METRICS_PORT:-}
+
     volumes:
       - logs:/app/logs
 
     # Host side of the mapping, so an environment can pick the interface as well as the port:
     # "8080" publishes on every interface, "127.0.0.1:8080" only to the host -- which is what a
     # server with a reverse proxy in front of the API wants.
+    #
+    # Only the API's port. 9464, the metrics port, is never published -- see HEIMDALL_METRICS_PORT.
     ports:
       - "${API_PORT:-8080}:8080"
 

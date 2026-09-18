@@ -52,6 +52,26 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
   <!--
+    Metrics: OpenTelemetry collects them in-process and the Prometheus exporter serves them for a
+    scrape (see MetricsConfiguration in the Web API). The four are released together and are kept on
+    the same line so the SDK the exporter was built against is the one that runs.
+
+    The exporter is a beta, and knowingly so: OpenTelemetry has never shipped a stable
+    OpenTelemetry.Exporter.Prometheus.AspNetCore — every release, this one included, is a
+    pre-release, because the Prometheus exposition side of the specification is itself still
+    marked experimental. The alternative is exporting OTLP to a collector that re-exposes the data
+    for Prometheus, which is one more service to run for the same numbers. What the beta is trusted
+    with is small: it formats metrics the stable SDK already collected, on a port that is never
+    published, so an API change there costs a rebuild rather than an outage. Move it to the first
+    stable release when one exists.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.18.0-beta.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+  </ItemGroup>
+  <!--
     Test-only packages. SSH.NET is pinned rather than referenced: Testcontainers pulls it in for its
     SSH transport, and the version its 4.13.0 release resolved (2025.1.0) carries GHSA-q939-rpr3-3284.
     4.14.0 already resolves a fixed 2026.0.0, so this entry is a floor that keeps a future
