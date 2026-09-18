@@ -19,6 +19,7 @@ using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Email;
+using ArturRios.Heimdall.WebApi.Metrics;
 using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Heimdall.WebApi.Security;
@@ -68,6 +69,13 @@ public class Startup(string[] args) : WebApiStartup(args)
     /// </summary>
     public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
 
+    /// <summary>
+    ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
+    ///     values in the environment, and used again by <see cref="ConfigureApp" /> to mount the scrape
+    ///     endpoint — one reading for both, so the exporter and its endpoint cannot disagree.
+    /// </summary>
+    private MetricsOptions _metrics = MetricsOptions.Disabled;
+
     public override void Build()
     {
         ConfigureLogging();
@@ -88,6 +96,8 @@ public class Startup(string[] args) : WebApiStartup(args)
         AddDependencies();
 
         Log.Information("Dependencies added successfully");
+
+        AddMetrics();
 
         ConfigureSecurity();
 
@@ -378,6 +388,13 @@ public class Startup(string[] args) : WebApiStartup(args)
 
     public override void ConfigureApp()
     {
+        // First, ahead of everything else in the pipeline — including the ExceptionMiddleware and
+        // AuthenticationMiddleware Build adds after this method returns. The scrape endpoint is a
+        // terminal branch taken only on the metrics port, so Prometheus is never asked for a token,
+        // never rate limited, never subject to CORS, and the endpoint never reaches the OpenAPI
+        // document. Every request on the public port falls straight through, /metrics included.
+        App.UseHeimdallMetrics(_metrics);
+
         ConfigureCors();
 
         // Local is included alongside Development because it is what a developer machine now runs:
@@ -396,6 +413,43 @@ public class Startup(string[] args) : WebApiStartup(args)
         App.UseAuthentication();
         App.UseAuthorization();
         App.MapControllers();
+    }
+
+    /// <summary>
+    ///     Registers the OpenTelemetry metrics pipeline and its Prometheus exporter, on the port
+    ///     <c>HEIMDALL_METRICS_PORT</c> names (9464 by default, <c>0</c> to switch it off).
+    /// </summary>
+    /// <remarks>
+    ///     The scrape endpoint is recognised by the port the connection arrived on, never by the
+    ///     <c>Host</c> header — Traefik forwards the client's own, so it is attacker-controlled. See
+    ///     <see cref="MetricsOptions" /> for why the port is the one thing a caller cannot choose, and
+    ///     the Dockerfile for how the container is made to listen on it without publishing it.
+    /// </remarks>
+    private void AddMetrics()
+    {
+        _metrics = MetricsOptions.FromEnvironment();
+
+        if (_metrics.InvalidValue is not null)
+        {
+            Log.Warning(
+                "Ignoring unusable {Variable} value {Value}; serving metrics on the default port {Port}",
+                MetricsOptions.PortVariable, _metrics.InvalidValue, _metrics.Port);
+        }
+
+        if (!_metrics.Enabled)
+        {
+            Log.Warning(
+                "Metrics are switched off by {Variable}; nothing will be collected or served for Prometheus",
+                MetricsOptions.PortVariable);
+
+            return;
+        }
+
+        Builder.Services.AddHeimdallMetrics(_metrics);
+
+        Log.Information(
+            "Serving Prometheus metrics at {Path} on port {Port} only",
+            MetricsOptions.ScrapePath, _metrics.Port);
     }
 
     /// <summary>
