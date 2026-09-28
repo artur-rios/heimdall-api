@@ -2,7 +2,7 @@
 title = 'Operations'
 linkTitle = 'Operations'
 weight = 80
-description = 'Migrations, start-up guards, health checks, logging, rate limiting, data retention, and the integrations.'
+description = 'Migrations, start-up guards, health checks, metrics, logging, rate limiting, data retention, and the integrations.'
 +++
 
 ## Migrations
@@ -86,6 +86,53 @@ read through the repository abstraction and catches everything — an unreachabl
 execution, and the check reports unhealthy rather than propagating, so the aggregate can still be
 reported (AF-30c). Adding a verification is one more registration; the detailed handler resolves them
 all as `IEnumerable<IServiceHealthCheck>`.
+
+## Metrics — Prometheus
+
+The API publishes its metrics in Prometheus text format at **`GET /metrics` on port 9464** — and on
+that port only. They are collected with OpenTelemetry: request rate, duration and status per route
+(`http.server.*`), Kestrel connections, outbound `HttpClient` calls (Mailgun), the .NET runtime (GC,
+heap, thread pool, exceptions), EF Core, and the Npgsql connection pool. Every series carries
+`service_name="heimdall-api"`.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `HEIMDALL_METRICS_PORT` | `9464` | The port `/metrics` answers on. Blank means the default; `0` switches metrics off entirely — no exporter is registered and nothing is collected. |
+
+**The endpoint is recognised by the port the connection arrived on, never by the `Host` header.**
+In production the API runs behind Traefik, which forwards the client's own `Host` header — a check
+on it would be a check on a value any caller chooses. The local port of the socket is the one thing
+a caller cannot pick: Traefik reaches the container on 8080, Prometheus reaches it directly on 9464
+over a private Docker network, and a request for `/metrics` on 8080 falls through to the API, which
+has no such route (401 without a token, 404 with one).
+
+That guarantee holds only while 9464 stays private, so:
+
+- **Never publish 9464.** `docker-compose.yml` maps only the API's port; the image listens on both
+  (`ASPNETCORE_HTTP_PORTS=8080;9464`). Put Prometheus on a network it shares with the `api` service
+  and scrape `api:9464`.
+- **Never route Traefik to 9464.** With two ports exposed, give Traefik the service port explicitly
+  (`traefik.http.services.<name>.loadbalancer.server.port=8080`) rather than letting it pick.
+- **Moving the port means moving both.** A `HEIMDALL_METRICS_PORT` other than 9464 must also be
+  added to `ASPNETCORE_HTTP_PORTS`, or Kestrel never listens where the endpoint waits.
+
+The endpoint is mounted first in the pipeline, as a terminal branch: a scrape never meets CORS,
+rate limiting, authentication or authorization, and — not being a controller action — it is not in
+the OpenAPI document. The rest of the API is still served on 9464 too; only `/metrics` is special
+there, which is harmless for a port nothing outside the private network can reach.
+
+A minimal scrape job:
+
+```yaml
+scrape_configs:
+  - job_name: heimdall-api
+    static_configs:
+      - targets: ["api:9464"]
+```
+
+Running from source (`dotnet run`), the API listens on 5177 only, so `/metrics` is not served; add
+the port to the URLs it listens on (`--urls "http://localhost:5177;http://localhost:9464"`) to try
+it.
 
 ## Logging
 
@@ -506,6 +553,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_MONITORING_REFUSAL_THRESHOLD` | | `20` |
 | `HEIMDALL_MONITORING_LOCKOUT_THRESHOLD` | | `10` |
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
+| `HEIMDALL_METRICS_PORT` | | `9464`; `0` → metrics off |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |

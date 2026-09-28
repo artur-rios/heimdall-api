@@ -67,10 +67,28 @@ ENV HEIMDALL_LOG_DIRECTORY=/app/logs
 RUN mkdir -p /app/logs && chown -R $APP_UID:$APP_UID /app/logs
 USER $APP_UID
 
-# Matches the aspnet image's own default; named here so the Compose port mapping has an explicit
-# counterpart to point at.
-ENV ASPNETCORE_HTTP_PORTS=8080
-EXPOSE 8080
+# Two ports, two audiences, and the split is what keeps the metrics private.
+#
+# 8080 is the API: the aspnet image's own default, named here so the Compose port mapping has an
+# explicit counterpart to point at. It stays first -- it is the port anything reading this list for
+# "the" port should find.
+#
+# 9464 is the Prometheus scrape endpoint (HEIMDALL_METRICS_PORT). Kestrel serves the same pipeline
+# on both ports; what differs is that /metrics is answered only when the connection arrived on this
+# one -- on 8080 it falls through to the API, which has no such route. Prometheus reaches 9464
+# directly, over the private Docker network it shares with the container. Compose never publishes it,
+# so it has no route from the host's interfaces, and Traefik only ever forwards to 8080. The decision
+# is made on the socket's local port rather than on the Host header because Traefik forwards the
+# client's own Host header -- a value any caller can set to whatever would pass the check.
+#
+# EXPOSE publishes nothing by itself; it documents the ports and is what Traefik's Docker provider
+# reads. With two of them exposed, Traefik needs the service port stated explicitly
+# (traefik.http.services.<name>.loadbalancer.server.port=8080) rather than guessed.
+#
+# Setting HEIMDALL_METRICS_PORT to another value moves the endpoint, and this list has to follow it,
+# or Kestrel never listens where the endpoint is waiting.
+ENV ASPNETCORE_HTTP_PORTS=8080;9464
+EXPOSE 8080 9464
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["dotnet", "ArturRios.Heimdall.WebApi.dll"]

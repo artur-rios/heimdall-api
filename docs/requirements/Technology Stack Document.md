@@ -91,6 +91,7 @@ The data access pattern is **repository-based**: application handlers depend on 
 | Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ResponseResolver` maps it to an HTTP response. |
 | API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Enabled with JWT auth support (`UseSwaggerGen(jwtAuthentication: true)`). |
 | Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `Startup.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
+| Metrics | **OpenTelemetry** (`OpenTelemetry.Extensions.Hosting`, `.Instrumentation.AspNetCore`, `.Instrumentation.Http`, `.Exporter.Prometheus.AspNetCore`) | `1.18.0` / exporter `1.18.0-beta.1` | ASP.NET Core, `HttpClient`, `System.Runtime`, Kestrel, EF Core and Npgsql meters, served for Prometheus at `/metrics` on the private port `HEIMDALL_METRICS_PORT` (9464) only. The exporter has never had a stable release; it is accepted as a beta because it only formats what the stable SDK collected, on a port that is never published. |
 | Configuration | `.env.<environment>` files + environment variables | — | Loaded by the `ArturRios.Util.WebApi` configuration loader; `.env*` files are copied next to the built assembly. |
 
 ---
@@ -135,6 +136,10 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Validation | FluentValidation | `12.1.1` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
+| Metrics | OpenTelemetry.Extensions.Hosting | `1.18.0` |
+| Metrics | OpenTelemetry.Instrumentation.AspNetCore | `1.18.0` |
+| Metrics | OpenTelemetry.Instrumentation.Http | `1.18.0` |
+| Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.18.0-beta.1` |
 | Testing | xunit | `2.9.3` |
 | Testing | xunit.runner.visualstudio | `3.1.5` |
 | Testing | Microsoft.NET.Test.Sdk | `18.8.1` |
