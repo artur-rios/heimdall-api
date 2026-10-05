@@ -41,7 +41,7 @@ public class VerifyEmailCommandHandler(
     IAsyncRepository<Person> personWriter)
     : ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>
 {
-    public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command)
+    public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<VerifyEmailCommandOutput?>.New;
 

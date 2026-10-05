@@ -36,7 +36,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         var result = await commandMediator
             .ExecuteCommandAsync<CreateApplicationCommand, CreateApplicationCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
 
         var result = await queryMediator.ExecuteQueryAsync<GetApplicationByIdQuery, ApplicationOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -74,7 +74,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeApplicationsQuery, ApplicationOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         var result = await commandMediator
             .ExecuteCommandAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -118,7 +118,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         var result = await commandMediator
             .ExecuteCommandAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -139,6 +139,6 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
             .ExecuteCommandAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>(
                 new HardDeleteApplicationCommand { ScopeId = scopeId, Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ApplicationMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
 }

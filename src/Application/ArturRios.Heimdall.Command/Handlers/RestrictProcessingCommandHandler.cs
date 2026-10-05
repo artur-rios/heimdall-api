@@ -38,7 +38,7 @@ public class RestrictProcessingCommandHandler(
     IAsyncRepository<GoogleUser> googleUserWriter)
     : ICommandHandlerAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>
 {
-    public async Task<DataOutput<RestrictProcessingCommandOutput?>> HandleAsync(RestrictProcessingCommand command)
+    public async Task<DataOutput<RestrictProcessingCommandOutput?>> HandleAsync(RestrictProcessingCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RestrictProcessingCommandOutput?>.New;
 

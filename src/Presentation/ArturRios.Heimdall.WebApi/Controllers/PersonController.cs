@@ -29,7 +29,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<CreateAdminCommand, CreatePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -47,7 +47,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<CreateUserCommand, CreatePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -88,7 +88,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<UpdatePersonCommand, UpdatePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -147,7 +147,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<DeletePersonCommand, DeletePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -166,7 +166,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -187,7 +187,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await commandMediator
             .ExecuteCommandAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -204,7 +204,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -223,7 +223,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -242,7 +242,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -261,6 +261,6 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: PersonMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
 }

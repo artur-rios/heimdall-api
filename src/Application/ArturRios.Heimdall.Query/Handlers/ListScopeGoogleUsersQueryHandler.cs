@@ -31,7 +31,7 @@ public class ListScopeGoogleUsersQueryHandler(
     IValidator<ListScopeGoogleUsersQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>
 {
-    public async Task<PaginatedOutput<GoogleUserOutput>> HandleAsync(ListScopeGoogleUsersQuery query)
+    public async Task<PaginatedOutput<GoogleUserOutput>> HandleAsync(ListScopeGoogleUsersQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<GoogleUserOutput>.New;
 

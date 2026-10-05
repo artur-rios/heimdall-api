@@ -40,7 +40,7 @@ public class ResetPasswordCommandHandler(
     IAsyncRepository<Person> personWriter)
     : ICommandHandlerAsync<ResetPasswordCommand, ResetPasswordCommandOutput>
 {
-    public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command)
+    public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ResetPasswordCommandOutput?>.New;
 

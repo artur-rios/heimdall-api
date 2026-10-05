@@ -33,7 +33,7 @@ public class GetGoogleUserByIdQueryHandler(
         public GoogleUserOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<GoogleUserOutput?>> HandleAsync(GetGoogleUserByIdQuery query)
+    public async Task<DataOutput<GoogleUserOutput?>> HandleAsync(GetGoogleUserByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<GoogleUserOutput?>.New;
 

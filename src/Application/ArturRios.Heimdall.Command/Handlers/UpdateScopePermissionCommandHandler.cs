@@ -26,7 +26,7 @@ public class UpdateScopePermissionCommandHandler(
     : ICommandHandlerAsync<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput>
 {
     public async Task<DataOutput<UpdateScopePermissionCommandOutput?>> HandleAsync(
-        UpdateScopePermissionCommand command)
+        UpdateScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdateScopePermissionCommandOutput?>.New;
 

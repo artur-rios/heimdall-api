@@ -31,10 +31,9 @@ using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
-using ArturRios.Util.WebApi.Middleware;
+using Microsoft.AspNetCore.HttpOverrides;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
-using ArturRios.Util.WebApi.Security.Middleware;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 using Serilog.Formatting.Json;
@@ -42,7 +41,20 @@ using System.Threading.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi;
 
-public class Startup(string[] args) : WebApiStartup(args)
+/// <summary>
+///     Builds the API on Util.WebApi's standard sequence: configuration, controllers, the
+///     invalid-model-state envelope and Swagger, then <see cref="ConfigureServices" />, then the
+///     standard pipeline — forwarded headers, tracing, <c>ExceptionMiddleware</c>, Swagger, CORS and
+///     <c>AuthenticationMiddleware</c>, in that order — and the controllers.
+/// </summary>
+/// <remarks>
+///     What the standard pipeline has no place for is added around it rather than inside it. The
+///     metrics branch, forwarded headers, the developer exception page and HTTPS redirection go ahead
+///     of it, through <see cref="EdgePipeline" />; rate limiting goes after it, in
+///     <see cref="CreateApplication" />.
+///     Call <see cref="CreateApplication" />, not <c>Build</c>, to get a complete API.
+/// </remarks>
+public class Startup : WebApiStartup
 {
     /// <summary>
     ///     Set to <c>true</c> to refuse start-up when the database connection does not require TLS,
@@ -61,6 +73,7 @@ public class Startup(string[] args) : WebApiStartup(args)
     private const double DefaultTokenExpirationInSeconds = 3600;
 
     private const string CorsAllowedOriginsEnvironmentVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
+    private const string CorsPolicyName = "HeimdallFrontEnds";
 
     /// <summary>
     ///     Rate-limiting policy name applied via <c>[EnableRateLimiting(AuthEndpointRateLimitPolicy)]</c>
@@ -71,22 +84,74 @@ public class Startup(string[] args) : WebApiStartup(args)
 
     /// <summary>
     ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
-    ///     values in the environment, and used again by <see cref="ConfigureApp" /> to mount the scrape
+    ///     values in the environment, and used again by <see cref="EdgePipeline" /> to mount the scrape
     ///     endpoint — one reading for both, so the exporter and its endpoint cannot disagree.
     /// </summary>
     private MetricsOptions _metrics = MetricsOptions.Disabled;
 
-    public override void Build()
+    public Startup(string[] args) : base(args, ConfigureStandardSequence)
     {
+        // Before anything else, so every later step has somewhere to log — which is why
+        // ConfigureLogging reads its settings straight from the environment (see its remarks).
         ConfigureLogging();
 
         Builder.Host.UseSerilog();
 
         Log.Information("Hello world!");
         Log.Information("Building web api on {EnvironmentEnvironmentName} environment", Builder.Environment.EnvironmentName);
+    }
 
-        LoadConfiguration();
+    /// <summary>
+    ///     Tunes the parts of the standard sequence Heimdall does not take as they come.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Swagger is described by <see cref="SwaggerConfiguration" /> alone, the same method
+    ///         tools/ArturRios.Heimdall.OpenApiGen applies to produce docs/openapi/heimdall.json, so the
+    ///         published page and the running API's are one document. Util.WebApi's own JWT scheme is
+    ///         left off for that reason: <see cref="SwaggerConfiguration" /> defines the "Bearer" scheme
+    ///         and the document-wide requirement itself, and the library's would collide with it — its
+    ///         <c>AddSecurityDefinition</c> throws on a duplicate key, and it runs after this callback.
+    ///     </para>
+    ///     <para>
+    ///         This does not expose the document in production: Util.WebApi registers Swagger only in
+    ///         the environments it allows, and in Production it registers nothing at all.
+    ///     </para>
+    /// </remarks>
+    private static void ConfigureStandardSequence(WebApiStartupOptions options)
+    {
+        options.Swagger.ConfigureGenerator = SwaggerConfiguration.Configure;
+    }
 
+    /// <summary>
+    ///     Builds the API and completes it: <c>Build</c>'s standard sequence, then rate limiting, then
+    ///     the database seed — so nothing is served before the reference data exists.
+    /// </summary>
+    public WebApplication CreateApplication()
+    {
+        var app = Build();
+
+        Log.Information("App built successfully");
+
+        // After the standard pipeline, because it has no slot for it. Rate limiting still sees the
+        // endpoint — WebApplication routes ahead of every middleware it is given — and still runs
+        // before MVC: the endpoint itself is always the last step, however late this is added. The
+        // rate-limited endpoints are all anonymous, so AuthenticationMiddleware passes them through
+        // to this point rather than spending anything on them first.
+        app.UseRateLimiter();
+
+        Log.Information("App configured successfully");
+
+        SeedDatabase(app);
+
+        Log.Information("Services started successfully");
+        Log.Information("Ready to run!");
+
+        return app;
+    }
+
+    protected override void ConfigureServices(WebApplicationBuilder builder)
+    {
         Log.Information("Configuration loaded successfully");
 
         ConfigureWebApi();
@@ -99,49 +164,16 @@ public class Startup(string[] args) : WebApiStartup(args)
 
         AddMetrics();
 
+        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, builder.Environment));
+
         ConfigureSecurity();
+        ConfigureCors();
+        ConfigureForwardedHeaders();
 
         Log.Information("Security configured successfully");
-
-        AddCustomInvalidModelStateResponse();
-        UseSwaggerGen(jwtAuthentication: true);
-
-        // Layered over the SwaggerGen the call above registers, so Swagger UI shows the controllers'
-        // own summaries and marks which endpoints need a token. The same method produces
-        // docs/openapi/heimdall.json, which is what keeps the published page and this one identical.
-        Builder.Services.ConfigureSwaggerGen(SwaggerConfiguration.Configure);
-
-        BuildApp();
-
-        Log.Information("App built successfully");
-
-        ConfigureApp();
-
-        // The two middlewares are registered around UseSwagger rather than before it, and the order
-        // is the whole point.
-        //
-        // ExceptionMiddleware stays first, so a failure inside Swagger still answers the same JSON
-        // envelope as every other error rather than a bare 500. AuthenticationMiddleware goes after,
-        // because it does not exempt the Swagger routes: registered ahead of them it answered 401 to
-        // every request for /swagger, index.html included, which no browser can satisfy — it has no
-        // way to send a bearer token for a document request. Swagger UI was therefore unreachable.
-        //
-        // This does not expose the document in production: Util.WebApi registers Swagger only in the
-        // environments it allows, and in Production it registers nothing at all — the generator is
-        // what publishes the document for readers who are not running the API (scripts/openapi.py).
-        AddMiddlewares([typeof(ExceptionMiddleware)]);
-        UseSwagger();
-        AddMiddlewares([typeof(AuthenticationMiddleware)]);
-
-        Log.Information("App configured successfully");
-
-        StartServices();
-
-        Log.Information("Services started successfully");
-        Log.Information("Ready to run!");
     }
 
-    public override void AddDependencies()
+    private void AddDependencies()
     {
         // EF diagnostics expose parameter and column values — password hashes, salts, e-mails — so
         // they stay off in production.
@@ -386,33 +418,42 @@ public class Startup(string[] args) : WebApiStartup(args)
         Builder.Services.AddScoped<DatabaseSeeder>();
     }
 
-    public override void ConfigureApp()
+    /// <summary>
+    ///     The middlewares that must run ahead of the standard pipeline. A startup filter is how they
+    ///     get there: ASP.NET Core wraps the application's whole pipeline in it, so what it adds runs
+    ///     before anything <c>Build</c> adds.
+    /// </summary>
+    private sealed class EdgePipeline(MetricsOptions metrics, IWebHostEnvironment environment) : IStartupFilter
     {
-        // First, ahead of everything else in the pipeline — including the ExceptionMiddleware and
-        // AuthenticationMiddleware Build adds after this method returns. The scrape endpoint is a
-        // terminal branch taken only on the metrics port, so Prometheus is never asked for a token,
-        // never rate limited, never subject to CORS, and the endpoint never reaches the OpenAPI
-        // document. Every request on the public port falls straight through, /metrics included.
-        App.UseHeimdallMetrics(_metrics);
-
-        ConfigureCors();
-
-        // Local is included alongside Development because it is what a developer machine now runs:
-        // the configuration loader resolves Environments/.env.<environment>, so the launch profiles
-        // name Local to reach .env.local rather than relying on the loader's fallback. Testing
-        // IsDevelopment() alone would have silently cost the developer exception page in the one
-        // environment that exists to have it.
-        if (Builder.Environment.IsDevelopment() || Builder.Environment.IsEnvironment("Local"))
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
         {
-            App.UseDeveloperExceptionPage();
-        }
+            // First, ahead of everything else — the standard pipeline's ExceptionMiddleware and
+            // AuthenticationMiddleware included. The scrape endpoint is a terminal branch taken only on
+            // the metrics port, so Prometheus is never asked for a token, never rate limited, never
+            // subject to CORS, and the endpoint never reaches the OpenAPI document. Every request on
+            // the public port falls straight through, /metrics included.
+            app.UseHeimdallMetrics(metrics);
 
-        App.UseHttpsRedirection();
-        App.UseRouting();
-        App.UseRateLimiter();
-        App.UseAuthentication();
-        App.UseAuthorization();
-        App.MapControllers();
+            // Local is included alongside Development because it is what a developer machine now
+            // runs: the configuration loader resolves Environments/.env.<environment>, so the launch
+            // profiles name Local to reach .env.local rather than relying on the loader's fallback.
+            // Testing IsDevelopment() alone would have silently cost the developer exception page in
+            // the one environment that exists to have it.
+            if (environment.IsDevelopment() || environment.IsEnvironment("Local"))
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            // Ahead of HTTPS redirection, which decides on the scheme: behind Traefik every request
+            // arrives as http, and only X-Forwarded-Proto says the caller used https. The standard
+            // pipeline runs the same middleware again first thing; by then the trusted hop has been
+            // consumed and the connection's address is no longer a proxy's, so it changes nothing.
+            app.UseForwardedHeaders();
+
+            app.UseHttpsRedirection();
+
+            next(app);
+        };
     }
 
     /// <summary>
@@ -467,11 +508,10 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         scraped, and drive the anonymous endpoints from every visitor's browser at once.
     ///     </para>
     ///     <para>
-    ///         This is <see cref="WebApiStartup.ConfigureCors" />, the base class's own extension
-    ///         point, overridden rather than shadowed — it was declared privately at first, which
-    ///         hid the inherited member instead of implementing it (CS0114). Nothing in the base
-    ///         orchestrates start-up (<c>Build</c> is this class's), so it is still called exactly
-    ///         once, from <see cref="ConfigureApp" />, where its position in the pipeline is decided.
+    ///         The policy is registered here and applied by the standard pipeline, which names it in
+    ///         <c>UseCors</c> ahead of <c>AuthenticationMiddleware</c>, so a preflight request is
+    ///         answered without a token. With no origins configured no policy is named, and the
+    ///         pipeline adds no CORS middleware at all.
     ///     </para>
     ///     <para>
     ///         Refusing by default rather than falling back to the wildcard is deliberate, and it is
@@ -482,7 +522,7 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         unaffected — CORS is a browser rule and non-browser clients never send an Origin.
     ///     </para>
     /// </remarks>
-    public override void ConfigureCors()
+    private void ConfigureCors()
     {
         var origins = (Environment.GetEnvironmentVariable(CorsAllowedOriginsEnvironmentVariable) ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -502,18 +542,22 @@ public class Startup(string[] args) : WebApiStartup(args)
         // Credentials are allowed because the front end sends the bearer token UC-11 issued. That is
         // also why the origin list has to be explicit: AllowAnyOrigin and AllowCredentials are
         // mutually exclusive by specification, precisely to stop this combination from existing.
-        App.UseCors(policy => policy
+        Builder.Services.AddCors(cors => cors.AddPolicy(CorsPolicyName, policy => policy
             .WithOrigins(origins)
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials());
+            .AllowCredentials()));
+
+        Options.CorsPolicy = CorsPolicyName;
     }
 
-    public override void ConfigureSecurity()
+    private void ConfigureSecurity()
     {
-        Builder.Services.AddAuthentication("Jwt").AddJwtBearer("Jwt");
-        Builder.Services.AddAuthorization();
-
+        // Authentication is Util.WebApi's alone: ASP.NET Core's authentication and authorization
+        // middlewares are not registered, because nothing here reads HttpContext.User or carries
+        // ASP.NET Core's [Authorize] — the controllers use the library's attributes, which read the
+        // user AuthenticationMiddleware attaches.
+        //
         // AuthenticationMiddleware resolves AuthenticationOptions and the token validators from the
         // container, and JwtTokenValidator additionally needs JwtConfiguration, JwtHandler, and the
         // claims mapper. IdentityUserMapper replaces the library default so tokens carry PublicIds
@@ -540,6 +584,41 @@ public class Startup(string[] args) : WebApiStartup(args)
     }
 
     /// <summary>
+    ///     Believes <c>X-Forwarded-For</c> and <c>X-Forwarded-Proto</c> from the proxies
+    ///     <c>HEIMDALL_TRUSTED_PROXIES</c> names, and from no one else — see
+    ///     <see cref="TrustedProxyOptions" />. Applied by <c>UseForwardedHeaders</c>, which runs
+    ///     ahead of everything that reads the client address: the rate limiter, and the request log.
+    /// </summary>
+    private void ConfigureForwardedHeaders()
+    {
+        var proxies = TrustedProxyOptions.FromEnvironment();
+
+        if (proxies.InvalidEntries.Count > 0)
+        {
+            Log.Warning(
+                "Ignoring unusable {Variable} entries {Entries}; they are neither an address nor a CIDR network",
+                TrustedProxyOptions.ProxiesVariable, proxies.InvalidEntries);
+        }
+
+        if (!proxies.Configured)
+        {
+            Log.Warning(
+                "No trusted proxy is configured ({Variable}); behind a reverse proxy every caller will " +
+                "be rate limited and logged under the proxy's address",
+                TrustedProxyOptions.ProxiesVariable);
+
+            return;
+        }
+
+        Log.Information(
+            "Trusting forwarded headers from {Proxies} and {Networks}",
+            proxies.Proxies.Select(proxy => proxy.ToString()),
+            proxies.Networks.Select(network => network.ToString()));
+
+        Builder.Services.Configure<ForwardedHeadersOptions>(proxies.Apply);
+    }
+
+    /// <summary>
     ///     Throttles the anonymous, credential-checking endpoints (login, password recovery/reset,
     ///     email verification, Google sign-in, 2FA challenge verification) per calling IP address.
     ///     None of these require a bearer token, so nothing else stops a caller from firing an
@@ -551,11 +630,11 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///     each endpoint in <c>AuthController</c>.
     /// </summary>
     /// <remarks>
-    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP. Behind a reverse proxy or
-    ///     load balancer that doesn't forward the real client IP (e.g. via <c>X-Forwarded-For</c> with
-    ///     <c>ForwardedHeadersMiddleware</c> configured), every caller would share one partition — this
-    ///     is a per-instance, defense-in-depth throttle, not a substitute for a WAF or an API gateway's
-    ///     own rate limiting in front of a real deployment.
+    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP, which is the caller's own
+    ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
+    ///     every caller shares the proxy's partition. Either way this is a per-instance,
+    ///     defense-in-depth throttle, not a substitute for a WAF or an API gateway's own rate limiting
+    ///     in front of a real deployment.
     /// </remarks>
     private void AddAuthEndpointRateLimiting()
     {
@@ -744,17 +823,20 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///     application depends on is guaranteed to exist. Migrations are not applied here — the
     ///     seeder throws if any are pending.
     /// </summary>
-    public override void StartServices()
+    private static void SeedDatabase(WebApplication app)
     {
-        using var scope = App.Services.CreateScope();
+        using var scope = app.Services.CreateScope();
 
         var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
 
         seeder.SeedAsync().GetAwaiter().GetResult();
     }
 
-    public override void ConfigureWebApi()
+    private void ConfigureWebApi()
     {
+        // The standard sequence has already called AddControllers(); calling it again adds this
+        // configuration to the same MVC registration.
+        //
         // MfaPendingGuardFilter (FR-2F-10, NFR-17) runs as a global MVC authorization filter, on
         // every controller action — added here rather than per-action, since a UC-38 challenge token
         // must be rejected everywhere except POST /api/auth/2fa/verify, and that endpoint needs no
@@ -957,6 +1039,13 @@ public class Startup(string[] args) : WebApiStartup(args)
     ///         is read this way. An unusable value falls back to the documented default, silently
     ///         here because there is no logger yet to warn with; <c>AddDataRetention</c> reads the
     ///         same variable later and does warn.
+    ///     </para>
+    ///     <para>
+    ///         <b>Every request's client IP address is logged</b>, by Util.WebApi's
+    ///         <c>TraceActivityMiddleware</c>, as the address the request came from — the real caller's
+    ///         once <see cref="TrustedProxyOptions" /> names the proxy in front of the API. It is
+    ///         security telemetry, kept for the same period as the rest of the log, and the Data
+    ///         Retention Schedule and the Privacy Notice say so.
     ///     </para>
     /// </remarks>
     private static void ConfigureLogging()

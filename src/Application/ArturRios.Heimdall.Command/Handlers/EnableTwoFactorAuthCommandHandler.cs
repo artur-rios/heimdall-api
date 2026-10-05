@@ -51,7 +51,7 @@ public class EnableTwoFactorAuthCommandHandler(
     private const int TotpSecretLengthInBytes = 20; // 160 bits, the RFC 6238-recommended minimum.
 
     public async Task<DataOutput<EnableTwoFactorAuthCommandOutput?>> HandleAsync(
-        EnableTwoFactorAuthCommand command)
+        EnableTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<EnableTwoFactorAuthCommandOutput?>.New;
 

@@ -23,7 +23,7 @@ public class HardDeleteApplicationCommandHandler(
     : ICommandHandlerAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>
 {
     public async Task<DataOutput<HardDeleteApplicationCommandOutput?>> HandleAsync(
-        HardDeleteApplicationCommand command)
+        HardDeleteApplicationCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteApplicationCommandOutput?>.New;
 

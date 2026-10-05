@@ -27,7 +27,7 @@ public class ListScopePermissionsQueryHandler(
     IValidator<ListScopePermissionsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopePermissionsQuery, ScopePermissionOutput>
 {
-    public async Task<PaginatedOutput<ScopePermissionOutput>> HandleAsync(ListScopePermissionsQuery query)
+    public async Task<PaginatedOutput<ScopePermissionOutput>> HandleAsync(ListScopePermissionsQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<ScopePermissionOutput>.New;
 

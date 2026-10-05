@@ -37,7 +37,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
         public PersonOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<PersonOutput?>> HandleAsync(GetPersonByIdQuery query)
+    public async Task<DataOutput<PersonOutput?>> HandleAsync(GetPersonByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PersonOutput?>.New;
 

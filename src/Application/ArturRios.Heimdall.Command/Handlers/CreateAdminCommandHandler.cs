@@ -26,7 +26,7 @@ public class CreateAdminCommandHandler(
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateAdminCommand, CreatePersonCommandOutput>
 {
-    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateAdminCommand command)
+    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateAdminCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 

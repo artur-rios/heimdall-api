@@ -16,13 +16,13 @@
   </PropertyGroup>
   <!-- The author's own libraries the API is built on. -->
   <ItemGroup>
-    <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.1" />
-    <PackageVersion Include="ArturRios.Data.Relational.Core" Version="4.0.0" />
-    <PackageVersion Include="ArturRios.Mediator" Version="1.0.3" />
-    <PackageVersion Include="ArturRios.Messaging" Version="1.1.0" />
-    <PackageVersion Include="ArturRios.Util" Version="1.5.0" />
-    <PackageVersion Include="ArturRios.Util.WebApi" Version="3.2.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.2" />
+    <PackageVersion Include="ArturRios.Data.Relational.Core" Version="4.0.1" />
+    <PackageVersion Include="ArturRios.Mediator" Version="2.0.0" />
+    <PackageVersion Include="ArturRios.Messaging" Version="1.3.0" />
+    <PackageVersion Include="ArturRios.Util" Version="2.1.0" />
+    <PackageVersion Include="ArturRios.Util.WebApi" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
   <!--
     EF Core. Relational, Abstractions, and Analyzers are listed although no project references them
@@ -31,21 +31,21 @@
   -->
   <ItemGroup>
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
   </ItemGroup>
   <!-- Everything else the product depends on. -->
   <ItemGroup>
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
-    <PackageVersion Include="Google.Apis.Auth" Version="1.75.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.22.0" />
+    <PackageVersion Include="Google.Apis.Auth" Version="1.77.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
@@ -66,10 +66,10 @@
     stable release when one exists.
   -->
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.18.0-beta.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.19.1-beta.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
   </ItemGroup>
   <!--
     Test-only packages. SSH.NET is pinned rather than referenced: Testcontainers pulls it in for its
@@ -78,14 +78,14 @@
     Testcontainers downgrade from silently reintroducing the advisory.
   -->
   <ItemGroup>
-    <PackageVersion Include="ArturRios.Util.Test" Version="2.2.0" />
+    <PackageVersion Include="ArturRios.Util.Test" Version="3.0.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
-    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Moq" Version="4.21.0" />
     <PackageVersion Include="SSH.NET" Version="2026.0.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
-    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
 </Project>

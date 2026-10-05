@@ -24,7 +24,7 @@ public class DeleteApplicationCommandHandler(
     IAsyncRepository<Application> applicationWriter)
     : ICommandHandlerAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>
 {
-    public async Task<DataOutput<DeleteApplicationCommandOutput?>> HandleAsync(DeleteApplicationCommand command)
+    public async Task<DataOutput<DeleteApplicationCommandOutput?>> HandleAsync(DeleteApplicationCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteApplicationCommandOutput?>.New;
 

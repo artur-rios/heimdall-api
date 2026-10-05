@@ -41,7 +41,7 @@ public class ReapplyErasuresCommandHandler(
     IAsyncRepository<GoogleUser> googleUserWriter)
     : ICommandHandlerAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>
 {
-    public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command)
+    public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ReapplyErasuresCommandOutput?>.New;
         var requested = command.SubjectIds.Distinct().ToList();

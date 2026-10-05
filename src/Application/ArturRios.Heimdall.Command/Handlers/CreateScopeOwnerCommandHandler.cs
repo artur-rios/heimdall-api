@@ -30,7 +30,7 @@ public class CreateScopeOwnerCommandHandler(
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>
 {
-    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateScopeOwnerCommand command)
+    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateScopeOwnerCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 

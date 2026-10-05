@@ -82,7 +82,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     neither worth the six lines saved.
     /// </remarks>
     public async Task<DataOutput<AnonymiseExpiredDeletionsCommandOutput?>> HandleAsync(
-        AnonymiseExpiredDeletionsCommand command)
+        AnonymiseExpiredDeletionsCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<AnonymiseExpiredDeletionsCommandOutput?>.New;
         var now = DateTime.UtcNow;

@@ -35,7 +35,7 @@ public class ListErasureRequestsQueryHandler(
     IValidator<ListErasureRequestsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListErasureRequestsQuery, ErasureRequestOutput>
 {
-    public async Task<PaginatedOutput<ErasureRequestOutput>> HandleAsync(ListErasureRequestsQuery query)
+    public async Task<PaginatedOutput<ErasureRequestOutput>> HandleAsync(ListErasureRequestsQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<ErasureRequestOutput>.New;
 

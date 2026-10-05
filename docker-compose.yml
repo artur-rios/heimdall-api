@@ -80,6 +80,11 @@ services:
       # Empty by default, which refuses every cross-origin request. A browser front end will not
       # reach the API until its origin is listed here.
       HEIMDALL_CORS_ALLOWED_ORIGINS: ${HEIMDALL_CORS_ALLOWED_ORIGINS:-}
+      # Comma-separated addresses and CIDR networks of the reverse proxy in front of the API (Traefik
+      # in production). X-Forwarded-For and X-Forwarded-Proto are believed from these and from no one
+      # else, so the rate limiter and the request log see the real caller. Empty by default, which
+      # trusts nobody: every caller is then the proxy.
+      HEIMDALL_TRUSTED_PROXIES: ${HEIMDALL_TRUSTED_PROXIES:-}
 
       # The entrypoint applies pending EF Core migrations before starting the API. false when they
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.

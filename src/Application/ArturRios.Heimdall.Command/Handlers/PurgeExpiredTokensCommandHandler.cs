@@ -51,7 +51,7 @@ public class PurgeExpiredTokensCommandHandler(
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
-    public async Task<DataOutput<PurgeExpiredTokensCommandOutput?>> HandleAsync(PurgeExpiredTokensCommand command)
+    public async Task<DataOutput<PurgeExpiredTokensCommandOutput?>> HandleAsync(PurgeExpiredTokensCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PurgeExpiredTokensCommandOutput?>.New;
         var cutoff = DateTime.UtcNow - retention.SingleUseTokenGrace;

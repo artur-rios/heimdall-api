@@ -39,7 +39,7 @@ public class ListScopeAdminsQueryHandler(
     IValidator<ListScopeAdminsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>
 {
-    public async Task<PaginatedOutput<PersonSummaryOutput>> HandleAsync(ListScopeAdminsQuery query)
+    public async Task<PaginatedOutput<PersonSummaryOutput>> HandleAsync(ListScopeAdminsQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<PersonSummaryOutput>.New;
 

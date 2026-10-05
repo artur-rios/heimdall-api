@@ -25,7 +25,7 @@ public class CreateScopeCommandHandler(
     IAsyncRepository<Scope> scopeWriter)
     : ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>
 {
-    public async Task<DataOutput<CreateScopeCommandOutput?>> HandleAsync(CreateScopeCommand command)
+    public async Task<DataOutput<CreateScopeCommandOutput?>> HandleAsync(CreateScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreateScopeCommandOutput?>.New;
 

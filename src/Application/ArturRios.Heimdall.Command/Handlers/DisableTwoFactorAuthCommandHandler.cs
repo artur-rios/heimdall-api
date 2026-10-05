@@ -39,7 +39,7 @@ public class DisableTwoFactorAuthCommandHandler(
     : ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>
 {
     public async Task<DataOutput<DisableTwoFactorAuthCommandOutput?>> HandleAsync(
-        DisableTwoFactorAuthCommand command)
+        DisableTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DisableTwoFactorAuthCommandOutput?>.New;
 

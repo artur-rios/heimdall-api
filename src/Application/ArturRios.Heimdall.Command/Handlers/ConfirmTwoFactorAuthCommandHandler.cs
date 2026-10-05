@@ -68,7 +68,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
     private const int RecoveryCodeSegmentLength = 4;
 
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
-        ConfirmTwoFactorAuthCommand command)
+        ConfirmTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ConfirmTwoFactorAuthCommandOutput?>.New;
 

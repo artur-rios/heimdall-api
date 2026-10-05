@@ -21,7 +21,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application> applicationReader)
     : IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>
 {
-    public async Task<DataOutput<ApplicationOutput?>> HandleAsync(GetApplicationByIdQuery query)
+    public async Task<DataOutput<ApplicationOutput?>> HandleAsync(GetApplicationByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ApplicationOutput?>.New;
 

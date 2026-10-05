@@ -54,7 +54,7 @@ public class DetectSecuritySignalsQueryHandler(
     /// </summary>
     public const string CredentialVerificationShedding = "CREDENTIAL_VERIFICATION_SHEDDING";
 
-    public async Task<DataOutput<SecuritySignalsOutput?>> HandleAsync(DetectSecuritySignalsQuery query)
+    public async Task<DataOutput<SecuritySignalsOutput?>> HandleAsync(DetectSecuritySignalsQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<SecuritySignalsOutput?>.New;
         var now = DateTime.UtcNow;

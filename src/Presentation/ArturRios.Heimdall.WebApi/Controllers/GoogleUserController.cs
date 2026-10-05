@@ -38,7 +38,7 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
 
         var result = await queryMediator.ExecuteQueryAsync<GetGoogleUserByIdQuery, GoogleUserOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -83,7 +83,7 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
         var result = await commandMediator
             .ExecuteCommandAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -106,6 +106,6 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
             .ExecuteCommandAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>(
                 new HardDeleteGoogleUserCommand { ScopeId = scopeId, Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: GoogleUserMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }
 }

@@ -82,6 +82,7 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty → every cross-origin request is refused. Set it to your front end's origin (`https://app.example.com`, comma separated for several) or a browser client cannot call the API |
+| `HEIMDALL_TRUSTED_PROXIES` | Empty → `X-Forwarded-For` is ignored. Behind a reverse proxy, set it to the proxy's address or network so the rate limiter and the request log see the real caller |
 
 ### Optional integrations
 

@@ -37,7 +37,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopePermissionCommand, CreateScopePermissionCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
 
         var result = await queryMediator.ExecuteQueryAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopePermissionsQuery, ScopePermissionOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         var result = await commandMediator
             .ExecuteCommandAsync<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         var result = await commandMediator
             .ExecuteCommandAsync<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -143,6 +143,6 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
             .ExecuteCommandAsync<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput>(
                 new HardDeleteScopePermissionCommand { ScopeId = scopeId, Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ScopePermissionMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
 }

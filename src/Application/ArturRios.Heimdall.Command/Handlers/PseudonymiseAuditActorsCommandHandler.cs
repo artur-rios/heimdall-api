@@ -52,7 +52,7 @@ public class PseudonymiseAuditActorsCommandHandler(
     : ICommandHandlerAsync<PseudonymiseAuditActorsCommand, PseudonymiseAuditActorsCommandOutput>
 {
     public async Task<DataOutput<PseudonymiseAuditActorsCommandOutput?>> HandleAsync(
-        PseudonymiseAuditActorsCommand command)
+        PseudonymiseAuditActorsCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PseudonymiseAuditActorsCommandOutput?>.New;
         var cutoff = DateTime.UtcNow - retention.AuditActorRetention;

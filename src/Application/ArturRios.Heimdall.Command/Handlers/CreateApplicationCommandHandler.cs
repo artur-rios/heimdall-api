@@ -28,7 +28,7 @@ public class CreateApplicationCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>
 {
-    public async Task<DataOutput<CreateApplicationCommandOutput?>> HandleAsync(CreateApplicationCommand command)
+    public async Task<DataOutput<CreateApplicationCommandOutput?>> HandleAsync(CreateApplicationCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreateApplicationCommandOutput?>.New;
 
