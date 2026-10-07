@@ -21,7 +21,7 @@
     <PackageVersion Include="ArturRios.Mediator" Version="2.0.0" />
     <PackageVersion Include="ArturRios.Messaging" Version="1.3.0" />
     <PackageVersion Include="ArturRios.Util" Version="2.1.0" />
-    <PackageVersion Include="ArturRios.Util.WebApi" Version="5.0.0" />
+    <PackageVersion Include="ArturRios.Util.WebApi" Version="5.1.0" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
   <!--

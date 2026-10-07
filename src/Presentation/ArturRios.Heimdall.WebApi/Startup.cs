@@ -117,10 +117,18 @@ public class Startup : WebApiStartup
     ///         This does not expose the document in production: Util.WebApi registers Swagger only in
     ///         the environments it allows, and in Production it registers nothing at all.
     ///     </para>
+    ///     <para>
+    ///         The client IP address goes in every request's log entry. That is the library's default,
+    ///         set here all the same because it is a decision about personal data, not a technicality:
+    ///         the Privacy Notice (1.2) and the Data Retention Schedule declare it, and turning it off
+    ///         would make them say more than the API does. Nothing exports traces, so the
+    ///         <c>client.address</c> activity tag is left at its default and goes nowhere.
+    ///     </para>
     /// </remarks>
     private static void ConfigureStandardSequence(WebApiStartupOptions options)
     {
         options.Swagger.ConfigureGenerator = SwaggerConfiguration.Configure;
+        options.TraceActivity.LogClientIp = true;
     }
 
     /// <summary>
