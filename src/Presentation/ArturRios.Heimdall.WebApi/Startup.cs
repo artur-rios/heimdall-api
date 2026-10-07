@@ -121,14 +121,21 @@ public class Startup : WebApiStartup
     ///         The client IP address goes in every request's log entry. That is the library's default,
     ///         set here all the same because it is a decision about personal data, not a technicality:
     ///         the Privacy Notice (1.2) and the Data Retention Schedule declare it, and turning it off
-    ///         would make them say more than the API does. Nothing exports traces, so the
-    ///         <c>client.address</c> activity tag is left at its default and goes nowhere.
+    ///         would make them say more than the API does.
+    ///     </para>
+    ///     <para>
+    ///         The same address is tagged on the request's activity as <c>client.address</c>, also the
+    ///         library's default and also set here, for the same reason. Nothing exports traces, so
+    ///         today the tag lives and dies with the activity in memory; adding a trace exporter would
+    ///         carry the address out of the process, and that is a change to the Privacy Notice and the
+    ///         Data Retention Schedule before it is a change here.
     ///     </para>
     /// </remarks>
     private static void ConfigureStandardSequence(WebApiStartupOptions options)
     {
         options.Swagger.ConfigureGenerator = SwaggerConfiguration.Configure;
         options.TraceActivity.LogClientIp = true;
+        options.TraceActivity.TagClientAddress = true;
     }
 
     /// <summary>
