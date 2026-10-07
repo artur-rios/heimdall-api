@@ -20,9 +20,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class AddScopeOwnerCommandHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>
 {

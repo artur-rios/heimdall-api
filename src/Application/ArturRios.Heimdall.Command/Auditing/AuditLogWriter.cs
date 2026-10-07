@@ -4,7 +4,7 @@ using ArturRios.Heimdall.Shared.Security;
 
 namespace ArturRios.Heimdall.Command.Auditing;
 
-public class AuditLogWriter(IAsyncRepository<AuditLog> repository, IActorAccessor actorAccessor)
+public class AuditLogWriter(IAsyncRepository<AuditLog, long> repository, IActorAccessor actorAccessor)
     : IAuditLogWriter
 {
     /// <summary>Longest failure reason stored; matches AUDIT_LOG.failure_reason's column.</summary>

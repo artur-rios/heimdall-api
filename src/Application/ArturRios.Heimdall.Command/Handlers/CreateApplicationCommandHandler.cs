@@ -22,9 +22,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class CreateApplicationCommandHandler(
     IValidator<CreateApplicationCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Application> applicationWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Application, long> applicationWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<CreateApplicationCommand, CreateApplicationCommandOutput>
 {

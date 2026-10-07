@@ -53,16 +53,16 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class AnonymiseExpiredDeletionsCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
-    IAsyncReadOnlyRepository<PasswordResetToken> passwordResetTokenReader,
-    IAsyncRepository<PasswordResetToken> passwordResetTokenWriter,
-    IAsyncReadOnlyRepository<EmailVerificationToken> emailVerificationTokenReader,
-    IAsyncRepository<EmailVerificationToken> emailVerificationTokenWriter,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorAuthReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorAuthWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAsyncReadOnlyRepository<PasswordResetToken, long> passwordResetTokenReader,
+    IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
+    IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorAuthReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
@@ -278,7 +278,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     than what was selected.
     /// </summary>
     private static async Task<(int Removed, IEnumerable<string> Errors)> DeleteAllAsync<T>(
-        IReadOnlyCollection<long> ids, IAsyncRepository<T> writer) where T : Entity
+        IReadOnlyCollection<long> ids, IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         if (ids.Count == 0)
         {
@@ -293,7 +293,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     }
 
     private static async Task<IEnumerable<string>> SaveAsync<T>(
-        IReadOnlyCollection<T> records, IAsyncRepository<T> writer) where T : Entity
+        IReadOnlyCollection<T> records, IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         if (records.Count == 0)
         {

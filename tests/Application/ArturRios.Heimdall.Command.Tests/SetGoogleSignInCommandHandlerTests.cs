@@ -40,7 +40,7 @@ public class SetGoogleSignInCommandHandlerTests
     }
 
     private static async Task<Scope> SeedScopeAsync(
-        AsyncFakeRepository<Scope> scopes,
+        AsyncFakeRepository<Scope, long> scopes,
         bool googleSignInEnabled = false,
         bool isDeleted = false,
         Guid? ownerPublicId = null)
@@ -78,19 +78,19 @@ public class SetGoogleSignInCommandHandlerTests
         };
 
     private static SetGoogleSignInCommandHandler Handler(
-        AsyncFakeRepository<Scope> scopes,
+        AsyncFakeRepository<Scope, long> scopes,
         bool allowed = true,
         Mock<IValidator<SetGoogleSignInCommand>>? validator = null) =>
         new((validator ?? ValidValidator()).Object, scopes, scopes, OwnershipChecker(allowed));
 
-    private static async Task<Scope> StoredAsync(AsyncFakeRepository<Scope> scopes, Scope scope) =>
+    private static async Task<Scope> StoredAsync(AsyncFakeRepository<Scope, long> scopes, Scope scope) =>
         (await scopes.GetAllAsync()).Data!.Single(x => x.PublicId == scope.PublicId);
 
     [UnitFact]
     public async Task GivenSystemAdminAndEnabledTrue_WhenHandlingSetGoogleSignIn_ThenFlagIsEnabled()
     {
         // Given a scope with Google Sign-In off (UC-24 main flow, FR-GO-01)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes);
 
@@ -110,7 +110,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenSystemAdminAndEnabledFalse_WhenHandlingSetGoogleSignIn_ThenFlagIsDisabled()
     {
         // Given a scope with Google Sign-In already on — the "Disable" half of UC-24
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, googleSignInEnabled: true);
         var handler = Handler(scopes);
 
@@ -127,7 +127,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenExistingOwnerActor_WhenHandlingSetGoogleSignIn_ThenFlagIsUpdated()
     {
         // Given a Scope Admin actor the checker accepts as an owner of the scope (FR-GO-02)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes);
 
@@ -145,7 +145,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenScope_WhenHandlingSetGoogleSignIn_ThenUpdatedAtIsStamped()
     {
         // Given a scope whose UpdatedAt is in the past (no DB trigger maintains it)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes);
 
@@ -163,7 +163,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenOutput_WhenHandlingSetGoogleSignIn_ThenItCarriesTheScopeWithPublicIdentifiersOnly()
     {
         // Given a scope with a known owner (UC-24 step 6 returns the scope, SRD §4.0 / NFR-15)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var ownerPublicId = Guid.NewGuid();
         var scope = await SeedScopeAsync(scopes, ownerPublicId: ownerPublicId);
         var handler = Handler(scopes);
@@ -184,7 +184,7 @@ public class SetGoogleSignInCommandHandlerTests
     {
         // Given a scope already enabled, asked to enable again — PUT is idempotent and UC-24 defines
         // no alternative flow for it, so it is the plain main flow
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, googleSignInEnabled: true);
         var handler = Handler(scopes);
 
@@ -202,7 +202,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingSetGoogleSignIn_ThenScopeNotFoundIsReported()
     {
         // Given an empty store (AF-24a)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = Handler(scopes);
 
         // When
@@ -218,7 +218,7 @@ public class SetGoogleSignInCommandHandlerTests
     {
         // Given a scope withdrawn from service (AF-24a) — enabling it could never take effect anyway,
         // FR-GO-13 refuses Google sign-in for a deleted scope
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, isDeleted: true);
         var handler = Handler(scopes);
 
@@ -238,7 +238,7 @@ public class SetGoogleSignInCommandHandlerTests
     public async Task GivenScopeAdminNotOwningTheScope_WhenHandlingSetGoogleSignIn_ThenNotScopeOwnerIsReported()
     {
         // Given a Scope Admin the ownership checker rejects (AF-24b)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes, allowed: false);
 
@@ -264,7 +264,7 @@ public class SetGoogleSignInCommandHandlerTests
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<SetGoogleSignInCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult([new ValidationFailure("Enabled", ScopeMessages.EnabledRequired)]));
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, googleSignInEnabled: true);
         var handler = Handler(scopes, validator: validator);
 

@@ -9,8 +9,8 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <inheritdoc cref="ITwoFactorEmailCodeIssuer" />
 public class TwoFactorEmailCodeIssuer(
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
     ITwoFactorEmailSender emailSender) : ITwoFactorEmailCodeIssuer
 {
     private const int CodeLength = 6;

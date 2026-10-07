@@ -52,9 +52,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ResendTwoFactorChallengeCodeCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorChallengeTokenValidator challengeTokenValidator,
     ITwoFactorEmailCodeIssuer emailCodeIssuer)
     : ICommandHandlerAsync<ResendTwoFactorChallengeCodeCommand, ResendTwoFactorChallengeCodeCommandOutput>

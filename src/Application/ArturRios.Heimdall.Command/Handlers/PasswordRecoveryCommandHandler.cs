@@ -33,7 +33,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class PasswordRecoveryCommandHandler(
     IValidator<PasswordRecoveryCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     IPasswordResetService passwordReset)
     : ICommandHandlerAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>
 {

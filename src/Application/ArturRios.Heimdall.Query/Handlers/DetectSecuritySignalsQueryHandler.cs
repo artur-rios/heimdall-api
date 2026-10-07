@@ -37,8 +37,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class DetectSecuritySignalsQueryHandler(
-    IAsyncReadOnlyRepository<AuditLog> auditReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<AuditLog, long> auditReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     DataRetentionOptions options)
     : IQueryHandlerAsync<DetectSecuritySignalsQuery, SecuritySignalsOutput>
 {

@@ -33,9 +33,9 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class GetTwoFactorStatusQueryHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader)
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader)
     : IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>
 {
     public async Task<DataOutput<TwoFactorStatusOutput?>> HandleAsync(GetTwoFactorStatusQuery query, CancellationToken cancellationToken = default)

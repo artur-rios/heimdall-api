@@ -35,7 +35,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     }
 
     private static async Task<GoogleUser> SeedGoogleUserAsync(
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         bool isDeleted = false,
         Guid? scopePublicId = null)
     {
@@ -78,7 +78,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenSystemAdmin_WhenGettingGoogleUserById_ThenReturnsIt()
     {
         // Given a System Admin, who may view any Google User (UC-27 step 2)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(true));
 
@@ -99,7 +99,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenOwningScopeAdmin_WhenGettingGoogleUserById_ThenReturnsIt()
     {
         // Given a Scope Admin who owns the scope — the checker answers for the ownership
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
@@ -121,7 +121,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenGoogleUserReadingThemselves_WhenGettingGoogleUserById_ThenReturnsItWithoutConsultingOwnership()
     {
         // Given the Google User themselves — the third actor UC-27 names, who owns no scope at all
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
@@ -144,7 +144,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenNoSuchGoogleUser_WhenGettingGoogleUserById_ThenReturnsNotFoundError()
     {
         // Given an id nobody holds (AF-27a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(true));
 
@@ -161,7 +161,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     {
         // Given a Google User that exists, but not under the scope the route addresses — it is not
         // the resource this path names, so it is AF-27a rather than AF-27b
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, scopePublicId: Guid.NewGuid());
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(true));
 
@@ -177,7 +177,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenLogicallyDeletedGoogleUser_WhenGettingGoogleUserById_ThenReturnsNotFoundError()
     {
         // Given a logically deleted Google User and a default read (FR-GO-17, AF-27a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(true));
 
@@ -193,7 +193,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenLogicallyDeletedGoogleUserAndIncludeDeleted_WhenGettingGoogleUserById_ThenReturnsIt()
     {
         // Given the same record, explicitly requested (FR-GO-17's escape hatch)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(true));
 
@@ -210,7 +210,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     public async Task GivenNonOwningScopeAdmin_WhenGettingGoogleUserById_ThenReturnsNotAuthorizedError()
     {
         // Given a Scope Admin who does not own the Google User's scope (AF-27b)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(false));
 
@@ -228,7 +228,7 @@ public class GetGoogleUserByIdQueryHandlerTests
     {
         // Given a User who is not this Google User — a password person, or another Google User in
         // the same scope. The matrix grants a User this read only as self (AF-27b).
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new GetGoogleUserByIdQueryHandler(googleUsers, Ownership(false));
 

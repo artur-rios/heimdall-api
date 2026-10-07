@@ -16,13 +16,13 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class ExportMyDataCommandHandlerTests
 {
     private sealed record Fakes(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<GoogleUser> GoogleUsers,
-        AsyncFakeRepository<Scope> Scopes,
-        AsyncFakeRepository<Application> Applications,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactors,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
-        AsyncFakeRepository<AuditLog> AuditEntries)
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers,
+        AsyncFakeRepository<Scope, long> Scopes,
+        AsyncFakeRepository<Application, long> Applications,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactors,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
+        AsyncFakeRepository<AuditLog, long> AuditEntries)
     {
         public static Fakes New() => new(new(), new(), new(), new(), new(), new(), new());
 

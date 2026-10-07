@@ -43,10 +43,10 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     }
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
         Mock<ITotpSecretProtector> Protector,
         RecordingIssuer TokenIssuer,
         Person Person)
@@ -87,7 +87,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -102,9 +102,9 @@ public class VerifyTwoFactorAuthCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorRecoveryCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            new AsyncFakeRepository<TwoFactorRecoveryCode, long>(),
             protector,
             new RecordingIssuer(),
             person);

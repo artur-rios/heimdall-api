@@ -47,9 +47,9 @@ public class GetPersonByIdQueryHandlerTests
         RoleId = (long)Roles.SystemAdmin
     };
 
-    private static async Task<AsyncFakeRepository<Person>> RepositoryWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> RepositoryWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {

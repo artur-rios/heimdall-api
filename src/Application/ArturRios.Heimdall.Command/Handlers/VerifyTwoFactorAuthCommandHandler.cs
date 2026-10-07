@@ -30,10 +30,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     invalid" would misdescribe what actually happened.
 /// </remarks>
 public class VerifyTwoFactorAuthCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    IAsyncRepository<TwoFactorRecoveryCode> recoveryCodeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
+    IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
     ITwoFactorFactorVerifier factorVerifier,
     ITwoFactorChallengeTokenValidator challengeTokenValidator,
     PersonAuthTokenService personAuthTokenService)

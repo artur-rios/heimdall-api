@@ -21,8 +21,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class CreateScopePermissionCommandHandler(
     IValidator<CreateScopePermissionCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncRepository<ScopePermission> permissionWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncRepository<ScopePermission, long> permissionWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<CreateScopePermissionCommand, CreateScopePermissionCommandOutput>
 {

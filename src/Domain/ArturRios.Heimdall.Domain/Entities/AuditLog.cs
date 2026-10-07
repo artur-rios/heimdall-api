@@ -24,7 +24,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///         how often intact while the entry stops relating to an identifiable person at all.
 ///     </para>
 /// </remarks>
-public class AuditLog : Entity
+public class AuditLog : Entity<long>
 {
     /// <summary>External identifier of this entry.</summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();

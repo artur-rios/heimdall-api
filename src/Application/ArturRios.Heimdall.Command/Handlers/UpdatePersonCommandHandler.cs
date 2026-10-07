@@ -21,9 +21,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class UpdatePersonCommandHandler(
     IValidator<UpdatePersonCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {

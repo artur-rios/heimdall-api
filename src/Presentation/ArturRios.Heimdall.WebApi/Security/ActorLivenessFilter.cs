@@ -47,8 +47,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     </para>
 /// </remarks>
 public class ActorLivenessFilter(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader) : IAsyncAuthorizationFilter
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader) : IAsyncAuthorizationFilter
 {
     /// <summary>
     ///     The single refusal, deliberately identical for "no such identity" and "deleted": a caller

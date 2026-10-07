@@ -8,7 +8,7 @@ namespace ArturRios.Heimdall.Command.Services;
 /// <inheritdoc cref="ITotpCodeVerifier" />
 public class TotpCodeVerifier(
     ITotpSecretProtector totpSecretProtector,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter) : ITotpCodeVerifier
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter) : ITotpCodeVerifier
 {
     // A one time-step (30s) tolerance on either side of "now", the conventional allowance for clock
     // drift between the server and whatever device generated the code — wide enough to forgive a

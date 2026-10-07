@@ -25,10 +25,10 @@ public class DisableTwoFactorAuthCommandHandlerTests
     private const string Password = "Str0ng-Pass!";
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
         Mock<ITotpSecretProtector> Protector,
         Person Person)
     {
@@ -60,7 +60,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -77,9 +77,9 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorRecoveryCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            new AsyncFakeRepository<TwoFactorRecoveryCode, long>(),
             protector,
             person);
     }

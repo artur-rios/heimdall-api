@@ -21,7 +21,7 @@ public class AuditLogWriterTests
     public async Task GivenAuthenticatedActor_WhenWritingEntry_ThenRowCarriesActorActionAndTarget()
     {
         // Given
-        var repository = new AsyncFakeRepository<AuditLog>();
+        var repository = new AsyncFakeRepository<AuditLog, long>();
         var personId = Guid.NewGuid();
         var targetId = Guid.NewGuid();
         var writer = new AuditLogWriter(repository, Actor(personId, 2));
@@ -42,7 +42,7 @@ public class AuditLogWriterTests
     public async Task GivenAnonymousActor_WhenWritingEntry_ThenActorFieldsAreNull()
     {
         // Given
-        var repository = new AsyncFakeRepository<AuditLog>();
+        var repository = new AsyncFakeRepository<AuditLog, long>();
         var writer = new AuditLogWriter(repository, Actor(null, null));
 
         // When
@@ -59,7 +59,7 @@ public class AuditLogWriterTests
     public async Task GivenAFailure_WhenWritingEntry_ThenTheOutcomeAndReasonAreStored()
     {
         // Given
-        var repository = new AsyncFakeRepository<AuditLog>();
+        var repository = new AsyncFakeRepository<AuditLog, long>();
         var writer = new AuditLogWriter(repository, Actor(Guid.NewGuid(), 1));
 
         // When
@@ -76,7 +76,7 @@ public class AuditLogWriterTests
     {
         // The column is bounded, and a reason too long for it must not turn a recorded refusal into
         // no record at all — which is the one outcome the trail cannot have.
-        var repository = new AsyncFakeRepository<AuditLog>();
+        var repository = new AsyncFakeRepository<AuditLog, long>();
         var writer = new AuditLogWriter(repository, Actor(null, null));
 
         // When

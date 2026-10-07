@@ -15,14 +15,14 @@ namespace ArturRios.Heimdall.Command.Tests;
 // and the step may be repeated.
 public class ReapplyErasuresCommandHandlerTests
 {
-    private static (AsyncFakeRepository<Person>, AsyncFakeRepository<GoogleUser>) Fakes() => (new(), new());
+    private static (AsyncFakeRepository<Person, long>, AsyncFakeRepository<GoogleUser, long>) Fakes() => (new(), new());
 
     private static ReapplyErasuresCommandHandler Handler(
-        AsyncFakeRepository<Person> persons, AsyncFakeRepository<GoogleUser> googleUsers) =>
+        AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers) =>
         new(persons, persons, googleUsers, googleUsers);
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons, DateTime? anonymisedAt = null)
+        AsyncFakeRepository<Person, long> persons, DateTime? anonymisedAt = null)
     {
         var person = new Person
         {

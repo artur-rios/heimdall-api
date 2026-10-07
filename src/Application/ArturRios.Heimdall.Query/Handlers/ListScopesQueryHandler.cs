@@ -15,7 +15,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (FR-SC-07).
 /// </summary>
 public class ListScopesQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IValidator<ListScopesQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>
 {

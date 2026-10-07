@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class GoogleSignOutCommandHandlerTests
 {
     private static async Task<GoogleUser> SeedGoogleUserAsync(
-        AsyncFakeRepository<GoogleUser> googleUsers, bool isDeleted = false)
+        AsyncFakeRepository<GoogleUser, long> googleUsers, bool isDeleted = false)
     {
         // Bogus fills the descriptive fields; only what the lookup reads is pinned.
         var googleUser = new Bogus.Faker<GoogleUser>()
@@ -37,7 +37,7 @@ public class GoogleSignOutCommandHandlerTests
     public async Task GivenActiveGoogleUser_WhenHandlingGoogleSignOut_ThenSucceeds()
     {
         // Given a token naming a Google User in good standing (UC-26 main flow)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new GoogleSignOutCommandHandler(googleUsers);
 
@@ -54,7 +54,7 @@ public class GoogleSignOutCommandHandlerTests
     {
         // Given a token whose id names no Google User at all — a password User's, an
         // administrator's, or one whose Google User UC-29 hard deleted (AF-26a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
         var handler = new GoogleSignOutCommandHandler(googleUsers);
 
@@ -72,7 +72,7 @@ public class GoogleSignOutCommandHandlerTests
         // Given the Google User the token names was logically deleted by UC-28, so UC-25 would no
         // longer authenticate it (AF-25d) and the token is no longer one UC-26's precondition
         // recognises (AF-26a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var handler = new GoogleSignOutCommandHandler(googleUsers);
 
@@ -90,7 +90,7 @@ public class GoogleSignOutCommandHandlerTests
     {
         // Given a live Google User (UC-26 step 2: under this project's stateless token strategy the
         // sign-out writes nothing — the client discards the token)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
 
         var handler = new GoogleSignOutCommandHandler(googleUsers);

@@ -21,8 +21,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     there is no per-owner narrowing — owning the scope is the whole of the rule.
 /// </summary>
 public class ListScopePermissionsQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopePermissionsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopePermissionsQuery, ScopePermissionOutput>

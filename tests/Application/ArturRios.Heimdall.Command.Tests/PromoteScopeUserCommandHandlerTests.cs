@@ -28,7 +28,7 @@ public class PromoteScopeUserCommandHandlerTests
     }
 
     private static async Task<Scope> SeedScopeAsync(
-        AsyncFakeRepository<Scope> scopes, string name = "Acme", bool isDeleted = false)
+        AsyncFakeRepository<Scope, long> scopes, string name = "Acme", bool isDeleted = false)
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name, IsDeleted = isDeleted };
         await scopes.CreateAsync(scope);
@@ -36,7 +36,7 @@ public class PromoteScopeUserCommandHandlerTests
     }
 
     private static async Task<Person> SeedUserAsync(
-        AsyncFakeRepository<Person> persons, Scope scope, bool isDeleted = false, string? email = null)
+        AsyncFakeRepository<Person, long> persons, Scope scope, bool isDeleted = false, string? email = null)
     {
         var person = new Person
         {
@@ -55,7 +55,7 @@ public class PromoteScopeUserCommandHandlerTests
     }
 
     private static async Task<Person> SeedAdminAsync(
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Person, long> persons,
         Roles role = Roles.ScopeAdmin,
         bool isDeleted = false,
         string? email = null,
@@ -85,18 +85,18 @@ public class PromoteScopeUserCommandHandlerTests
     };
 
     private static PromoteScopeUserCommandHandler Handler(
-        AsyncFakeRepository<Scope> scopes, AsyncFakeRepository<Person> persons, bool allowed = true) =>
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true) =>
         new(scopes, persons, persons, OwnershipChecker(allowed));
 
-    private static async Task<Person> StoredAsync(AsyncFakeRepository<Person> persons, Person person) =>
+    private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
 
     [UnitFact]
     public async Task GivenSystemAdminAndScopeUser_WhenHandlingPromoteScopeUser_ThenPersonBecomesScopeOwner()
     {
         // Given a scope and a User belonging to it (UC-23 main flow)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope);
         var handler = Handler(scopes, persons);
@@ -122,8 +122,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenExistingOwnerActor_WhenHandlingPromoteScopeUser_ThenPersonBecomesScopeOwner()
     {
         // Given a Scope Admin actor the checker accepts as an owner of the scope (FR-SC-13)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var actor = await SeedAdminAsync(persons, ownedScopes: scope);
         var person = await SeedUserAsync(persons, scope);
@@ -146,8 +146,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenScopeUser_WhenHandlingPromoteScopeUser_ThenMembershipIsRemovedAndUpdatedAtIsStamped()
     {
         // Given a User whose record was last touched a day ago (UC-23 steps 4-5)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope);
         var before = person.UpdatedAt;
@@ -168,8 +168,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenOutput_WhenHandlingPromoteScopeUser_ThenItCarriesPublicIdentifiersOnly()
     {
         // Given a User with a known name and email (SRD §4.0, NFR-15)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope, email: "member@test.local");
         var handler = Handler(scopes, persons);
@@ -189,8 +189,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingPromoteScopeUser_ThenScopeNotFoundIsReported()
     {
         // Given a scope id nothing matches (AF-23a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope);
         var handler = Handler(scopes, persons);
@@ -211,8 +211,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenLogicallyDeletedScope_WhenHandlingPromoteScopeUser_ThenScopeNotFoundIsReported()
     {
         // Given a scope withdrawn from service (AF-23a treats it as absent)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes, isDeleted: true);
         var person = await SeedUserAsync(persons, scope);
         var handler = Handler(scopes, persons);
@@ -232,8 +232,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenUnknownPerson_WhenHandlingPromoteScopeUser_ThenPersonNotScopeUserIsReported()
     {
         // Given a person id nothing matches (AF-23b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes, persons);
 
@@ -250,8 +250,8 @@ public class PromoteScopeUserCommandHandlerTests
     {
         // Given a logically deleted User — they can no longer authenticate, so the ownership would be
         // unusable (AF-23b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope, isDeleted: true);
         var handler = Handler(scopes, persons);
@@ -272,8 +272,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenUserOfAnotherScope_WhenHandlingPromoteScopeUser_ThenPersonNotScopeUserIsReported()
     {
         // Given a User who belongs to some other scope (AF-23b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var person = await SeedUserAsync(persons, otherScope);
@@ -295,8 +295,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenSystemAdminPerson_WhenHandlingPromoteScopeUser_ThenPersonNotScopeUserIsReported()
     {
         // Given a System Admin target — not a User of any scope, and AF-23d covers only ScopeAdmins
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedAdminAsync(persons, Roles.SystemAdmin);
         var handler = Handler(scopes, persons);
@@ -314,8 +314,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenScopeAdminNotOwningTheScope_WhenHandlingPromoteScopeUser_ThenNotScopeOwnerIsReported()
     {
         // Given an actor the ownership checker rejects (AF-23c)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedUserAsync(persons, scope);
         var handler = Handler(scopes, persons, allowed: false);
@@ -337,8 +337,8 @@ public class PromoteScopeUserCommandHandlerTests
     public async Task GivenPersonAlreadyScopeAdmin_WhenHandlingPromoteScopeUser_ThenAlreadyScopeAdminIsReported()
     {
         // Given a target who already holds the role the promotion would grant (AF-23d)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedAdminAsync(persons, ownedScopes: scope);
         var handler = Handler(scopes, persons);
@@ -359,8 +359,8 @@ public class PromoteScopeUserCommandHandlerTests
     {
         // Given an actor the checker rejects, naming a person who does not exist. The authorization
         // answer must not depend on data the caller is not allowed to learn (design Decision 2).
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes, persons, allowed: false);
 
@@ -379,8 +379,8 @@ public class PromoteScopeUserCommandHandlerTests
     {
         // Given a User whose address already belongs to a ScopeAdmin. Promotion would move it into
         // the admin namespace, where FR-PE-09 requires it to be unique system-wide.
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         await SeedAdminAsync(persons, email: "Shared@test.local");
         var person = await SeedUserAsync(persons, scope, email: "shared@test.local");
@@ -403,8 +403,8 @@ public class PromoteScopeUserCommandHandlerTests
     {
         // Given the same address held by a User of another scope. FR-PE-09 keeps the two namespaces
         // independent, so the admin-side check must not see it.
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         await SeedUserAsync(persons, otherScope, email: "shared@test.local");
@@ -425,8 +425,8 @@ public class PromoteScopeUserCommandHandlerTests
     {
         // Given the colliding admin is logically deleted — they hold no live claim on the address,
         // the same exclusion UC-06 path c applies (FR-PE-09).
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         await SeedAdminAsync(persons, isDeleted: true, email: "shared@test.local");
         var person = await SeedUserAsync(persons, scope, email: "shared@test.local");

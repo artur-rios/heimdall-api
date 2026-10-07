@@ -21,9 +21,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class UpdateApplicationCommandHandler(
     IValidator<UpdateApplicationCommand> validator,
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Application> applicationWriter)
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Application, long> applicationWriter)
     : ICommandHandlerAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>
 {
     public async Task<DataOutput<UpdateApplicationCommandOutput?>> HandleAsync(UpdateApplicationCommand command, CancellationToken cancellationToken = default)

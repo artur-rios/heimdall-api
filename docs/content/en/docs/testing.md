@@ -131,7 +131,7 @@ graph TB
 | | Unit | Functional |
 | --- | --- | --- |
 | Subject | Exactly one class | The whole API over HTTP |
-| Dependencies | Replaced by test doubles (`FakeRepository<T>`, Moq) | Real — in-memory host + real PostgreSQL |
+| Dependencies | Replaced by test doubles (`FakeRepository<T, long>`, Moq) | Real — in-memory host + real PostgreSQL |
 | Asserts | The behaviour of the method under test | Both the **HTTP response** and the **resulting database state** |
 | Base class | — | `WebApiTest<TEntryPoint>` (exposes `Gateway`, `AuthenticateAsync`, `Authorize`) |
 

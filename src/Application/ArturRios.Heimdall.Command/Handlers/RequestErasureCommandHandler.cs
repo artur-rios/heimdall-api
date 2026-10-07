@@ -50,10 +50,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>

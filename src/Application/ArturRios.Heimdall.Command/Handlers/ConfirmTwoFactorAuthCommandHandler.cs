@@ -43,7 +43,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <para>
 ///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
 ///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
-///         <see cref="IAsyncRepository{T}.CreateRangeAsync" /> rather than ten separate inserts. The
+///         <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten separate inserts. The
 ///         repository layer exposes no transaction, so ordering is what stands in for one: the
 ///         dangerous half-write is "two-factor is active but the caller holds no recovery codes",
 ///         which would lock a caller out of their own account on the strength of a request this
@@ -54,13 +54,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ConfirmTwoFactorAuthCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
-    IAsyncRepository<TwoFactorRecoveryCode> recoveryCodeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
+    IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
     ITotpCodeVerifier totpCodeVerifier)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {

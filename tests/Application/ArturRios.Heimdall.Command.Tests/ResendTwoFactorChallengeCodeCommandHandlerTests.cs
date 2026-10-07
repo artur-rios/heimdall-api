@@ -46,8 +46,8 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
     }
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
         RecordingEmailCodeIssuer EmailCodeIssuer,
         Mock<ITwoFactorChallengeTokenValidator> Validator,
         Person Person)
@@ -87,10 +87,10 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
             ProcessingRestrictedAt = processingRestricted ? DateTime.UtcNow : null
         };
 
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         await persons.CreateAsync(person);
 
-        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth, long>();
 
         if (withConfiguration)
         {

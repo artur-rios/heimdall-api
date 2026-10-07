@@ -26,10 +26,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class GoogleSignInCommandHandler(
     IGoogleIdTokenVerifier tokenVerifier,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAuthTokenIssuer tokenIssuer)
     : ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>
 {

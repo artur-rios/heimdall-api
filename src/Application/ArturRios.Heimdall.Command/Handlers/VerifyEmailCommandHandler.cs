@@ -36,9 +36,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class VerifyEmailCommandHandler(
     IValidator<VerifyEmailCommand> validator,
-    IAsyncReadOnlyRepository<EmailVerificationToken> tokenReader,
-    IAsyncRepository<EmailVerificationToken> tokenWriter,
-    IAsyncRepository<Person> personWriter)
+    IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
+    IAsyncRepository<EmailVerificationToken, long> tokenWriter,
+    IAsyncRepository<Person, long> personWriter)
     : ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>
 {
     public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command, CancellationToken cancellationToken = default)

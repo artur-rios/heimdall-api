@@ -21,10 +21,10 @@ public class HardDeletePersonCommandHandlerTests
 {
     // One fake per aggregate; each is passed as BOTH the reader and the writer argument.
     private sealed record Fakes(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<Application> Applications,
-        AsyncFakeRepository<PasswordResetToken> PasswordResetTokens,
-        AsyncFakeRepository<EmailVerificationToken> EmailVerificationTokens)
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<Application, long> Applications,
+        AsyncFakeRepository<PasswordResetToken, long> PasswordResetTokens,
+        AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens)
     {
         public HardDeletePersonCommandHandler Handler() => new(
             Persons, Persons,
@@ -34,10 +34,10 @@ public class HardDeletePersonCommandHandlerTests
     }
 
     private static Fakes EmptyFakes() => new(
-        new AsyncFakeRepository<Person>(),
-        new AsyncFakeRepository<Application>(),
-        new AsyncFakeRepository<PasswordResetToken>(),
-        new AsyncFakeRepository<EmailVerificationToken>());
+        new AsyncFakeRepository<Person, long>(),
+        new AsyncFakeRepository<Application, long>(),
+        new AsyncFakeRepository<PasswordResetToken, long>(),
+        new AsyncFakeRepository<EmailVerificationToken, long>());
 
     private static Scope Scope(long id) => new() { Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}" };
 

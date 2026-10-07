@@ -32,7 +32,7 @@ public class PersonalDataPurposeTests
     /// </summary>
     private static bool IsStoredValue(PropertyInfo property)
     {
-        if (property.Name == nameof(ArturRios.Data.Relational.Core.Entities.Entity.Id))
+        if (property.Name == nameof(ArturRios.Data.Relational.Core.Entities.Entity<long>.Id))
         {
             return false;
         }

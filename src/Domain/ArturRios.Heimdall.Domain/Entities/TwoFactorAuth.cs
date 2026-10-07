@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     reached implicitly through their authenticated identity (see §4.1 of the System Requirements
 ///     Document).
 /// </summary>
-public class TwoFactorAuth : Entity
+public class TwoFactorAuth : Entity<long>
 {
     /// <summary>Foreign key to the owning <see cref="Person" /> (internal Id). Required, unique.</summary>
     public long PersonId { get; set; }

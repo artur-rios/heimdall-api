@@ -39,13 +39,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ExportMyDataCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
-    IAsyncReadOnlyRepository<AuditLog> auditReader)
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
+    IAsyncReadOnlyRepository<AuditLog, long> auditReader)
     : ICommandHandlerAsync<ExportMyDataCommand, DataExportCommandOutput>
 {
     public async Task<DataOutput<DataExportCommandOutput?>> HandleAsync(ExportMyDataCommand command, CancellationToken cancellationToken = default)

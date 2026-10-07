@@ -20,14 +20,14 @@ public class DeleteApplicationCommandHandlerTests
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was (not) stamped" is a meaningful assertion.
     private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
         return scope;
     }
 
-    private static async Task<Person> SeedScopeAdminAsync(AsyncFakeRepository<Person> persons, Scope? ownedScope = null)
+    private static async Task<Person> SeedScopeAdminAsync(AsyncFakeRepository<Person, long> persons, Scope? ownedScope = null)
     {
         var person = new Person
         {
@@ -47,7 +47,7 @@ public class DeleteApplicationCommandHandlerTests
     }
 
     private static async Task<Application> SeedApplicationAsync(
-        AsyncFakeRepository<Application> applications, Scope scope, Person owner, bool isDeleted = false)
+        AsyncFakeRepository<Application, long> applications, Scope scope, Person owner, bool isDeleted = false)
     {
         var application = new Application
         {
@@ -73,19 +73,19 @@ public class DeleteApplicationCommandHandlerTests
         ActingPersonId = actingPersonId
     };
 
-    private static DeleteApplicationCommandHandler Handler(AsyncFakeRepository<Application> applications) =>
+    private static DeleteApplicationCommandHandler Handler(AsyncFakeRepository<Application, long> applications) =>
         new(applications, applications);
 
-    private static async Task<Application> StoredAsync(AsyncFakeRepository<Application> applications, Guid publicId) =>
+    private static async Task<Application> StoredAsync(AsyncFakeRepository<Application, long> applications, Guid publicId) =>
         (await applications.GetAllAsync()).Data!.Single(a => a.PublicId == publicId);
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingDeleteApplication_ThenApplicationIsLogicallyDeleted()
     {
         // Given an application a System Admin does not own (UC-19 step 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -107,9 +107,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenOwningScopeAdmin_WhenHandlingDeleteApplication_ThenApplicationIsLogicallyDeleted()
     {
         // Given the ScopeAdmin who owns the application deleting it (UC-19 step 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -129,9 +129,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenActiveApplication_WhenHandlingDeleteApplication_ThenUpdatedAtIsStampedAndCreatedAtIsNot()
     {
         // Given an existing application (UC-19 step 3: no DB trigger maintains UpdatedAt)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -155,9 +155,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenOutput_WhenHandlingDeleteApplication_ThenItCarriesPublicIdentifiersOnly()
     {
         // Given internal ids that must never leave the data layer (SRD §4.0)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -176,9 +176,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenAlreadyDeletedApplication_WhenHandlingDeleteApplication_ThenSuccessReportsAlreadyDeleted()
     {
         // Given an application that is already logically deleted (AF-19b: idempotent)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner, isDeleted: true);
@@ -200,9 +200,9 @@ public class DeleteApplicationCommandHandlerTests
     {
         // Given an already-deleted application: the row carries the state the request asks for, so
         // re-stamping UpdatedAt would misreport when the deletion happened
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner, isDeleted: true);
@@ -222,9 +222,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenUnknownApplication_WhenHandlingDeleteApplication_ThenApplicationNotFoundIsReported()
     {
         // Given an application id nobody holds (AF-19a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -245,9 +245,9 @@ public class DeleteApplicationCommandHandlerTests
     {
         // Given an application that exists, but under a different scope than the path addresses: the
         // lookup is qualified by the route's scopeId (AF-19a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: otherScope);
@@ -268,9 +268,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingDeleteApplication_ThenApplicationNotFoundIsReported()
     {
         // Given a scope id nobody holds: an unknown scope is the same one 404 (AF-19a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -292,9 +292,9 @@ public class DeleteApplicationCommandHandlerTests
     {
         // Given a co-owner of the scope: owning the scope is not grounds to delete another owner's
         // application (AF-19c)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -318,9 +318,9 @@ public class DeleteApplicationCommandHandlerTests
     public async Task GivenUnrelatedScopeAdmin_WhenHandlingDeleteApplication_ThenNotAuthorizedIsReported()
     {
         // Given a ScopeAdmin with no tie to the application's scope at all (AF-19c)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -344,9 +344,9 @@ public class DeleteApplicationCommandHandlerTests
         // Given a non-owner addressing an already-deleted application: authorization runs before the
         // AF-19b no-op, so the idempotent success cannot be used to probe applications the caller may
         // not see (design Decision 3)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);

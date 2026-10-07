@@ -21,8 +21,8 @@ public class VerifyEmailCommandHandlerTests
     private static readonly DateTime Now = DateTime.UtcNow;
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<EmailVerificationToken> Tokens,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<EmailVerificationToken, long> Tokens,
         Person Person)
     {
         public VerifyEmailCommandHandler Handler(IValidator<VerifyEmailCommand>? validator = null) =>
@@ -45,7 +45,7 @@ public class VerifyEmailCommandHandlerTests
     /// </summary>
     private static async Task<Fixture> FixtureAsync(bool isDeleted = false, bool emailVerified = false)
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -58,16 +58,16 @@ public class VerifyEmailCommandHandlerTests
 
         await persons.CreateAsync(person); // assigns person.Id
 
-        return new Fixture(persons, new AsyncFakeRepository<EmailVerificationToken>(), person);
+        return new Fixture(persons, new AsyncFakeRepository<EmailVerificationToken, long>(), person);
     }
 
     /// <summary>
     ///     Adds a verification token for a person. The <c>Person</c> navigation is set explicitly
-    ///     because <see cref="AsyncFakeRepository{T}" /> is an in-memory list and resolves no
+    ///     because <see cref="AsyncFakeRepository{T, TKey}" /> is an in-memory list and resolves no
     ///     <c>Include</c>.
     /// </summary>
     private static async Task<EmailVerificationToken> TokenForAsync(
-        AsyncFakeRepository<EmailVerificationToken> tokens,
+        AsyncFakeRepository<EmailVerificationToken, long> tokens,
         Person person,
         string value,
         DateTime? expiresAt = null,

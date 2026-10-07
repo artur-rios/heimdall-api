@@ -30,8 +30,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class ListErasureRequestsQueryHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IValidator<ListErasureRequestsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListErasureRequestsQuery, ErasureRequestOutput>
 {

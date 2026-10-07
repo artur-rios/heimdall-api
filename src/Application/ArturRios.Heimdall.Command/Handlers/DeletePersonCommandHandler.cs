@@ -20,8 +20,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class DeletePersonCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>
 {

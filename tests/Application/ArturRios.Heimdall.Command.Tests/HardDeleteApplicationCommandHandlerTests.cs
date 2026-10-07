@@ -17,14 +17,14 @@ namespace ArturRios.Heimdall.Command.Tests;
 // are covered in ApplicationControllerHardDeleteTests.
 public class HardDeleteApplicationCommandHandlerTests
 {
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
         return scope;
     }
 
-    private static async Task<Person> SeedScopeAdminAsync(AsyncFakeRepository<Person> persons, Scope? ownedScope = null)
+    private static async Task<Person> SeedScopeAdminAsync(AsyncFakeRepository<Person, long> persons, Scope? ownedScope = null)
     {
         var person = new Person
         {
@@ -44,7 +44,7 @@ public class HardDeleteApplicationCommandHandlerTests
     }
 
     private static async Task<Application> SeedApplicationAsync(
-        AsyncFakeRepository<Application> applications, Scope scope, Person owner, bool isDeleted = false)
+        AsyncFakeRepository<Application, long> applications, Scope scope, Person owner, bool isDeleted = false)
     {
         var application = new Application
         {
@@ -66,19 +66,19 @@ public class HardDeleteApplicationCommandHandlerTests
         Id = id
     };
 
-    private static HardDeleteApplicationCommandHandler Handler(AsyncFakeRepository<Application> applications) =>
+    private static HardDeleteApplicationCommandHandler Handler(AsyncFakeRepository<Application, long> applications) =>
         new(applications, applications);
 
-    private static async Task<IEnumerable<Application>> StoredAsync(AsyncFakeRepository<Application> applications) =>
+    private static async Task<IEnumerable<Application>> StoredAsync(AsyncFakeRepository<Application, long> applications) =>
         (await applications.GetAllAsync()).Data!;
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingHardDeleteApplication_ThenApplicationIsRemoved()
     {
         // Given an active application (UC-20 main flow)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -98,9 +98,9 @@ public class HardDeleteApplicationCommandHandlerTests
     {
         // Given an application already carrying IsDeleted — exactly what a cleanup pass starts from,
         // so the lookup omits the !IsDeleted filter (Decision 1)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner, isDeleted: true);
@@ -118,9 +118,9 @@ public class HardDeleteApplicationCommandHandlerTests
     public async Task GivenOutput_WhenHandlingHardDeleteApplication_ThenItCarriesPublicIdentifiersOnly()
     {
         // Given internal ids that must never leave the data layer (SRD §4.0, Decision 8)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -137,9 +137,9 @@ public class HardDeleteApplicationCommandHandlerTests
     public async Task GivenSiblingApplicationInTheSameScope_WhenHandlingHardDeleteApplication_ThenOnlyTheAddressedOneIsRemoved()
     {
         // Given two applications of the same scope, only one of them addressed
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var target = await SeedApplicationAsync(applications, scope, owner);
@@ -159,9 +159,9 @@ public class HardDeleteApplicationCommandHandlerTests
     public async Task GivenUnknownApplication_WhenHandlingHardDeleteApplication_ThenApplicationNotFoundIsReported()
     {
         // Given an application id nobody holds (AF-20a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         await SeedApplicationAsync(applications, scope, owner);
@@ -180,9 +180,9 @@ public class HardDeleteApplicationCommandHandlerTests
     {
         // Given the application exists, but under a different scope than the command addresses
         // (AF-20a, Decision 4)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: otherScope);
@@ -202,9 +202,9 @@ public class HardDeleteApplicationCommandHandlerTests
     {
         // Given a scope id nobody holds — an unknown scope and an unknown application are one 404
         // (AF-20a, Decision 4)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -223,9 +223,9 @@ public class HardDeleteApplicationCommandHandlerTests
     {
         // Given the same application hard deleted twice: the row is gone, so the second call has
         // nothing to find. UC-20 has no idempotent path — unlike UC-19's AF-19b (Decision 6)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);

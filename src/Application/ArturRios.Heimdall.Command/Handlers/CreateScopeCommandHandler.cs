@@ -20,9 +20,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class CreateScopeCommandHandler(
     IValidator<CreateScopeCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Scope> scopeWriter)
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Scope, long> scopeWriter)
     : ICommandHandlerAsync<CreateScopeCommand, CreateScopeCommandOutput>
 {
     public async Task<DataOutput<CreateScopeCommandOutput?>> HandleAsync(CreateScopeCommand command, CancellationToken cancellationToken = default)

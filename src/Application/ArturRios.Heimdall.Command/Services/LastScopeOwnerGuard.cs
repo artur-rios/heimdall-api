@@ -29,7 +29,7 @@ public static class LastScopeOwnerGuard
     ///     live. Requires <c>ScopeOwnerships</c> to have been loaded.
     /// </summary>
     public static async Task<bool> WouldStripLastOwnerAsync(
-        Person person, IAsyncReadOnlyRepository<Person> personReader)
+        Person person, IAsyncReadOnlyRepository<Person, long> personReader)
     {
         if (person.RoleId != (long)Roles.ScopeAdmin || person.ScopeOwnerships.Count == 0)
         {

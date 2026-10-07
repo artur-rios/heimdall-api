@@ -40,9 +40,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class EnableTwoFactorAuthCommandHandler(
     IValidator<EnableTwoFactorAuthCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITotpSecretProtector totpSecretProtector)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
