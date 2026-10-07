@@ -14,7 +14,14 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-  <!-- The author's own libraries the API is built on. -->
+  <!--
+    The author's own libraries the API is built on.
+
+    ArturRios.Data.Relational.Core is held at 4.x on purpose. 5.0.0 replaced Entity with Entity<TKey>,
+    and the test suites' FakeRepository and AsyncFakeRepository come from ArturRios.Util.Test 3.0.0,
+    which was compiled against the 4.x Entity. Move both together once ArturRios.Util.Test 4.0.0,
+    built on Relational.Core 5.0.0, is published.
+  -->
   <ItemGroup>
     <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.2" />
     <PackageVersion Include="ArturRios.Data.Relational.Core" Version="4.0.1" />
@@ -49,7 +56,7 @@
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.0" />
   </ItemGroup>
   <!--
     Metrics: OpenTelemetry collects them in-process and the Prometheus exporter serves them for a

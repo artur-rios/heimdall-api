@@ -314,6 +314,9 @@ investigation asks first, and a reference could not be matched against a block l
 abuse report. It is kept for the logs' twelve months and removed with them, on legitimate interests
 (the Data Protection Document's network row). Behind a reverse proxy it is the caller's address only
 when `HEIMDALL_TRUSTED_PROXIES` names the proxy; otherwise it is the proxy's, and identifies nobody.
+The same middleware also tags the address on the request's trace activity (`client.address`). Nothing
+exports traces, so that copy never leaves memory and ends with the request; adding a trace exporter
+would change that, and needs this schedule and the Privacy Notice updated first.
 
 The seeder simply stopped logging the address. It came from the environment the operator set, so the
 line told them nothing they did not know, and it was written on every start-up for the life of the
