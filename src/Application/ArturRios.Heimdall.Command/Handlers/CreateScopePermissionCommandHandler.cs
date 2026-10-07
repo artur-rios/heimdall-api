@@ -27,7 +27,7 @@ public class CreateScopePermissionCommandHandler(
     : ICommandHandlerAsync<CreateScopePermissionCommand, CreateScopePermissionCommandOutput>
 {
     public async Task<DataOutput<CreateScopePermissionCommandOutput?>> HandleAsync(
-        CreateScopePermissionCommand command)
+        CreateScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreateScopePermissionCommandOutput?>.New;
 

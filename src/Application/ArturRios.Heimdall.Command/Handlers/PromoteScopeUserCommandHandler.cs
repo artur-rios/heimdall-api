@@ -27,7 +27,7 @@ public class PromoteScopeUserCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>
 {
-    public async Task<DataOutput<PromoteScopeUserCommandOutput?>> HandleAsync(PromoteScopeUserCommand command)
+    public async Task<DataOutput<PromoteScopeUserCommandOutput?>> HandleAsync(PromoteScopeUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PromoteScopeUserCommandOutput?>.New;
 

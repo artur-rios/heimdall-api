@@ -31,7 +31,7 @@ public class HardDeletePersonCommandHandler(
     IAsyncRepository<EmailVerificationToken> emailVerificationTokenWriter)
     : ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>
 {
-    public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command)
+    public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeletePersonCommandOutput?>.New;
 

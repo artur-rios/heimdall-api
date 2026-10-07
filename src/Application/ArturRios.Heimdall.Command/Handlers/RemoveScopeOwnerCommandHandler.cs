@@ -25,7 +25,7 @@ public class RemoveScopeOwnerCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>
 {
-    public async Task<DataOutput<RemoveScopeOwnerCommandOutput?>> HandleAsync(RemoveScopeOwnerCommand command)
+    public async Task<DataOutput<RemoveScopeOwnerCommandOutput?>> HandleAsync(RemoveScopeOwnerCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RemoveScopeOwnerCommandOutput?>.New;
 

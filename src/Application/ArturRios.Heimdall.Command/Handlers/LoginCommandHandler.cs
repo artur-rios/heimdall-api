@@ -68,7 +68,7 @@ public class LoginCommandHandler(
         return (hash, salt);
     }
 
-    public async Task<DataOutput<LoginCommandOutput?>> HandleAsync(LoginCommand command)
+    public async Task<DataOutput<LoginCommandOutput?>> HandleAsync(LoginCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<LoginCommandOutput?>.New;
 

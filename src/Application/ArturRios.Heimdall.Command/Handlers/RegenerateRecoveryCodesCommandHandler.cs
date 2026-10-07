@@ -52,7 +52,7 @@ public class RegenerateRecoveryCodesCommandHandler(
     private const int RecoveryCodeSegmentLength = 4;
 
     public async Task<DataOutput<RegenerateRecoveryCodesCommandOutput?>> HandleAsync(
-        RegenerateRecoveryCodesCommand command)
+        RegenerateRecoveryCodesCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RegenerateRecoveryCodesCommandOutput?>.New;
 

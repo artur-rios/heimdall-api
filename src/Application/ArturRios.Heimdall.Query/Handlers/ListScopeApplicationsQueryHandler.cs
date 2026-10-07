@@ -28,7 +28,7 @@ public class ListScopeApplicationsQueryHandler(
     IValidator<ListScopeApplicationsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>
 {
-    public async Task<PaginatedOutput<ApplicationOutput>> HandleAsync(ListScopeApplicationsQuery query)
+    public async Task<PaginatedOutput<ApplicationOutput>> HandleAsync(ListScopeApplicationsQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<ApplicationOutput>.New;
 

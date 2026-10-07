@@ -23,7 +23,7 @@ public class HardDeleteScopePermissionCommandHandler(
     : ICommandHandlerAsync<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopePermissionCommandOutput?>> HandleAsync(
-        HardDeleteScopePermissionCommand command)
+        HardDeleteScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteScopePermissionCommandOutput?>.New;
 

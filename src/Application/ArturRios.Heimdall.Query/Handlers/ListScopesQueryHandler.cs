@@ -19,7 +19,7 @@ public class ListScopesQueryHandler(
     IValidator<ListScopesQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopesQuery, ScopeOutput>
 {
-    public async Task<PaginatedOutput<ScopeOutput>> HandleAsync(ListScopesQuery query)
+    public async Task<PaginatedOutput<ScopeOutput>> HandleAsync(ListScopesQuery query, CancellationToken cancellationToken = default)
     {
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
         var validation = await validator.ValidateAsync(query);

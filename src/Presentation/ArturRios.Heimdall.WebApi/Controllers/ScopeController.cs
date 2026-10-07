@@ -27,7 +27,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopeCommand, CreateScopeCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<UpdateScopeCommand, UpdateScopeCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -57,7 +57,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<DeleteScopeCommand, DeleteScopeCommandOutput>(new DeleteScopeCommand { Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
             .ExecuteCommandAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>(
                 new HardDeleteScopeCommand { Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopesQuery, ScopeOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -123,6 +123,6 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
 
         var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 }

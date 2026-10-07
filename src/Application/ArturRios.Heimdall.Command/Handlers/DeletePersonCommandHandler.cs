@@ -25,7 +25,7 @@ public class DeletePersonCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>
 {
-    public async Task<DataOutput<DeletePersonCommandOutput?>> HandleAsync(DeletePersonCommand command)
+    public async Task<DataOutput<DeletePersonCommandOutput?>> HandleAsync(DeletePersonCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeletePersonCommandOutput?>.New;
 

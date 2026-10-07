@@ -25,7 +25,7 @@ public class GetScopePermissionByIdQueryHandler(
     IScopeOwnershipChecker scopeOwnership)
     : IQueryHandlerAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>
 {
-    public async Task<DataOutput<ScopePermissionOutput?>> HandleAsync(GetScopePermissionByIdQuery query)
+    public async Task<DataOutput<ScopePermissionOutput?>> HandleAsync(GetScopePermissionByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ScopePermissionOutput?>.New;
 

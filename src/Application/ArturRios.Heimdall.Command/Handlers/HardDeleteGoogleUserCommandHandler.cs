@@ -31,7 +31,7 @@ public class HardDeleteGoogleUserCommandHandler(
     : ICommandHandlerAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>
 {
     public async Task<DataOutput<HardDeleteGoogleUserCommandOutput?>> HandleAsync(
-        HardDeleteGoogleUserCommand command)
+        HardDeleteGoogleUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteGoogleUserCommandOutput?>.New;
 

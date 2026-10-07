@@ -86,25 +86,25 @@ classDiagram
     }
     class ICommandHandlerAsync~TCommand, TOutput~ {
         <<interface>>
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
     class IQueryHandlerAsync~TQuery, TOutput~ {
         <<interface>>
-        +HandleAsync(query) DataOutput~TOutput~
+        +HandleAsync(query, cancellationToken) DataOutput~TOutput~
     }
     class IPaginatedQueryHandlerAsync~TQuery, TOutput~ {
         <<interface>>
-        +HandleAsync(query) PaginatedOutput~TOutput~
+        +HandleAsync(query, cancellationToken) PaginatedOutput~TOutput~
     }
     class AuditingCommandHandler~TCommand, TOutput~ {
         -ICommandHandlerAsync inner
         -IAuditLogWriter auditLogWriter
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
     class ConcreteCommandHandler {
         -IValidator~TCommand~ validator
         -IAsyncRepository~T~ repository
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
 
     Controller --> CommandMediator
@@ -128,12 +128,12 @@ public async Task<ActionResult<DataOutput<CreateScopeCommandOutput?>>> Create(
     var result = await commandMediator
         .ExecuteCommandAsync<CreateScopeCommand, CreateScopeCommandOutput>(command);
 
-    return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
 }
 ```
 
 No business rule lives in a controller. The handler returns a `DataOutput<T>` carrying data,
-messages, and errors; `ResponseResolver` turns that into an HTTP status using the per-area
+messages, and errors; Util.WebApi's `ToActionResult` turns that into an HTTP status using the per-area
 **message map** — a dictionary from message text to status code — so "which error is a 404 and which
 is a 409" is a single table per area rather than scattered `return NotFound()` calls.
 
@@ -166,7 +166,7 @@ See [Audit logging](../flows/audit-logging/) for the sequence.
 
 ## How a failure becomes a status
 
-`ResponseResolver` resolves the HTTP status from the envelope's first error (or, on success, its
+`ToActionResult` resolves the HTTP status from the envelope's first error (or, on success, its
 first message) against the map the controller passes it, falling back to 200 on success and 400 on
 failure. Each use case owns a `*MessageMap` naming its own outcomes — `InvalidCredentials` is a 401,
 `EmailAlreadyExists` a 409, and so on.
@@ -200,12 +200,14 @@ vocabulary the use case defines.
 
 ```mermaid
 graph LR
-    REQ([Request]) --> EX[ExceptionMiddleware]
+    REQ([Request]) --> FWD["Forwarded headers<br/>trusted proxies only"]
+    FWD --> HTTPS[HTTPS redirect]
+    HTTPS --> TRACE[TraceActivityMiddleware]
+    TRACE --> EX[ExceptionMiddleware]
     EX --> CORS["CORS<br/>configured origins only"]
-    CORS --> HTTPS[HTTPS redirect]
-    HTTPS --> RL[Rate limiter<br/>auth endpoints only]
-    RL --> AUTHN[Authentication +<br/>AuthenticationMiddleware]
-    AUTHN --> MFA[MfaPendingGuardFilter]
+    CORS --> AUTHN[AuthenticationMiddleware]
+    AUTHN --> RL[Rate limiter<br/>auth endpoints only]
+    RL --> MFA[MfaPendingGuardFilter]
     MFA --> LIVE[ActorLivenessFilter]
     LIVE --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
     ROLE --> CTRL[Controller action]
@@ -213,9 +215,17 @@ graph LR
     MED --> H[Handler]
     H --> DB[(PostgreSQL)]
     H --> RES[DataOutput]
-    RES --> RR["ResponseResolver<br/>+ message map"]
+    RES --> RR["ToActionResult<br/>+ message map"]
     RR --> RESP([HTTP response])
 ```
+
+Everything from `TraceActivityMiddleware` to `AuthenticationMiddleware` is Util.WebApi's standard
+pipeline, which `Startup` derives from `WebApiStartup` to get. What it has no place for is added
+around it: the metrics scrape branch (on its own port, ahead of everything — see
+[Operations](../operations/)), forwarded headers and HTTPS redirection go in front through a startup
+filter, and the rate limiter goes after it. `TraceActivityMiddleware` logs every request with the
+caller's IP address — the real caller's when `HEIMDALL_TRUSTED_PROXIES` names the proxy in front of
+the API, the proxy's otherwise.
 
 Four things about this pipeline are worth knowing before reading any handler:
 

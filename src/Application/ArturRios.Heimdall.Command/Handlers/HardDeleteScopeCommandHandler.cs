@@ -31,7 +31,7 @@ public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<ScopePermission> scopePermissionReader)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
-    public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command)
+    public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteScopeCommandOutput?>.New;
 

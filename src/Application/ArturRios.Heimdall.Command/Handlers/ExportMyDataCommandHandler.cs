@@ -48,7 +48,7 @@ public class ExportMyDataCommandHandler(
     IAsyncReadOnlyRepository<AuditLog> auditReader)
     : ICommandHandlerAsync<ExportMyDataCommand, DataExportCommandOutput>
 {
-    public async Task<DataOutput<DataExportCommandOutput?>> HandleAsync(ExportMyDataCommand command)
+    public async Task<DataOutput<DataExportCommandOutput?>> HandleAsync(ExportMyDataCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DataExportCommandOutput?>.New;
 

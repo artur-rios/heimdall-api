@@ -30,7 +30,7 @@ public class DeleteScopeCommandHandler(
     IAsyncRepository<Application> applicationWriter)
     : ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>
 {
-    public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command)
+    public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteScopeCommandOutput?>.New;
 

@@ -400,6 +400,7 @@ through `DB_CONNECTION_EXTRA=SSL Mode=Require;Trust Server Certificate=true` —
 | `relation "role" already exists` on the second run | The login is named `heimdall`, so `"$user"` resolves to the entities' schema | Rename the login, or keep `Search Path=public` in every connection string |
 | `error getting credentials … docker-credential-desktop.exe` in WSL | `~/.docker/config.json` points at a Windows helper | Remove `credsStore` (step 2) |
 | Browser front end gets a CORS error | `HEIMDALL_CORS_ALLOWED_ORIGINS` is empty | List the front end's origin exactly as the browser sends it |
+| Every request is logged from the same address, and callers hit 429 together | `HEIMDALL_TRUSTED_PROXIES` does not cover the proxy | Set it to the address or network the proxy connects from (Operations → Client addresses behind a proxy) |
 | `docker compose ps` shows nothing | `--env-file` omitted, so `COMPOSE_PROJECT_NAME` is unset | Pass the env file on every Compose command |
 | Health check never leaves `starting` | The API is up but `/healthcheck` is not answering | `logs -f api`; the start period is 30 s, five retries at 15 s after that |
 

@@ -38,7 +38,7 @@ public class GetTwoFactorStatusQueryHandler(
     IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader)
     : IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>
 {
-    public async Task<DataOutput<TwoFactorStatusOutput?>> HandleAsync(GetTwoFactorStatusQuery query)
+    public async Task<DataOutput<TwoFactorStatusOutput?>> HandleAsync(GetTwoFactorStatusQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<TwoFactorStatusOutput?>.New;
 

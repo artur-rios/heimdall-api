@@ -32,7 +32,7 @@ public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReade
         public ScopeOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<ScopeOutput?>> HandleAsync(GetScopeByIdQuery query)
+    public async Task<DataOutput<ScopeOutput?>> HandleAsync(GetScopeByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ScopeOutput?>.New;
 

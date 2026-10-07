@@ -44,7 +44,7 @@ public class DeleteGoogleUserCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>
 {
-    public async Task<DataOutput<DeleteGoogleUserCommandOutput?>> HandleAsync(DeleteGoogleUserCommand command)
+    public async Task<DataOutput<DeleteGoogleUserCommandOutput?>> HandleAsync(DeleteGoogleUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteGoogleUserCommandOutput?>.New;
 

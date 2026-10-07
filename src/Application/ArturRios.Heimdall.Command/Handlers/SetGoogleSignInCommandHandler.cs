@@ -27,7 +27,7 @@ public class SetGoogleSignInCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>
 {
-    public async Task<DataOutput<SetGoogleSignInCommandOutput?>> HandleAsync(SetGoogleSignInCommand command)
+    public async Task<DataOutput<SetGoogleSignInCommandOutput?>> HandleAsync(SetGoogleSignInCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<SetGoogleSignInCommandOutput?>.New;
 

@@ -27,7 +27,7 @@ public class HealthCheckController(QueryMediator queryMediator) : Controller
             .WithData("Hello world!")
             .WithMessage("Heimdall API is working.");
 
-        return ResponseResolver.Resolve(result, HttpStatusCodes.Ok);
+        return result.ToActionResult(HttpStatusCodes.Ok);
     }
 
     /// <summary>
@@ -48,6 +48,6 @@ public class HealthCheckController(QueryMediator queryMediator) : Controller
             ? HttpStatusCodes.Ok
             : HttpStatusCodes.ServiceUnavailable;
 
-        return ResponseResolver.Resolve(result, statusCode);
+        return result.ToActionResult(statusCode);
     }
 }

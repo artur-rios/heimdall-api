@@ -27,7 +27,7 @@ public class UpdatePersonCommandHandler(
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
-    public async Task<DataOutput<UpdatePersonCommandOutput?>> HandleAsync(UpdatePersonCommand command)
+    public async Task<DataOutput<UpdatePersonCommandOutput?>> HandleAsync(UpdatePersonCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdatePersonCommandOutput?>.New;
 

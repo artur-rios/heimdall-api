@@ -40,7 +40,7 @@ public class VerifyTwoFactorAuthCommandHandler(
     : ICommandHandlerAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>
 {
     public async Task<DataOutput<VerifyTwoFactorAuthCommandOutput?>> HandleAsync(
-        VerifyTwoFactorAuthCommand command)
+        VerifyTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<VerifyTwoFactorAuthCommandOutput?>.New;
 

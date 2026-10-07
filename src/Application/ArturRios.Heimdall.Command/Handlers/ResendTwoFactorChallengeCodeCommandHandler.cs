@@ -67,7 +67,7 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
     public const int MaxReissuesPerChallenge = 3;
 
     public async Task<DataOutput<ResendTwoFactorChallengeCodeCommandOutput?>> HandleAsync(
-        ResendTwoFactorChallengeCodeCommand command)
+        ResendTwoFactorChallengeCodeCommand command, CancellationToken cancellationToken = default)
     {
         // UC-46 steps 2-6. Resolved before the answer is built, but the answer does not depend on
         // it: each alternative flow is the absence of work rather than a refusal of its own, the

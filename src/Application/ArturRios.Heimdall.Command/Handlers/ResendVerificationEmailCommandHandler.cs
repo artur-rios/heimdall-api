@@ -45,7 +45,7 @@ public class ResendVerificationEmailCommandHandler(
     : ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>
 {
     public async Task<DataOutput<ResendVerificationEmailCommandOutput?>> HandleAsync(
-        ResendVerificationEmailCommand command)
+        ResendVerificationEmailCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ResendVerificationEmailCommandOutput?>.New;
 

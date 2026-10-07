@@ -48,9 +48,9 @@ own record is covered below.
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
-| Application logs | Serilog file sink | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
+| Application logs | Serilog file sink, including every request's client IP address | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
 | Database backups | The backup store, outside the schema | **35 days** (proposed) — §9 | A backup is a full copy of every category above. Longer than the 30-day erasure deadline, which is what makes restore-time reconciliation mandatory | ⚠️ Regime proposed, reconciliation implemented — §9 |
-| Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. It is never persisted and never logged; the window is one minute and the key is discarded with it | By construction |
+| Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. As the partition key it is never persisted; the window is one minute and the key is discarded with it. The same address is also written to the application logs, and kept for their period — §8 | By construction |
 | Data Protection key ring | `DATA_PROTECTION_KEYS` | Life of the encrypted material | Not personal data itself, but the TOTP secrets of NFR-16 are undecryptable without it. Listed so nobody purges it as housekeeping | Never purged, deliberately |
 
 Every period is decided and every one is now enforced, with a single qualification: the backup
@@ -305,6 +305,15 @@ refer to one so an operator can correlate — whether three failures are one add
 people — it writes a stable, non-reversible reference instead (`LogSafeEmail`). That is
 pseudonymisation rather than anonymisation, and the honest limit is that somebody who already
 suspects a particular address can hash it and look; what it defeats is bulk harvesting.
+
+**IP addresses are the exception, and a deliberate one.** Every request is logged with its client IP
+address, in clear, since Privacy Notice 1.2. It is the one identifier the logs carry that is not a
+`PublicId` or a reference, and it is there because it is the security telemetry: the source of a
+credential-stuffing run, or the address a compromised account was used from, is what a breach
+investigation asks first, and a reference could not be matched against a block list or a provider's
+abuse report. It is kept for the logs' twelve months and removed with them, on legitimate interests
+(the Data Protection Document's network row). Behind a reverse proxy it is the caller's address only
+when `HEIMDALL_TRUSTED_PROXIES` names the proxy; otherwise it is the proxy's, and identifies nobody.
 
 The seeder simply stopped logging the address. It came from the environment the operator set, so the
 line told them nothing they did not know, and it was written on every start-up for the life of the

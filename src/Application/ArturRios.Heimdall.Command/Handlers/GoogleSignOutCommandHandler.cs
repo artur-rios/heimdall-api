@@ -41,7 +41,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class GoogleSignOutCommandHandler(IAsyncReadOnlyRepository<GoogleUser> googleUserReader)
     : ICommandHandlerAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>
 {
-    public async Task<DataOutput<GoogleSignOutCommandOutput?>> HandleAsync(GoogleSignOutCommand command)
+    public async Task<DataOutput<GoogleSignOutCommandOutput?>> HandleAsync(GoogleSignOutCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<GoogleSignOutCommandOutput?>.New;
 

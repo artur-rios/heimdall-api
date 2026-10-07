@@ -41,7 +41,7 @@ public class LiftProcessingRestrictionCommandHandler(
     : ICommandHandlerAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>
 {
     public async Task<DataOutput<LiftProcessingRestrictionCommandOutput?>> HandleAsync(
-        LiftProcessingRestrictionCommand command)
+        LiftProcessingRestrictionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<LiftProcessingRestrictionCommandOutput?>.New;
 

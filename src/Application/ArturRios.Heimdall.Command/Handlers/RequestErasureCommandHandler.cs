@@ -58,7 +58,7 @@ public class RequestErasureCommandHandler(
     DataRetentionOptions retention)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>
 {
-    public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command)
+    public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RequestErasureCommandOutput?>.New;
 

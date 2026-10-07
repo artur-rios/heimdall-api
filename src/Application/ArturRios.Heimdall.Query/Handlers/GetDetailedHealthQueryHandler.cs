@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 public class GetDetailedHealthQueryHandler(IEnumerable<IServiceHealthCheck> healthChecks)
     : IQueryHandlerAsync<DetailedHealthQuery, HealthCheckOutput>
 {
-    public async Task<DataOutput<HealthCheckOutput?>> HandleAsync(DetailedHealthQuery query)
+    public async Task<DataOutput<HealthCheckOutput?>> HandleAsync(DetailedHealthQuery query, CancellationToken cancellationToken = default)
     {
         var services = new List<ServiceHealthOutput>();
 

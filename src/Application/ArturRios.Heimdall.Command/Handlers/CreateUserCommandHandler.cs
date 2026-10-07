@@ -32,7 +32,7 @@ public class CreateUserCommandHandler(
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateUserCommand, CreatePersonCommandOutput>
 {
-    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateUserCommand command)
+    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 

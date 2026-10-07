@@ -26,7 +26,7 @@ public class UpdateApplicationCommandHandler(
     IAsyncRepository<Application> applicationWriter)
     : ICommandHandlerAsync<UpdateApplicationCommand, UpdateApplicationCommandOutput>
 {
-    public async Task<DataOutput<UpdateApplicationCommandOutput?>> HandleAsync(UpdateApplicationCommand command)
+    public async Task<DataOutput<UpdateApplicationCommandOutput?>> HandleAsync(UpdateApplicationCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdateApplicationCommandOutput?>.New;
 

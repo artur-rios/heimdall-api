@@ -26,7 +26,7 @@ public class DeleteScopePermissionCommandHandler(
     : ICommandHandlerAsync<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput>
 {
     public async Task<DataOutput<DeleteScopePermissionCommandOutput?>> HandleAsync(
-        DeleteScopePermissionCommand command)
+        DeleteScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteScopePermissionCommandOutput?>.New;
 

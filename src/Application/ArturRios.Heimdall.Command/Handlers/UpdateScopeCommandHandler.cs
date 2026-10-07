@@ -23,7 +23,7 @@ public class UpdateScopeCommandHandler(
     IAsyncRepository<Scope> scopeWriter)
     : ICommandHandlerAsync<UpdateScopeCommand, UpdateScopeCommandOutput>
 {
-    public async Task<DataOutput<UpdateScopeCommandOutput?>> HandleAsync(UpdateScopeCommand command)
+    public async Task<DataOutput<UpdateScopeCommandOutput?>> HandleAsync(UpdateScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdateScopeCommandOutput?>.New;
 

@@ -37,7 +37,7 @@ public class PasswordRecoveryCommandHandler(
     IPasswordResetService passwordReset)
     : ICommandHandlerAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>
 {
-    public async Task<DataOutput<PasswordRecoveryCommandOutput?>> HandleAsync(PasswordRecoveryCommand command)
+    public async Task<DataOutput<PasswordRecoveryCommandOutput?>> HandleAsync(PasswordRecoveryCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PasswordRecoveryCommandOutput?>.New;
 

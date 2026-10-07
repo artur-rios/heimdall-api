@@ -33,7 +33,7 @@ public static class LegalBasisRecorder
     ///     version that names a document nobody can produce is worse than no record: it looks like
     ///     evidence of what somebody was told while pointing at the wrong text.
     /// </remarks>
-    public const string CurrentPrivacyNoticeVersion = "1.1";
+    public const string CurrentPrivacyNoticeVersion = "1.2";
 
     /// <summary>The basis applied when a scope declares none, and for identities outside any scope.</summary>
     public const LegalBases DefaultBasis = LegalBases.ContractPerformance;

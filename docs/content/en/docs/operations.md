@@ -188,9 +188,10 @@ same Argon2id work a real check would, so it is not observable — by message or
 caller who does not already know the password.
 
 {{% alert title="Not a substitute for a gateway" color="warning" %}}
-The limiter's partition key is the connection's remote IP. Behind a reverse proxy or load balancer
-that does not forward the real client IP (via `X-Forwarded-For` with `ForwardedHeadersMiddleware`
-configured), **every caller shares one partition**. This is a per-instance, defence-in-depth
+The limiter's partition key is the connection's remote IP — the real caller's only when
+`HEIMDALL_TRUSTED_PROXIES` names the proxy in front of the API
+([Client addresses behind a proxy](#client-addresses-behind-a-proxy)). Without it, **every caller
+shares the proxy's partition**. This is a per-instance, defence-in-depth
 throttle — not a replacement for a WAF or an API gateway's own rate limiting in front of a real
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
@@ -451,6 +452,28 @@ origin" would instead leave a deployment open with nothing to indicate it.
 Server-to-server callers are unaffected: CORS is a browser rule, and non-browser clients send no
 `Origin` header.
 
+## Client addresses behind a proxy
+
+In production every connection reaches the API from Traefik, so the connection's address is
+Traefik's. The caller's own address travels in `X-Forwarded-For`, and the scheme they used in
+`X-Forwarded-Proto`. `HEIMDALL_TRUSTED_PROXIES` lists the proxies those headers are believed from —
+addresses and CIDR networks, comma separated:
+
+| Traefik reaches the API | Value |
+| --- | --- |
+| From a container on a Docker network shared with `api` | That network's subnet, e.g. `172.18.0.0/16` — Traefik's own address changes when its container is recreated |
+| From the host, through the published `API_PORT` | The Compose network's gateway, e.g. `172.19.0.1` — what published-port traffic arrives from |
+
+Two things read the result: the rate limiter, which partitions on it, and the request log, which
+records it (`Started request with TraceId … from <address>` on every request). **Unset, nothing is
+trusted** and both see Traefik — one rate-limit bucket for every caller, and a log that names the
+proxy. Start-up warns when that is the case.
+
+Only the headers' last hop is read: Traefik appends the address it saw to whatever the caller sent,
+so the rightmost entry is the only one it vouches for, and an earlier entry a caller forged is
+ignored. Never list a range a caller can originate from — anything trusted here can claim any
+address it likes. `X-Forwarded-Host` is not read; nothing in the API decides on the host name.
+
 ## Integrations
 
 ### Email delivery (Mailgun)
@@ -555,6 +578,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_METRICS_PORT` | | `9464`; `0` → metrics off |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
+| `HEIMDALL_TRUSTED_PROXIES` | | unset → forwarded headers ignored; every caller is the proxy |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |

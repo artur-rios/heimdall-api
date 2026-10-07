@@ -33,7 +33,7 @@ public class GoogleSignInCommandHandler(
     IAuthTokenIssuer tokenIssuer)
     : ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>
 {
-    public async Task<DataOutput<GoogleSignInCommandOutput?>> HandleAsync(GoogleSignInCommand command)
+    public async Task<DataOutput<GoogleSignInCommandOutput?>> HandleAsync(GoogleSignInCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<GoogleSignInCommandOutput?>.New;
 
