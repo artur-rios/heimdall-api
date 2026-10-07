@@ -19,9 +19,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class RemoveScopeOwnerCommandHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>
 {

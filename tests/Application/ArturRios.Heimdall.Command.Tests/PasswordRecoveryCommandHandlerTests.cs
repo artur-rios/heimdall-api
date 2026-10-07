@@ -53,9 +53,9 @@ public class PasswordRecoveryCommandHandlerTests
         return person;
     }
 
-    private static async Task<AsyncFakeRepository<Person>> PersonsWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> PersonsWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {
@@ -92,7 +92,7 @@ public class PasswordRecoveryCommandHandlerTests
     }
 
     private static PasswordRecoveryCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons, IPasswordResetService passwordReset) =>
+        AsyncFakeRepository<Person, long> persons, IPasswordResetService passwordReset) =>
         new(ValidValidator().Object, persons, passwordReset);
 
     private static PasswordRecoveryCommand Command(string email, Guid? scopeId = null) =>

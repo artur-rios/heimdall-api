@@ -65,9 +65,9 @@ public class UpdatePersonCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<Person>> PersonsWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> PersonsWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {
@@ -78,13 +78,13 @@ public class UpdatePersonCommandHandlerTests
     }
 
     private static UpdatePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Person, long> persons,
         bool ownershipAllowed = true,
-        AsyncFakeRepository<GoogleUser>? googleUsers = null) =>
+        AsyncFakeRepository<GoogleUser, long>? googleUsers = null) =>
         new(
             PassingValidator(),
             persons,
-            googleUsers ?? new AsyncFakeRepository<GoogleUser>(),
+            googleUsers ?? new AsyncFakeRepository<GoogleUser, long>(),
             persons,
             Ownership(ownershipAllowed));
 
@@ -358,7 +358,7 @@ public class UpdatePersonCommandHandlerTests
         var scope = Scope(1);
         var target = User(10, scope, "user@test.local");
         var persons = await PersonsWith(target);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await googleUsers.CreateAsync(new GoogleUser
         {
             PublicId = Guid.NewGuid(),

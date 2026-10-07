@@ -26,7 +26,7 @@ public class JwtAuthTokenIssuer(
     JwtConfiguration configuration,
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper,
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader) : IAuthTokenIssuer
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader) : IAuthTokenIssuer
 {
     public async Task<AuthToken> IssueAsync(AuthTokenSubject subject)
     {

@@ -38,10 +38,10 @@ public class CreateScopePermissionCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<(AsyncFakeRepository<Scope> scopes, Scope scope)> ScopeStoreAsync(
+    private static async Task<(AsyncFakeRepository<Scope, long> scopes, Scope scope)> ScopeStoreAsync(
         bool isDeleted = false)
     {
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = isDeleted };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
@@ -60,8 +60,8 @@ public class CreateScopePermissionCommandHandlerTests
     };
 
     private static CreateScopePermissionCommandHandler Handler(
-        AsyncFakeRepository<Scope> scopes,
-        AsyncFakeRepository<ScopePermission> permissions,
+        AsyncFakeRepository<Scope, long> scopes,
+        AsyncFakeRepository<ScopePermission, long> permissions,
         IScopeOwnershipChecker? ownership = null,
         Mock<IValidator<CreateScopePermissionCommand>>? validator = null) =>
         new((validator ?? ValidValidator()).Object, scopes, permissions,
@@ -72,7 +72,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given a SystemAdmin actor (UC-31 main flow)
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -94,7 +94,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given a ScopeAdmin who owns the scope (matrix: "owning Scope Admin")
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var caller = Guid.NewGuid();
         var handler = Handler(scopes, permissions, OwnershipChecker(allowed: true));
 
@@ -112,7 +112,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given internal ids that must never leave the data layer (FR-SP-02: scope fixed at creation)
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -131,7 +131,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given the JWT-claim flag cleared (FR-SP-01: defaults to false, but explicitly sent false)
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -149,7 +149,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given no description — the field is optional
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -166,8 +166,8 @@ public class CreateScopePermissionCommandHandlerTests
     public async Task GivenMissingScope_WhenHandlingCreateScopePermission_ThenScopeNotFoundIsReported()
     {
         // Given an empty scope store (AF-31a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -185,7 +185,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given a logically deleted scope (AF-31a)
         var (scopes, scope) = await ScopeStoreAsync(isDeleted: true);
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions);
 
         // When
@@ -202,7 +202,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given the ownership checker rejects the acting ScopeAdmin (AF-31e)
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var handler = Handler(scopes, permissions, OwnershipChecker(allowed: false));
 
         // When
@@ -220,7 +220,7 @@ public class CreateScopePermissionCommandHandlerTests
     {
         // Given a validator that rejects the command (AF-31d)
         var (scopes, scope) = await ScopeStoreAsync();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var validator = new Mock<IValidator<CreateScopePermissionCommand>>();
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<CreateScopePermissionCommand>(), It.IsAny<CancellationToken>()))

@@ -9,7 +9,7 @@ namespace ArturRios.Heimdall.Shared.Services;
 ///     Default <see cref="IScopeOwnershipChecker" />: a System Admin bypasses ownership; any other
 ///     actor is authorized only when a <c>SCOPE_OWNER</c> row links their person id to the scope.
 /// </summary>
-public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person> personReader) : IScopeOwnershipChecker
+public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person, long> personReader) : IScopeOwnershipChecker
 {
     public async Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId)
     {

@@ -50,9 +50,9 @@ public class ListScopePersonsQueryHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<Scope>> ScopesWith(params Scope[] scopes)
+    private static async Task<AsyncFakeRepository<Scope, long>> ScopesWith(params Scope[] scopes)
     {
-        var repository = new AsyncFakeRepository<Scope>();
+        var repository = new AsyncFakeRepository<Scope, long>();
 
         foreach (var scope in scopes)
         {
@@ -62,9 +62,9 @@ public class ListScopePersonsQueryHandlerTests
         return repository;
     }
 
-    private static async Task<AsyncFakeRepository<Person>> PersonsWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> PersonsWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {

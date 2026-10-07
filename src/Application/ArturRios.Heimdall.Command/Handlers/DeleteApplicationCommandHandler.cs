@@ -20,8 +20,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     than thrown.
 /// </summary>
 public class DeleteApplicationCommandHandler(
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter)
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncRepository<Application, long> applicationWriter)
     : ICommandHandlerAsync<DeleteApplicationCommand, DeleteApplicationCommandOutput>
 {
     public async Task<DataOutput<DeleteApplicationCommandOutput?>> HandleAsync(DeleteApplicationCommand command, CancellationToken cancellationToken = default)

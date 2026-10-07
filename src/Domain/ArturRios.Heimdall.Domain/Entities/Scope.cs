@@ -7,12 +7,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     A logical tenant boundary that groups the owners, users, applications, and Google Users
 ///     belonging to a specific client system.
 /// </summary>
-public class Scope : Entity
+public class Scope : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the scope is addressed
     ///     from outside the database (API paths, response bodies, token claims). The internal
-    ///     <see cref="Entity.Id" /> is never exposed to callers.
+    ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

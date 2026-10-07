@@ -15,7 +15,7 @@ public class ScopeOwnershipCheckerTests
     public async Task GivenSystemAdminActor_WhenCheckingScopeManagement_ThenAllowedWithoutOwnership()
     {
         // Given a store with no ownership rows for the actor
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var checker = new ScopeOwnershipChecker(persons);
 
         // When a System Admin (any person id, any scope) is checked
@@ -29,7 +29,7 @@ public class ScopeOwnershipCheckerTests
     public async Task GivenScopeAdminOwningScope_WhenCheckingScopeManagement_ThenAllowed()
     {
         // Given a ScopeAdmin who owns scope 1
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var actor = new Person
         {
             RoleId = (long)Roles.ScopeAdmin,
@@ -51,7 +51,7 @@ public class ScopeOwnershipCheckerTests
         // Given a logically deleted ScopeAdmin who still has a SCOPE_OWNER row for scope 1. They can
         // no longer authenticate (UC-11 AF-11c), so a token issued before their deletion must not
         // keep working.
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var actor = new Person
         {
             RoleId = (long)Roles.ScopeAdmin,
@@ -72,7 +72,7 @@ public class ScopeOwnershipCheckerTests
     public async Task GivenScopeAdminNotOwningScope_WhenCheckingScopeManagement_ThenNotAllowed()
     {
         // Given a ScopeAdmin who owns no scope
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var actor = new Person { RoleId = (long)Roles.ScopeAdmin };
         await persons.CreateAsync(actor);
         var checker = new ScopeOwnershipChecker(persons);

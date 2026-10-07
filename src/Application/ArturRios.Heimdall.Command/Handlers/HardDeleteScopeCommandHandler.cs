@@ -20,15 +20,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class HardDeleteScopeCommandHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncRepository<Scope> scopeWriter,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter,
-    IAsyncReadOnlyRepository<ScopePermission> scopePermissionReader)
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncRepository<Scope, long> scopeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncRepository<Application, long> applicationWriter,
+    IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -99,7 +99,7 @@ public class HardDeleteScopeCommandHandler(
     /// </summary>
     private static async Task<IEnumerable<string>> DeleteAllAsync<T>(
         IReadOnlyCollection<T> members,
-        IAsyncRepository<T> writer) where T : Entity
+        IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         if (members.Count == 0)
         {

@@ -7,11 +7,11 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     A named permission level referenced by a <see cref="Person" /> via its <c>RoleId</c>.
 ///     The name is one of <c>User</c>, <c>ScopeAdmin</c>, or <c>SystemAdmin</c>.
 /// </summary>
-public class Role : Entity
+public class Role : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the role is addressed
-    ///     from outside the database. The internal <see cref="Entity.Id" /> is never exposed to callers.
+    ///     from outside the database. The internal <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

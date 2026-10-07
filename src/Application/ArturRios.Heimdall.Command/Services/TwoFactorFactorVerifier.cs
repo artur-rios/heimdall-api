@@ -9,9 +9,9 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <inheritdoc cref="ITwoFactorFactorVerifier" />
 public class TwoFactorFactorVerifier(
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
     ITotpCodeVerifier totpCodeVerifier) : ITwoFactorFactorVerifier
 {
     public async Task<TwoFactorFactorVerificationResult> VerifyAsync(

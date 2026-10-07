@@ -61,9 +61,9 @@ public class ListScopeAdminsQueryHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<T>> RepositoryWith<T>(params T[] items) where T : Entity
+    private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {
-        var repository = new AsyncFakeRepository<T>();
+        var repository = new AsyncFakeRepository<T, long>();
 
         foreach (var item in items)
         {
@@ -83,7 +83,7 @@ public class ListScopeAdminsQueryHandlerTests
     };
 
     private static ListScopeAdminsQueryHandler HandlerFor(
-        AsyncFakeRepository<Scope> scopes, AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true) =>
         new(scopes, persons, Ownership(ownershipAllowed), new ListScopeAdminsQueryValidator());
 
     [UnitFact]

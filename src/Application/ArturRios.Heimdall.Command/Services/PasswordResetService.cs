@@ -23,7 +23,7 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     </para>
 /// </remarks>
 public class PasswordResetService(
-    IAsyncRepository<PasswordResetToken> tokenWriter,
+    IAsyncRepository<PasswordResetToken, long> tokenWriter,
     IPasswordResetSender sender,
     PasswordResetOptions options)
     : IPasswordResetService

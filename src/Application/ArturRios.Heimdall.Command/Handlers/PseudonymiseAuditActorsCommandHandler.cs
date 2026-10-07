@@ -44,10 +44,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class PseudonymiseAuditActorsCommandHandler(
-    IAsyncReadOnlyRepository<AuditLog> auditReader,
-    IAsyncRepository<AuditLog> auditWriter,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
+    IAsyncReadOnlyRepository<AuditLog, long> auditReader,
+    IAsyncRepository<AuditLog, long> auditWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PseudonymiseAuditActorsCommand, PseudonymiseAuditActorsCommandOutput>
 {

@@ -41,10 +41,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class LoginCommandHandler(
     IValidator<LoginCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITwoFactorChallengeTokenIssuer challengeTokenIssuer,
     PersonAuthTokenService personAuthTokenService)

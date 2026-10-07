@@ -35,9 +35,9 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
     private static PurgeExpiredTokensCommandHandler Handler(AppDbContext context)
     {
-        var passwordResetTokens = new EfRepository<PasswordResetToken>(context);
-        var emailVerificationTokens = new EfRepository<EmailVerificationToken>(context);
-        var twoFactorEmailCodes = new EfRepository<TwoFactorEmailCode>(context);
+        var passwordResetTokens = new EfRepository<PasswordResetToken, long>(context);
+        var emailVerificationTokens = new EfRepository<EmailVerificationToken, long>(context);
+        var twoFactorEmailCodes = new EfRepository<TwoFactorEmailCode, long>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,

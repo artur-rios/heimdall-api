@@ -15,7 +15,7 @@ public class DatabaseHealthCheckTests
     public async Task GivenReachableDatabase_WhenCheckingHealth_ThenReportsHealthy()
     {
         // Given a working repository, standing in for a reachable database
-        var repository = new AsyncFakeRepository<Role>();
+        var repository = new AsyncFakeRepository<Role, long>();
         var check = new DatabaseHealthCheck(repository);
 
         // When
@@ -40,7 +40,7 @@ public class DatabaseHealthCheckTests
     }
 
     // Minimal read-only repository whose read throws — models a database that cannot be reached.
-    private sealed class ThrowingRoleRepository : IAsyncReadOnlyRepository<Role>
+    private sealed class ThrowingRoleRepository : IAsyncReadOnlyRepository<Role, long>
     {
         public IQueryable<Role> Query() => throw new InvalidOperationException("Database unreachable");
 

@@ -42,12 +42,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class PurgeExpiredTokensCommandHandler(
-    IAsyncReadOnlyRepository<PasswordResetToken> passwordResetTokenReader,
-    IAsyncRepository<PasswordResetToken> passwordResetTokenWriter,
-    IAsyncReadOnlyRepository<EmailVerificationToken> emailVerificationTokenReader,
-    IAsyncRepository<EmailVerificationToken> emailVerificationTokenWriter,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> twoFactorEmailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> twoFactorEmailCodeWriter,
+    IAsyncReadOnlyRepository<PasswordResetToken, long> passwordResetTokenReader,
+    IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
+    IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> twoFactorEmailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode, long> twoFactorEmailCodeWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -106,7 +106,7 @@ public class PurgeExpiredTokensCommandHandler(
     /// </summary>
     private async Task<(int Count, IEnumerable<string> Errors)> PurgeAsync<T>(
         IQueryable<T> candidates,
-        IAsyncRepository<T> writer) where T : Entity
+        IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         var ids = await candidates
             .Take(retention.PurgeBatchSize)

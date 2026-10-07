@@ -25,10 +25,10 @@ public class RegenerateRecoveryCodesCommandHandlerTests
     private const string EmailCode = "123456";
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
         Mock<ITotpSecretProtector> Protector,
         Person Person)
     {
@@ -56,7 +56,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(), Name = "person", Email = "person@test.local", RoleId = (long)Roles.User
@@ -68,9 +68,9 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorRecoveryCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            new AsyncFakeRepository<TwoFactorRecoveryCode, long>(),
             protector,
             person);
     }

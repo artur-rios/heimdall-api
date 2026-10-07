@@ -5,10 +5,10 @@ namespace ArturRios.Heimdall.Domain.Entities;
 
 /// <summary>
 ///     A time-limited, single-use token issued for a password reset. Never addressed by its
-///     internal <see cref="Entity.Id" />; the caller-facing reference is the random token string
+///     internal <see cref="Entity{TKey}.Id" />; the caller-facing reference is the random token string
 ///     delivered by email, so it has no <c>PublicId</c>.
 /// </summary>
-public class PasswordResetToken : Entity
+public class PasswordResetToken : Entity<long>
 {
     /// <summary>Foreign key to the associated <see cref="Person" /> (internal Id). Required.</summary>
     public long PersonId { get; set; }

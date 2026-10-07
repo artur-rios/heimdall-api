@@ -41,8 +41,8 @@ public static class TwoFactorEmailCodeVerification
     ///     budget remained.
     /// </returns>
     public static async Task<TwoFactorEmailCode?> FindMatchingAsync(
-        IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-        IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
+        IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+        IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
         long twoFactorAuthId,
         string? code)
     {

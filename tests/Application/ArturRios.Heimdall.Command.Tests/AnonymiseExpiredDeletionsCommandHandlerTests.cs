@@ -30,11 +30,11 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     };
 
     private sealed record Fakes(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<GoogleUser> GoogleUsers,
-        AsyncFakeRepository<PasswordResetToken> PasswordResetTokens,
-        AsyncFakeRepository<EmailVerificationToken> EmailVerificationTokens,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths)
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers,
+        AsyncFakeRepository<PasswordResetToken, long> PasswordResetTokens,
+        AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths)
     {
         public static Fakes New() => new(new(), new(), new(), new(), new());
 

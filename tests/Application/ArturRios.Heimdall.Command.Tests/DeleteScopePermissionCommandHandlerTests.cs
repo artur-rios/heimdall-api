@@ -30,7 +30,7 @@ public class DeleteScopePermissionCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
@@ -38,7 +38,7 @@ public class DeleteScopePermissionCommandHandlerTests
     }
 
     private static async Task<ScopePermission> SeedPermissionAsync(
-        AsyncFakeRepository<ScopePermission> permissions, Scope scope, bool isDeleted = false)
+        AsyncFakeRepository<ScopePermission, long> permissions, Scope scope, bool isDeleted = false)
     {
         var permission = new ScopePermission
         {
@@ -65,19 +65,19 @@ public class DeleteScopePermissionCommandHandlerTests
     };
 
     private static DeleteScopePermissionCommandHandler Handler(
-        AsyncFakeRepository<ScopePermission> permissions, IScopeOwnershipChecker? ownership = null) =>
+        AsyncFakeRepository<ScopePermission, long> permissions, IScopeOwnershipChecker? ownership = null) =>
         new(permissions, permissions, ownership ?? OwnershipChecker());
 
     private static async Task<ScopePermission> StoredAsync(
-        AsyncFakeRepository<ScopePermission> permissions, Guid publicId) =>
+        AsyncFakeRepository<ScopePermission, long> permissions, Guid publicId) =>
         (await permissions.GetAllAsync()).Data!.Single(p => p.PublicId == publicId);
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingDeleteScopePermission_ThenPermissionIsLogicallyDeleted()
     {
         // Given an active permission (UC-34 main flow)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -98,8 +98,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenOwningScopeAdmin_WhenHandlingDeleteScopePermission_ThenPermissionIsLogicallyDeleted()
     {
         // Given a ScopeAdmin who owns the scope deleting the permission (UC-34 step 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var caller = Guid.NewGuid();
@@ -119,8 +119,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenActivePermission_WhenHandlingDeleteScopePermission_ThenUpdatedAtIsStampedAndCreatedAtIsNot()
     {
         // Given an existing permission (UC-34 step 3: no DB trigger maintains UpdatedAt)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var createdAt = permission.CreatedAt;
@@ -143,8 +143,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenAlreadyDeletedPermission_WhenHandlingDeleteScopePermission_ThenSuccessReportsAlreadyDeleted()
     {
         // Given a permission that is already logically deleted (AF-34b: idempotent)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope, isDeleted: true);
         var handler = Handler(permissions);
@@ -165,8 +165,8 @@ public class DeleteScopePermissionCommandHandlerTests
     {
         // Given an already-deleted permission: the row carries the state the request asks for, so
         // re-stamping UpdatedAt would misreport when the deletion happened
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope, isDeleted: true);
         var handler = Handler(permissions);
@@ -185,8 +185,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenUnknownPermission_WhenHandlingDeleteScopePermission_ThenNotFoundIsReported()
     {
         // Given a permission id nobody holds (AF-34a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -206,8 +206,8 @@ public class DeleteScopePermissionCommandHandlerTests
     {
         // Given a permission that exists, but under a different scope than the path addresses:
         // qualified by the route's scopeId (AF-34a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var permission = await SeedPermissionAsync(permissions, otherScope);
@@ -227,8 +227,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingDeleteScopePermission_ThenNotFoundIsReported()
     {
         // Given a scope id nobody holds: an unknown scope is the same one 404 (AF-34a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -247,8 +247,8 @@ public class DeleteScopePermissionCommandHandlerTests
     public async Task GivenNonOwningScopeAdmin_WhenHandlingDeleteScopePermission_ThenNotScopeOwnerIsReported()
     {
         // Given the ownership checker rejects the acting ScopeAdmin (AF-34e)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions, OwnershipChecker(allowed: false));
@@ -272,8 +272,8 @@ public class DeleteScopePermissionCommandHandlerTests
         // Given a non-owner addressing an already-deleted permission: authorization runs before the
         // AF-34b no-op, so the idempotent success cannot be used to probe scopes the caller may not
         // act on
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope, isDeleted: true);
         var handler = Handler(permissions, OwnershipChecker(allowed: false));

@@ -157,13 +157,13 @@ key, so an entry survives the hard deletion of the person who made the write.
 
 ## Common shape
 
-Every entity above derives from `Entity`, which contributes the internal key, and each one that is
+Every entity above derives from `Entity<long>`, which contributes the internal key, and each one that is
 addressable from outside also carries timestamps:
 
 ```mermaid
 classDiagram
     direction LR
-    class Entity {
+    class Entity~long~ {
         <<abstract>>
         +long Id
     }
@@ -173,7 +173,7 @@ classDiagram
         +DateTime CreatedAt
         +DateTime UpdatedAt
     }
-    Entity <|-- AddressableEntity
+    Entity~long~ <|-- AddressableEntity
 ```
 
 `Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission` and `AuditLog` follow the

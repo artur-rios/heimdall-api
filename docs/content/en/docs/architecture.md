@@ -54,8 +54,8 @@ graph TB
 ```
 
 The arrows only ever point inwards or sideways: **Domain depends on nothing**, and Application
-depends on Infrastructure only through repository *interfaces* (`IAsyncRepository<T>`,
-`IAsyncReadOnlyRepository<T>`) that Infrastructure implements. Presentation supplies the concrete
+depends on Infrastructure only through repository *interfaces* (`IAsyncRepository<T, long>`,
+`IAsyncReadOnlyRepository<T, long>`) that Infrastructure implements. Presentation supplies the concrete
 adapters for the abstractions the Application layer declares — `IAuthTokenIssuer`,
 `IEmailVerificationSender`, `IGoogleIdTokenVerifier` — which is why swapping Mailgun for logging, or
 the real Google verifier for the refusing one, is a start-up registration decision and nothing else.
@@ -177,7 +177,7 @@ value, or the column and its type. Nothing stable could be keyed off that, so ev
 through to the 400 default — a duplicate that lost a race and a database that had gone away were
 both reported as bad requests, and the message leaked schema detail to the caller.
 
-`ArturRios.Data.Relational.Core` 4.0.0 classifies each failure into one of five fixed, caller-safe
+`ArturRios.Data.Relational.Core` (since 4.0.0) classifies each failure into one of five fixed, caller-safe
 messages instead, reading the provider text only to decide which. `DataAccessMessageMap` folds four
 of them into every use case's map:
 
@@ -289,7 +289,7 @@ query reaches the database.
 
 `AppDbContext` applies one **entity map** per entity (`PersonDbMap`, `ScopeDbMap`, …) rather than
 annotating the domain classes, keeping storage concerns out of the domain. Handlers never touch the
-context: they depend on `IAsyncRepository<T>` for writes and `IAsyncReadOnlyRepository<T>` for reads,
+context: they depend on `IAsyncRepository<T, long>` for writes and `IAsyncReadOnlyRepository<T, long>` for reads,
 the latter exposing `Query()` so a handler can compose an `IQueryable` and let the database do the
 filtering.
 

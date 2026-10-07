@@ -38,9 +38,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ResendVerificationEmailCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<EmailVerificationToken> tokenReader,
-    IAsyncRepository<EmailVerificationToken> tokenWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
+    IAsyncRepository<EmailVerificationToken, long> tokenWriter,
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>
 {

@@ -22,8 +22,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     the scope is AF-17b (<c>NotScopeOwner</c>).
 /// </summary>
 public class ListScopeApplicationsQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Application> applicationReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopeApplicationsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>

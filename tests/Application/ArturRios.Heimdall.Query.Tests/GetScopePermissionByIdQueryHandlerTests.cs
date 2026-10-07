@@ -46,10 +46,10 @@ public class GetScopePermissionByIdQueryHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<ScopePermission>> PermissionsWith(
+    private static async Task<AsyncFakeRepository<ScopePermission, long>> PermissionsWith(
         params ScopePermission[] permissions)
     {
-        var repository = new AsyncFakeRepository<ScopePermission>();
+        var repository = new AsyncFakeRepository<ScopePermission, long>();
 
         foreach (var permission in permissions)
         {

@@ -32,7 +32,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     succeeds.
 ///     <para>
 ///         <b>Write order.</b> The replacements are inserted before the old set is deleted, in a
-///         single <see cref="IAsyncRepository{T}.CreateRangeAsync" /> rather than ten inserts. The
+///         single <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten inserts. The
 ///         repository layer exposes no transaction, so ordering is what decides which way a partial
 ///         failure falls: delete-then-create can leave an account with no recovery codes at all,
 ///         while create-then-delete leaves it with the set the caller already holds — the state it
@@ -41,10 +41,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class RegenerateRecoveryCodesCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
-    IAsyncRepository<TwoFactorRecoveryCode> recoveryCodeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
+    IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
     ITwoFactorFactorVerifier factorVerifier)
     : ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>
 {

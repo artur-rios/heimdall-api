@@ -19,8 +19,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     A System Admin bypasses the ownership check.
 /// </summary>
 public class ListScopePersonsQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopePersonsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopePersonsQuery, PersonOutput>

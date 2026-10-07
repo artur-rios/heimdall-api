@@ -24,10 +24,10 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     private const string EmailCode = "123456";
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
         Mock<ITotpSecretProtector> Protector,
         Person Person)
     {
@@ -56,7 +56,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -71,9 +71,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorRecoveryCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            new AsyncFakeRepository<TwoFactorRecoveryCode, long>(),
             protector,
             person);
     }
@@ -179,9 +179,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     ///     cannot issue the codes it is about to promise.
     /// </summary>
     private sealed class FailingRecoveryCodeRepository
-        : AsyncFakeRepository<TwoFactorRecoveryCode>, IAsyncRepository<TwoFactorRecoveryCode>
+        : AsyncFakeRepository<TwoFactorRecoveryCode, long>, IAsyncRepository<TwoFactorRecoveryCode, long>
     {
-        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<TwoFactorRecoveryCode>.CreateRangeAsync(
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<TwoFactorRecoveryCode, long>.CreateRangeAsync(
             IEnumerable<TwoFactorRecoveryCode> entities, CancellationToken cancellationToken) =>
             Task.FromResult(DataOutput<IEnumerable<long>>.New
                 .WithError("recovery codes could not be written"));

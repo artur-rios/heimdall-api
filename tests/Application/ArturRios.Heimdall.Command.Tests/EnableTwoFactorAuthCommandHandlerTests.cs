@@ -21,9 +21,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
     private static readonly byte[] EncryptedSecret = [1, 2, 3, 4];
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
         Mock<ITotpSecretProtector> Protector,
         Mock<ITwoFactorEmailSender> EmailSender,
         Person Person)
@@ -48,7 +48,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync(string email = "person@test.local")
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -63,8 +63,8 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
             protector,
             new Mock<ITwoFactorEmailSender>(),
             person);

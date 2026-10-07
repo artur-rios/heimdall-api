@@ -33,8 +33,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class ListScopeAdminsQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopeAdminsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>

@@ -10,12 +10,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     owner/user join tables, since it never needs ownership or multi-scope semantics. Has no
 ///     <c>PasswordHash</c>, <c>Salt</c>, or <c>RoleId</c> — authentication is delegated to Google.
 /// </summary>
-public class GoogleUser : Entity
+public class GoogleUser : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the Google User is
     ///     addressed from outside the database (API paths, response bodies, token claims). The
-    ///     internal <see cref="Entity.Id" /> is never exposed to callers.
+    ///     internal <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

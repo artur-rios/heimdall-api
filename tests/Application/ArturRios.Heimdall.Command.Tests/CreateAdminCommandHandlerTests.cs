@@ -38,7 +38,7 @@ public class CreateAdminCommandHandlerTests
     public async Task GivenUniqueEmail_WhenHandlingCreateAdmin_ThenScopeAdminIsCreatedWithoutJoinRow()
     {
         // Given
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);
         var command = Command((int)Roles.ScopeAdmin);
@@ -68,7 +68,7 @@ public class CreateAdminCommandHandlerTests
     [UnitFact]
     public async Task GivenSystemAdminRole_WhenHandlingCreateAdmin_ThenSystemAdminIsCreated()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);
 
@@ -83,7 +83,7 @@ public class CreateAdminCommandHandlerTests
     public async Task GivenExistingAdminEmail_WhenHandlingCreateAdmin_ThenReturnsEmailAlreadyExists()
     {
         // Given an existing ScopeAdmin with the same email (AF-06a)
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command((int)Roles.ScopeAdmin);
         await persons.CreateAsync(new Person
         {
@@ -106,7 +106,7 @@ public class CreateAdminCommandHandlerTests
     {
         // Given an existing ScopeAdmin whose email differs from the request only by case (AF-06a is
         // case-insensitive)
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command((int)Roles.ScopeAdmin);
         await persons.CreateAsync(new Person
         {

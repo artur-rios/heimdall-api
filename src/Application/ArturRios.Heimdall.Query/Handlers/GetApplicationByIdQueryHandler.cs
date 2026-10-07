@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (<c>ApplicationNotFound</c>); an application the caller may not see is AF-17b
 ///     (<c>NotAuthorizedToViewApplication</c>). Both are returned as errors rather than thrown.
 /// </summary>
-public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application> applicationReader)
+public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application, long> applicationReader)
     : IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>
 {
     public async Task<DataOutput<ApplicationOutput?>> HandleAsync(GetApplicationByIdQuery query, CancellationToken cancellationToken = default)

@@ -25,13 +25,13 @@ public class DetectSecuritySignalsQueryHandlerTests
     };
 
     private static DetectSecuritySignalsQueryHandler Handler(
-        AsyncFakeRepository<AuditLog> entries,
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<AuditLog, long> entries,
+        AsyncFakeRepository<Person, long> persons,
         DataRetentionOptions? options = null) =>
         new(entries, persons, options ?? Options());
 
     private static async Task SeedRefusalsAsync(
-        AsyncFakeRepository<AuditLog> entries, Guid actorId, int count, TimeSpan age, string? reason = null)
+        AsyncFakeRepository<AuditLog, long> entries, Guid actorId, int count, TimeSpan age, string? reason = null)
     {
         for (var i = 0; i < count; i++)
         {
@@ -47,7 +47,7 @@ public class DetectSecuritySignalsQueryHandlerTests
         }
     }
 
-    private static async Task SeedLockedOutAsync(AsyncFakeRepository<Person> persons, int count)
+    private static async Task SeedLockedOutAsync(AsyncFakeRepository<Person, long> persons, int count)
     {
         for (var i = 0; i < count; i++)
         {
@@ -65,7 +65,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     [UnitFact]
     public async Task GivenSustainedRefusalsByOneActor_WhenDetecting_ThenASignalIsRaised()
     {
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
         var actor = Guid.NewGuid();
         await SeedRefusalsAsync(entries, actor, count: 6, age: TimeSpan.FromMinutes(2));
 
@@ -82,7 +82,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     public async Task GivenTheSameRefusalsSpreadBeyondTheWindow_WhenDetecting_ThenNothingIsRaised()
     {
         // The distinction the whole design rests on: a total would alert here, and it should not.
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
         await SeedRefusalsAsync(entries, Guid.NewGuid(), count: 20, age: TimeSpan.FromDays(30));
 
         var output = await Handler(entries, new()).HandleAsync(new DetectSecuritySignalsQuery());
@@ -93,7 +93,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     [UnitFact]
     public async Task GivenRefusalsBelowTheThreshold_WhenDetecting_ThenNothingIsRaised()
     {
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
         await SeedRefusalsAsync(entries, Guid.NewGuid(), count: 2, age: TimeSpan.FromMinutes(1));
 
         var output = await Handler(entries, new()).HandleAsync(new DetectSecuritySignalsQuery());
@@ -105,7 +105,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     public async Task GivenRefusalsSpreadAcrossManyActors_WhenDetecting_ThenNoOneActorTriggers()
     {
         // Grouping by actor is what makes this "somebody probing" rather than "a busy afternoon"
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
 
         for (var i = 0; i < 10; i++)
         {
@@ -121,7 +121,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     public async Task GivenAnonymousRefusals_WhenDetecting_ThenTheyAreNotGrouped()
     {
         // An anonymous write has no actor to group by, and the per-IP limiter is what bounds them
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
 
         for (var i = 0; i < 20; i++)
         {
@@ -144,7 +144,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     [UnitFact]
     public async Task GivenManyAccountsLockedOutAtOnce_WhenDetecting_ThenASignalIsRaised()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         await SeedLockedOutAsync(persons, count: 4);
 
         var output = await Handler(new(), persons).HandleAsync(new DetectSecuritySignalsQuery());
@@ -160,7 +160,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     public async Task GivenAnExpiredLockout_WhenDetecting_ThenItIsNotCounted()
     {
         // A lockout that has already elapsed is history, not a signal
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
 
         for (var i = 0; i < 5; i++)
         {
@@ -184,7 +184,7 @@ public class DetectSecuritySignalsQueryHandlerTests
     {
         // TH-03's load condition, detectable from the trail because the gate's refusal reaches it as
         // a canonical message rather than as provider text
-        var entries = new AsyncFakeRepository<AuditLog>();
+        var entries = new AsyncFakeRepository<AuditLog, long>();
         await SeedRefusalsAsync(
             entries, Guid.NewGuid(), count: 6, age: TimeSpan.FromMinutes(1),
             reason: AuthMessages.AuthenticationTemporarilyUnavailable);

@@ -14,9 +14,9 @@ namespace ArturRios.Heimdall.Query.Tests;
 // found), AF-02b (caller may not view the scope), and the include-deleted behavior (FR-SC-07).
 public class GetScopeByIdQueryHandlerTests
 {
-    private static async Task<AsyncFakeRepository<Scope>> RepositoryWith(params Scope[] scopes)
+    private static async Task<AsyncFakeRepository<Scope, long>> RepositoryWith(params Scope[] scopes)
     {
-        var repository = new AsyncFakeRepository<Scope>();
+        var repository = new AsyncFakeRepository<Scope, long>();
 
         foreach (var scope in scopes)
         {

@@ -12,9 +12,9 @@ namespace ArturRios.Heimdall.Query.Tests;
 // Cover the main flow (pagination + filtering, FR-SC-03) and the include-deleted behavior (FR-SC-07).
 public class ListScopesQueryHandlerTests
 {
-    private static async Task<AsyncFakeRepository<Scope>> RepositoryWith(params Scope[] scopes)
+    private static async Task<AsyncFakeRepository<Scope, long>> RepositoryWith(params Scope[] scopes)
     {
-        var repository = new AsyncFakeRepository<Scope>();
+        var repository = new AsyncFakeRepository<Scope, long>();
 
         foreach (var scope in scopes)
         {

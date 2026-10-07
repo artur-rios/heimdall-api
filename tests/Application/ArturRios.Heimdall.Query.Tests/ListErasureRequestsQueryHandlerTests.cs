@@ -14,14 +14,14 @@ namespace ArturRios.Heimdall.Query.Tests;
 public class ListErasureRequestsQueryHandlerTests
 {
     private static ListErasureRequestsQueryHandler Handler(
-        AsyncFakeRepository<Person> persons, AsyncFakeRepository<GoogleUser> googleUsers) =>
+        AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers) =>
         new(persons, googleUsers, new ListErasureRequestsQueryValidator());
 
     private static ListErasureRequestsQuery Query(bool overdueOnly = false) =>
         new() { PageNumber = 1, PageSize = 20, OverdueOnly = overdueOnly };
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Person, long> persons,
         DateTime? requestedAt,
         DateTime? dueAt,
         string? blockedReason = null,
@@ -46,8 +46,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenOutstandingRequests_WhenListing_ThenTheyAreReturnedSoonestDeadlineFirst()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var later = await SeedPersonAsync(persons, DateTime.UtcNow, DateTime.UtcNow.AddDays(20));
         var sooner = await SeedPersonAsync(persons, DateTime.UtcNow, DateTime.UtcNow.AddDays(5));
 
@@ -66,8 +66,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenAnAlreadyAnonymisedRequest_WhenListing_ThenItIsNotOutstanding()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedPersonAsync(
             persons, DateTime.UtcNow.AddDays(-40), DateTime.UtcNow.AddDays(-10),
             anonymisedAt: DateTime.UtcNow.AddDays(-9));
@@ -80,8 +80,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenAnIdentityThatNeverAsked_WhenListing_ThenItIsNotIncluded()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedPersonAsync(persons, requestedAt: null, dueAt: null);
 
         var output = await Handler(persons, googleUsers).HandleAsync(Query());
@@ -92,8 +92,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenAPassedDeadline_WhenListing_ThenTheRequestIsMarkedOverdue()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedPersonAsync(persons, DateTime.UtcNow.AddDays(-40), DateTime.UtcNow.AddDays(-10));
 
         var output = await Handler(persons, googleUsers).HandleAsync(Query());
@@ -104,8 +104,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenOverdueOnly_WhenListing_ThenOnlyLateRequestsAreReturned()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var late = await SeedPersonAsync(persons, DateTime.UtcNow.AddDays(-40), DateTime.UtcNow.AddDays(-10));
         await SeedPersonAsync(persons, DateTime.UtcNow, DateTime.UtcNow.AddDays(20));
 
@@ -119,8 +119,8 @@ public class ListErasureRequestsQueryHandlerTests
     {
         // The blocked ones are why this queue exists: they need an owner transferred before the
         // pass can carry them out.
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedPersonAsync(
             persons, DateTime.UtcNow, DateTime.UtcNow.AddDays(30),
             blockedReason: ErasureMessages.BlockedByLastScopeOwnership);
@@ -133,8 +133,8 @@ public class ListErasureRequestsQueryHandlerTests
     [UnitFact]
     public async Task GivenAGoogleUsersRequest_WhenListing_ThenItAppearsAlongsideThePersons()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = new GoogleUser
         {
             PublicId = Guid.NewGuid(),
@@ -159,8 +159,8 @@ public class ListErasureRequestsQueryHandlerTests
     {
         // The subject has asked to be erased; a queue an administrator works from is the last place
         // to widen who sees their details. The projection carries no field for either.
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedPersonAsync(persons, DateTime.UtcNow, DateTime.UtcNow.AddDays(30));
 
         var output = await Handler(persons, googleUsers).HandleAsync(Query());

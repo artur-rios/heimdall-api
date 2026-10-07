@@ -36,9 +36,9 @@ public class CreateUserCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<(AsyncFakeRepository<Scope> scopes, Scope scope)> ScopeStoreAsync()
+    private static async Task<(AsyncFakeRepository<Scope, long> scopes, Scope scope)> ScopeStoreAsync()
     {
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = false };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
@@ -62,9 +62,9 @@ public class CreateUserCommandHandlerTests
         // while this handler ignored the GOOGLE_USER table entirely — so the scope ended up with two
         // identities for one address, each with its own PublicId and its own way in.
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         await googleUsers.CreateAsync(new GoogleUser
@@ -99,9 +99,9 @@ public class CreateUserCommandHandlerTests
         var otherScope = new Scope { PublicId = Guid.NewGuid(), Name = "Other" };
         await scopes.CreateAsync(otherScope);
 
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
 
         await googleUsers.CreateAsync(new GoogleUser
@@ -129,9 +129,9 @@ public class CreateUserCommandHandlerTests
     {
         // Given a SystemAdmin actor (ownership allowed) and an empty scope
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(),
             email.Object);
@@ -159,9 +159,9 @@ public class CreateUserCommandHandlerTests
     {
         // Given the ownership checker allows the actor (e.g. a ScopeAdmin who owns the scope)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(allowed: true),
             email.Object);
@@ -179,9 +179,9 @@ public class CreateUserCommandHandlerTests
     {
         // Given the ownership checker rejects the actor (AF-06e)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(allowed: false),
             email.Object);
@@ -199,10 +199,10 @@ public class CreateUserCommandHandlerTests
     public async Task GivenMissingScope_WhenHandlingCreateUser_ThenReturnsScopeNotFound()
     {
         // Given an empty scope store (AF-06b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(),
             email.Object);
@@ -220,7 +220,7 @@ public class CreateUserCommandHandlerTests
     {
         // Given a scope that already has a User with the target email (AF-06a)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
@@ -230,7 +230,7 @@ public class CreateUserCommandHandlerTests
             ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(),
             email.Object);
@@ -249,7 +249,7 @@ public class CreateUserCommandHandlerTests
         // Given a scope User whose email differs from the request only by case (AF-06a is
         // case-insensitive)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
@@ -259,7 +259,7 @@ public class CreateUserCommandHandlerTests
             ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new CreateUserCommandHandler(
             ValidValidator().Object, scopes, persons, googleUsers, persons, OwnershipChecker(),
             email.Object);

@@ -61,9 +61,9 @@ public class LoginCommandHandlerTests
         return person;
     }
 
-    private static async Task<AsyncFakeRepository<Person>> PersonsWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> PersonsWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {
@@ -115,9 +115,9 @@ public class LoginCommandHandlerTests
     }
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
         RecordingIssuer TokenIssuer,
         RecordingChallengeTokenIssuer ChallengeTokenIssuer)
     {
@@ -136,15 +136,15 @@ public class LoginCommandHandlerTests
                 new PersonAuthTokenService(TokenIssuer));
     }
 
-    private static Fixture FixtureFor(AsyncFakeRepository<Person> persons) =>
-        new(persons, new AsyncFakeRepository<TwoFactorAuth>(), new AsyncFakeRepository<TwoFactorEmailCode>(),
+    private static Fixture FixtureFor(AsyncFakeRepository<Person, long> persons) =>
+        new(persons, new AsyncFakeRepository<TwoFactorAuth, long>(), new AsyncFakeRepository<TwoFactorEmailCode, long>(),
             new RecordingIssuer(), new RecordingChallengeTokenIssuer());
 
     private static LoginCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons, IAuthTokenIssuer issuer)
+        AsyncFakeRepository<Person, long> persons, IAuthTokenIssuer issuer)
     {
-        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
-        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth, long>();
+        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
 
         return new LoginCommandHandler(
             ValidValidator().Object,
@@ -475,8 +475,8 @@ public class LoginCommandHandlerTests
             .ReturnsAsync(new ValidationResult([
                 new ValidationFailure(nameof(LoginCommand.Email), AuthMessages.EmailRequired)
             ]));
-        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
-        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth, long>();
+        var emailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
         var handler = new LoginCommandHandler(
             validator.Object,
             persons,

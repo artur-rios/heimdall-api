@@ -26,8 +26,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     guard against it would be a flow no document defines.
 /// </remarks>
 public class HardDeleteGoogleUserCommandHandler(
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter)
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter)
     : ICommandHandlerAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>
 {
     public async Task<DataOutput<HardDeleteGoogleUserCommandOutput?>> HandleAsync(

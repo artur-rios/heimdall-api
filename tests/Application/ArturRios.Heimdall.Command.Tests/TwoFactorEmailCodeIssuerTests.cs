@@ -19,7 +19,7 @@ public class TwoFactorEmailCodeIssuerTests
     private const string Email = "person@test.local";
 
     private sealed record Fixture(
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
         Mock<ITwoFactorEmailSender> Sender,
         TwoFactorAuth TwoFactorAuth)
     {
@@ -35,7 +35,7 @@ public class TwoFactorEmailCodeIssuerTests
     {
         var sender = new Mock<ITwoFactorEmailSender>();
         var fixture = new Fixture(
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
             sender,
             new TwoFactorAuth { Id = 7, PersonId = 10, IsActive = true, EmailEnabled = true });
 

@@ -9,12 +9,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     permission's <see cref="Name" /> is folded into the acting identity's JWT as a claim at
 ///     login. A scope's permissions are managed by that scope's owners or a System Admin.
 /// </summary>
-public class ScopePermission : Entity
+public class ScopePermission : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the permission is
     ///     addressed from outside the database (API paths, response bodies). The internal
-    ///     <see cref="Entity.Id" /> is never exposed to callers.
+    ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

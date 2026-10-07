@@ -22,8 +22,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class SetGoogleSignInCommandHandler(
     IValidator<SetGoogleSignInCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncRepository<Scope> scopeWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncRepository<Scope, long> scopeWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>
 {

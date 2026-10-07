@@ -35,9 +35,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class ResetPasswordCommandHandler(
     IValidator<ResetPasswordCommand> validator,
-    IAsyncReadOnlyRepository<PasswordResetToken> tokenReader,
-    IAsyncRepository<PasswordResetToken> tokenWriter,
-    IAsyncRepository<Person> personWriter)
+    IAsyncReadOnlyRepository<PasswordResetToken, long> tokenReader,
+    IAsyncRepository<PasswordResetToken, long> tokenWriter,
+    IAsyncRepository<Person, long> personWriter)
     : ICommandHandlerAsync<ResetPasswordCommand, ResetPasswordCommandOutput>
 {
     public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command, CancellationToken cancellationToken = default)
