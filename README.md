@@ -30,33 +30,6 @@ password recovery, email verification, and Google Sign-In for multiple client sy
 For the full picture — vision, requirements, use cases, the technology stack, and testing standards —
 see [Documentation](#documentation).
 
-## Project structure
-
-```
-api-client/                                     Ready-to-send requests for every endpoint
-  http/                                         JetBrains HTTP Client (.http) files
-  bruno/                                        Bruno collection
-docs/                                           Hugo (Docsy) documentation site — see Documentation
-  requirements/                                 Vision, requirements, use cases, tech stack, data protection, testing
-  content/en/                                   The site's own pages (overview, architecture, flows…)
-  openapi/                                      Generated OpenAPI document, published by the site
-  themes/docsy/                                 The site theme, as a git submodule
-scripts/                                        Tooling (EF Core migrations, coverage, OpenAPI)
-tools/ArturRios.Heimdall.OpenApiGen/            Writes docs/openapi/heimdall.json (not in the solution)
-src/
-  Domain/ArturRios.Heimdall.Domain/      Domain entities & enums
-  Application/
-    ArturRios.Heimdall.Command/          Command (write) handlers — CQRS
-    ArturRios.Heimdall.Query/            Query (read) handlers — CQRS
-    ArturRios.Heimdall.Shared/           Shared messages/contracts
-  Infrastructure/ArturRios.Heimdall.Data/ EF Core DbContext, entity maps, migrations, seeding
-  Presentation/ArturRios.Heimdall.WebApi/ ASP.NET Core Web API (entry point)
-  ArturRios.Heimdall.sln
-tests/                                          Test projects mirroring src/ (unit + functional)
-README.md
-LICENSE
-```
-
 ## Documentation
 
 The full documentation is published as a website:
@@ -66,42 +39,21 @@ The full documentation is published as a website:
 | --- | --- |
 | [Overview](https://artur-rios.github.io/heimdall-api/docs/overview/) | The domain vocabulary — scopes, persons, roles, applications, permissions — and the rules that bind them |
 | [Getting started](https://artur-rios.github.io/heimdall-api/docs/getting-started/) | Prerequisites, configuration, migrations, and running the API |
-| [Testing](https://artur-rios.github.io/heimdall-api/docs/testing/) | The unit and functional suites, conventions, and the flake hunter |
 | [Architecture](https://artur-rios.github.io/heimdall-api/docs/architecture/) | Layers, CQRS, the auditing decorator, and the request pipeline — with class diagrams |
 | [Domain model](https://artur-rios.github.io/heimdall-api/docs/domain-model/) | Entities, relationships, and deletion cascades — with a class diagram |
 | [API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/) | Every endpoint, who may call it, and the use case it implements |
 | [API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/) | Swagger UI over the generated OpenAPI document — parameters, schemas, and responses |
 | [Flows](https://artur-rios.github.io/heimdall-api/docs/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
 | [Operations](https://artur-rios.github.io/heimdall-api/docs/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
+| [Changelog](https://artur-rios.github.io/heimdall-api/docs/changelog/) | This repository's CHANGELOG.md, rendered |
+| [Contributing](https://artur-rios.github.io/heimdall-api/docs/contributing/) | This repository's CONTRIBUTING.md, rendered |
 
 The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme from
 `docs/`, and deployed to GitHub Pages by
-[`build-docs.yml`](.github/workflows/build-docs.yml) on every push to `main` that touches `docs/`.
-
-The API explorer renders `docs/openapi/heimdall.json`, which is generated and committed. Regenerate
-it after changing anything it describes:
-
-```bash
-python scripts/openapi.py
-```
-
-[`check-openapi.yml`](.github/workflows/check-openapi.yml) fails the build if it is out of date —
-otherwise a controller change would keep being published with the old document, since the docs site
-only rebuilds on changes under `docs/`.
-
-To preview it locally — Hugo Extended and Node.js 24+ required:
-
-```bash
-git submodule update --init --recursive
-```
-
-```bash
-npm install --prefix docs/themes/docsy
-```
-
-```bash
-hugo -s docs server
-```
+[`build-docs.yml`](.github/workflows/build-docs.yml) on every push to `main` that touches `docs/`,
+`CHANGELOG.md` or `CONTRIBUTING.md`, and after every successful Tests run on `main` (for the coverage report).
+Regenerating the OpenAPI document it publishes and previewing the site locally are covered in
+[CONTRIBUTING.md](./CONTRIBUTING.md#openapi-document).
 
 ### Requirements documents
 
@@ -372,6 +324,12 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
+| `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |
+| `HEIMDALL_TRUSTED_PROXIES` | Empty — `X-Forwarded-For` and `X-Forwarded-Proto` are ignored, and start-up warns. Behind a reverse proxy, set it to the proxy's addresses or CIDR networks (comma separated) so the rate limiter and the request log see the real caller |
+
+The data retention, security monitoring and database TLS settings are listed with their defaults under
+[Environment variables at a glance](https://artur-rios.github.io/heimdall-api/docs/operations/#environment-variables-at-a-glance)
+on the documentation site.
 
 ### Email delivery
 
@@ -467,56 +425,19 @@ and writes nothing — and is honoured everywhere it matters: a deleted account 
 (UC-25), cannot sign out, and is absent from reads unless `includeDeleted=true`. The hard delete has
 no idempotent path; a second call is a 404. Neither cascades, because a Google User owns nothing.
 
-## Build
-
-```bash
-dotnet build src/ArturRios.Heimdall.sln
-```
-
-## Test
-
-Run the whole suite:
-
-```bash
-dotnet test src/ArturRios.Heimdall.sln
-```
-
-Run one kind at a time — unit tests are isolated; functional tests run end-to-end against a real
-PostgreSQL database provisioned by Testcontainers:
-
-```bash
-dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
-```
-
-```bash
-dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
-```
-
-Every run writes a `.trx` under each project's `TestResults/` (git-ignored), so a failure is always
-recorded by name rather than only as a console count. To chase a test that fails only occasionally,
-repeat the run and let the harness collect the names:
-
-```bash
-python scripts/flake_hunt.py --runs 25
-```
-
-See the [Testing Specification Document](docs/requirements/Testing%20Specification%20Document.md) for
-the full testing standard.
-
 ## Migrations
 
 The schema is managed with **EF Core migrations, applied explicitly** — the API never migrates on
-startup, and refuses to start when migrations are pending. Use the interactive migration menu to
-**list, create (generate), or apply** migrations:
+startup, and refuses to start when migrations are pending. Apply them before the first run, and after
+every update, with the interactive migration menu:
 
 ```bash
 python scripts/migrations.py
 ```
 
 It asks which environment file to load (for the connection string), then offers the migration
-actions. Creating a migration prompts for its name and adds it to
-`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. Requires `dotnet tool restore` (above)
-to have been run once.
+actions. Requires `dotnet tool restore` (above) to have been run once. The Docker image applies them
+itself — see [What the container does at start-up](#what-the-container-does-at-start-up).
 
 ## Run
 
@@ -633,6 +554,15 @@ first one wrote, whatever the login is called.
 The same trap applies when running from source — `Environments/.env.local` and
 `scripts/migrations.py` share the connection string, not this file — so either keep `Search
 Path=public` in those connection strings too, or do not name the login `heimdall`.
+
+## Changelog
+
+Notable changes in each release are recorded in [CHANGELOG.md](./CHANGELOG.md).
+
+## Contributing
+
+Building from source, running the tests, authoring migrations, regenerating the OpenAPI document, the
+branching model and the release process are described in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Legal
 

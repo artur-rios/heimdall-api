@@ -56,6 +56,20 @@ target = 'static/coverage-report'
 [[module.mounts]]
 source = 'openapi'
 target = 'static/openapi'
+# CHANGELOG.md and CONTRIBUTING.md live at the repository root; the site renders them
+# (see layouts/_shortcodes/repo-file.html) instead of keeping copies.
+#
+# Mounting them under assets/ replaces Hugo's default assets mount the same way, so docs/assets/
+# (the project stylesheet) is mounted explicitly first.
+[[module.mounts]]
+source = 'assets'
+target = 'assets'
+[[module.mounts]]
+source = '../CHANGELOG.md'
+target = 'assets/repo/CHANGELOG.md'
+[[module.mounts]]
+source = '../CONTRIBUTING.md'
+target = 'assets/repo/CONTRIBUTING.md'
 
 [languages]
 [languages.en]
