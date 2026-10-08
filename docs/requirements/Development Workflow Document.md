@@ -25,7 +25,7 @@ delivery flow.
 
 ```mermaid
 flowchart TD
-    A["Pick a use case<br/>(issue in Todo)"] --> B["Create branch from main<br/>feature/uc-##-use-case-name"]
+    A["Pick a use case<br/>(issue in Todo)"] --> B["Create branch from develop<br/>feature/uc-##-use-case-name"]
     B --> C["Move issue → In Progress"]
     C --> D["Implement the use case"]
     D --> E["Move issue → Testing"]
@@ -34,11 +34,11 @@ flowchart TD
     G --> H{All pass?}
     H -->|No| I["Fix code / tests"]
     I --> G
-    H -->|Yes| J["Open pull request"]
+    H -->|Yes| J["Open pull request into develop"]
     J --> K["Human review"]
     K --> L{Approved?}
     L -->|Changes requested| I
-    L -->|Yes| M["Human merge to main<br/>delete feature branch"]
+    L -->|Yes| M["Human merge to develop<br/>delete feature branch"]
     M --> N["Move issue → Done and close it"]
 ```
 
@@ -56,19 +56,20 @@ these columns, in order:
 | 1 | **Todo** | The use case has not been started (default). |
 | 2 | **In Progress** | A feature branch has been created and implementation has begun. |
 | 3 | **Testing** | Implementation is finished; unit and functional tests are being written, run, and fixed until green. |
-| 4 | **Done** | The pull request has been reviewed and merged to `main`; the issue is then **closed**. |
+| 4 | **Done** | The pull request has been reviewed and merged to `develop`; the issue is then **closed**. |
 
 An issue only ever moves **forward** during normal flow. If review requests changes, work continues
 on the same branch (still linked to the same issue) until tests pass again and the PR is re-reviewed.
 
 ## 4. Step-by-step
 
-### Step 1 — Branch from `main`
+### Step 1 — Branch from `develop`
 
-Every use case is implemented on its own branch, created from an up-to-date `main`:
+Every use case is implemented on its own branch, created from an up-to-date `develop` — the
+integration branch. `main` only ever receives releases (see [§5](#5-from-develop-to-a-release)):
 
 ```bash
-git switch main
+git switch develop
 git pull
 git switch -c feature/uc-01-create-scope
 ```
@@ -81,6 +82,11 @@ feature/uc-##-use-case-name
 
 - `##` — the zero-padded use case number (`01`, `02`, … `29`).
 - `use-case-name` — the use case name in lower-case kebab-case.
+
+A change that is not a use case — a defect, a dependency, documentation — goes on a
+`fix/<name>` or `feature/<name>` branch in the same way. Those two prefixes are the only ones the
+**Branch Policy** check accepts into `develop` (besides Dependabot's), and it also refuses a branch
+that was cut from `main` instead of `develop`.
 
 | Use case | Branch |
 | --- | --- |
@@ -152,7 +158,7 @@ A use case does not leave the Testing stage until the full suite is green.
 
 ### Step 6 — Open a pull request
 
-With all tests passing, push the branch and open a PR from `feature/uc-##-…` into `main`. The PR
+With all tests passing, push the branch and open a PR from `feature/uc-##-…` into `develop`. The PR
 description should reference the use case and its issue (e.g. `Closes #<issue-number>`) so the issue
 is linked to the PR.
 
@@ -160,7 +166,7 @@ is linked to the PR.
 
 - The PR is **reviewed by a human**. Requested changes are addressed on the same branch (back to
   Step 5 whenever code changes, so the suite stays green).
-- Once approved, a human **merges the PR into `main`**.
+- Once approved, a human **merges the PR into `develop`**.
 - The **feature branch is deleted** after the merge.
 
 > Review and merge are **human actions**. An agent may prepare and push the PR, but must not
@@ -195,21 +201,31 @@ After the merge, set the issue `Status` to **Done** and **close** it. If the PR 
 `Closes #<issue-number>` reference, the merge closes the issue automatically — still confirm the
 board shows it in **Done**.
 
-## 5. Definition of Done
+## 5. From `develop` to a release
+
+A merged use case is on `develop`, not yet in production. Releases are cut from `develop` as
+`release/<major>.<minor>.<patch>` branches and reach `main` only through a pull request that Jenkins
+merges itself, after deploying the release to homologation and then to production; it also tags the
+merge `v<major>.<minor>.<patch>`. Nobody merges into `main` by hand, and a release branch carries no
+commits of its own — a fix for a release lands on `develop` through a `fix/` branch, and a new release
+is cut. The full procedure, including finalizing the changelog before the release branch is cut, is
+in [CONTRIBUTING.md](https://github.com/artur-rios/heimdall-api/blob/main/CONTRIBUTING.md#releasing).
+
+## 6. Definition of Done
 
 A use case is done only when **all** of the following hold:
 
-- [ ] Implemented on a `feature/uc-##-use-case-name` branch created from `main`.
+- [ ] Implemented on a `feature/uc-##-use-case-name` branch created from `develop`.
 - [ ] Main flow and every alternative flow from the use case specification are implemented.
 - [ ] Unit tests cover each handler and new Domain behavior (main + applicable `AF-xx`).
 - [ ] Functional tests cover each endpoint (main + every `AF-xx`, including authorization).
 - [ ] The full test suite passes (`Category=Unit` and `Category=Functional`).
-- [ ] A pull request was merged to `main` — reviewed by a human, or merged by an agent under an
+- [ ] A pull request was merged to `develop` — reviewed by a human, or merged by an agent under an
       authorized batch run (Step 7.1).
 - [ ] The feature branch was deleted.
 - [ ] The issue is in **Done** and closed.
 
-## 6. References
+## 7. References
 
 - [Use Case Specification Document](Use%20Case%20Specification%20Document.md) — the use cases and their flows.
 - [Testing Specification Document](Testing%20Specification%20Document.md) — how the tests are written.
