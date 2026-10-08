@@ -33,6 +33,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Every dependency is on its latest stable release, including `ArturRios.Util.WebApi` 5.1.0,
   `ArturRios.Data.Relational.Core` 5.0.0, `Mediator` 2.0.0, `Swashbuckle.AspNetCore` 10.3.0 and OpenTelemetry
   1.19. The HTTP API and the OpenAPI document are unchanged.
+- Four deployment environments instead of three: `local` (Docker Desktop on Windows, by hand), and `development`,
+  `homologation` and `production`, which share one VPS and are deployed by yggdrasil — `develop` to development,
+  `release/x.y.z` to homologation, the release pull request to production. Development and homologation run on
+  demand. The Development-in-WSL setup is gone. A new `docker/homologation.env.example` runs homologation as
+  `Staging`; the development and production templates now describe the VPS (`PUBLIC_HOST`, `UI_HOST`, Traefik's
+  Docker range in `HEIMDALL_TRUSTED_PROXIES`, one database and login per environment) and the local one points
+  CORS and the e-mail links at the local heimdall-ui on `http://localhost:8081`. The e-mail templates' reset link
+  is `/password-reset`, the route heimdall-ui serves. The docs page "Deploying with Docker" is now
+  "Environments and deployment"; the old address redirects to it.
+
+### Removed
+
+- `scripts/deploy_wsl.py`, which deployed into a WSL distro for the retired Development-in-WSL environment.
 
 ### Fixed
 

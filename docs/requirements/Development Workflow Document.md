@@ -203,12 +203,16 @@ board shows it in **Done**.
 
 ## 5. From `develop` to a release
 
-A merged use case is on `develop`, not yet in production. Releases are cut from `develop` as
-`release/<major>.<minor>.<patch>` branches and reach `main` only through a pull request that Jenkins
-merges itself, after deploying the release to homologation and then to production; it also tags the
-merge `v<major>.<minor>.<patch>`. Nobody merges into `main` by hand, and a release branch carries no
-commits of its own — a fix for a release lands on `develop` through a `fix/` branch, and a new release
-is cut. The full procedure, including finalizing the changelog before the release branch is cut, is
+A merged use case is on `develop`, not yet in production: Jenkins deploys every push to `develop` to
+the **development** environment, which runs on demand — a stopped one stays stopped until
+`scripts/ygg.sh env start development` on the VPS turns it on (the four environments are listed in
+§0.2 of the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md)).
+Releases are cut from `develop` as `release/<major>.<minor>.<patch>` branches and reach `main` only
+through a pull request that Jenkins merges itself, after deploying the release to homologation (on
+demand, like development) and then to production; it also tags the merge
+`v<major>.<minor>.<patch>`. Nobody merges into `main` by hand, and a release branch carries no
+commits of its own — a fix for a release lands on `develop` through a `fix/` branch, and a new
+release is cut. The full procedure, including finalizing the changelog before the release branch is cut, is
 in [CONTRIBUTING.md](https://github.com/artur-rios/heimdall-api/blob/main/CONTRIBUTING.md#releasing).
 
 ## 6. Definition of Done

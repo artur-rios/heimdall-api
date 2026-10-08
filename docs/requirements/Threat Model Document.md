@@ -319,7 +319,9 @@ staging deployment without Mailgun credentials logs verification tokens, reset t
 in plaintext, which is deliberate and documented: the functional suite and a local run both need
 those flows to work without credentials or network. It is listed here because a staging deployment
 with real users' addresses in it turns a convenience into an account-takeover primitive for anyone
-who can read a log.
+who can read a log. The development and homologation environments (the latter running as `Staging`) are exactly
+such deployments, which is why they hold made-up people only — §0.2 of the
+[Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md).
 
 ## 8.1 Detection
 
