@@ -16,6 +16,9 @@ on:
       - main
     paths:
       - 'docs/**'
+      # Rendered by the site's Changelog and Contributing pages (see docs/hugo.toml).
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
       - '.github/workflows/build-docs.yml'
   workflow_run:
     workflows: ['Tests']

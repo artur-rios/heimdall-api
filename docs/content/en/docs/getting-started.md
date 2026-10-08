@@ -8,15 +8,16 @@ description = 'Prerequisites, configuration, migrations, and running the API loc
 ## Prerequisites
 
 - **.NET 10 SDK**
-- **PostgreSQL** — the API's relational database. (Functional tests spin up their own instance via
-  Testcontainers, so a running PostgreSQL is only needed to run the API itself.)
-- **Docker** — required by Testcontainers when running the functional suite.
+- **PostgreSQL** — the API's relational database.
 - **Python 3** — only to run the migration menu script.
 - The pinned EF Core CLI tool. Restore it once after cloning:
 
 ```bash
 dotnet tool restore
 ```
+
+Building from source, running the test suites and the other contributor tooling are covered in
+[Contributing](../contributing/).
 
 ## Clone
 
@@ -78,9 +79,12 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | --- | --- |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (set only while [rotating the signing secret](../operations/#rotating-the-signing-secret)) |
+| `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
+| `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](../operations/#metrics--prometheus)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty → every cross-origin request is refused. Set it to your front end's origin (`https://app.example.com`, comma separated for several) or a browser client cannot call the API |
 | `HEIMDALL_TRUSTED_PROXIES` | Empty → `X-Forwarded-For` is ignored. Behind a reverse proxy, set it to the proxy's address or network so the rate limiter and the request log see the real caller |
 
@@ -102,13 +106,8 @@ python scripts/migrations.py
 ```
 
 The script asks which environment file to load (for the connection string), then offers *list*,
-*create*, and *apply*. See [Operations](../operations/#migrations) for more.
-
-## Build
-
-```bash
-dotnet build src/ArturRios.Heimdall.sln
-```
+*create*, and *apply*; apply is the one a deployment needs. See [Operations](../operations/#migrations)
+for more, and [Contributing](../contributing/#migrations) for authoring a new migration.
 
 ## Run
 
@@ -195,7 +194,7 @@ npx @usebruno/cli run Auth --env Local
 
 ## Next
 
-- [Testing](../testing/) — how to run the suites.
+- [Contributing](../contributing/) — building, testing, and the branching and release process.
 - [Architecture](../architecture/) — what happens between the controller and the database.
 - [Development Workflow](../requirements/development-workflow-document/) — how a use case goes from
   backlog to merged.

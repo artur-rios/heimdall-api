@@ -486,7 +486,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `ScopePermissionController*`, `AuthControllerScopePermissionClaim`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
 Suite totals as of UC-35: **520 unit** and **428 functional** tests, all passing. Run them separately
-with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+with `--filter "Category=Unit"` / `"Category=Functional"` (see CONTRIBUTING.md).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
 the Command.Tests project, and `ApplicationControllerUpdateTests` to the functional suite.

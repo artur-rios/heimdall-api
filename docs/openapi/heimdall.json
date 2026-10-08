@@ -2,13 +2,13 @@
   "openapi": "3.0.4",
   "info": {
     "title": "Heimdall API",
-    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. Every endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is rejected everywhere except `POST /api/auth/2fa/verify`.",
+    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. Every endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer credential, and it is read only from the `challengeToken` body field of `POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
     "contact": {
       "name": "Artur Rios",
       "url": "https://github.com/artur-rios/heimdall-api"
     },
     "license": {
-      "name": "MIT",
+      "name": "ArturRios.Heimdall — Proprietary License",
       "url": "https://github.com/artur-rios/heimdall-api/blob/main/LICENSE"
     },
     "version": "v1"
