@@ -15,6 +15,9 @@ sequenceDiagram
     actor C as Anonymous caller
     participant AC as AuthController
     participant H as PasswordRecoveryCommandHandler
+    participant Q as PasswordRecoveryQueue
+    participant W as PasswordRecoveryDispatcher
+    participant PR as PasswordRecoveryProcessor
     participant PS as IPasswordResetService
     participant S as IPasswordResetSender
     participant DB as PostgreSQL
@@ -23,16 +26,19 @@ sequenceDiagram
     AC->>H: HandleAsync
     H->>H: validate input shape (NFR-10)
     Note right of H: the only rejection this endpoint ever issues
+    H->>Q: TryEnqueue(email, scopeId)
+    H-->>C: 200 — identical response, in the same time, either way
 
-    H->>DB: find by the lookup the role implies
+    Q-->>W: next request (background, own DI scope)
+    W->>PR: ProcessAsync
+    PR->>DB: find by the lookup the role implies
     alt person found and eligible
-        H->>PS: issue token
+        PR->>PS: issue token
         PS->>DB: INSERT PasswordResetToken (time-limited)
         PS->>S: SendAsync(email, token)
-    else nobody, deleted person, or deleted scope (AF-12a)
-        Note over H,DB: no row written, no email sent
+    else nobody, deleted or restricted person, or deleted scope (AF-12a)
+        Note over PR,DB: no row written, no email sent
     end
-    H-->>C: 200 — identical response either way
 ```
 
 **Every path returns the same success output.** AF-12a — the address belongs to nobody — is not an
@@ -41,6 +47,15 @@ have. A logically deleted person, and a `User` whose scope is deleted, are treat
 
 The only thing that distinguishes the two paths is a row that does not get written and an email that
 consequently never arrives — neither of which is visible to the caller.
+
+**The same answer, in the same time.** While the lookup, the token insert and the Mailgun call ran on
+the request, a registered address answered a Mailgun round trip later than an unknown one — a timing
+difference that answered exactly what the uniform response refuses. So the handler only validates and
+queues; everything that depends on the address happens afterwards, in `PasswordRecoveryProcessor`,
+run by a hosted service in a DI scope of its own (never the finished request's). The queue is in
+memory and bounded: a durable outbox would keep every address anybody typed, registered or not, and
+a response-time floor would have to outlast Mailgun's slowest send. The cost is that a restart drops
+whatever is still queued, which a person who receives nothing simply asks for again.
 
 {{% alert title="An outage must not become an oracle" color="warning" %}}
 A Mailgun failure here is **logged, never surfaced**. If a delivery error turned into a 500, the
@@ -66,8 +81,12 @@ sequenceDiagram
     alt unknown / expired / already spent
         H-->>FE: 400 — each rejection named
     end
+    H->>DB: spend the token (UPDATE … WHERE NOT used AND unexpired)
+    alt a parallel request spent it first
+        H-->>FE: 400 — already used (AF-13b)
+    end
     H->>DB: UPDATE person — fresh Argon2id hash + new salt
-    H->>DB: mark every live reset token for this person Used
+    H->>DB: mark every other live reset token for this person Used
     H-->>FE: 200
 ```
 

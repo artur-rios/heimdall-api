@@ -88,6 +88,13 @@ the scope id turned it into a per-scope directory. The handler now verifies the 
 against a decoy hash — of a random secret generated once per process, belonging to nobody — and
 discards the result. A lockout takes the same path, so it is not detectable either.
 
+**The lockout counts attempts as they start, not as they fail.** Each attempt reserves itself in
+`failed_login_attempts` — one conditional `UPDATE`, refused once the account is locked or ten
+attempts are already counted — before the password is derived; a wrong password leaves the
+reservation standing, a right one clears the count. Counting after the derivation let ten
+simultaneous wrong passwords all read a count of zero and all write one, so the account never
+locked (FR-AU-09).
+
 ## Scope eligibility
 
 `PersonAuthTokenService.TryBuildSubject` is the single place the eligibility rules live, shared with

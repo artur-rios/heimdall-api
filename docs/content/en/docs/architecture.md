@@ -206,7 +206,7 @@ graph LR
     TRACE --> EX[ExceptionMiddleware]
     EX --> CORS["CORS<br/>configured origins only"]
     CORS --> AUTHN[AuthenticationMiddleware]
-    AUTHN --> RL[Rate limiter<br/>auth endpoints only]
+    AUTHN --> RL[Rate limiter<br/>credential-checking endpoints only]
     RL --> MFA[MfaPendingGuardFilter]
     MFA --> LIVE[ActorLivenessFilter]
     LIVE --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
@@ -227,7 +227,7 @@ filter, and the rate limiter goes after it. `TraceActivityMiddleware` logs every
 caller's IP address — the real caller's when `HEIMDALL_TRUSTED_PROXIES` names the proxy in front of
 the API, the proxy's otherwise.
 
-Four things about this pipeline are worth knowing before reading any handler:
+Five things about this pipeline are worth knowing before reading any handler:
 
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
@@ -240,7 +240,16 @@ whole lifetime after the account behind it was deleted — and the handlers comp
 `ScopeOwnershipChecker` excluded a deleted Scope Admin, while every System Admin bypass and every
 "acting on yourself" branch trusted the role claim alone, leaving the protection in place for the
 lesser role and absent for the greater one. It costs one indexed read per authenticated request, and
-two for a Google User, since the token does not say which table its subject lives in.
+two for a Google User, since the token does not say which table its subject lives in. A restricted
+identity (**NFR-24**) is refused the same way — except on the four actions marked
+`[DataSubjectRight]` (export, erasure request, restriction, lifting one's own restriction), where a
+restricted or suspended subject still reaches the handler and the use case's own flows answer.
+
+**Single-use state is spent in the database, not in memory.** The repositories write whole rows —
+read, change, save — so two requests that read the same recovery code, token, challenge or counter
+before either saved would both act on it. `IAtomicWrites` (Domain, implemented in Data on
+`ExecuteUpdate`) makes each of those a single conditional `UPDATE … WHERE` whose affected-row count
+says who won, and charges every guess budget before the comparison it guards.
 
 **One class owns both directions of the claims.** `IdentityUserMapper` writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a

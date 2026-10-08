@@ -103,7 +103,7 @@ graph LR
 | ---- | ------------ | ---------- |
 | FR-SC-01 | The system shall allow System Admins to **create** a new scope with a unique name and at least one initial owner (a person with the `ScopeAdmin` role) | High |
 | FR-SC-02 | The system shall allow authorized users to **read** scope details by ID: a System Admin any scope, a Scope Admin the scopes they own, a User the scope they belong to | High |
-| FR-SC-03 | The system shall allow System Admins to **list** all scopes, with pagination and an optional case-insensitive name filter. The collection endpoint is not exposed to other roles, which reach their own scopes through FR-SC-02 | High |
+| FR-SC-03 | The system shall allow System Admins to **list** all scopes, and Scope Admins to list the scopes they own, with pagination and an optional case-insensitive name filter. A Scope Admin's listing is filtered by ownership as recorded in the database — not by the token's owned-scope claim — before pagination, so its total counts their own scopes and nothing about other tenants. The collection endpoint is not exposed to Users, who reach their one scope through FR-SC-02 | High |
 | FR-SC-04 | The system shall allow System Admins to **update** scope information | High |
 | FR-SC-05 | The system shall allow System Admins to **logically delete** a scope by setting `IsDeleted = true` | High |
 | FR-SC-06 | The system shall allow System Admins to **hard delete** a scope, permanently removing it and its associated users and applications | High |
@@ -163,7 +163,7 @@ graph LR
 | ID | Requirement | Priority |
 | ---- | ------------ | ---------- |
 | FR-PR-01 | The system shall allow a person to request a password reset by providing their email | High |
-| FR-PR-02 | The system shall generate a time-limited password reset token and send it via email | High |
+| FR-PR-02 | The system shall generate a time-limited password reset token and send it via email. The request shall be answered before the person is looked up and the token issued and sent, so the response is the same in content and in time whether or not the address is registered (AF-12a) | High |
 | FR-PR-03 | The system shall allow the person to set a new password using a valid reset token | High |
 | FR-PR-04 | Expired or already-used reset tokens shall be rejected | High |
 
@@ -249,6 +249,7 @@ graph LR
 | FR-2F-14 | The system shall accept an authenticator-app code at most once: the time step of an accepted code shall be recorded, and a code from that step or any earlier one shall be refused, so a code observed in transit cannot be replayed within the verification window | High |
 | FR-2F-15 | The system shall allow an authenticated person to read their own two-factor authentication state: whether it is active, which methods are configured, and how many issued recovery codes remain unused. A person with no configuration shall be answered successfully with every flag false and a zero count, since never having enabled it is an ordinary state rather than a fault. A Google User shall be refused, as under FR-2F-01. No secret is returned — never the TOTP secret, never a recovery code | High |
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
+| FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
 
 ---
 
@@ -506,6 +507,10 @@ A scope permission belongs to exactly one scope, and unlike `APPLICATION` it has
 | EmailEnabled | Boolean | Default: `false`; at least one of `AppEnabled`/`EmailEnabled` must be `true` |
 | TotpSecretEncrypted | Byte array | Required when `AppEnabled = true`, otherwise null; encrypted at rest, never returned once FR-2F-04 confirmation succeeds |
 | IsActive | Boolean | Default: `false`; set `true` only once every selected method is confirmed (FR-2F-04) |
+| LastTotpTimeStepUsed | BigInt | Null until an app code is accepted; the time step of the last accepted one, so no code from that step or earlier is accepted again (FR-2F-14) |
+| EmailCodeReissueCount | Integer | Default: `0`; reissues the outstanding challenge has spent, reset when a login issues a new challenge (FR-2F-13, FR-2F-16) |
+| ChallengeId | GUID | Null unless a challenge is outstanding; set when a login issues a challenge token, which carries the same value, and cleared when it is redeemed, so a challenge is redeemable once (FR-2F-10) |
+| ChallengeAttempts | Integer | Default: `0`; guesses made at the outstanding challenge with an app code or a recovery code, reset when a login issues a new challenge; at five the challenge is cleared (FR-2F-17) |
 | CreatedAt | DateTime | Auto-set on creation |
 | UpdatedAt | DateTime | Auto-set on update |
 
@@ -535,7 +540,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | Method | Endpoint | Description | Auth Required |
 | -------- | ---------- | ------------- | --------------- |
 | POST | `/api/scopes` | Create a new scope with at least one initial owner | SystemAdmin |
-| GET | `/api/scopes` | List all scopes | SystemAdmin |
+| GET | `/api/scopes` | List scopes — all of them for a SystemAdmin, the ones they own for a ScopeAdmin | SystemAdmin, ScopeAdmin |
 | GET | `/api/scopes/{id}` | Get scope by ID | Authenticated |
 | PUT | `/api/scopes/{id}` | Update a scope | SystemAdmin |
 | DELETE | `/api/scopes/{id}` | Logically delete a scope | SystemAdmin |
@@ -641,9 +646,10 @@ where a control is narrower than the threat it appears to cover.
 | NFR-21 | Data Protection | An audit entry shall stop naming the identity that produced it once its attribution period has elapsed, or immediately once that identity has been anonymised (NFR-20), whichever comes first. Clearing the attribution is the only change `AUDIT_LOG` shall ever permit: every other column stays immutable, the attribution may be set to null but never to another identity, no row may be deleted or truncated, and the rule shall be enforced by the database rather than by the application. The resulting guarantee is that an action can never be denied, and who took it can never be reassigned — only forgotten |
 | NFR-22 | Data Protection | Application log files shall be removed once they are older than the configured retention period, and no log statement shall write an email address. Where a line needs to refer to an address so an operator can correlate, it shall write a stable non-reversible reference to it instead. The two halves are ordered: the redaction lands no later than the retention limit, since bounding the files without redacting them would give identifiable data a longer life than it had before |
 | NFR-23 | Data Protection | Every identity shall record, at creation, the lawful basis its data is processed on and the version of the privacy notice then in force (GDPR Art. 5(2) and 30(1)(c), LGPD Art. 8 §2). A scope may declare the basis for the identities within it, since the tenant is usually their controller; where it declares none, contract performance applies. Consent shall not be selectable while no withdrawal path exists, and identities predating this requirement shall be marked as unrecorded rather than backfilled with a guess |
-| NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate, shall not receive email, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)) |
+| NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate, shall not receive email, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. A token it already holds shall be refused everywhere except where the subject exercises their own rights — export (UC-41), erasure (UC-42), restriction (UC-44) and lifting their own restriction (UC-45) — and a restricted System Admin shall not lift anybody else's. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)) |
 | NFR-25 | Security | The database and its backups shall be encrypted at rest, and the API's connection to the database shall require TLS (GDPR Art. 32, LGPD Art. 46). Backups shall have a stated schedule, retention period, location and restore-testing cadence, published in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md). Because a backup is a full copy that is never edited, a restore shall be followed by re-applying every erasure completed since it was taken, from a ledger kept outside the database |
 | NFR-26 | Security | The signals the system already records — refused writes, account lockouts, credential-verification shedding — shall be read on a schedule and the ones exceeding their thresholds written to the log at warning level, with a stable marker and kind an alerting rule can match. Each threshold shall be measured over a window rather than as a total, because the same count means different things at different rates. Detection shall not declare a breach: a signal is a reason to look, and the [Incident Response Document](Incident%20Response%20Document.md) is what turns looking into a declaration. The signals shall additionally be **collected and delivered to a person on a schedule**, reporting each signal once and failing loudly when delivery does not succeed — writing a signal nobody receives satisfies the letter of detection and none of its purpose, since both notification clocks run from awareness rather than from recording |
+| NFR-27 | Security | Single-use credentials — recovery codes, email codes, password reset and email verification tokens, the two-factor challenge, and an authenticator-app time step — shall be spent at most once, and the bounded budgets of FR-AU-09, FR-2F-13, FR-2F-16 and FR-2F-17 shall never admit more attempts than they state, **including when requests arrive concurrently**. Each check shall be made by the same database write that spends or charges, and every budget shall be charged before the comparison it guards rather than after it fails |
 
 ### 6.1 The reference configuration
 
@@ -896,7 +902,7 @@ block-beta
 | -------- | :-----------: | :----------: | :----: | :---------: |
 | Create Scope | ✅ | ❌ | ❌ | ❌ |
 | Read Scope by ID | ✅ | ✅ (owned) | ✅ (belongs to) | ❌ |
-| List Scopes | ✅ | ❌ | ❌ | ❌ |
+| List Scopes | ✅ | ✅ (owned scopes only) | ❌ | ❌ |
 | Update Scope | ✅ | ❌ | ❌ | ❌ |
 | Delete Scope (logical) | ✅ | ❌ | ❌ | ❌ |
 | Delete Scope (hard) | ✅ | ❌ | ❌ | ❌ |
