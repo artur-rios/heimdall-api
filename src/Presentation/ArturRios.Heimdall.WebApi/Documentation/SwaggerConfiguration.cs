@@ -36,16 +36,19 @@ public static class SwaggerConfiguration
                 + "endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, "
                 + "`PaginatedOutput<T>` for a listing.\n\n"
                 + "Obtain a token from `POST /api/auth/login`, then authorize with it. A challenge "
-                + "token issued by a 2FA-gated login is rejected everywhere except "
-                + "`POST /api/auth/2fa/verify`.",
+                + "token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer "
+                + "credential, and it is read only from the `challengeToken` body field of "
+                + "`POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
             Contact = new OpenApiContact
             {
                 Name = "Artur Rios",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api")
             },
+            // The repository's own LICENSE, by the name its first line gives it: the software is
+            // proprietary, all rights reserved, so no SPDX identifier applies.
             License = new OpenApiLicense
             {
-                Name = "MIT",
+                Name = "ArturRios.Heimdall — Proprietary License",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api/blob/main/LICENSE")
             }
         });
