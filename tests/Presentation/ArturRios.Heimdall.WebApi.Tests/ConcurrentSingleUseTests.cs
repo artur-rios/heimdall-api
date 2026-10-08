@@ -43,21 +43,39 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     ///     Starts <paramref name="count" /> copies of a request at the same moment and waits for all
     ///     of them — a gate rather than a loop, so none has finished before the last has begun.
     /// </summary>
+    /// <remarks>
+    ///     The burst runs under a hash gate with the production bound but a patient wait. A burst of
+    ///     ten Argon2id derivations queues behind four permits, and on a slow CI runner the last ones
+    ///     can wait longer than the real ten seconds and be refused with 503 — which tests the gate's
+    ///     saturation policy (covered in AuthControllerLoginTests), not what these tests are about.
+    ///     The functional collection runs its tests one at a time, so swapping the shared gate here
+    ///     affects no other test.
+    /// </remarks>
     private static async Task<T[]> InParallelAsync<T>(int count, Func<int, Task<T>> request)
     {
-        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var original = PasswordHashGate.Shared;
+        PasswordHashGate.Shared = new PasswordHashGate(original.MaxConcurrent, TimeSpan.FromMinutes(2));
 
-        var requests = Enumerable.Range(0, count)
-            .Select(index => Task.Run(async () =>
-            {
-                await start.Task;
-                return await request(index);
-            }))
-            .ToArray();
+        try
+        {
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        start.SetResult();
+            var requests = Enumerable.Range(0, count)
+                .Select(index => Task.Run(async () =>
+                {
+                    await start.Task;
+                    return await request(index);
+                }))
+                .ToArray();
 
-        return await Task.WhenAll(requests);
+            start.SetResult();
+
+            return await Task.WhenAll(requests);
+        }
+        finally
+        {
+            PasswordHashGate.Shared = original;
+        }
     }
 
     private async Task<Person> SeedPersonAsync(string prefix)
