@@ -20,6 +20,7 @@ identities isolated from every other's inside its own **scope**.
 | [API reference](api-reference/) | Every endpoint, the role that may call it, and the use case it implements. |
 | [Flows](flows/) | Sequence diagrams for login, two-factor authentication, Google Sign-In, person onboarding, and audit logging. |
 | [Operations](operations/) | Migrations, health checks, logging, rate limiting, and the environment variables the API reads. |
+| [Environments and deployment](environments-and-deployment/) | The four environments — local on Docker Desktop, development, homologation and production on the VPS — their env files and their PostgreSQL databases. |
 | [Requirements](requirements/) | The source specifications: vision, system requirements, use cases, technology stack, testing, workflow, and operations. |
 | [Changelog](changelog/) | Notable changes in each release — the repository's `CHANGELOG.md`, rendered. |
 | [Contributing](contributing/) | Building from source, the test suites and coverage, migrations, the OpenAPI document, branching and releasing — the repository's `CONTRIBUTING.md`, rendered. |

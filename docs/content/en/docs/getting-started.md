@@ -45,9 +45,14 @@ cp src/Presentation/ArturRios.Heimdall.WebApi/Environments/.env src/Presentation
 | --- | --- | --- |
 | `Local` (what the launch profiles set) | `Environments/.env.local` | `Settings/appsettings.Local.json` |
 | `Development` | `Environments/.env.development` | `Settings/appsettings.Development.json` |
+| `Staging` | `Environments/.env.staging` | `Settings/appsettings.Staging.json` |
 | `Production` | `Environments/.env.production` | `Settings/appsettings.Production.json` |
 
 Both sets are gitignored — the env files hold credentials, and the app settings are per-machine.
+They are for running from source: the image carries no `Environments/` file, and a container takes
+its variables from the env file Compose is given instead — see [Environments and deployment](../environments-and-deployment/),
+where local and development run as `Development`, homologation as `Staging` and production as
+`Production`.
 `Settings/appsettings.json` is tracked and loaded first, so a missing environment file costs defaults
 rather than the whole configuration.
 

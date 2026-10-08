@@ -99,17 +99,18 @@ heap, thread pool, exceptions), EF Core, and the Npgsql connection pool. Every s
 | `HEIMDALL_METRICS_PORT` | `9464` | The port `/metrics` answers on. Blank means the default; `0` switches metrics off entirely — no exporter is registered and nothing is collected. |
 
 **The endpoint is recognised by the port the connection arrived on, never by the `Host` header.**
-In production the API runs behind Traefik, which forwards the client's own `Host` header — a check
-on it would be a check on a value any caller chooses. The local port of the socket is the one thing
-a caller cannot pick: Traefik reaches the container on 8080, Prometheus reaches it directly on 9464
-over a private Docker network, and a request for `/metrics` on 8080 falls through to the API, which
-has no such route (401 without a token, 404 with one).
+On the VPS (development, homologation, production) the API runs behind Traefik, which forwards the
+client's own `Host` header — a check on it would be a check on a value any caller chooses. The local
+port of the socket is the one thing a caller cannot pick: Traefik reaches the container on 8080,
+Prometheus reaches it directly on 9464 over a private Docker network, and a request for `/metrics`
+on 8080 falls through to the API, which has no such route (401 without a token, 404 with one).
 
 That guarantee holds only while 9464 stays private, so:
 
 - **Never publish 9464.** `docker-compose.yml` maps only the API's port; the image listens on both
   (`ASPNETCORE_HTTP_PORTS=8080;9464`). Put Prometheus on a network it shares with the `api` service
-  and scrape `api:9464`.
+  and scrape it there — under yggdrasil, `heimdall-api.<environment>:9464` on the `telemetry`
+  network.
 - **Never route Traefik to 9464.** With two ports exposed, give Traefik the service port explicitly
   (`traefik.http.services.<name>.loadbalancer.server.port=8080`) rather than letting it pick.
 - **Moving the port means moving both.** A `HEIMDALL_METRICS_PORT` other than 9464 must also be
@@ -467,14 +468,14 @@ Server-to-server callers are unaffected: CORS is a browser rule, and non-browser
 
 ## Client addresses behind a proxy
 
-In production every connection reaches the API from Traefik, so the connection's address is
+On the VPS every connection reaches the API from Traefik, so the connection's address is
 Traefik's. The caller's own address travels in `X-Forwarded-For`, and the scheme they used in
 `X-Forwarded-Proto`. `HEIMDALL_TRUSTED_PROXIES` lists the proxies those headers are believed from —
 addresses and CIDR networks, comma separated:
 
 | Traefik reaches the API | Value |
 | --- | --- |
-| From a container on a Docker network shared with `api` | That network's subnet, e.g. `172.18.0.0/16` — Traefik's own address changes when its container is recreated |
+| From a container on a Docker network shared with `api` | That network's subnet, e.g. `172.18.0.0/16` — Traefik's own address changes when its container is recreated. The VPS templates use `172.16.0.0/12`, the range Docker allocates every network from, which covers yggdrasil's `edge` network whatever subnet it was given |
 | From the host, through the published `API_PORT` | The Compose network's gateway, e.g. `172.19.0.1` — what published-port traffic arrives from |
 
 Two things read the result: the rate limiter, which partitions on it, and the request log, which

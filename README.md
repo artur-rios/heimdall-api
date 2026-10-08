@@ -45,6 +45,7 @@ The full documentation is published as a website:
 | [API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/) | Swagger UI over the generated OpenAPI document — parameters, schemas, and responses |
 | [Flows](https://artur-rios.github.io/heimdall-api/docs/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
 | [Operations](https://artur-rios.github.io/heimdall-api/docs/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
+| [Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/) | Local on Docker Desktop, and development, homologation and production on the VPS — env files and each PostgreSQL database |
 | [Changelog](https://artur-rios.github.io/heimdall-api/docs/changelog/) | This repository's CHANGELOG.md, rendered |
 | [Contributing](https://artur-rios.github.io/heimdall-api/docs/contributing/) | This repository's CONTRIBUTING.md, rendered |
 
@@ -67,7 +68,7 @@ so either place is authoritative:
 - [Use Case Specification Document](docs/requirements/Use%20Case%20Specification%20Document.md) —
   the use cases with flows and alternative flows.
 - [Operations & Infrastructure Document](docs/requirements/Operations%20%26%20Infrastructure%20Document.md) —
-  technical foundation and the health-check feature.
+  hosting, the four environments, technical foundation and the health-check feature.
 - [Technology Stack Document](docs/requirements/Technology%20Stack%20Document.md) — the technologies,
   libraries, and versions the project is built on.
 - [Data Retention Schedule Document](docs/requirements/Data%20Retention%20Schedule%20Document.md) —
@@ -461,19 +462,24 @@ what a running instance serves.
 ## Deploy with Docker
 
 [`docker-compose.yml`](docker-compose.yml) runs the API in a container against a **PostgreSQL
-instance that is already installed on the host** — the same instance other services share, this one
-owning a single database of its own. Postgres is deliberately not a service in the file.
+instance that is already installed on the host** — the same instance other services and
+environments share, each owning a database of its own. Postgres is deliberately not a service in the
+file.
 
-Three environments, one Compose file, one env file each:
+Four environments, one Compose file, one env file each:
 
-| Environment | Where | Env file | Postgres |
-| --- | --- | --- | --- |
-| Local | Docker Desktop on Windows | `docker/local.env` | Installed on the Windows host |
-| Development | Docker in the WSL Ubuntu distro | `docker/development.env` | Installed in that distro |
-| Production | The VPC server | `docker/production.env` | Installed on the server |
+| Environment | Where | Deployed by | `ASPNETCORE_ENVIRONMENT` | Public hosts | Env file template | Database |
+| --- | --- | --- | --- | --- | --- | --- |
+| `local` | The developer's Windows machine, Docker Desktop | Hand: `docker compose --env-file docker/local.env up -d --build` | `Development` | `http://localhost:8080` | `docker/local.env.example` | `heimdall_local`, PostgreSQL on Windows |
+| `development` | The VPS, on demand | Jenkins, on every push to `develop` | `Development` | `heimdall-api-dev.example.com`, and `/api/` under `heimdall-dev.example.com` | `docker/development.env.example` | `heimdall_development`, PostgreSQL on the VPS |
+| `homologation` | The VPS, on demand | Jenkins, on every push of a `release/x.y.z` branch | `Staging` | `heimdall-api-hml.example.com`, and `/api/` under `heimdall-hml.example.com` | `docker/homologation.env.example` | `heimdall_homologation`, PostgreSQL on the VPS |
+| `production` | The VPS, always on | Jenkins, on a green `release/x.y.z → main` pull request, which it then merges and tags | `Production` | `heimdall-api.example.com`, and `/api/` under `heimdall.example.com` | `docker/production.env.example` | `heimdall`, PostgreSQL on the VPS |
 
-Copy the template for the environment you are deploying and fill it in — each one documents what it
-expects, including which `DB_HOST` value applies:
+`example.com` stands for the real domain. `Staging` keeps homologation off Mailgun — verification and
+reset e-mails are logged, as in Development — without serving Swagger or the developer exception page.
+
+**Local** is deployed by hand. Copy the template and fill it in — it documents what each variable
+expects:
 
 ```bash
 cp docker/local.env.example docker/local.env
@@ -488,9 +494,18 @@ docker compose --env-file docker/local.env up -d --build
 The real env files are gitignored: they hold the database password, the token signing secret and the
 master user's credentials.
 
-For the full walkthrough of the two developer-machine environments — every command, what each host's
-Postgres has to allow, and the errors each misconfiguration produces — see
-[Deploying with Docker](https://artur-rios.github.io/heimdall-api/docs/deploying-with-docker/).
+**Development, homologation and production** share one Ubuntu VPS and are deployed by
+[yggdrasil](https://github.com/artur-rios/yggdrasil): Jenkins applies yggdrasil's
+`stacks/heimdall-api.proxy.yml` on top of this Compose file — no host port, Traefik in front with a
+wildcard certificate, the project named `heimdall-api-<environment>` — and reads the env file from
+`/etc/yggdrasil/<environment>/heimdall-api.env` on the VPS, filled in from the matching template.
+Each environment has its own database, login, signing secret and master user. Development and
+homologation run only while they are used: a deploy leaves a stopped environment stopped, and
+`scripts/ygg.sh env start <environment>` on the VPS turns one on (`env stop` turns it off again).
+
+For the full walkthrough — every command, what each host's Postgres has to allow, and the errors each
+misconfiguration produces — see
+[Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/).
 
 ### What the container does at start-up
 
@@ -505,10 +520,10 @@ which is required if the environment ever runs more than one replica.
 
 The container serves Prometheus metrics at `/metrics` on **port 9464**, and only there — on the
 API's port 8080 the path is not served. Prometheus is meant to scrape the container directly over a
-Docker network it shares with it (`api:9464`), so Compose deliberately does **not** publish 9464:
-the endpoint is told apart by the port a connection arrives on rather than by the `Host` header,
-which Traefik forwards from the client and an attacker therefore controls. Publishing the port
-would undo that.
+Docker network it shares with it (`heimdall-api.<environment>:9464` under yggdrasil), so Compose
+deliberately does **not** publish 9464: the endpoint is told apart by the port a connection arrives
+on rather than by the `Host` header, which Traefik forwards from the client and an attacker
+therefore controls. Publishing the port would undo that.
 
 `HEIMDALL_METRICS_PORT` moves the endpoint (blank = 9464) or, set to `0`, switches metrics off. A
 port other than 9464 must also be added to `ASPNETCORE_HTTP_PORTS` (the image sets `8080;9464`).
@@ -523,17 +538,22 @@ own processes use, so an installation that only listens on `localhost` is unreac
 - `listen_addresses` must include the address the container connects to (`*` binds all interfaces —
   pair it with a firewall that does not expose 5432 publicly).
 - `pg_hba.conf` needs a line for the Docker bridge range, e.g.
-  `host <database> <user> 172.16.0.0/12 scram-sha-256`.
-- The database and its login must exist; each service on the shared instance gets its own:
+  `host heimdall_development heimdall_development_svc 172.16.0.0/12 scram-sha-256`.
+- The database and its login must exist; each service and each environment on the shared instance
+  gets its own, so that development and homologation cannot reach production's data. On the VPS:
 
   ```bash
   sudo -u postgres createuser --pwprompt heimdall_svc && sudo -u postgres createdb --owner heimdall_svc heimdall
+  sudo -u postgres createuser --pwprompt heimdall_development_svc && sudo -u postgres createdb --owner heimdall_development_svc heimdall_development
+  sudo -u postgres createuser --pwprompt heimdall_homologation_svc && sudo -u postgres createdb --owner heimdall_homologation_svc heimdall_homologation
   ```
+
+  with one `pg_hba.conf` line per pair, so each login reaches its own database and no other.
 
 Docker Desktop on Windows is the exception: it forwards the connection through its own VM, so the
 Windows Postgres sees it arrive from `127.0.0.1` and the stock `pg_hba.conf` already covers it —
-neither an extra rule nor a firewall opening is needed there. The plain engine (WSL, the server)
-connects over the bridge for real, and needs both of the above.
+neither an extra rule nor a firewall opening is needed there. The VPS's plain engine connects over
+the bridge for real, and needs both of the above.
 
 Check reachability before the first deploy:
 
