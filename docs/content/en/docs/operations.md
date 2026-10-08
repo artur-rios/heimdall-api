@@ -14,9 +14,8 @@ python scripts/migrations.py
 ```
 
 The script asks which environment file to load (for the connection string), then offers **list**,
-**create (generate)**, and **apply**. Creating a migration prompts for its name and adds it to
-`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. It needs `dotnet tool restore` to have been
-run once, for the pinned EF Core CLI tool.
+**create (generate)**, and **apply**. It needs `dotnet tool restore` to have been run once, for the
+pinned EF Core CLI tool. Authoring a migration is covered in [Contributing](../contributing/#migrations).
 
 **The API never migrates on startup, and refuses to start when migrations are pending.** The seeder
 checks `GetPendingMigrationsAsync` first and throws with the missing migration names:
@@ -165,12 +164,16 @@ hash it and look for it. What it defeats is reading addresses out of the logs in
 
 Brute force is bounded in two independent places, because each covers what the other misses.
 
-**Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**,
-applied to `AuthController`'s anonymous, credential-checking endpoints: login, password recovery,
-password reset, email verification, Google sign-in, and second-factor verification. Rejections
+**Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**
+(an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
+`AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
+reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
 answer **429**. None of these requires a bearer token, so nothing else bounds how fast one caller
 can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
-hashing library's defaults) — so memory exhaustion is realistic without it.
+hashing library's defaults) — so memory exhaustion is realistic without it. The authenticated
+endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
+regeneration, and the erasure request — share the same limit: a bearer token is not the password,
+and without it whoever held one could test passwords or six-digit codes against them unthrottled.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -180,6 +183,16 @@ defeats the limiter with:
 | Password (UC-11) | 10 consecutive failures | The account is locked for 15 minutes. `PERSON.failed_login_attempts` counts, `PERSON.locked_out_until` holds the window; a successful login clears both. |
 | 2FA email code (UC-37, UC-38) | 5 wrong guesses per issued code | The code is retired. `TWO_FACTOR_EMAIL_CODE.failed_attempts` counts; guessing again costs a fresh login, which is itself limited and mails the account holder a code they did not ask for. |
 | 2FA app code | Single use | `TWO_FACTOR_AUTH.last_totp_time_step_used` records the accepted time step, so an observed code cannot be replayed within the ±1-step verification window (RFC 6238 §5.2). |
+| 2FA challenge (UC-38) | Single redemption | `TWO_FACTOR_AUTH.challenge_id` holds the one outstanding challenge, which the challenge token names. Redeeming it clears it and a newer login replaces it, so a challenge token is refused once spent (FR-2F-10). |
+| 2FA challenge guesses (UC-38) | 5 guesses with an app code or a recovery code per challenge | The challenge is cleared, so its token is refused and guessing again costs a fresh login (FR-2F-17). `TWO_FACTOR_AUTH.challenge_attempts` counts; a new login resets it. An email-only configuration is bounded by its code's budget instead. |
+
+Every budget, and every single-use item — recovery codes, reset and verification tokens, the
+challenge, the TOTP step — is charged or spent by **one conditional `UPDATE`** whose `WHERE` clause
+is the rule itself ("unused", "under the cap", "still outstanding"), and before the comparison it
+guards rather than after it. A burst of parallel requests therefore cannot outrun a budget or spend
+one code twice: the database lets exactly as many through as the rule allows. A login attempt is
+counted in `failed_login_attempts` while it is in flight and cleared if the password turns out to
+be right.
 
 A lockout is a window rather than a latch an administrator clears: reaching the threshold needs
 nothing but wrong guesses, so a permanent lock would hand any anonymous caller a denial of service
@@ -505,6 +518,18 @@ Each page finishes the job by posting its token back — the verification page t
 `POST /api/auth/verify-email`, the reset page to `POST /api/auth/password-reset` with the new
 password. If no link is configured the email carries the bare token instead, which still works.
 
+**Password recovery is answered before it is worked.** `POST /api/auth/password-recovery` only
+validates the request and puts it on an in-process queue; a background worker then looks the address
+up, issues the token and sends the email. So the response takes the same time whether or not the
+address is registered — otherwise the Mailgun round trip a registered address waited for would give
+away what the uniform answer hides (AF-12a). Two consequences for operators:
+
+- A restart drops whatever is still queued — at most a few seconds' worth. Nobody is told; the
+  person asks again, as they would for an email that never arrived.
+- The queue holds 1,024 requests. Beyond that a request is dropped and the log says
+  `The password recovery queue is full` — a sign that Mailgun is down or very slow, not that the
+  endpoint is under attack (the rate limiter caps that first).
+
 | State | Behaviour |
 | --- | --- |
 | Configured | Emails are sent. |
@@ -596,9 +621,12 @@ per-account failure budgets above live in the database instead.
 
 A token still carries no revocation list, but it no longer outlives the identity it names:
 `ActorLivenessFilter` resolves the caller on every authenticated request and refuses a token whose
-person or Google User has been deleted (**FR-AU-05**, **FR-GO-12**). That costs one indexed read per
-request — the price of making logical deletion take effect immediately rather than whenever the
-token happens to expire.
+person or Google User has been deleted (**FR-AU-05**, **FR-GO-12**) or is under a restriction of
+processing (**NFR-24**). That costs one indexed read per request — the price of making logical
+deletion and restriction take effect immediately rather than whenever the token happens to expire.
+The four endpoints through which a subject exercises their own rights — data export, erasure request,
+restriction and lifting their own restriction — still admit a restricted or suspended (not yet
+anonymised) subject, and leave the answer to the use case.
 
 The full operational specification is the
 [Operations & Infrastructure Document](../requirements/operations-infrastructure-document/).
