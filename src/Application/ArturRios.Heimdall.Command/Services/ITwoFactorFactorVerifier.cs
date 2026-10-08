@@ -38,9 +38,10 @@ public interface ITwoFactorFactorVerifier
     ///     Checks <paramref name="recoveryCode" /> against an unused, matching recovery code when it
     ///     is supplied; otherwise checks <paramref name="code" /> against a current TOTP code (when
     ///     <see cref="TwoFactorAuth.AppEnabled" />) and, failing that, against a live email code
-    ///     (when <see cref="TwoFactorAuth.EmailEnabled" />). Does not write anything — the caller
-    ///     decides whether and how to mark the returned row as used, once every other check for its
-    ///     own use case has also passed.
+    ///     (when <see cref="TwoFactorAuth.EmailEnabled" />). Writes only what guessing itself costs —
+    ///     an accepted TOTP step (FR-2F-14) and a charged email-code guess (FR-2F-13). Spending the
+    ///     returned email or recovery code is the caller's, once every other check for its own use
+    ///     case has also passed, and is done through <c>IAtomicWrites</c> so only one request can.
     /// </summary>
     Task<TwoFactorFactorVerificationResult> VerifyAsync(
         TwoFactorAuth twoFactorAuth, string? code, string? recoveryCode);

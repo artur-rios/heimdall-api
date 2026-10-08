@@ -3,6 +3,7 @@ using System.Text;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -37,11 +38,11 @@ public class DisableTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 TwoFactorAuths,
-                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()));
+                new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()));
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
         // it enforces (a code cannot be presented twice) is part of what these tests exercise.
-        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, InMemoryAtomicWrites.Instance);
 
         public DisableTwoFactorAuthCommand Command(
             string? password = Password, string? code = null, string? recoveryCode = null) => new()

@@ -40,6 +40,12 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         misses — so an authenticated request costs one indexed read, and a Google User's two.
 ///     </para>
 ///     <para>
+///         One exception: an action marked <see cref="DataSubjectRightAttribute" /> — the endpoints
+///         through which a subject exports, erases, restricts, or lifts their own restriction — also
+///         admits an identity that is restricted, or logically deleted but not yet anonymised, and
+///         leaves the use case's own eligibility flows to answer. See that attribute for why.
+///     </para>
+///     <para>
 ///         A request carrying no bearer token resolves to <c>null</c> and is left alone, exactly as
 ///         <see cref="MfaPendingGuardFilter" /> leaves it: this filter narrows an identity the
 ///         pipeline already attached and never requires authentication of its own, so
@@ -75,7 +81,9 @@ public class ActorLivenessFilter(
             return;
         }
 
-        var error = await RefusalReasonAsync(user.Id, user.RoleId);
+        var subjectRight = context.ActionDescriptor.EndpointMetadata.OfType<DataSubjectRightAttribute>().Any();
+
+        var error = await RefusalReasonAsync(user.Id, user.RoleId, subjectRight);
 
         if (error is null)
         {
@@ -109,13 +117,18 @@ public class ActorLivenessFilter(
     ///         role from that same row instead of asking whether it exists.
     ///     </para>
     /// </remarks>
-    private async Task<string?> RefusalReasonAsync(Guid actorPublicId, int actorRole)
+    private async Task<string?> RefusalReasonAsync(Guid actorPublicId, int actorRole, bool subjectRight)
     {
         // Nullable so "no live person with this id" is distinguishable from a role value. No role is
         // zero — Roles runs from 1 — but relying on that would be relying on an enum's numbering.
+        //
+        // On a subject-rights action a restricted or suspended identity still counts, an anonymised
+        // one never does: once NFR-20 has run there is no subject left to serve.
         var personRole = await personReader.Query()
-            .Where(person => person.PublicId == actorPublicId && !person.IsDeleted
-                             && person.ProcessingRestrictedAt == null)
+            .Where(person => person.PublicId == actorPublicId &&
+                             (subjectRight
+                                 ? person.AnonymisedAt == null
+                                 : !person.IsDeleted && person.ProcessingRestrictedAt == null))
             .Select(person => (long?)person.RoleId)
             .FirstOrDefaultAsync();
 
@@ -125,8 +138,10 @@ public class ActorLivenessFilter(
         }
 
         var googleUserIsLive = await googleUserReader.Query()
-            .AnyAsync(googleUser => googleUser.PublicId == actorPublicId && !googleUser.IsDeleted
-                                    && googleUser.ProcessingRestrictedAt == null);
+            .AnyAsync(googleUser => googleUser.PublicId == actorPublicId &&
+                                    (subjectRight
+                                        ? googleUser.AnonymisedAt == null
+                                        : !googleUser.IsDeleted && googleUser.ProcessingRestrictedAt == null));
 
         if (!googleUserIsLive)
         {

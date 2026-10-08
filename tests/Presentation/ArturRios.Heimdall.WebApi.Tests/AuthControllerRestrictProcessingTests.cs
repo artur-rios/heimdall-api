@@ -89,7 +89,8 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     public async Task GivenARestrictedPerson_WhenTheyActOnAnExistingToken_ThenTheyAreRefused()
     {
         // The restriction takes effect immediately: ActorLivenessFilter re-reads the record on every
-        // request, so a token issued before it does not keep working.
+        // request, so a token issued before it does not keep working — outside the subject-rights
+        // endpoints SubjectRightsLivenessTests covers, the subject lifting their own included.
         var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
@@ -112,13 +113,9 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     }
 
     [FunctionalFact]
-    public async Task GivenTheSubject_WhenLiftingTheirOwn_ThenItIsLiftedWithoutNotification()
+    public async Task GivenASystemAdmin_WhenLiftingSomebodyElses_ThenTheSubjectIsInformedFirst()
     {
         var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow.AddDays(-1));
-
-        // A restricted identity cannot act on a token, so the lift is exercised as the System Admin
-        // path would reach it — see the unit tests for the subject-lifts-own path, which cannot be
-        // driven over HTTP while the liveness filter refuses the token.
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<LiftProcessingRestrictionCommandOutput?>>(

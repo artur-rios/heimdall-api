@@ -20,6 +20,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // same on every path by design, so the response assertions alone cannot tell the main flow from
 // AF-12a — each test also opens the database and asserts whether a password_reset_token row exists.
 // That row, and only that row, is the difference between the two.
+//
+// The row is written after the response, by PasswordRecoveryDispatcher (AF-12a's timing half), so
+// every database assertion first waits for the queue to settle — see SettleAsync.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -90,6 +93,27 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
             "/api/auth/password-recovery",
             new PasswordRecoveryCommand { Email = email, ScopeId = scopeId });
 
+    /// <summary>
+    ///     Waits until every recovery requested so far has been worked through. The dispatcher takes
+    ///     requests one at a time, in order, so once a sentinel request made last has produced its
+    ///     token, every earlier one has been processed too — including those that rightly produced
+    ///     nothing, which a plain "wait for a row" could never confirm.
+    /// </summary>
+    private async Task SettleAsync()
+    {
+        var sentinel = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("sentinel"));
+
+        await RecoverAsync(sentinel.Email);
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+
+        while ((await TokensForAsync(sentinel)).Count == 0)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The recovery queue did not settle in time.");
+            await Task.Delay(50);
+        }
+    }
+
     private async Task<List<PasswordResetToken>> TokensForAsync(Person person)
     {
         await using var context = db.CreateContext();
@@ -124,6 +148,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then — response
         AssertGenericSuccess(response);
+        await SettleAsync();
 
         // Then — database state: one unused token, expiring in the future (FR-PR-02)
         var token = Assert.Single(await TokensForAsync(person));
@@ -145,6 +170,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Single(await TokensForAsync(person));
     }
 
@@ -160,6 +186,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Single(await TokensForAsync(person));
     }
 
@@ -177,6 +204,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // Then both are live: UC-13 decides which tokens are valid, and nothing in UC-12 invalidates
         // the earlier one, so the first email a person opens still works
         AssertGenericSuccess(response);
+        await SettleAsync();
         var tokens = await TokensForAsync(person);
         Assert.Equal(2, tokens.Count);
         Assert.NotEqual(tokens[0].TokenHash, tokens[1].TokenHash);
@@ -193,6 +221,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         AssertGenericSuccess(response);
 
         // Then — database state: nothing was issued at all
+        await SettleAsync();
         await using var context = db.CreateContext();
         Assert.Equal(0, await context.PasswordResetTokens.CountAsync(
             token => token.Person.Email.StartsWith("nobody-")));
@@ -212,6 +241,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Empty(await TokensForAsync(person));
     }
 
@@ -228,6 +258,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Empty(await TokensForAsync(person));
     }
 
@@ -244,6 +275,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Empty(await TokensForAsync(person));
     }
 
@@ -260,6 +292,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Empty(await TokensForAsync(person));
     }
 
@@ -276,6 +309,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         AssertGenericSuccess(response);
+        await SettleAsync();
         Assert.Empty(await TokensForAsync(person));
     }
 
@@ -323,5 +357,24 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAddressFreedByADeletedAdmin_WhenItsNewHolderRecovers_ThenTheTokenIsTheirs()
+    {
+        // A deleted admin awaiting anonymisation still holds the address its live successor now
+        // holds (FR-PE-09 is unique among live persons only). The recovery goes to the live one.
+        var email = UniqueEmail("reused-admin");
+        var deleted = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
+        var current = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        // When
+        var response = await RecoverAsync(email);
+
+        // Then
+        AssertGenericSuccess(response);
+        await SettleAsync();
+        Assert.Single(await TokensForAsync(current));
+        Assert.Empty(await TokensForAsync(deleted));
     }
 }

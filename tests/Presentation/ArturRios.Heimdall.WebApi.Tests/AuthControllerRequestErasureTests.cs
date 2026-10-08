@@ -152,13 +152,14 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
         await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
             "/api/auth/erasure-request", new { password = Password });
 
-        // The token still authenticates for this call: the liveness filter is what would refuse a
-        // suspended identity, and this asserts the handler's own guard rather than that
+        // The token still reaches the handler although the first request suspended the identity:
+        // the endpoint is a data subject right, which the liveness filter leaves to the use case
+        // (DataSubjectRightAttribute). So the answer is AF-42c's own.
         var second = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
             "/api/auth/erasure-request", new { password = Password });
 
-        Assert.Contains(
-            second.StatusCode, new[] { HttpStatusCode.Conflict, HttpStatusCode.Unauthorized });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Contains(ErasureMessages.ErasureAlreadyRequested, second.Body!.Errors);
     }
 
     [FunctionalFact]

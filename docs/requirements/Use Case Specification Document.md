@@ -193,7 +193,7 @@ sequenceDiagram
 | **ID** | UC-02 |
 | **Name** | View Scope |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve scope details by ID, or list scopes. There are two distinct reads: (a) a single scope by ID, via `GET /api/scopes/{id}`, open to any authenticated actor; or (b) the list of scopes, via `GET /api/scopes`, restricted to System Admins |
+| **Description** | Retrieve scope details by ID, or list scopes. There are two distinct reads: (a) a single scope by ID, via `GET /api/scopes/{id}`, open to any authenticated actor; or (b) the list of scopes, via `GET /api/scopes`, open to System Admins (every scope) and Scope Admins (the scopes they own) |
 | **Preconditions** | Actor is authenticated |
 | **Postconditions** | Scope information is returned |
 
@@ -209,24 +209,27 @@ sequenceDiagram
 
 **Main Flow (read b — list scopes):**
 
-1. A System Admin requests a list of scopes, optionally filtering by name (case-insensitive) and
-   paging the result (FR-SC-03).
-2. The system filters out logically deleted scopes unless explicitly requested.
-3. The system returns the page of scopes.
+1. A System Admin or a Scope Admin requests a list of scopes, optionally filtering by name
+   (case-insensitive) and paging the result (FR-SC-03).
+2. For a Scope Admin, the system keeps only the scopes they own, as the scope-owner records stand now.
+3. The system filters out logically deleted scopes unless explicitly requested.
+4. The system returns the page of scopes, its total counting only what the caller may see.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-02a | Scope not found, or logically deleted and not explicitly requested (read a) | Return `404 Not Found` |
-| AF-02b | Actor not authorized for the requested scope (read a); actor is not a System Admin (read b) | Return `403 Forbidden` |
+| AF-02b | Actor not authorized for the requested scope (read a); actor is a User (read b) | Return `403 Forbidden` |
 
-> **On the list read being System-Admin-only.** The list endpoint is not opened to every actor with
-> the page filtered to what they may see. A Scope Admin reaches the scopes they own through the
-> `ownedScopeIds` their token carries plus read (a); a User has exactly one scope and likewise reads
-> it by ID. Restricting the collection endpoint keeps the total number of scopes — a fact about
-> other tenants — out of reach of any caller who is not a System Admin. This is what the System
-> Requirements Document §5.1 specifies and §7 records.
+> **On who may list.** A Scope Admin's console has a scopes screen, and building it from the
+> `ownedScopeIds` claim plus one read (a) per scope made the screen depend on a sign-in-time snapshot
+> and cost a request per row. So read (b) is open to Scope Admins, filtered to the scopes they own
+> before pagination: the total they see is their own count, and the number of scopes other tenants
+> hold — the fact that kept the listing System-Admin-only — stays out of reach. Ownership is read
+> from the scope-owner records, so an owner removed by UC-22 stops seeing the scope at once rather
+> than when their token expires. A User has exactly one scope and reads it by ID; the collection
+> stays closed to them. System Requirements Document §5.1 and §7 record the same.
 
 ---
 
@@ -783,11 +786,18 @@ sequenceDiagram
 4. The system stores the token and sends a recovery email.
 5. The system returns a generic success message (does not reveal whether the email exists).
 
+Steps 2 to 4 run after step 5, outside the request: the API validates the request, queues it, and
+answers; a background worker then does the lookup, the token and the email (FR-PR-02). The answer
+is therefore identical in time as well as in content for a registered and an unknown address —
+while the work ran on the request, a registered address answered a Mailgun round trip later, which
+gave away exactly what AF-12a withholds. The queue lives in memory, so a restart drops pending
+requests; a person who receives nothing asks again, as for any email that does not arrive.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-12a | Email not found | Return `200 OK` with same generic message (prevents enumeration) |
+| AF-12a | Email not found, or the person is logically deleted, restricted (NFR-24), or cannot sign in because their scope or scopes are deleted | Return `200 OK` with the same generic message, in the same time (prevents enumeration). No token is issued and nothing is sent |
 
 ---
 
@@ -815,7 +825,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-13a | Token expired | Return `400 Bad Request` — "Token expired" |
-| AF-13b | Token already used | Return `400 Bad Request` — "Token already used" |
+| AF-13b | Token already used — including by a request carrying the same token at the same time (NFR-27): exactly one of them sets a password | Return `400 Bad Request` — "Token already used" |
 | AF-13c | Token not found | Return `400 Bad Request` — "Invalid token" |
 | AF-13d | New password fails validation | Return `400 Bad Request` with validation errors |
 
@@ -861,7 +871,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-14a | Token expired | Return `400 Bad Request` — "Token expired" |
-| AF-14b | Token already used | Return `400 Bad Request` — "Token already used" |
+| AF-14b | Token already used — including by a request carrying the same token at the same time (NFR-27) | Return `400 Bad Request` — "Token already used" |
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
 
 ---
@@ -1296,7 +1306,7 @@ sequenceDiagram
 | AF-25a | ID token invalid, expired, or fails verification | Return `401 Unauthorized` |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
-| AF-25d | Existing Google User is logically deleted | Return `401 Unauthorized` |
+| AF-25d | Existing Google User is logically deleted, or under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
 
 ---
 
@@ -1708,16 +1718,16 @@ sequenceDiagram
 ```
 
 1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
-2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token.
-3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes.
+2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token. The token must also still name the person's outstanding challenge: redeeming a challenge spends it, and a newer login replaces it, so a challenge is redeemable once (FR-2F-10).
+3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13).
 4. If a recovery code was used, the system marks it consumed — it cannot be used again.
-5. The system generates and returns the full authentication token, identical in shape to a direct UC-11 success.
+5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-38a | Challenge token expired or invalid | Return `401 Unauthorized` |
+| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), or naming a person who is logically deleted or under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
 | AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
@@ -1860,7 +1870,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10) | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46b | The challenge names a person who no longer exists, is logically deleted, or is under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46c | The person has no active two-factor configuration, or has one without the email method — an authenticator-app holder has no code to resend | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46d | The challenge has already authorized its maximum reissues (FR-2F-13) | Return `200 OK`, identical to the main flow. Nothing is sent |
@@ -1905,6 +1915,7 @@ sequenceDiagram
 - **One endpoint, not one per identity type.** The subject is the token's, so a second endpoint would be a second way to say the same thing and a second place to get authorization wrong.
 - **Secret material is named, not reproduced.** Art. 15(4) says the right to a copy must not adversely affect others' rights, and reproducing a password hash or a TOTP secret would hand whoever holds the document the material to attack the account. Each is listed with the reason, so the subject learns what exists.
 - **A suspended identity can still export.** The lookups omit the `!IsDeleted` filter most handlers apply: somebody suspended pending erasure has more reason to want a copy than anyone, and Art. 15 is not conditional on the account being in good standing.
+- **So can a restricted one** (NFR-24: "remaining reachable by its own subject's export"). The liveness check that refuses a restricted or suspended identity's token everywhere else steps aside for this endpoint and for UC-42, UC-44 and UC-45; an anonymised identity is still refused.
 - **Cleared audit attributions cannot appear.** Once NFR-21 clears an attribution, nothing connects the entry to the person; reporting it would itself be a re-identification.
 
 ---
@@ -1935,7 +1946,7 @@ sequenceDiagram
 | --- | --- | --- |
 | AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account | `CredentialNotAccepted` (401). Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
-| AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation. |
+| AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. The anonymisation pass retries it once an owner has been transferred (UC-21). |
 
 **Notes**
@@ -1943,6 +1954,7 @@ sequenceDiagram
 - The suspension is immediate and deliberate: a subject who has asked to be erased has withdrawn the basis on which the account operates, so continuing to authenticate them while the deadline runs would be processing they have objected to.
 - AF-42d is a success rather than a refusal. The subject's right does not depend on the scope's ownership arrangements, and GDPR Art. 12(3)'s clock starts at the request whether or not anything blocks it. Answering 4xx would tell the subject their right had been refused when it has not.
 - Because it verifies a password, this use case's endpoint is governed by NFR-18 rather than NFR-05.
+- **A restricted subject may request erasure** (NFR-24). The right does not lapse with the restriction, and the request is the subject's own consent to the processing it involves (Art. 18(2)). The record is suspended and the deadline runs, but NFR-24 keeps it out of the anonymisation pass until the restriction is lifted — by the subject (UC-45) or a System Admin — and UC-43 shows it meanwhile.
 - This use case does **not** change UC-09 or UC-10. Those remain administrative operations and keep refusing self-deletion; this is a separate path with a different actor and a different meaning.
 
 ---
@@ -1978,6 +1990,7 @@ sequenceDiagram
 - **Restriction is not deletion, and the two are independent states.** `IsDeleted` means the identity is on its way out — excluded from reads, cascaded by UC-04, eventually anonymised by NFR-20. A restriction means the opposite: the record is disputed and must be preserved exactly as it stands. Reusing the flag would start an erasure clock on data the subject has specifically asked be kept.
 - **No credential is required, unlike UC-42.** Erasure is irreversible and demands proof the person is present. A restriction destroys nothing and is liftable, and somebody asking for one may be doing so precisely because they believe the account is compromised — demanding the password of a person in that position would be the wrong way round.
 - **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them.
+- **A restricted identity can still reach this use case and its siblings.** Every other endpoint refuses its token (NFR-24), but UC-41, UC-42, UC-44 and UC-45 are how the subject exercises their rights over the restricted record, so they admit a restricted or suspended (not anonymised) subject and answer with their own flows — here, AF-44a.
 - The grounds are an enum rather than free text: Art. 18(1) is exhaustive, so prose would add unbounded personal data with no purpose the ground does not already serve.
 
 ---
@@ -2005,11 +2018,12 @@ sequenceDiagram
 | --- | --- | --- |
 | AF-45a | The identity is not restricted | `NotRestricted` (404) |
 | AF-45b | The subject could not be informed | `RestrictionLiftNotificationFailed` (503). The restriction stands |
-| AF-45c | A non-System-Admin names somebody else | `NotEligible` (403) |
+| AF-45c | A non-System-Admin names somebody else, or a System Admin who is themselves restricted or suspended does | `NotEligible` (403) |
 
 **Notes**
 
 - **AF-45b is the opposite of how every other delivery in this API behaves.** Elsewhere a failed send is deliberately not the caller's problem: a verification email that does not arrive is re-requested, and surfacing the failure would leak whether an address exists. Art. 18(3) makes this one a precondition — the subject "shall be informed before the restriction is lifted" — so a lift that proceeded after a failed send would be unlawful, and would look identical to one that worked.
+- **The subject can reach this while restricted.** Their token is refused everywhere else (NFR-24), but lifting their own restriction is their right, so this endpoint admits it. It admits nothing more: a restricted System Admin is a subject here, not an administrator (AF-45c).
 - **A subject lifting their own needs no notification.** They are the person Art. 18(3) exists to inform. Requiring an email to somebody standing in front of you, and refusing their request when it bounces, would be the article's letter against its purpose.
 
 ---
@@ -2053,10 +2067,10 @@ sequenceDiagram
 | UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
-| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-2F-07 |
+| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-2F-07, NFR-27 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
-| UC-13: Reset Password | FR-PR-03, FR-PR-04 |
-| UC-14: Email Verification | FR-EV-03 |
+| UC-13: Reset Password | FR-PR-03, FR-PR-04, NFR-27 |
+| UC-14: Email Verification | FR-EV-03, NFR-27 |
 | UC-15: Resend Verification Email | FR-EV-04 |
 | UC-16: Create Application | FR-AP-01, FR-AP-02, FR-AP-03 |
 | UC-17: View Application | FR-AP-04, FR-AP-05, FR-AP-09 |
@@ -2079,10 +2093,10 @@ sequenceDiagram
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
 | UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15 |
 | UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, NFR-27 |
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12 |
-| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
+| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
 
 ---
 

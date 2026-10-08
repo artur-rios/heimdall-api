@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -104,11 +105,13 @@ public class LoginCommandHandlerTests
     {
         public Guid? PersonId { get; private set; }
         public int? RoleId { get; private set; }
+        public Guid? ChallengeId { get; private set; }
 
-        public Task<AuthToken> IssueAsync(Guid personId, int roleId)
+        public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId)
         {
             PersonId = personId;
             RoleId = roleId;
+            ChallengeId = challengeId;
             return Task.FromResult(
                 new AuthToken("challenge-token", new DateTime(2026, 1, 1, 0, 5, 0, DateTimeKind.Utc)));
         }
@@ -125,9 +128,8 @@ public class LoginCommandHandlerTests
             new(
                 ValidValidator().Object,
                 Persons,
-                Persons,
                 TwoFactorAuths,
-                TwoFactorAuths,
+                InMemoryAtomicWrites.Instance,
                 // The real issuer over the fake repositories, not a mock of it: these tests assert
                 // what lands in EmailCodes — that the prior code was retired and a fresh one written
                 // — which is the behaviour the issuer owns. A mock would only prove it was called.
@@ -149,9 +151,8 @@ public class LoginCommandHandlerTests
         return new LoginCommandHandler(
             ValidValidator().Object,
             persons,
-            persons,
             twoFactorAuths,
-            twoFactorAuths,
+            InMemoryAtomicWrites.Instance,
             new TwoFactorEmailCodeIssuer(emailCodes, emailCodes, Mock.Of<ITwoFactorEmailSender>()),
             new RecordingChallengeTokenIssuer(),
             new PersonAuthTokenService(issuer));
@@ -480,9 +481,8 @@ public class LoginCommandHandlerTests
         var handler = new LoginCommandHandler(
             validator.Object,
             persons,
-            persons,
             twoFactorAuths,
-            twoFactorAuths,
+            InMemoryAtomicWrites.Instance,
             new TwoFactorEmailCodeIssuer(emailCodes, emailCodes, Mock.Of<ITwoFactorEmailSender>()),
             new RecordingChallengeTokenIssuer(),
             new PersonAuthTokenService(issuer));
@@ -526,6 +526,11 @@ public class LoginCommandHandlerTests
         // Then — no full token was ever built, and the challenge named the right person
         Assert.Null(fixture.TokenIssuer.Subject);
         Assert.Equal(person.PublicId, fixture.ChallengeTokenIssuer.PersonId);
+
+        // Then — FR-2F-10: the challenge the token names is the configuration's outstanding one
+        var configuration = fixture.TwoFactorAuths.Query().Single(x => x.PersonId == person.Id);
+        Assert.NotNull(configuration.ChallengeId);
+        Assert.Equal(configuration.ChallengeId, fixture.ChallengeTokenIssuer.ChallengeId);
         Assert.Equal((int)Roles.SystemAdmin, fixture.ChallengeTokenIssuer.RoleId);
     }
 

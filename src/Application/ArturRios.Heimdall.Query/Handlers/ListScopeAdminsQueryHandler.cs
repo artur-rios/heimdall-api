@@ -77,7 +77,9 @@ public class ListScopeAdminsQueryHandler(
         // A logically deleted administrator is never a valid owner, so this listing has no
         // include-deleted mode at all — see ListScopeAdminsQuery.
         var admins = personReader.Query()
-            .Where(x => x.RoleId == (long)Roles.ScopeAdmin && !x.IsDeleted);
+            .Where(x => x.RoleId == (long)Roles.ScopeAdmin && !x.IsDeleted
+                        // NFR-24: withheld from tenant-facing listings, as in ListScopePersons.
+                        && x.ProcessingRestrictedAt == null);
 
         if (excludedScopeId is not null)
         {

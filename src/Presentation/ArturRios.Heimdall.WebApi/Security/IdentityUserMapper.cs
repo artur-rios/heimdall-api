@@ -37,6 +37,12 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
     /// </summary>
     public const string MfaPendingClaim = "mfaPending";
 
+    /// <summary>
+    ///     The claim naming which challenge a UC-38 challenge token stands for (FR-2F-10). Present
+    ///     only on a challenge token, beside <see cref="MfaPendingClaim" />.
+    /// </summary>
+    public const string ChallengeIdClaim = "challengeId";
+
     private const char OwnedScopeIdsSeparator = ',';
 
     public Dictionary<string, string> ToClaims(IAuthenticatedUser user)
@@ -87,6 +93,11 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             claims[MfaPendingClaim] = "true";
         }
 
+        if (identityUser.ChallengeId is not null)
+        {
+            claims[ChallengeIdClaim] = identityUser.ChallengeId.Value.ToString();
+        }
+
         return claims;
     }
 
@@ -114,7 +125,10 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             ScopePermissionClaims = ReadScopePermissionClaims(claims),
             MfaPending = claims.TryGetValue(MfaPendingClaim, out var rawMfaPending) &&
                          bool.TryParse(rawMfaPending, out var parsedMfaPending) &&
-                         parsedMfaPending
+                         parsedMfaPending,
+            ChallengeId = TryReadGuid(claims, ChallengeIdClaim, out var challengeId)
+                ? challengeId
+                : null
         };
     }
 

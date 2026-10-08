@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using ArturRios.Data.PostgreSql;
 using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Auditing;
@@ -6,7 +8,9 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Data.Configuration;
+using ArturRios.Heimdall.Data.Persistence;
 using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.HealthChecks;
@@ -36,6 +40,7 @@ using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
+using Serilog.Events;
 using Serilog.Formatting.Json;
 using System.Threading.RateLimiting;
 
@@ -150,9 +155,10 @@ public class Startup : WebApiStartup
 
         // After the standard pipeline, because it has no slot for it. Rate limiting still sees the
         // endpoint — WebApplication routes ahead of every middleware it is given — and still runs
-        // before MVC: the endpoint itself is always the last step, however late this is added. The
-        // rate-limited endpoints are all anonymous, so AuthenticationMiddleware passes them through
-        // to this point rather than spending anything on them first.
+        // before MVC: the endpoint itself is always the last step, however late this is added. Most
+        // rate-limited endpoints are anonymous, so AuthenticationMiddleware passes them through to
+        // this point rather than spending anything on them first; the few authenticated ones that
+        // check a password or a second factor pay only for reading the bearer token.
         app.UseRateLimiter();
 
         Log.Information("App configured successfully");
@@ -204,6 +210,10 @@ public class Startup : WebApiStartup
         Builder.Services.AddDataConfigFromEnvironment<AppDbContext>("HEIMDALL_DATA");
 
         WarnIfDatabaseConnectionIsNotEncrypted();
+
+        // Spending single-use credentials and charging bounded budgets as one conditional UPDATE
+        // each, so concurrent requests cannot both spend one code or lose each other's counts.
+        Builder.Services.AddScoped<IAtomicWrites, AtomicWrites>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
@@ -355,6 +365,14 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
         Builder.Services.AddSingleton(PasswordResetOptions.FromEnvironment());
         Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+        // UC-12 runs in two halves (AF-12a): the handler queues, the dispatcher does the work after
+        // the caller has been answered, so no address takes longer to answer than another. See
+        // PasswordRecoveryQueue for why this is an in-memory queue rather than a floor or an outbox.
+        Builder.Services.AddSingleton<PasswordRecoveryQueue>();
+        Builder.Services.AddSingleton<IPasswordRecoveryQueue>(
+            provider => provider.GetRequiredService<PasswordRecoveryQueue>());
+        Builder.Services.AddScoped<PasswordRecoveryProcessor>();
+        Builder.Services.AddHostedService<PasswordRecoveryDispatcher>();
         AddEmailSenders();
         AddGoogleSignIn();
 
@@ -634,23 +652,61 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
-    ///     Throttles the anonymous, credential-checking endpoints (login, password recovery/reset,
-    ///     email verification, Google sign-in, 2FA challenge verification) per calling IP address.
-    ///     None of these require a bearer token, so nothing else stops a caller from firing an
-    ///     unbounded burst of requests at them — each login attempt alone costs a full Argon2id
+    ///     Throttles the credential-checking endpoints (login, password recovery/reset, email
+    ///     verification, Google sign-in, 2FA challenge verification and resend) per calling IP
+    ///     address. None of these require a bearer token, so nothing else stops a caller from firing
+    ///     an unbounded burst of requests at them — each login attempt alone costs a full Argon2id
     ///     verification (600 MB / 16 threads by this codebase's hashing library default), and a 2FA
     ///     email code has only 1,000,000 possible values, so an unthrottled brute force or memory/CPU
-    ///     exhaustion attempt is realistic without this. Policy name matches the
+    ///     exhaustion attempt is realistic without this. The authenticated endpoints that check a
+    ///     password or a second factor (2FA confirm, disable and recovery-code regeneration, and the
+    ///     erasure request) carry it too: a bearer token is not the password, and without a limit
+    ///     whoever holds one could test passwords or six-digit codes against them as fast as they
+    ///     could send requests, outside the login lockout. Policy name matches the
     ///     <see cref="Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute" /> applied to
     ///     each endpoint in <c>AuthController</c>.
     /// </summary>
     /// <remarks>
-    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP, which is the caller's own
+    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /64 —
+    ///     see <see cref="RateLimitPartitionKey" />), which is the caller's own
     ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
     ///     every caller shares the proxy's partition. Either way this is a per-instance,
     ///     defense-in-depth throttle, not a substitute for a WAF or an API gateway's own rate limiting
     ///     in front of a real deployment.
     /// </remarks>
+    /// <summary>
+    ///     The partition a caller's requests are counted in: the whole address for IPv4, and the
+    ///     <c>/64</c> it belongs to for IPv6.
+    /// </summary>
+    /// <remarks>
+    ///     A /64 is what one IPv6 subscriber is routinely handed, and every address inside it is
+    ///     theirs to use — 2<sup>64</sup> of them. Counted per address, a single caller could give
+    ///     every request a fresh partition and never meet the limit at all. An IPv4-mapped IPv6
+    ///     address is one IPv4 caller, and is counted as that address.
+    /// </remarks>
+    public static string RateLimitPartitionKey(IPAddress? address)
+    {
+        if (address is null)
+        {
+            return "unknown";
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+        {
+            return address.ToString();
+        }
+
+        var bytes = address.GetAddressBytes();
+        Array.Clear(bytes, 8, 8);
+
+        return $"{new IPAddress(bytes)}/64";
+    }
+
     private void AddAuthEndpointRateLimiting()
     {
         Builder.Services.AddRateLimiter(options =>
@@ -659,7 +715,7 @@ public class Startup : WebApiStartup
 
             options.AddPolicy(AuthEndpointRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    partitionKey: RateLimitPartitionKey(httpContext.Connection.RemoteIpAddress),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
@@ -1062,6 +1118,14 @@ public class Startup : WebApiStartup
     ///         security telemetry, kept for the same period as the rest of the log, and the Data
     ///         Retention Schedule and the Privacy Notice say so.
     ///     </para>
+    ///     <para>
+    ///         <b><c>MailgunEmailService</c> is silenced.</b> The messaging library logs every send
+    ///         with the recipient's address in the clear — "Sending e-mail to …" and "accepted the
+    ///         message for …" at Information, the same on a rejection at Error — which is exactly what
+    ///         NFR-22 forbids, and this codebase's own redaction cannot reach a library's templates.
+    ///         Nothing is lost: <c>MailgunSender</c> already logs every outcome, refusal and exception
+    ///         included, under a <c>LogSafeEmail</c> reference.
+    ///     </para>
     /// </remarks>
     private static void ConfigureLogging()
     {
@@ -1071,6 +1135,7 @@ public class Startup : WebApiStartup
         var retention = DataRetentionOptions.FromEnvironment().LogRetention;
 
         Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Override(typeof(MailgunEmailService).FullName!, LogEventLevel.Fatal)
             .WriteTo.Console(new JsonFormatter())
             .WriteTo.File(
                 new JsonFormatter(),

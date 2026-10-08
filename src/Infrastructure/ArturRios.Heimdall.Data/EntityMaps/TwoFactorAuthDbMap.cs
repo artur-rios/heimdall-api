@@ -23,6 +23,12 @@ internal static class TwoFactorAuthDbMap
 
         twoFactorAuth.Property(x => x.EmailCodeReissueCount).HasDefaultValue(0);
 
+        // The outstanding challenge (FR-2F-10); null when none is outstanding.
+        twoFactorAuth.Property(x => x.ChallengeId);
+
+        // Guesses at that challenge with an app code or a recovery code; reset with it.
+        twoFactorAuth.Property(x => x.ChallengeAttempts).HasDefaultValue(0);
+
         twoFactorAuth.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         twoFactorAuth.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
 

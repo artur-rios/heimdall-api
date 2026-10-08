@@ -55,6 +55,11 @@ public class ListScopeOwnersQueryHandler(
         var owners = personReader.Query()
             .Where(x => x.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
 
+        // NFR-24: a restricted identity is withheld from tenant-facing listings, whatever
+        // IncludeDeleted says — the same rule ListScopePersons and ListScopeGoogleUsers apply. An
+        // owner is no less a data subject than a User.
+        owners = owners.Where(x => x.ProcessingRestrictedAt == null);
+
         if (!query.IncludeDeleted)
         {
             owners = owners.Where(x => !x.IsDeleted);

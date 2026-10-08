@@ -52,8 +52,23 @@ public static class TestTokens
     ///     minutes to reach it, so it mints a token already that close to its own. Omitted, the token
     ///     behaves like any other test credential and outlives the test.
     /// </param>
-    public static string ForMfaPending(Guid personId, int role, TimeSpan? lifetime = null) =>
-        Create(new IdentityUser(personId, role) { MfaPending = true }, lifetime);
+    /// <param name="challengeId">
+    ///     The challenge the token names (FR-2F-10). Omitted, it is <see cref="SeededChallengeId" />,
+    ///     which a test seeding a two-factor configuration directly records as outstanding — the
+    ///     state a login would have left.
+    /// </param>
+    public static string ForMfaPending(
+        Guid personId, int role, TimeSpan? lifetime = null, Guid? challengeId = null) =>
+        Create(
+            new IdentityUser(personId, role) { MfaPending = true, ChallengeId = challengeId ?? SeededChallengeId },
+            lifetime);
+
+    /// <summary>
+    ///     The outstanding challenge a seeded two-factor configuration records, and the one
+    ///     <see cref="ForMfaPending" /> names by default. One value is enough: each person has their
+    ///     own configuration, so sharing it lets no test redeem another's challenge.
+    /// </summary>
+    public static readonly Guid SeededChallengeId = Guid.Parse("6f1c2a52-0d4e-4c1b-9a51-2f5e8b3c7d10");
 
     private static string Create(IdentityUser user, TimeSpan? lifetime = null)
     {

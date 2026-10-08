@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -54,7 +55,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class ResendTwoFactorChallengeCodeCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
+    IAtomicWrites atomicWrites,
     ITwoFactorChallengeTokenValidator challengeTokenValidator,
     ITwoFactorEmailCodeIssuer emailCodeIssuer)
     : ICommandHandlerAsync<ResendTwoFactorChallengeCodeCommand, ResendTwoFactorChallengeCodeCommandOutput>
@@ -76,7 +77,7 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
 
         if (reissuable is { } target)
         {
-            await ReissueAsync(target.Configuration, target.Email);
+            await ReissueAsync(target.Configuration, target.ChallengeId, target.Email);
         }
 
         // UC-46 step 7: the same answer either way.
@@ -91,13 +92,15 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
     ///     more wait, while undercharging would let the bound be stepped around by whatever made the
     ///     write fail. Neither outcome reaches the caller.
     /// </summary>
-    private async Task ReissueAsync(TwoFactorAuth twoFactorAuth, string email)
+    /// <remarks>
+    ///     The charge is one conditional write (<see cref="IAtomicWrites" />) that only succeeds while
+    ///     the challenge is still outstanding and under the cap. Incrementing a count read earlier
+    ///     let parallel resends all read "under the cap" and overwrite each other's increments, so a
+    ///     burst could mail many more codes — and buy many more guesses — than FR-2F-13 allows.
+    /// </remarks>
+    private async Task ReissueAsync(TwoFactorAuth twoFactorAuth, Guid challengeId, string email)
     {
-        twoFactorAuth.EmailCodeReissueCount++;
-
-        var budget = await twoFactorWriter.UpdateAsync(twoFactorAuth);
-
-        if (!budget.Success)
+        if (!await atomicWrites.TryChargeEmailCodeReissueAsync(twoFactorAuth, challengeId, MaxReissuesPerChallenge))
         {
             return;
         }
@@ -112,7 +115,7 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
     ///     configuration or no email method (AF-46c), or its reissues are spent (AF-46d). The caller
     ///     cannot tell these apart, and neither can this method's result.
     /// </summary>
-    private async Task<(TwoFactorAuth Configuration, string Email)?> ResolveReissuableAsync(
+    private async Task<(TwoFactorAuth Configuration, Guid ChallengeId, string Email)?> ResolveReissuableAsync(
         string? challengeToken)
     {
         // AF-46a: signature, expiry, and the MFA-pending claim — exactly UC-38 step 2's check, made
@@ -142,11 +145,14 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
 
         // AF-46c — no active configuration, or one without the email method: an authenticator-app
         // holder has no code to resend. AF-46d — the challenge has spent its reissues.
+        // FR-2F-10/FR-2F-16: only the outstanding challenge has a code to resend — not one already
+        // redeemed, and not one a newer login has replaced.
         return twoFactorAuth is { EmailEnabled: true } &&
+               twoFactorAuth.ChallengeId == principal.ChallengeId &&
                twoFactorAuth.EmailCodeReissueCount < MaxReissuesPerChallenge
             // The address is the person's stored one, read here rather than taken from the request:
             // the command carries no address field, and this is why.
-            ? (twoFactorAuth, person.Email)
+            ? (twoFactorAuth, principal.ChallengeId, person.Email)
             : null;
     }
 }

@@ -109,6 +109,9 @@ classDiagram
         +byte[]? TotpSecretEncrypted
         +bool IsActive
         +long? LastTotpTimeStepUsed
+        +int EmailCodeReissueCount
+        +Guid? ChallengeId
+        +int ChallengeAttempts
     }
     class TwoFactorEmailCode {
         +long TwoFactorAuthId

@@ -51,9 +51,9 @@ public class JwtTwoFactorChallengeTokenIssuer(
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
 {
-    public Task<AuthToken> IssueAsync(Guid personId, int roleId)
+    public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId)
     {
-        var identity = new IdentityUser(personId, roleId) { MfaPending = true };
+        var identity = new IdentityUser(personId, roleId) { MfaPending = true, ChallengeId = challengeId };
 
         var challengeConfiguration = configuration with
         {
@@ -66,12 +66,21 @@ public class JwtTwoFactorChallengeTokenIssuer(
         return Task.FromResult(new AuthToken(token, DateTime.UtcNow.Add(TwoFactorLifetimes.ChallengeToken)));
     }
 
+    /// <summary>
+    ///     Signature and lifetime, against every configured key when there are any — the same rule
+    ///     the bearer-token validator applies — so rotating the signing secret does not void the
+    ///     challenges already in flight while it keeps every full token issued beside them valid.
+    /// </summary>
+    private Task<bool> IsSignedAndLiveAsync(string token) =>
+        configuration.Keys.Count > 0
+            ? jwtHandler.IsTokenValidAsync(token, configuration.Keys)
+            : jwtHandler.IsTokenValidAsync(token, configuration.Secret);
+
     public async Task<TwoFactorChallengePrincipal?> ValidateAsync(string? token)
     {
         // Signature and lifetime (JwtHandler.IsTokenValidAsync validates both) — AF-38a's "expired
         // or invalid".
-        if (string.IsNullOrWhiteSpace(token) ||
-            !await jwtHandler.IsTokenValidAsync(token, configuration.Secret))
+        if (string.IsNullOrWhiteSpace(token) || !await IsSignedAndLiveAsync(token))
         {
             return null;
         }
@@ -85,8 +94,11 @@ public class JwtTwoFactorChallengeTokenIssuer(
 
         // FR-2F-10: only a token carrying the MFA-pending claim is a challenge token at all — a full
         // login token that happens to still be signature-valid is not accepted here either.
-        return mapper.FromClaims(claims) is IdentityUser { MfaPending: true } identity
-            ? new TwoFactorChallengePrincipal(identity.Id)
+        // FR-2F-10 again: a challenge token names which challenge it is, so UC-38 can refuse one that
+        // was already redeemed or has been superseded by a newer login. One without that claim
+        // cannot be checked, and so is not accepted either.
+        return mapper.FromClaims(claims) is IdentityUser { MfaPending: true, ChallengeId: { } challengeId } identity
+            ? new TwoFactorChallengePrincipal(identity.Id, challengeId)
             : null;
     }
 }

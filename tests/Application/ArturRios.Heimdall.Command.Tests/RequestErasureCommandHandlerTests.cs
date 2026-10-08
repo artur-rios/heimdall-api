@@ -166,6 +166,39 @@ public class RequestErasureCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenASuspendedPersonWhoAlreadyAsked_WhenRequestingAgain_ThenTheRepeatIsNamed()
+    {
+        // A subject suspended by their own request reaches this handler (the endpoint is a data
+        // subject right, so the liveness filter lets them through). AF-42c — "already requested" —
+        // is the true answer for them, not AF-42b's generic "not eligible".
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, erasureRequestedAt: DateTime.UtcNow.AddDays(-1));
+        person.IsDeleted = true;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.ErasureAlreadyRequested, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonSuspendedByAnAdministrator_WhenRequestingErasure_ThenNotEligible()
+    {
+        // AF-42b: a logically deleted identity that never asked is not a live one
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        person.IsDeleted = true;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotEligible, output.Errors);
+        Assert.Null(person.ErasureRequestedAt);
+    }
+
+    [UnitFact]
     public async Task GivenATokenNamingNobody_WhenRequestingErasure_ThenItIsRefused()
     {
         var persons = new AsyncFakeRepository<Person, long>();

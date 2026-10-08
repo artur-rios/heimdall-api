@@ -3,6 +3,7 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -246,5 +247,46 @@ public class ApplicationControllerGetByIdTests(PostgresFixture db) : WebApiTest<
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnOwnerRemovedFromTheScope_WhenGetApplicationById_ThenForbidden()
+    {
+        // Given a Scope Admin still named as the application's owner, but no longer an owner of its
+        // scope — UC-22 removed them, and FR-AP-03 says an owner must own the application's scope.
+        // They still own another scope, so their token stays live.
+        var scope = await SeedScopeAsync();
+        var otherScope = await SeedScopeAsync();
+        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+
+        await using (var context = db.CreateContext())
+        {
+            context.ScopeOwners.Add(new ScopeOwner { ScopeId = otherScope.Id, PersonId = owner.Id });
+            await context.SaveChangesAsync();
+        }
+
+        var application = await SeedApplicationAsync(scope, owner);
+
+        await using (var context = db.CreateContext())
+        {
+            context.ScopeOwners.Remove(new ScopeOwner { ScopeId = scope.Id, PersonId = owner.Id });
+            await context.SaveChangesAsync();
+        }
+
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin, null, otherScope.PublicId));
+
+        // When
+        var read = await Gateway.GetAsync<DataOutput<ApplicationOutput?>>(
+            Route(scope.PublicId, application.PublicId));
+        var delete = await Gateway.DeleteAsync<DataOutput<object?>>(
+            Route(scope.PublicId, application.PublicId));
+
+        // Then — refused as any other non-owner is, and nothing deleted
+        Assert.Equal(HttpStatusCode.Forbidden, read.StatusCode);
+        Assert.Contains(ApplicationMessages.NotAuthorizedToViewApplication, read.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
+
+        await using var check = db.CreateContext();
+        Assert.False(check.Applications.Single(x => x.Id == application.Id).IsDeleted);
     }
 }

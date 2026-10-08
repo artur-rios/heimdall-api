@@ -3,6 +3,7 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -77,7 +78,7 @@ public class ScopeControllerViewTests(PostgresFixture db) : WebApiTest<Program>(
         return person;
     }
 
-    // GET /api/scopes — list (SystemAdmin only)
+    // GET /api/scopes — list (System Admin: every scope; Scope Admin: the scopes they own)
 
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenGetScopesFilteredByName_ThenReturnsMatchingScope()
@@ -97,7 +98,62 @@ public class ScopeControllerViewTests(PostgresFixture db) : WebApiTest<Program>(
     }
 
     [FunctionalFact]
-    public async Task GivenNonSystemAdmin_WhenGetScopes_ThenForbidden()
+    public async Task GivenAPageNumberWhoseOffsetOverflows_WhenGetScopes_ThenBadRequestRatherThanAServerError()
+    {
+        // Given a non-empty listing — the pagination helper only computes the offset when there is
+        // something to page — and a page number whose (pageNumber - 1) * pageSize wraps past
+        // int.MaxValue into a negative OFFSET
+        await SeedScopeAsync(UniqueName());
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.GetAsync<PaginatedOutput<ScopeOutput>>(
+            "/api/scopes?pageNumber=30000000&pageSize=100");
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(PaginationMessages.InvalidPageNumber, response.Body!.Errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenScopeAdmin_WhenGetScopes_ThenOnlyTheScopesTheyOwnAreListed()
+    {
+        // Given two scopes sharing a unique prefix, only one of them owned by the caller. Ownership
+        // is read from the database, not from the token: this token carries no owned-scope claim.
+        var prefix = UniqueName();
+        var owned = await SeedScopeAsync($"{prefix}-owned");
+        await SeedScopeAsync($"{prefix}-other");
+        var owner = await SeedScopeAdminAsync(ownedScope: owned);
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
+
+        // When
+        var response = await Gateway.GetAsync<PaginatedOutput<ScopeOutput>>(
+            $"/api/scopes?name={prefix}&pageNumber=1&pageSize=10");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, response.Body?.TotalItems);
+        Assert.Equal(owned.PublicId, Assert.Single(response.Body!.Data!).Id);
+    }
+
+    [FunctionalFact]
+    public async Task GivenScopeAdminOwningNothing_WhenGetScopes_ThenAnEmptyPage()
+    {
+        // Given a Scope Admin who owns no scope at all, while other scopes exist
+        await SeedScopeAsync(UniqueName());
+        var admin = await SeedScopeAdminAsync();
+        Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
+
+        // When
+        var response = await Gateway.GetAsync<PaginatedOutput<ScopeOutput>>("/api/scopes?pageNumber=1&pageSize=10");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, response.Body?.TotalItems);
+    }
+
+    [FunctionalFact]
+    public async Task GivenUser_WhenGetScopes_ThenForbidden()
     {
         // Given
         Authorize(TestTokens.ForRole((int)Roles.User));

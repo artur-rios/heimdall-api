@@ -108,6 +108,28 @@ public class ListScopeOwnersQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenARestrictedOwner_WhenHandlingListScopeOwners_ThenTheyAreWithheld()
+    {
+        // Given two owners, one under a restriction of processing (NFR-24)
+        var scope = Scope(1);
+        var ana = Owner(10, scope, "Ana", "ana@test.local");
+        var bruno = Owner(11, scope, "Bruno", "bruno@test.local");
+        bruno.ProcessingRestrictedAt = DateTime.UtcNow;
+        var scopes = await ScopesWith(scope);
+        var persons = await PersonsWith(ana, bruno);
+        var handler = new ListScopeOwnersQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopeOwnersQueryValidator());
+
+        // When — even asking for deleted ones too, since the two states are independent
+        var query = QueryFor(scope);
+        query.IncludeDeleted = true;
+        var output = await handler.HandleAsync(query);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([ana.PublicId], output.Data!.Select(x => x.Id));
+    }
+
+    [UnitFact]
     public async Task GivenUnknownScope_WhenHandlingListScopeOwners_ThenReturnsScopeNotFound()
     {
         // Given an empty scope store (AF-07a)

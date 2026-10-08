@@ -49,9 +49,9 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         return new AnonymiseExpiredDeletionsCommandHandler(
             persons, persons, googleUsers, googleUsers,
-            passwordResetTokens, passwordResetTokens,
-            emailVerificationTokens, emailVerificationTokens,
-            twoFactorAuths, twoFactorAuths,
+            passwordResetTokens,
+            emailVerificationTokens,
+            twoFactorAuths,
             Retention);
     }
 

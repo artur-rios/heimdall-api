@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Input.Validation;
@@ -9,7 +10,8 @@ using ArturRios.Util.Test.Mock;
 namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for ListScopesQueryHandler (UC-02).
-// Cover the main flow (pagination + filtering, FR-SC-03) and the include-deleted behavior (FR-SC-07).
+// Cover the main flow (pagination + filtering, FR-SC-03), the include-deleted behavior (FR-SC-07),
+// and who sees what: a System Admin every scope, a Scope Admin only the scopes they own.
 public class ListScopesQueryHandlerTests
 {
     private static async Task<AsyncFakeRepository<Scope, long>> RepositoryWith(params Scope[] scopes)
@@ -40,7 +42,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.True(output.Success);
@@ -57,7 +59,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { Name = "Alpha", PageNumber = 1, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, Name = "Alpha", PageNumber = 1, PageSize = 10 });
 
         // Then — "Alpha" and "Alphabet" match, "Beta" does not
         Assert.Equal(2, output.TotalItems);
@@ -73,7 +75,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { Name = "aLpHa", PageNumber = 1, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, Name = "aLpHa", PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.Equal(2, output.TotalItems);
@@ -88,7 +90,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.Equal(1, output.TotalItems);
@@ -103,7 +105,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { IncludeDeleted = true, PageNumber = 1, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, IncludeDeleted = true, PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.Equal(2, output.TotalItems);
@@ -117,7 +119,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 0, PageSize = 10 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, PageNumber = 0, PageSize = 10 });
 
         // Then
         Assert.False(output.Success);
@@ -133,7 +135,7 @@ public class ListScopesQueryHandlerTests
         var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
 
         // When
-        var output = await handler.HandleAsync(new ListScopesQuery { PageNumber = 1, PageSize = 101 });
+        var output = await handler.HandleAsync(new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, PageNumber = 1, PageSize = 101 });
 
         // Then
         Assert.False(output.Success);
@@ -149,10 +151,79 @@ public class ListScopesQueryHandlerTests
 
         // When
         var output = await handler.HandleAsync(
-            new ListScopesQuery { Name = new string('a', 201), PageNumber = 1, PageSize = 10 });
+            new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, Name = new string('a', 201), PageNumber = 1, PageSize = 10 });
 
         // Then
         Assert.False(output.Success);
         Assert.Contains(PaginationMessages.FilterTooLong, output.Errors);
+    }
+    private static Scope OwnedScope(string name, Guid ownerPublicId, bool isDeleted = false) => new()
+    {
+        PublicId = Guid.NewGuid(),
+        Name = name,
+        IsDeleted = isDeleted,
+        Owners = [new ScopeOwner { Person = new Person { PublicId = ownerPublicId } }]
+    };
+
+    [UnitFact]
+    public async Task GivenAScopeAdmin_WhenHandlingList_ThenOnlyTheScopesTheyOwnAreReturned()
+    {
+        // Given two scopes the caller owns and one they do not
+        var owner = Guid.NewGuid();
+        var repository = await RepositoryWith(
+            OwnedScope("Mine A", owner), NamedScope("Theirs"), OwnedScope("Mine B", owner));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery
+        {
+            ActingPersonId = owner, ActingRole = (int)Roles.ScopeAdmin, PageNumber = 1, PageSize = 10
+        });
+
+        // Then — the total is theirs too: the count of other tenants' scopes is not disclosed
+        Assert.True(output.Success);
+        Assert.Equal(2, output.TotalItems);
+        Assert.All(output.Data!, scope => Assert.StartsWith("Mine", scope.Name));
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdminAskingForDeletedScopes_WhenHandlingList_ThenOnlyTheirOwnDeletedScopeIsAdded()
+    {
+        // Given a live and a deleted scope the caller owns, and a deleted scope they do not
+        var owner = Guid.NewGuid();
+        var repository = await RepositoryWith(
+            OwnedScope("Mine", owner), OwnedScope("Mine, gone", owner, isDeleted: true),
+            NamedScope("Theirs, gone", isDeleted: true));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery
+        {
+            ActingPersonId = owner, ActingRole = (int)Roles.ScopeAdmin, IncludeDeleted = true,
+            PageNumber = 1, PageSize = 10
+        });
+
+        // Then
+        Assert.Equal(2, output.TotalItems);
+        Assert.All(output.Data!, scope => Assert.StartsWith("Mine", scope.Name));
+    }
+
+    [UnitFact]
+    public async Task GivenAUser_WhenHandlingList_ThenNotAuthorized()
+    {
+        // Given a User, who reaches their one scope by id and has no collection to list
+        var repository = await RepositoryWith(NamedScope("Alpha"));
+        var handler = new ListScopesQueryHandler(repository, new ListScopesQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(new ListScopesQuery
+        {
+            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User, PageNumber = 1, PageSize = 10
+        });
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(ScopeMessages.NotAuthorizedToListScopes, output.Errors);
+        Assert.Null(output.Data);
     }
 }

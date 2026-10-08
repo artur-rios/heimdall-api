@@ -24,7 +24,8 @@ public class UpdatePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<Person, long> personWriter,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
     public async Task<DataOutput<UpdatePersonCommandOutput?>> HandleAsync(UpdatePersonCommand command, CancellationToken cancellationToken = default)
@@ -113,6 +114,20 @@ public class UpdatePersonCommandHandler(
             return output.WithErrors(update.Errors);
         }
 
+        // UC-08 step 4, continued: a verification token is proof of control of the address it was
+        // mailed to, and that is no longer the person's address. Left live, one mailed to the old
+        // address would mark the new one verified through UC-14 without anybody having read
+        // anything sent to it — undoing the reset just made.
+        if (emailChanged)
+        {
+            var retirement = await RetireVerificationTokensAsync(person.Id);
+
+            if (retirement is not null)
+            {
+                return output.WithErrors(retirement);
+            }
+        }
+
         // UC-08 step 7: return the updated person.
         return output
             .WithData(new UpdatePersonCommandOutput
@@ -135,6 +150,29 @@ public class UpdatePersonCommandHandler(
     ///     a Scope Admin may update a <c>User</c> belonging to a scope they own. Everything else is
     ///     denied.
     /// </summary>
+    private async Task<IEnumerable<string>?> RetireVerificationTokensAsync(long personId)
+    {
+        var now = DateTime.UtcNow;
+
+        var live = await verificationTokenWriter.Query()
+            .Where(x => x.PersonId == personId && !x.Used && x.ExpiresAt > now)
+            .ToListAsync();
+
+        foreach (var outstanding in live)
+        {
+            outstanding.Used = true;
+
+            var retirement = await verificationTokenWriter.UpdateAsync(outstanding);
+
+            if (!retirement.Success)
+            {
+                return retirement.Errors;
+            }
+        }
+
+        return null;
+    }
+
     private async Task<bool> MayUpdateAsync(UpdatePersonCommand command, Person person)
     {
         if (command.ActingRole == (int)Roles.SystemAdmin || command.ActingPersonId == person.PublicId)

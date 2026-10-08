@@ -6,7 +6,11 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     token's claims are the presentation layer's concern.
 /// </summary>
 /// <param name="PersonId">The <c>PublicId</c> of the person the challenge token names.</param>
-public record TwoFactorChallengePrincipal(Guid PersonId);
+/// <param name="ChallengeId">
+///     Which challenge this is. It must still equal the configuration's <c>TwoFactorAuth.ChallengeId</c>
+///     for the token to be honoured, which is what makes a challenge redeemable once (FR-2F-10).
+/// </param>
+public record TwoFactorChallengePrincipal(Guid PersonId, Guid ChallengeId);
 
 /// <summary>
 ///     Issues the short-lived challenge token AF-11g returns instead of a full authentication token
@@ -19,17 +23,19 @@ public interface ITwoFactorChallengeTokenIssuer
 {
     /// <param name="personId">The <c>PublicId</c> of the person who passed the password check.</param>
     /// <param name="roleId">Their role value (see <c>Roles</c>) — carried so the mapper that reads the token back can build an identity from it, but never authorizes anything by itself while <c>MfaPending</c> is set.</param>
+    /// <param name="challengeId">The identifier recorded as the configuration's outstanding challenge, carried in the token so UC-38 can tell an outstanding challenge from a redeemed or superseded one (FR-2F-10).</param>
     /// <returns>The signed challenge token and its (short) expiry.</returns>
-    Task<AuthToken> IssueAsync(Guid personId, int roleId);
+    Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId);
 }
 
 /// <summary>
 ///     Validates a UC-38 challenge token — signature, expiry, and the MFA-pending claim (AF-38a,
-///     FR-2F-10) — and resolves the person it names, without any database read.
+///     FR-2F-10) — and resolves the person and challenge it names, without any database read. Whether
+///     that challenge is still outstanding is the handler's question, answered against the database.
 /// </summary>
 public interface ITwoFactorChallengeTokenValidator
 {
     /// <param name="token">The challenge token submitted to <c>POST /api/auth/2fa/verify</c>.</param>
-    /// <returns>The named person, or <see langword="null" /> if the token is missing, malformed, unsigned by this API, expired, or does not carry the MFA-pending claim.</returns>
+    /// <returns>The named person and challenge, or <see langword="null" /> if the token is missing, malformed, unsigned by this API, expired, or does not carry the MFA-pending and challenge claims.</returns>
     Task<TwoFactorChallengePrincipal?> ValidateAsync(string? token);
 }

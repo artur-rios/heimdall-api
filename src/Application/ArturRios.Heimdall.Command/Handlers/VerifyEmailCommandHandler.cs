@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -38,7 +39,8 @@ public class VerifyEmailCommandHandler(
     IValidator<VerifyEmailCommand> validator,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
-    IAsyncRepository<Person, long> personWriter)
+    IAsyncRepository<Person, long> personWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>
 {
     public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command, CancellationToken cancellationToken = default)
@@ -82,6 +84,14 @@ public class VerifyEmailCommandHandler(
             return output.WithError(AuthMessages.TokenAlreadyUsed);
         }
 
+        // UC-14 step 4, for the presented token, brought forward and made atomic: of two requests
+        // carrying the same token, only the one that spends it verifies the address (AF-14b for the
+        // other).
+        if (!await atomicWrites.TryConsumeEmailVerificationTokenAsync(token, now))
+        {
+            return output.WithError(AuthMessages.TokenAlreadyUsed);
+        }
+
         // UC-14 step 3 (FR-EV-03).
         var person = token.Person;
 
@@ -95,7 +105,7 @@ public class VerifyEmailCommandHandler(
             return output.WithErrors(update.Errors);
         }
 
-        // UC-14 step 4.
+        // UC-14 step 4, for every other token the person still holds.
         var consumption = await ConsumeTokensAsync(token, now);
 
         if (consumption is not null)

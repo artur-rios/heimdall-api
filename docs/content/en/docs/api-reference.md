@@ -53,16 +53,24 @@ Two rules apply everywhere and are not repeated per row:
 Every **anonymous** endpoint here is rate-limited to **10 requests per minute per IP**. Each of them
 checks a credential, and none is protected by a token — see
 [Operations](../operations/#rate-limiting) for why that matters and what the limit does not replace.
+The authenticated endpoints that check a password or a second factor — `2fa/confirm`,
+`2fa/disable`, `2fa/recovery-codes/regenerate` and `erasure-request` — share the same limit.
 
 The 2FA endpoints never name a person: the subject is always the caller, read from the bearer token,
 so a caller can only ever act on their own configuration.
+
+A token naming a restricted identity (UC-44), or one logically deleted and not yet anonymised, is
+refused everywhere with a 401 — except `data-export`, `erasure-request`, `processing-restriction` and
+`processing-restriction/lift`, through which the subject exercises their own rights (NFR-24). Those
+answer with the use case's own flows instead: a restricted subject can export, request erasure, lift
+their own restriction, and is told a second restriction is a conflict (AF-44a).
 
 ## Scopes — `/api/scopes`
 
 | Method & path | Who | Use case |
 | --- | --- | --- |
 | `POST /` | System Admin | UC-01 — create a scope with one or more initial owners |
-| `GET /` | System Admin | UC-02 — list scopes (paginated, filterable) |
+| `GET /` | System Admin; Scope Admin (the scopes they own) | UC-02 — list scopes (paginated, filterable); a Scope Admin's page and total count their own scopes only |
 | `GET /{id}` | Any authenticated | UC-02 — read one scope |
 | `PUT /{id}` | System Admin | UC-03 — update name and description |
 | `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications) |
@@ -183,8 +191,9 @@ Some responses tell the caller less than the API knows, on purpose:
   checks still run in the specification's order so the code reads against UC-11 — only the *answer*
   is uniform.
 - **`POST /api/auth/password-recovery`** answers identically whether or not the address belongs to
-  anyone, and a Mailgun failure is logged rather than surfaced — an email outage must not turn into a
-  500 that confirms an anonymous caller's guess.
+  anyone — in the same time, too: it only queues the request, and the lookup, the token and the email
+  happen after the response. A Mailgun failure is logged rather than surfaced — an email outage must
+  not turn into a 500 that confirms an anonymous caller's guess.
 - **`POST /api/auth/google`** answers alike for an unverifiable token and a Google User whose account
   is gone (AF-25a, AF-25d).
 
