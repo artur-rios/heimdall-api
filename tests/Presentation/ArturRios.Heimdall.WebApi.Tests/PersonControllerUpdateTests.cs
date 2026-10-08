@@ -2,8 +2,10 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -102,6 +104,44 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
         var stored = await context.Persons.AsNoTracking().FirstAsync(p => p.PublicId == person.PublicId);
         Assert.Equal("Renamed", stored.Name);
         Assert.Equal(email, stored.Email);
+        Assert.False(stored.EmailVerified);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAVerificationTokenForTheOldAddress_WhenEmailChanges_ThenItCannotVerifyTheNewOne()
+    {
+        // Given a User holding a live verification token, mailed to the address they have now
+        const string token = "token-mailed-to-the-old-address-0123456789abcdef";
+        var scope = await SeedScopeAsync();
+        var person = await SeedUserAsync(scope);
+
+        await using (var seed = db.CreateContext())
+        {
+            seed.EmailVerificationTokens.Add(new EmailVerificationToken
+            {
+                PersonId = person.Id,
+                TokenHash = SingleUseTokenHash.Of(token),
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        // When they change it to an address nobody has proved they read
+        var update = await Gateway.PutAsync<DataOutput<UpdatePersonCommandOutput?>>(
+            $"/api/persons/{person.PublicId}", Body(person.Name, UniqueEmail("unproven")));
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+
+        var verify = await Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
+            "/api/auth/verify-email", new VerifyEmailCommand { Token = token });
+
+        // Then — the old address's token is spent, and the new address stays unverified (UC-08 step 4)
+        Assert.Equal(HttpStatusCode.BadRequest, verify.StatusCode);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, verify.Body!.Errors);
+
+        await using var context = db.CreateContext();
+        var stored = await context.Persons.AsNoTracking().FirstAsync(p => p.PublicId == person.PublicId);
         Assert.False(stored.EmailVerified);
     }
 

@@ -27,6 +27,7 @@ public static class ScopeMessageMap
             [ScopeMessages.ScopeNotFound] = HttpStatusCodes.NotFound,
             // AF-02b — caller may not view this scope.
             [ScopeMessages.NotAuthorizedToViewScope] = HttpStatusCodes.Forbidden,
+            [ScopeMessages.NotAuthorizedToListScopes] = HttpStatusCodes.Forbidden,
             // AF-01b — invalid input data, or no owner specified.
             [ScopeMessages.NameRequired] = HttpStatusCodes.BadRequest,
             [ScopeMessages.AtLeastOneOwnerRequired] = HttpStatusCodes.BadRequest,

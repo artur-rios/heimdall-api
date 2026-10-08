@@ -367,10 +367,25 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Then
         Assert.Equal(HttpStatusCode.OK, recovery.StatusCode);
 
-        await using var context = db.CreateContext();
-        var issued = await context.PasswordResetTokens
-            .Include(token => token.Person)
-            .SingleAsync(token => token.Person.Email == email);
+        // The token is issued after the answer, by the recovery dispatcher (AF-12a), so wait for it
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        PasswordResetToken? issued;
+
+        while (true)
+        {
+            await using var context = db.CreateContext();
+            issued = await context.PasswordResetTokens
+                .Include(token => token.Person)
+                .SingleOrDefaultAsync(token => token.Person.Email == email);
+
+            if (issued is not null)
+            {
+                break;
+            }
+
+            Assert.True(DateTime.UtcNow < deadline, "No reset token was issued in time.");
+            await Task.Delay(50);
+        }
 
         Assert.False(issued.Used);
         Assert.True(issued.ExpiresAt > DateTime.UtcNow);

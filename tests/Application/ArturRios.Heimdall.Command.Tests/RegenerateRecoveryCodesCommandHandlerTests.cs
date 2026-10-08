@@ -3,6 +3,7 @@ using System.Text;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -38,11 +39,12 @@ public class RegenerateRecoveryCodesCommandHandlerTests
                 TwoFactorAuths,
                 RecoveryCodes,
                 RecoveryCodes,
-                new TwoFactorFactorVerifier(EmailCodes, EmailCodes, RecoveryCodes, TotpVerifier()));
+                InMemoryAtomicWrites.Instance,
+                new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()));
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
         // it enforces (a code cannot be presented twice) is part of what these tests exercise.
-        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, InMemoryAtomicWrites.Instance);
 
         public RegenerateRecoveryCodesCommand Command(string? code = null, string? recoveryCode = null) => new()
         {
@@ -154,7 +156,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         // Then — the old, still-unused code no longer verifies as a valid second factor
         var verifier = new TwoFactorFactorVerifier(
-            fixture.EmailCodes, fixture.EmailCodes, fixture.RecoveryCodes, fixture.TotpVerifier());
+            fixture.EmailCodes, InMemoryAtomicWrites.Instance, fixture.RecoveryCodes, fixture.TotpVerifier());
         var replay = await verifier.VerifyAsync(twoFactorAuth, code: null, recoveryCode: oldUnused);
         Assert.False(replay.Matched);
     }
@@ -174,6 +176,27 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         Assert.True(output.Success);
         Assert.Equal(10, output.Data!.RecoveryCodes.Count);
         Assert.Equal(10, fixture.RecoveryCodes.Query().Count(x => x.TwoFactorAuthId == twoFactorAuth.Id));
+    }
+
+    [UnitFact]
+    public async Task GivenValidEmailCode_WhenHandlingRegenerate_ThenTheEmailCodeCannotBeReplayed()
+    {
+        // Given an email code that has just authorized a regeneration
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: EmailCode));
+        Assert.True(output.Success);
+
+        // When the same code is presented again as a second factor
+        var verifier = new TwoFactorFactorVerifier(
+            fixture.EmailCodes, InMemoryAtomicWrites.Instance, fixture.RecoveryCodes, fixture.TotpVerifier());
+        var replay = await verifier.VerifyAsync(twoFactorAuth, code: EmailCode, recoveryCode: null);
+
+        // Then it was spent by the regeneration, as it would have been by a login
+        Assert.True(emailCode.Used);
+        Assert.False(replay.Matched);
     }
 
     [UnitFact]

@@ -64,7 +64,8 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
             IsActive = true,
             AppEnabled = appEnabled,
             EmailEnabled = emailEnabled,
-            TotpSecretEncrypted = totpSecretEncrypted
+            TotpSecretEncrypted = totpSecretEncrypted,
+            ChallengeId = TestTokens.SeededChallengeId
         };
         context.TwoFactorAuths.Add(twoFactorAuth);
         await context.SaveChangesAsync();
@@ -168,6 +169,87 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         Assert.Null(replay.Body?.Data?.Token);
         Assert.Contains(TwoFactorMessages.FactorInvalid, replay.Body!.Errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARedeemedChallenge_WhenPresentedAgainWithAnotherFactor_ThenUnauthorized()
+    {
+        // FR-2F-10: "shall reject an expired or already-redeemed challenge token". Whoever holds a
+        // challenge that has already been traded for a full token — from a log, a proxy, a shared
+        // screen — must not be able to trade it again with any further factor, without the password.
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("redeemed-challenge"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var firstRecoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+        var secondRecoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+
+        var login = await LoginAsync(person.Email);
+        var challengeToken = login.Body!.Data!.ChallengeToken!;
+
+        var first = await VerifyAsync(challengeToken, recoveryCode: firstRecoveryCode);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        // When the same challenge is presented again, with a factor that is itself still good
+        var replay = await VerifyAsync(challengeToken, recoveryCode: secondRecoveryCode);
+
+        // Then — AF-38a, and the second recovery code is untouched
+        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+        Assert.Null(replay.Body?.Data?.Token);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, replay.Body!.Errors);
+
+        await using var context = db.CreateContext();
+        Assert.Equal(1, await context.TwoFactorRecoveryCodes.CountAsync(
+            x => x.TwoFactorAuthId == twoFactorAuth.Id && !x.Used));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAChallengeSupersededByANewerLogin_WhenPostVerify_ThenUnauthorized()
+    {
+        // Only the latest challenge is outstanding: a second login replaces the first one's.
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("superseded-challenge"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+
+        var earlier = await LoginAsync(person.Email);
+        var later = await LoginAsync(person.Email);
+
+        // When
+        var stale = await VerifyAsync(earlier.Body!.Data!.ChallengeToken!, recoveryCode: recoveryCode);
+        var current = await VerifyAsync(later.Body!.Data!.ChallengeToken!, recoveryCode: recoveryCode);
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, stale.StatusCode);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, stale.Body!.Errors);
+        Assert.Equal(HttpStatusCode.OK, current.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPersonRestrictedAfterTheirChallenge_WhenPostVerify_ThenNoTokenIsIssued()
+    {
+        // NFR-24 / UC-44 step 4: a restricted identity does not authenticate. UC-11 refuses one; a
+        // restriction applied between UC-11 and UC-38 is refused here the same way.
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted-challenge"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+
+        var login = await LoginAsync(person.Email);
+
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.FirstAsync(x => x.Id == person.Id);
+            stored.ProcessingRestrictedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        // When
+        var verify = await VerifyAsync(login.Body!.Data!.ChallengeToken!, recoveryCode: recoveryCode);
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, verify.StatusCode);
+        Assert.Null(verify.Body?.Data?.Token);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, verify.Body!.Errors);
     }
 
     [FunctionalFact]

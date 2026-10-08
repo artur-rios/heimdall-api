@@ -46,6 +46,7 @@ public class UpdateApplicationCommandHandler(
         var application = await applicationReader.Query()
             .Include(x => x.Scope)
             .Include(x => x.Owner)
+            .ThenInclude(owner => owner.ScopeOwnerships)
             .FirstOrDefaultAsync(x =>
                 x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId && !x.IsDeleted);
 
@@ -60,7 +61,12 @@ public class UpdateApplicationCommandHandler(
         // Owning the *scope* is not by itself grounds to modify another owner's application, so the
         // rule compares the owner rather than consulting IScopeOwnershipChecker — the same call
         // UC-17 makes for reads.
-        if (command.ActingRole != (int)Roles.SystemAdmin && currentOwnerId != command.ActingPersonId)
+        //
+        // An owner who no longer owns the application's scope (UC-22 removed them) is not a valid
+        // owner under FR-AP-03, and is refused as UC-17 refuses them.
+        if (command.ActingRole != (int)Roles.SystemAdmin &&
+            (currentOwnerId != command.ActingPersonId ||
+             application.Owner.ScopeOwnerships.All(ownership => ownership.ScopeId != application.ScopeId)))
         {
             return output.WithError(ApplicationMessages.NotAuthorizedToUpdateApplication);
         }

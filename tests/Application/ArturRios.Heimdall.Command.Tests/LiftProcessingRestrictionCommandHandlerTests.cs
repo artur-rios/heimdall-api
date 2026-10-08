@@ -115,6 +115,32 @@ public class LiftProcessingRestrictionCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenARestrictedSystemAdmin_WhenLiftingSomebodyElses_ThenItIsRefused()
+    {
+        // The lift endpoint lets a restricted caller through for their own restriction (UC-45,
+        // NFR-24). An administrator who is restricted themselves is a subject there, not an
+        // administrator: they may not process anyone else's record.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var subject = await SeedRestrictedAsync(persons);
+        var admin = await SeedRestrictedAsync(persons);
+        admin.RoleId = (long)Roles.SystemAdmin;
+        var notifier = new Mock<IRestrictionLiftNotifier>();
+
+        var output = await Handler(persons, new(), Notifier(true, notifier))
+            .HandleAsync(new LiftProcessingRestrictionCommand
+            {
+                SubjectId = subject.PublicId,
+                ActingPersonId = admin.PublicId,
+                ActingRole = (int)Roles.SystemAdmin
+            });
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotEligible, output.Errors);
+        notifier.Verify(n => n.NotifyAsync(It.IsAny<string>()), Times.Never);
+        Assert.NotNull(subject.ProcessingRestrictedAt);
+    }
+
+    [UnitFact]
     public async Task GivenANonAdminLiftingSomebodyElses_WhenLifting_ThenItIsRefused()
     {
         var persons = new AsyncFakeRepository<Person, long>();

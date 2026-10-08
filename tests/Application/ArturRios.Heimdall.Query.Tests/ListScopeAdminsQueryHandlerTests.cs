@@ -107,6 +107,26 @@ public class ListScopeAdminsQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenRestrictedScopeAdmin_WhenHandlingListScopeAdmins_ThenItIsWithheld()
+    {
+        // Given one Scope Admin under a restriction of processing (NFR-24), withheld from
+        // tenant-facing listings as ListScopePersons withholds a restricted User
+        var ana = Admin(10, "Ana", "ana@test.local");
+        var bruno = Admin(11, "Bruno", "bruno@test.local");
+        bruno.ProcessingRestrictedAt = DateTime.UtcNow;
+        var scopes = await RepositoryWith<Scope>();
+        var persons = await RepositoryWith(ana, bruno);
+        var handler = HandlerFor(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Query());
+
+        // Then
+        Assert.Equal(1, output.TotalItems);
+        Assert.Equal([ana.PublicId], output.Data!.Select(x => x.Id));
+    }
+
+    [UnitFact]
     public async Task GivenDeletedScopeAdmin_WhenHandlingListScopeAdmins_ThenItIsExcluded()
     {
         // Given one live and one logically deleted Scope Admin — a deleted admin is never a valid

@@ -9,8 +9,11 @@ namespace ArturRios.Heimdall.Shared.Messages;
 /// </summary>
 public static class PaginationMessages
 {
-    /// <summary><c>PageNumber</c> was less than 1.</summary>
-    public const string InvalidPageNumber = "Page number must be at least 1.";
+    /// <summary>
+    ///     <c>PageNumber</c> was less than 1, or past the last page whose offset fits in an <c>int</c>
+    ///     (<c>PaginatedQueryValidator.MaxPageNumber</c>).
+    /// </summary>
+    public const string InvalidPageNumber = "Page number must be between 1 and 21474836.";
 
     /// <summary>
     ///     <c>PageSize</c> was less than 1 or greater than the maximum allowed page size. The upper

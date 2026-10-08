@@ -58,7 +58,8 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = appEnabled, EmailEnabled = emailEnabled
+            PersonId = person.Id, IsActive = true, AppEnabled = appEnabled, EmailEnabled = emailEnabled,
+            ChallengeId = TestTokens.SeededChallengeId
         };
 
         context.TwoFactorAuths.Add(twoFactorAuth);
@@ -224,6 +225,11 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
                 .FirstAsync();
 
             redeemed.Used = false;
+
+            // And the challenge with it: redeeming it spent it too (FR-2F-10).
+            var configuration = await context.TwoFactorAuths.FirstAsync(x => x.PersonId == person.Id);
+            configuration.ChallengeId = TestTokens.SeededChallengeId;
+
             await context.SaveChangesAsync();
         }
 

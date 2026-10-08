@@ -78,8 +78,11 @@ public class GoogleSignInCommandHandler(
 
             googleUser = signUp.googleUser;
         }
-        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted.
-        else if (googleUser.IsDeleted)
+        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted. A
+        // restriction of processing is refused the same way and for the same reason UC-11 refuses
+        // one with its own uniform answer: a restricted identity may not authenticate (NFR-24,
+        // UC-44 step 4), and the subject who asked for it already knows why.
+        else if (googleUser.IsDeleted || googleUser.ProcessingRestrictedAt is not null)
         {
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }

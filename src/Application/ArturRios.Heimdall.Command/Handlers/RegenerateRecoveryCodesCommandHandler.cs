@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -45,6 +46,7 @@ public class RegenerateRecoveryCodesCommandHandler(
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
     IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
+    IAtomicWrites atomicWrites,
     ITwoFactorFactorVerifier factorVerifier)
     : ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>
 {
@@ -76,6 +78,24 @@ public class RegenerateRecoveryCodesCommandHandler(
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
         if (!verification.Matched)
+        {
+            return output.WithError(TwoFactorMessages.FactorInvalid);
+        }
+
+        // An email code is single-use wherever it is accepted (FR-2F-03): the one that authorized
+        // this regeneration is retired as UC-38 retires the one that completes a login, rather than
+        // staying redeemable there for the rest of its ten minutes. A recovery code is spent too,
+        // although its whole set is replaced below: spending it is what lets only one of two
+        // simultaneous regenerations — or a regeneration and a login — use it. Both are spent before
+        // anything is written, by writes only one request can win.
+        if (verification.ConsumedEmailCode is { } consumedEmailCode &&
+            !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+        {
+            return output.WithError(TwoFactorMessages.FactorInvalid);
+        }
+
+        if (verification.ConsumedRecoveryCode is { } consumedRecoveryCode &&
+            !await atomicWrites.TryConsumeRecoveryCodeAsync(consumedRecoveryCode, DateTime.UtcNow))
         {
             return output.WithError(TwoFactorMessages.FactorInvalid);
         }

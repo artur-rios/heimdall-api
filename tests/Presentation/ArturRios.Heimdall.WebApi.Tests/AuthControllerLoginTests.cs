@@ -16,6 +16,7 @@ using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Constants;
+using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -422,5 +423,45 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
 
         // Then — and the endpoint works again once the gate drains, so saturation is not a latch
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAddressFreedByADeletedAdmin_WhenItsNewHolderLogsIn_ThenTheyAreAuthenticated()
+    {
+        // FR-PE-09 keeps addresses unique among live persons only, so a deleted admin awaiting
+        // anonymisation and the admin who took the address over can both be stored. The lookup must
+        // resolve the live one; resolving the deleted one refused the new holder until the old row
+        // was anonymised, months later.
+        var email = UniqueEmail("reused-admin");
+        await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true, password: "0ld-Deleted-Pass!");
+        var current = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        // When
+        var response = await LoginAsync(email);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(response.Body!.Data!.Token));
+
+        await using var context = db.CreateContext();
+        var stored = await context.Persons.FirstAsync(x => x.Id == current.Id);
+        Assert.Equal(0, stored.FailedLoginAttempts);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAddressFreedByADeletedUser_WhenItsNewHolderLogsIn_ThenTheyAreAuthenticated()
+    {
+        // The per-scope half of the same rule.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("reused-user");
+        await SeedUserAsync(scope, email, isDeleted: true);
+        await SeedUserAsync(scope, email);
+
+        // When
+        var response = await LoginAsync(email, scopeId: scope.PublicId);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(response.Body!.Data!.Token));
     }
 }

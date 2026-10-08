@@ -80,13 +80,15 @@ public class UpdatePersonCommandHandlerTests
     private static UpdatePersonCommandHandler HandlerFor(
         AsyncFakeRepository<Person, long> persons,
         bool ownershipAllowed = true,
-        AsyncFakeRepository<GoogleUser, long>? googleUsers = null) =>
+        AsyncFakeRepository<GoogleUser, long>? googleUsers = null,
+        AsyncFakeRepository<EmailVerificationToken, long>? verificationTokens = null) =>
         new(
             PassingValidator(),
             persons,
             googleUsers ?? new AsyncFakeRepository<GoogleUser, long>(),
             persons,
-            Ownership(ownershipAllowed));
+            Ownership(ownershipAllowed),
+            verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>());
 
     private static UpdatePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -137,6 +139,54 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal("Renamed", output.Data!.Name);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingVerificationToken_WhenEmailChanges_ThenTheTokenIsRetired()
+    {
+        // Given a person holding a live verification token mailed to their current address
+        var scope = Scope(1);
+        var target = User(10, scope);
+        var persons = await PersonsWith(target);
+        var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        await tokens.CreateAsync(new EmailVerificationToken
+        {
+            PersonId = target.Id, TokenHash = "old-address", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        });
+        var handler = HandlerFor(persons, verificationTokens: tokens);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "elsewhere@test.local";
+
+        // When the address changes
+        var output = await handler.HandleAsync(command);
+
+        // Then the token can no longer verify the new address on the old one's behalf
+        Assert.True(output.Success);
+        Assert.All(tokens.Query().ToList(), token => Assert.True(token.Used));
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingVerificationToken_WhenEmailIsUnchanged_ThenTheTokenStaysLive()
+    {
+        // Given
+        var scope = Scope(1);
+        var target = User(10, scope);
+        var persons = await PersonsWith(target);
+        var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        await tokens.CreateAsync(new EmailVerificationToken
+        {
+            PersonId = target.Id, TokenHash = "same-address", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        });
+        var handler = HandlerFor(persons, verificationTokens: tokens);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.All(tokens.Query().ToList(), token => Assert.False(token.Used));
     }
 
     [UnitFact]

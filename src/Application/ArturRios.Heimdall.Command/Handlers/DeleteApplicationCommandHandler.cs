@@ -35,6 +35,7 @@ public class DeleteApplicationCommandHandler(
         // addresses. Checked before authorization so AF-19a and AF-19c both stay observable.
         var application = await applicationReader.Query()
             .Include(x => x.Owner)
+            .ThenInclude(owner => owner.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
 
         if (application is null)
@@ -47,7 +48,12 @@ public class DeleteApplicationCommandHandler(
         // rule compares the owner rather than consulting IScopeOwnershipChecker — the same call UC-17
         // makes for reads and UC-18 for updates. Runs before AF-19b so an already-deleted application
         // cannot be used to probe for applications outside the caller's reach.
-        if (command.ActingRole != (int)Roles.SystemAdmin && application.Owner.PublicId != command.ActingPersonId)
+        //
+        // An owner who no longer owns the application's scope (UC-22 removed them) is not a valid
+        // owner under FR-AP-03, and is refused as UC-17 refuses them.
+        if (command.ActingRole != (int)Roles.SystemAdmin &&
+            (application.Owner.PublicId != command.ActingPersonId ||
+             application.Owner.ScopeOwnerships.All(ownership => ownership.ScopeId != application.ScopeId)))
         {
             return output.WithError(ApplicationMessages.NotAuthorizedToDeleteApplication);
         }

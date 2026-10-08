@@ -505,6 +505,34 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     [FunctionalFact]
+    public async Task GivenRestrictedGoogleUser_WhenPostAuthGoogle_ThenReturnsUnauthorizedAndLeavesTheRowAlone()
+    {
+        // Given an account under a restriction of processing (UC-44): from that moment the identity
+        // cannot authenticate (NFR-24), and its record is preserved exactly as it stands
+        var scope = await SeedScopeAsync();
+        var subject = $"google-sub-{Guid.NewGuid():N}";
+        var email = UniqueEmail("restricted");
+        var googleUser = await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
+
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.GoogleUsers.FirstAsync(x => x.Id == googleUser.Id);
+            stored.ProcessingRestrictedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        // When — with a token that would otherwise refresh the verification flag
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(subject, email));
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
+        Assert.Null(response.Body.Data?.Token);
+        var after = Assert.Single(await StoredAsync(scope));
+        Assert.False(after.EmailVerified);
+    }
+
+    [FunctionalFact]
     public async Task GivenTokenReportsUnverifiedAddress_WhenPostAuthGoogle_ThenResponseReportsEmailVerifiedFalse()
     {
         // Given a first sign-in with a Google token whose email_verified claim is false (FR-EV-05)

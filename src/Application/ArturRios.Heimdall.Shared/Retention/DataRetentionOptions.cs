@@ -313,8 +313,12 @@ public sealed record DataRetentionOptions
 
     /// <summary>
     ///     Reads a period expressed in <paramref name="unit" />, accepting the raw number only when
-    ///     it is greater than <paramref name="minimum" /> and no greater than
-    ///     <paramref name="maximum" /> — both given in the variable's own unit, days or minutes.
+    ///     it is positive, at least <paramref name="minimum" />, and no greater than
+    ///     <paramref name="maximum" /> — both given in the variable's own unit, days or minutes. A
+    ///     <paramref name="minimum" /> of zero therefore means "more than 0", and any other is
+    ///     inclusive, which is how the Data Retention Schedule states each range ("1 to 10080",
+    ///     "30 to 3650"). It used to be exclusive throughout, so the documented lower bound of every
+    ///     range was itself refused.
     /// </summary>
     /// <remarks>
     ///     The bounds are checked on the number, before it is converted, and that ordering is the
@@ -339,7 +343,7 @@ public sealed record DataRetentionOptions
 
         // A zero or negative period would purge rows the moment they expire, or run continuously;
         // both are mistakes rather than policies.
-        if (!double.TryParse(raw, out var value) || value <= minimum || value > maximum)
+        if (!double.TryParse(raw, out var value) || value <= 0 || value < minimum || value > maximum)
         {
             invalid.Add(variable);
 

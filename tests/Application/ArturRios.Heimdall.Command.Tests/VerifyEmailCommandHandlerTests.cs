@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -26,7 +27,7 @@ public class VerifyEmailCommandHandlerTests
         Person Person)
     {
         public VerifyEmailCommandHandler Handler(IValidator<VerifyEmailCommand>? validator = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, Persons);
+            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance);
     }
 
     private static IValidator<VerifyEmailCommand> PassingValidator()

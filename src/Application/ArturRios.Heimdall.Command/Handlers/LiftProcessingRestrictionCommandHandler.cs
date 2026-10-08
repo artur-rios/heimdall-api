@@ -56,6 +56,15 @@ public class LiftProcessingRestrictionCommandHandler(
             return output.WithError(ErasureMessages.NotEligible);
         }
 
+        // The endpoint admits a restricted or suspended caller, because lifting their own restriction
+        // is a right of theirs (NFR-24). Lifting somebody else's is not: an administrator who is
+        // restricted or suspended themselves acts here as a subject, not as an administrator.
+        if (!liftingOwn && await personReader.Query().AnyAsync(x =>
+                x.PublicId == command.ActingPersonId && (x.IsDeleted || x.ProcessingRestrictedAt != null)))
+        {
+            return output.WithError(ErasureMessages.NotEligible);
+        }
+
         var person = await personReader.Query().FirstOrDefaultAsync(x => x.PublicId == subjectId);
 
         if (person is not null)
