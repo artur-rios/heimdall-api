@@ -313,8 +313,8 @@ The detailed check is intentionally **extensible**: for now the only verified se
 
 | ID | Requirement | Priority |
 | ---- | ------------ | ---------- |
-| FR-HC-01 | The system shall expose a **public** liveness endpoint (`GET /HealthCheck`) that confirms the API process is running and responding, requiring **no authentication** | High |
-| FR-HC-02 | The system shall expose a **detailed** health check endpoint (`GET /HealthCheck/detailed`) accessible **only to System Admins** | High |
+| FR-HC-01 | The system shall expose a **public** liveness endpoint (`GET /api/healthcheck`) that confirms the API process is running and responding, requiring **no authentication** | High |
+| FR-HC-02 | The system shall expose a **detailed** health check endpoint (`GET /api/healthcheck/detailed`) accessible **only to System Admins** | High |
 | FR-HC-03 | The detailed health check shall verify the **database connection** | High |
 | FR-HC-04 | The detailed health check shall report the status of **each verified service individually** | High |
 | FR-HC-05 | The detailed health check shall report an **aggregate general status** of `Healthy` when all verified services are up, or `Unhealthy` when one or more verified services are down | High |
@@ -325,8 +325,8 @@ The detailed check is intentionally **extensible**: for now the only verified se
 
 | Method | Endpoint | Description | Auth Required |
 | -------- | ---------- | ------------- | --------------- |
-| GET | `/HealthCheck` | Basic liveness check — confirms the API is on ("hello world") | **No (Public)** |
-| GET | `/HealthCheck/detailed` | Detailed health check — reports per-service status and an aggregate `Healthy` / `Unhealthy` general status | **SystemAdmin** |
+| GET | `/api/healthcheck` | Basic liveness check — confirms the API is on ("hello world") | **No (Public)** |
+| GET | `/api/healthcheck/detailed` | Detailed health check — reports per-service status and an aggregate `Healthy` / `Unhealthy` general status | **SystemAdmin** |
 
 ### 3.4 Detailed Health Check — Response Contract
 
@@ -369,7 +369,7 @@ The aggregate `status` is `Healthy` only when **every** entry in `services` is h
 
 **Main Flow (liveness):**
 
-1. A caller (monitor, load balancer, or anonymous user) sends `GET /HealthCheck`.
+1. A caller (monitor, load balancer, or anonymous user) sends `GET /api/healthcheck`.
 2. The system returns a success response indicating the API is on. No authentication is required.
 
 **Main Flow (detailed):**
@@ -380,7 +380,7 @@ sequenceDiagram
     participant API as Heimdall API
     participant DB as Database
 
-    SA->>API: GET /HealthCheck/detailed
+    SA->>API: GET /api/healthcheck/detailed
     API->>API: Authorize (SystemAdmin only)
     API->>DB: Verify database connection
     alt Database reachable
@@ -393,7 +393,7 @@ sequenceDiagram
     API-->>SA: 200 OK / 503 { status, services[] }
 ```
 
-1. A System Admin sends `GET /HealthCheck/detailed`.
+1. A System Admin sends `GET /api/healthcheck/detailed`.
 2. The system authorizes the request; only System Admins may proceed.
 3. The system verifies each registered service (currently: the database connection).
 4. The system computes the aggregate general status (`Healthy` if all up, `Unhealthy` otherwise).
@@ -411,8 +411,8 @@ sequenceDiagram
 
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
 | -------- | :-----------: | :----------: | :----: | :---------: |
-| Basic liveness (`GET /HealthCheck`) | ✅ | ✅ | ✅ | ✅ |
-| Detailed health check (`GET /HealthCheck/detailed`) | ✅ | ❌ | ❌ | ❌ |
+| Basic liveness (`GET /api/healthcheck`) | ✅ | ✅ | ✅ | ✅ |
+| Detailed health check (`GET /api/healthcheck/detailed`) | ✅ | ❌ | ❌ | ❌ |
 
 ### 3.7 Extensibility
 

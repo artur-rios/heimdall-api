@@ -11,7 +11,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
-[Route("[controller]")]
+/// <remarks>
+///     Under <c>api/</c> like every other route, because that prefix is all that carries a request on
+///     the web UI's host through to the API — see <c>OpenApiContractTests</c>. The container probe and
+///     yggdrasil's status catalog call the root <c>/healthcheck</c>, which the edge pipeline in
+///     <see cref="Startup" /> rewrites to this address.
+/// </remarks>
+[Route("api/healthcheck")]
 public class HealthCheckController(QueryMediator queryMediator) : Controller
 {
     /// <summary>

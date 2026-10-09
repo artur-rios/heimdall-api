@@ -1,4 +1,4 @@
-### Health check — /healthcheck
+### Health check — /api/healthcheck
 #
 # The liveness probe needs nothing at all, which makes it the quickest way to confirm the API is up
 # and the environment file was loaded before running anything else here.
@@ -6,9 +6,9 @@
 ### Liveness (UC-30) — anonymous.
 # Answers as long as the process is serving. Reads no dependency, so it stays 200 even when the
 # database is unreachable — use the detailed check below to tell those apart.
-GET {{host}}/healthcheck
+GET {{host}}/api/healthcheck
 
 ### Per-dependency status (UC-30) — System Admin.
 # Run auth.http's "Login" first. Names each dependency and its status.
-GET {{host}}/healthcheck/detailed
+GET {{host}}/api/healthcheck/detailed
 Authorization: Bearer {{token}}

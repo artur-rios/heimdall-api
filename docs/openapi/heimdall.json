@@ -1802,7 +1802,7 @@
         ]
       }
     },
-    "/HealthCheck": {
+    "/api/healthcheck": {
       "get": {
         "tags": [
           "HealthCheck"
@@ -1835,7 +1835,7 @@
         "security": [ ]
       }
     },
-    "/HealthCheck/detailed": {
+    "/api/healthcheck/detailed": {
       "get": {
         "tags": [
           "HealthCheck"

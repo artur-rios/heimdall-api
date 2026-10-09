@@ -324,7 +324,7 @@ public class HealthCheckTests(EnvironmentType environment = EnvironmentType.Loca
     [FunctionalFact]
     public async Task GivenApiWorking_WhenHealthCheckEndpointCalled_ThenEndpointReturnsOk()
     {
-        var output = await Gateway.GetAsync<DataOutput<string>>("/HealthCheck");
+        var output = await Gateway.GetAsync<DataOutput<string>>("/api/healthcheck");
 
         Assert.Equal(HttpStatusCode.OK, output.StatusCode);
         Assert.Equal("Hello world!", output.Body?.Data);

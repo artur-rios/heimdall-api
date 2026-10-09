@@ -39,6 +39,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Rewrite;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -484,6 +485,13 @@ public class Startup : WebApiStartup
             app.UseForwardedHeaders();
 
             app.UseHttpsRedirection();
+
+            // The health check moved under api/ so the web UI can reach it through its own host; the
+            // container probe and yggdrasil's status catalog still call the root address. Rewritten
+            // here, ahead of routing and authentication, so the alias runs the same endpoint with the
+            // same authorization, and stays out of the OpenAPI document.
+            app.UseRewriter(new RewriteOptions()
+                .AddRewrite("(?i)^healthcheck(/detailed)?/?$", "api/healthcheck$1", skipRemainingRules: true));
 
             next(app);
         };
