@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-09
+
+### Fixed
+
+- The health check moved to `GET /api/healthcheck` and `GET /api/healthcheck/detailed`. At the root it was
+  unreachable from the web UI's host, which routes only `/api/` to the API, so heimdall-ui's health screen showed
+  errors in every deployed environment. The root `/healthcheck` addresses still answer, for the container health
+  check and yggdrasil's status page, but are no longer in the OpenAPI document.
+
 ## [1.1.0] - 2026-10-09
 
 ### Added
@@ -128,6 +137,7 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/artur-rios/heimdall-api/releases/tag/v1.0.0

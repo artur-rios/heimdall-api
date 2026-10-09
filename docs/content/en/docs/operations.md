@@ -63,8 +63,12 @@ against a column that does not exist yet.
 
 | Endpoint | Who | What it does |
 | --- | --- | --- |
-| `GET /healthcheck` | Anonymous | Liveness. Confirms the process is up and responding. Reads no database. |
-| `GET /healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
+| `GET /api/healthcheck` | Anonymous | Liveness. Confirms the process is up and responding. Reads no database. |
+| `GET /api/healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
+
+Both also answer at the root, `/healthcheck` and `/healthcheck/detailed`, which is what the container
+health check and yggdrasil's status page call. Use the `/api/` addresses through Traefik: on the web
+UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 ```json
 {
