@@ -18,7 +18,7 @@ Everything else in the model is defined relative to that boundary.
 | **Scope** | A logical tenant boundary that groups the owners, users, applications, Google Users, and permissions belonging to one client system. |
 | **Person** | A registered human identity — name, email, password hash, role, deletion status. A person has **no scope column**; its relationship to scopes is derived from its role. |
 | **Role** | One of `SystemAdmin`, `ScopeAdmin`, `User`. A closed set of three rows. |
-| **Scope Owner** | A person with the `ScopeAdmin` role who owns a scope. Many-to-many: a scope has one or more owners, an admin may own several scopes. |
+| **Scope Owner** | A person with the `ScopeAdmin` role — or a `SystemAdmin` who chose to — who owns a scope. Many-to-many: a scope has one or more owners, an admin may own several scopes. |
 | **Scope User** | A person with the `User` role who belongs to **exactly one** scope. |
 | **Application** | A registered non-human identity (another system), in exactly one scope, owned by exactly one Scope Admin who owns that scope. |
 | **Google User** | An identity authenticated by Google rather than a password. Always `User`-equivalent, always in exactly one scope, stored in its own table with a direct `ScopeId`. |
@@ -34,12 +34,12 @@ This is the single rule that most often surprises newcomers: `Person` has no `Sc
 ```mermaid
 flowchart TD
     P[Person] --> R{Role}
-    R -->|SystemAdmin| S1["Belongs to no scope<br/>Governs the whole system"]
+    R -->|SystemAdmin| S1["Belongs to no scope<br/>Governs the whole system<br/>May own scopes via SCOPE_OWNER"]
     R -->|ScopeAdmin| S2["Owns 1..n scopes<br/>via SCOPE_OWNER"]
     R -->|User| S3["Belongs to exactly 1 scope<br/>via SCOPE_USER"]
 ```
 
-A `SystemAdmin` with a scope row, or a `User` with two, is not representable — the join tables carry
+An administrator with a `SCOPE_USER` row, or a `User` with two, is not representable — the join tables carry
 the constraints (`SCOPE_USER.PersonId` is unique; `SCOPE_OWNER` has a composite key).
 
 ## Two identifiers per entity

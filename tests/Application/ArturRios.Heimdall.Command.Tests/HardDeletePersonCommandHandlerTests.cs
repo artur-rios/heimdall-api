@@ -263,6 +263,24 @@ public class HardDeletePersonCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenSoleOwnerSystemAdmin_WhenHandlingHardDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError()
+    {
+        // Given — NFR-12 holds whatever role the sole owner has
+        var fakes = EmptyFakes();
+        var target = await SeedScopeAdminAsync(fakes, owned: Scope(1));
+        target.RoleId = (long)Roles.SystemAdmin;
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then — refused, and nothing was removed
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.Single((await fakes.Persons.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
     public async Task GivenLogicallyDeletedSoleOwner_WhenHandlingHardDeletePerson_ThenStillReturnsScopeWouldLoseLastOwnerError()
     {
         // Given a sole owner who is already soft-deleted: the guard applies anyway, unlike UC-09,

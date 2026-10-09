@@ -75,6 +75,30 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     }
 
     [FunctionalFact]
+    public async Task GivenSystemAdminNamingThemselvesOwner_WhenPostScope_ThenScopeIsCreatedAndOwnedByThem()
+    {
+        // Given a System Admin who names themselves the scope's owner (FR-SC-08)
+        var systemAdmin = await SeedPersonAsync(Roles.SystemAdmin);
+        Authorize(TestTokens.For(systemAdmin.PublicId, (int)Roles.SystemAdmin));
+        var name = UniqueName();
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<CreateScopeCommandOutput?>>(
+            "/api/scopes",
+            new CreateScopeCommand { Name = name, OwnerIds = [systemAdmin.PublicId] });
+
+        // Then — response
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal([systemAdmin.PublicId], response.Body?.Data?.OwnerIds);
+
+        // Then — database state: one SCOPE_OWNER row, for the System Admin
+        await using var context = db.CreateContext();
+        var persisted = await context.Scopes.Include(x => x.Owners).AsNoTracking()
+            .FirstAsync(x => x.Name == name);
+        Assert.Equal(systemAdmin.Id, Assert.Single(persisted.Owners).PersonId);
+    }
+
+    [FunctionalFact]
     public async Task GivenDuplicateName_WhenPostScope_ThenConflict()
     {
         // Given an existing scope and a valid owner
@@ -167,9 +191,9 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     }
 
     [FunctionalFact]
-    public async Task GivenOwnerNotScopeAdmin_WhenPostScope_ThenBadRequest()
+    public async Task GivenOwnerIsUser_WhenPostScope_ThenBadRequest()
     {
-        // Given an owner that is a plain User, not a ScopeAdmin (AF-01d)
+        // Given an owner that is a plain User, not an administrator (AF-01d)
         var owner = await SeedPersonAsync(Roles.User);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 

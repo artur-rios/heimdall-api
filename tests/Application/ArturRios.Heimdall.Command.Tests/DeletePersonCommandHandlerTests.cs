@@ -271,4 +271,22 @@ public class DeletePersonCommandHandlerTests
         Assert.False(target.IsDeleted);
         Assert.Equal(Stamp, target.UpdatedAt);
     }
+
+    [UnitFact]
+    public async Task GivenSoleOwnerSystemAdmin_WhenHandlingDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError()
+    {
+        // Given — NFR-12 holds whatever role the sole owner has
+        var target = ScopeAdmin(10, owned: Scope(1));
+        target.RoleId = (long)Roles.SystemAdmin;
+        var persons = await PersonsWith(target);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons).HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.False(target.IsDeleted);
+    }
 }

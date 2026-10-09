@@ -27,7 +27,8 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
         return scope;
     }
 
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, string name = "Admin")
+    private async Task<Person> SeedScopeAdminAsync(
+        Scope? ownedScope = null, string name = "Admin", Roles role = Roles.ScopeAdmin)
     {
         await using var context = db.CreateContext();
         var person = new Person
@@ -35,7 +36,7 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
             PublicId = Guid.NewGuid(),
             Name = name,
             Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
+            RoleId = (long)role,
             EmailVerified = true
         };
         context.Persons.Add(person);
@@ -66,6 +67,44 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(2, response.Body?.TotalItems);
+    }
+
+    [FunctionalFact]
+    public async Task GivenSystemAdmin_WhenListScopeAdmins_ThenSystemAdminsAreOfferedAsOwnersToo()
+    {
+        // Given a Scope Admin and a System Admin — either may own a scope (FR-SC-08)
+        var marker = $"pick{Guid.NewGuid():N}";
+        await SeedScopeAdminAsync(name: $"Ana {marker}");
+        await SeedScopeAdminAsync(name: $"Root {marker}", role: Roles.SystemAdmin);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.GetAsync<PaginatedOutput<PersonSummaryOutput>>(
+            $"/api/persons/scope-admins?pageNumber=1&pageSize=10&name={marker}");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, response.Body?.TotalItems);
+    }
+
+    [FunctionalFact]
+    public async Task GivenScopeAdmin_WhenListScopeAdmins_ThenSystemAdminsAreNotListed()
+    {
+        // Given a Scope Admin looking for co-owners while a System Admin matches the filter too —
+        // a System Admin's address is not tenant-facing (FR-PE-12)
+        var marker = $"pick{Guid.NewGuid():N}";
+        var scope = await SeedScopeAsync();
+        var caller = await SeedScopeAdminAsync(ownedScope: scope, name: $"Caller {marker}");
+        await SeedScopeAdminAsync(name: $"Root {marker}", role: Roles.SystemAdmin);
+        Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
+
+        // When
+        var response = await Gateway.GetAsync<PaginatedOutput<PersonSummaryOutput>>(
+            $"/api/persons/scope-admins?pageNumber=1&pageSize=10&name={marker}");
+
+        // Then — only the caller
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(caller.PublicId, Assert.Single(response.Body!.Data!).Id);
     }
 
     [FunctionalFact]

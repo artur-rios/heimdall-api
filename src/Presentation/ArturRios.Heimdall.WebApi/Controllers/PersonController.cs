@@ -70,12 +70,12 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
-    ///     Adds an existing <c>ScopeAdmin</c> person as an additional owner of a scope (UC-21,
-    ///     FR-SC-08/FR-SC-09). The attribute keeps a <c>User</c> out — they can never be a System
-    ///     Admin nor an existing owner — while the rules that depend on data it cannot see are the
-    ///     handler's: whether the acting Scope Admin owns this scope (AF-21c), whether the scope is
-    ///     active (AF-21a), whether the named person is a usable <c>ScopeAdmin</c> (AF-21b), and
-    ///     whether they already own it (AF-21d).
+    ///     Adds an existing <c>ScopeAdmin</c> or <c>SystemAdmin</c> person as an additional owner
+    ///     of a scope (UC-21, FR-SC-08/FR-SC-09). The attribute keeps a <c>User</c> out — they can
+    ///     never be a System Admin nor an existing owner — while the rules that depend on data it
+    ///     cannot see are the handler's: whether the acting Scope Admin owns this scope (AF-21c),
+    ///     whether the scope is active (AF-21a), whether the named person is a usable administrator
+    ///     (AF-21b), and whether they already own it (AF-21d).
     /// </summary>
     [HttpPost("scopes/{scopeId:guid}/owners/{personId:guid}")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
@@ -227,7 +227,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
-    ///     Lists the <c>ScopeAdmin</c> owners of a scope (UC-07, FR-PE-04). A System Admin or an
+    ///     Lists the owners of a scope (UC-07, FR-PE-04). A System Admin or an
     ///     owner of the scope may call it; the ownership check (AF-07b) is enforced by the handler
     ///     from the acting user.
     /// </summary>
@@ -246,8 +246,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
-    ///     Lists the system's <c>ScopeAdmin</c> persons (UC-07 read d, FR-PE-12), projected to
-    ///     identifier, name, and email — the source for an owner picker. A System Admin or a Scope
+    ///     Lists the administrators who may own a scope (UC-07 read d, FR-PE-12) — every
+    ///     <c>ScopeAdmin</c>, and for a System Admin caller every <c>SystemAdmin</c> too — projected to
+    ///     identifier, name, and email: the source for an owner picker. A System Admin or a Scope
     ///     Admin may call it. Optionally excludes the current owners of a named scope, in which case
     ///     the handler requires the caller to be entitled to manage that scope.
     /// </summary>

@@ -84,12 +84,12 @@ their own restriction, and is told a second restriction is a conflict (AF-44a).
 | `POST /persons` | System Admin | UC-06 path b — create a `ScopeAdmin` or `SystemAdmin` with no scope |
 | `POST /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-06 path a — create a `User` in a scope |
 | `POST /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-06 path c — create a new `ScopeAdmin` directly as a co-owner |
-| `POST /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-21 — add an existing `ScopeAdmin` as an owner |
+| `POST /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-21 — add an existing `ScopeAdmin` or `SystemAdmin` as an owner |
 | `POST /scopes/{scopeId}/users/{personId}/promote` | System Admin + Scope Admin | UC-23 — promote a scope's `User` to owner |
 | `GET /persons/{id}` | Any authenticated | UC-07 — read one person (a person may read themselves) |
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
-| `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list Scope Admins for an owner picker; optionally excludes a scope's current owners |
+| `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list who may own a scope (Scope Admins, plus System Admins for a System Admin caller) for an owner picker; optionally excludes a scope's current owners |
 | `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
@@ -106,7 +106,7 @@ their own restriction, and is told a second restriction is a conflict (AF-44a).
 | `DELETE /{id}` | System Admin + Scope Admin | UC-19 — logical delete |
 | `DELETE /{id}/hard` | System Admin | UC-20 — hard delete |
 
-An application's owner must be a **`ScopeAdmin` who owns that scope** — a `User` may never own one
+An application's owner must be a **`ScopeAdmin` or `SystemAdmin` who owns that scope** — a `User` may never own one
 (**FR-AP-03**).
 
 ## Scope permissions — `/api/scopes/{scopeId}/permissions`
