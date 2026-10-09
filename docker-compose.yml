@@ -1,14 +1,19 @@
-# One file for the three environments -- Local (Docker Desktop on Windows), Development (Docker in a
-# WSL Ubuntu) and Production (the VPC server). What differs between them is configuration, not
-# topology, so each environment supplies its own env file instead of its own Compose file:
+# One file for the four environments -- Local (Docker Desktop on Windows), and Development,
+# Homologation and Production, which share one Ubuntu VPS. What differs between them is
+# configuration, not topology, so each environment supplies its own env file instead of its own
+# Compose file. Local is deployed by hand:
 #
 #     docker compose --env-file docker/local.env up -d --build
-#     docker compose --env-file docker/development.env up -d --build
-#     docker compose --env-file docker/production.env up -d --build
 #
-# Postgres is not a service here: every environment already runs one instance, shared with other
-# services, each owning its own database. The API reaches it over DB_HOST -- see docker/*.env.example
-# and the README's "Deploy with Docker" section for what that has to be per environment.
+# The three VPS environments are deployed by yggdrasil (github.com/artur-rios/yggdrasil), which
+# applies its stacks/heimdall-api.proxy.yml on top of this file -- no host port, Traefik in front,
+# the project named heimdall-api-<environment> -- with the env file kept on the VPS at
+# /etc/yggdrasil/<environment>/heimdall-api.env, filled in from docker/<environment>.env.example.
+#
+# Postgres is not a service here: every host already runs one instance, shared with other services
+# and environments, each owning its own database. The API reaches it over DB_HOST -- see
+# docker/*.env.example and the README's "Deploy with Docker" section for what that has to be per
+# environment.
 services:
   api:
     build:
@@ -17,17 +22,19 @@ services:
     image: ${API_IMAGE:-heimdall-api}:${API_IMAGE_TAG:-latest}
     restart: unless-stopped
 
-    # host.docker.internal is defined by Docker Desktop already, but not by the plain Docker engine a
-    # WSL Ubuntu or the server runs -- there it is only what this line makes it: the gateway address
-    # of the container's bridge network, which is the host itself. Declaring it here is what lets the
-    # same DB_HOST value work on all three. It is inert when DB_HOST names a real host instead.
+    # host.docker.internal is defined by Docker Desktop already, but not by the plain Docker engine
+    # the VPS runs -- there it is only what this line makes it: the gateway address of the
+    # container's bridge network, which is the host itself. Declaring it here is what lets the same
+    # DB_HOST value work in all four environments. It is inert when DB_HOST names a real host.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
     environment:
       # Local and Development run as Development: Swagger is served, the developer exception page is
       # on, EF logs parameter values, and verification/reset e-mails are logged instead of sent.
-      # Production turns all of that off and requires the Mailgun variables below.
+      # Homologation runs as Staging: no Swagger and no developer exception page, but e-mails are
+      # still logged rather than sent. Production turns all of that off and requires the Mailgun
+      # variables below.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
 
       # The API resolves its whole configuration from the environment (Startup, and
@@ -80,6 +87,11 @@ services:
       # Empty by default, which refuses every cross-origin request. A browser front end will not
       # reach the API until its origin is listed here.
       HEIMDALL_CORS_ALLOWED_ORIGINS: ${HEIMDALL_CORS_ALLOWED_ORIGINS:-}
+      # Comma-separated addresses and CIDR networks of the reverse proxy in front of the API (Traefik
+      # on the VPS). X-Forwarded-For and X-Forwarded-Proto are believed from these and from no one
+      # else, so the rate limiter and the request log see the real caller. Empty by default, which
+      # trusts nobody: every caller is then the proxy.
+      HEIMDALL_TRUSTED_PROXIES: ${HEIMDALL_TRUSTED_PROXIES:-}
 
       # The entrypoint applies pending EF Core migrations before starting the API. false when they
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.
@@ -123,17 +135,19 @@ services:
       # ASPNETCORE_HTTP_PORTS as well, or Kestrel never listens where the endpoint waits.
       #
       # Deliberately absent from "ports" below. Prometheus scrapes the container over a Docker
-      # network it shares with it (api:9464); publishing the port would hand the metrics to anyone
-      # who can reach the host, and they describe the API's traffic, its failures and its database
-      # pool closely enough to be worth keeping to the operator.
+      # network it shares with it (heimdall-api.<environment>:9464 on yggdrasil's telemetry
+      # network); publishing the port would hand the metrics to anyone who can reach the host, and
+      # they describe the API's traffic, its failures and its database pool closely enough to be
+      # worth keeping to the operator.
       HEIMDALL_METRICS_PORT: ${HEIMDALL_METRICS_PORT:-}
 
     volumes:
       - logs:/app/logs
 
     # Host side of the mapping, so an environment can pick the interface as well as the port:
-    # "8080" publishes on every interface, "127.0.0.1:8080" only to the host -- which is what a
-    # server with a reverse proxy in front of the API wants.
+    # "8080" publishes on every interface, "127.0.0.1:8080" only to the host. Local only: on the
+    # VPS yggdrasil's overlay removes the mapping, and Traefik reaches the container over a Docker
+    # network.
     #
     # Only the API's port. 9464, the metrics port, is never published -- see HEIMDALL_METRICS_PORT.
     ports:

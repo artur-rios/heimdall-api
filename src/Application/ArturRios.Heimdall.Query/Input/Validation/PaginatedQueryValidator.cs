@@ -18,10 +18,18 @@ public abstract class PaginatedQueryValidator<TQuery> : AbstractValidator<TQuery
     /// </summary>
     protected const int MaxPageSize = 100;
 
+    /// <summary>
+    ///     The last page number whose offset, <c>(PageNumber - 1) * PageSize</c>, still fits in an
+    ///     <see cref="int" /> at the largest page size. The pagination helper computes that offset in
+    ///     unchecked arithmetic, so a larger number wrapped to a negative OFFSET, which PostgreSQL
+    ///     rejects — a 500 from nothing more than an absurd query string.
+    /// </summary>
+    public const int MaxPageNumber = int.MaxValue / MaxPageSize;
+
     protected PaginatedQueryValidator()
     {
         RuleFor(query => query.PageNumber)
-            .GreaterThanOrEqualTo(1)
+            .InclusiveBetween(1, MaxPageNumber)
             .WithMessage(PaginationMessages.InvalidPageNumber);
 
         RuleFor(query => query.PageSize)

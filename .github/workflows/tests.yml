@@ -67,6 +67,19 @@ jobs:
         # Built once here so both test steps can run with --no-build and neither pays for it.
         run: dotnet build src/ArturRios.Heimdall.sln --configuration Release --no-restore
 
+      - name: Check every test has a category
+        # The two test steps below select by Category trait, so a test without one would run in
+        # neither. List the tests outside both categories and fail on any.
+        run: |
+          set -euo pipefail
+          uncategorized=$(dotnet test src/ArturRios.Heimdall.sln --configuration Release --no-build --list-tests \
+            --filter "Category!=Unit&Category!=Functional" | sed -n 's/^    //p')
+          if [ -n "$uncategorized" ]; then
+            echo "::error::These tests have no Category trait (Unit or Functional), so no test step runs them:"
+            echo "$uncategorized"
+            exit 1
+          fi
+
       - name: Run unit tests
         # The Category trait comes from the [UnitFact] / [UnitTheory] attributes in
         # ArturRios.Util.Test, so this filter needs no per-project configuration.

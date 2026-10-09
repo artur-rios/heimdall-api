@@ -25,8 +25,8 @@ sequenceDiagram
 
     M->>DI: resolve ICommandHandlerAsync<TCommand, TOutput>
     DI-->>M: AuditingCommandHandler wrapping the concrete handler
-    M->>A: HandleAsync(command)
-    A->>H: HandleAsync(command)
+    M->>A: HandleAsync(command, cancellationToken)
+    A->>H: HandleAsync(command, cancellationToken)
     H->>DB: the actual write
     H-->>A: DataOutput{success, data}
 

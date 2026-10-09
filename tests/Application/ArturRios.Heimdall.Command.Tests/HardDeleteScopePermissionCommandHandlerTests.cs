@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // ScopePermissionControllerHardDeleteTests.
 public class HardDeleteScopePermissionCommandHandlerTests
 {
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
@@ -24,7 +24,7 @@ public class HardDeleteScopePermissionCommandHandlerTests
     }
 
     private static async Task<ScopePermission> SeedPermissionAsync(
-        AsyncFakeRepository<ScopePermission> permissions, Scope scope, bool isDeleted = false)
+        AsyncFakeRepository<ScopePermission, long> permissions, Scope scope, bool isDeleted = false)
     {
         var permission = new ScopePermission
         {
@@ -47,19 +47,19 @@ public class HardDeleteScopePermissionCommandHandlerTests
     };
 
     private static HardDeleteScopePermissionCommandHandler Handler(
-        AsyncFakeRepository<ScopePermission> permissions) =>
+        AsyncFakeRepository<ScopePermission, long> permissions) =>
         new(permissions, permissions);
 
     private static async Task<IEnumerable<ScopePermission>> StoredAsync(
-        AsyncFakeRepository<ScopePermission> permissions) =>
+        AsyncFakeRepository<ScopePermission, long> permissions) =>
         (await permissions.GetAllAsync()).Data!;
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingHardDeleteScopePermission_ThenPermissionIsRemoved()
     {
         // Given an active permission (UC-35 main flow)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
 
@@ -78,8 +78,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     {
         // Given a permission already carrying IsDeleted — exactly what a cleanup pass starts from, so
         // the lookup omits the !IsDeleted filter
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope, isDeleted: true);
 
@@ -96,8 +96,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     public async Task GivenOutput_WhenInspectingIdentifiers_ThenItCarriesOnlyThePermissionPublicId()
     {
         // Given internal ids that must never leave the data layer (SRD §4.0)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
 
@@ -114,8 +114,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
         GivenSiblingPermissionInTheSameScope_WhenHandlingHardDeleteScopePermission_ThenOnlyTheAddressedOneIsRemoved()
     {
         // Given two permissions of the same scope, only one of them addressed
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var target = await SeedPermissionAsync(permissions, scope);
         var sibling = await SeedPermissionAsync(permissions, scope);
@@ -134,8 +134,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     public async Task GivenUnknownPermission_WhenHandlingHardDeleteScopePermission_ThenNotFoundIsReported()
     {
         // Given a permission id nobody holds (AF-35a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         await SeedPermissionAsync(permissions, scope);
 
@@ -152,8 +152,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     public async Task GivenPermissionOfADifferentScope_WhenHandlingHardDeleteScopePermission_ThenNotFoundIsReported()
     {
         // Given the permission exists, but under a different scope than the command addresses (AF-35a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var permission = await SeedPermissionAsync(permissions, otherScope);
@@ -171,8 +171,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingHardDeleteScopePermission_ThenNotFoundIsReported()
     {
         // Given a scope id nobody holds — an unknown scope and an unknown permission are one 404 (AF-35a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
 
@@ -190,8 +190,8 @@ public class HardDeleteScopePermissionCommandHandlerTests
     {
         // Given the same permission hard deleted twice: the row is gone, so the second call has
         // nothing to find. UC-35 has no idempotent path — unlike UC-34's AF-34b
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);

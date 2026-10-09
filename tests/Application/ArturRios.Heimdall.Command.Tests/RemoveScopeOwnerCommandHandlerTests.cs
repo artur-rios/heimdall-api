@@ -27,7 +27,7 @@ public class RemoveScopeOwnerCommandHandlerTests
     }
 
     private static async Task<Scope> SeedScopeAsync(
-        AsyncFakeRepository<Scope> scopes, string name = "Acme", bool isDeleted = false)
+        AsyncFakeRepository<Scope, long> scopes, string name = "Acme", bool isDeleted = false)
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name, IsDeleted = isDeleted };
         await scopes.CreateAsync(scope);
@@ -35,7 +35,7 @@ public class RemoveScopeOwnerCommandHandlerTests
     }
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Person, long> persons,
         Roles role = Roles.ScopeAdmin,
         bool isDeleted = false,
         params Scope[] ownedScopes)
@@ -64,18 +64,18 @@ public class RemoveScopeOwnerCommandHandlerTests
     };
 
     private static RemoveScopeOwnerCommandHandler Handler(
-        AsyncFakeRepository<Scope> scopes, AsyncFakeRepository<Person> persons, bool allowed = true) =>
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true) =>
         new(scopes, persons, persons, OwnershipChecker(allowed));
 
-    private static async Task<Person> StoredAsync(AsyncFakeRepository<Person> persons, Person person) =>
+    private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
 
     [UnitFact]
     public async Task GivenSystemAdminAndCoOwnedScope_WhenHandlingRemoveScopeOwner_ThenOwnershipIsRemoved()
     {
         // Given a scope with two owners (UC-22 main flow)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         var coOwner = await SeedPersonAsync(persons, ownedScopes: scope);
@@ -99,8 +99,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenCoOwnerActor_WhenHandlingRemoveScopeOwner_ThenOwnershipIsRemoved()
     {
         // Given a Scope Admin actor the checker accepts as an owner of the scope (FR-SC-10)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         var actor = await SeedPersonAsync(persons, ownedScopes: scope);
@@ -120,8 +120,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenPersonOwningAnotherScope_WhenHandlingRemoveScopeOwner_ThenOtherOwnershipsSurvive()
     {
         // Given a ScopeAdmin who owns two scopes — only the named one is removed (FR-SC-08)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Globex");
         var person = await SeedPersonAsync(persons, ownedScopes: [scope, otherScope]);
@@ -141,8 +141,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenOutput_WhenHandlingRemoveScopeOwner_ThenItCarriesPublicIdentifiersOnly()
     {
         // Given internal Ids that differ from the public ones, so a leak would be visible
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         await SeedPersonAsync(persons, ownedScopes: scope);
@@ -162,8 +162,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingRemoveScopeOwner_ThenScopeNotFoundIsReported()
     {
         // Given no scope with the requested id (AF-22a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         var handler = Handler(scopes, persons);
@@ -181,8 +181,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenLogicallyDeletedScope_WhenHandlingRemoveScopeOwner_ThenScopeNotFoundIsReported()
     {
         // Given a logically deleted scope — treated as absent, as every scope-scoped handler does
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes, isDeleted: true);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         var handler = Handler(scopes, persons);
@@ -200,8 +200,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenUnknownPerson_WhenHandlingRemoveScopeOwner_ThenPersonNotScopeOwnerIsReported()
     {
         // Given no person with the requested id (AF-22a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         await SeedPersonAsync(persons, ownedScopes: scope);
         var handler = Handler(scopes, persons);
@@ -218,8 +218,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenPersonOwningOnlyAnotherScope_WhenHandlingRemoveScopeOwner_ThenPersonNotScopeOwnerIsReported()
     {
         // Given a ScopeAdmin who owns a different scope — no SCOPE_OWNER row links them here (AF-22a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Globex");
         var person = await SeedPersonAsync(persons, ownedScopes: otherScope);
@@ -239,8 +239,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenSoleOwner_WhenHandlingRemoveScopeOwner_ThenScopeWouldLoseLastOwnerIsReported()
     {
         // Given the scope's only owner (AF-22b, NFR-12)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         var handler = Handler(scopes, persons);
@@ -259,8 +259,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     {
         // Given the only co-owner is logically deleted — they cannot authenticate (FR-AU-07), so they
         // do not keep the scope owned (AF-22b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         await SeedPersonAsync(persons, isDeleted: true, ownedScopes: scope);
@@ -280,8 +280,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     {
         // Given a logically deleted ScopeAdmin still holding an ownership row — clearing that stale row
         // is exactly what this endpoint is for, and the live co-owner keeps the scope owned
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, isDeleted: true, ownedScopes: scope);
         await SeedPersonAsync(persons, ownedScopes: scope);
@@ -301,8 +301,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     {
         // Given a Scope Admin stepping down from a scope that keeps another owner — nothing in UC-22
         // forbids it, and AF-22b already prevents the damaging case
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var actor = await SeedPersonAsync(persons, ownedScopes: scope);
         await SeedPersonAsync(persons, ownedScopes: scope);
@@ -322,8 +322,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     public async Task GivenScopeAdminNotOwningTheScope_WhenHandlingRemoveScopeOwner_ThenNotScopeOwnerIsReported()
     {
         // Given the ownership checker rejects the actor (AF-22c)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var person = await SeedPersonAsync(persons, ownedScopes: scope);
         await SeedPersonAsync(persons, ownedScopes: scope);
@@ -344,8 +344,8 @@ public class RemoveScopeOwnerCommandHandlerTests
     {
         // Given an actor the checker rejects, naming a person who does not exist. The ownership check
         // runs first (design Decision 2), so the refusal must not reveal anything about the person.
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(scopes, persons, allowed: false);
 

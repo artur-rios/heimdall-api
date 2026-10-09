@@ -15,14 +15,21 @@ namespace ArturRios.Heimdall.Command.Tests;
 // and the step may be repeated.
 public class ReapplyErasuresCommandHandlerTests
 {
-    private static (AsyncFakeRepository<Person>, AsyncFakeRepository<GoogleUser>) Fakes() => (new(), new());
+    private static (AsyncFakeRepository<Person, long>, AsyncFakeRepository<GoogleUser, long>) Fakes() => (new(), new());
 
     private static ReapplyErasuresCommandHandler Handler(
-        AsyncFakeRepository<Person> persons, AsyncFakeRepository<GoogleUser> googleUsers) =>
-        new(persons, persons, googleUsers, googleUsers);
+        AsyncFakeRepository<Person, long> persons,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
+        AsyncFakeRepository<PasswordResetToken, long>? passwordResetTokens = null,
+        AsyncFakeRepository<EmailVerificationToken, long>? emailVerificationTokens = null,
+        AsyncFakeRepository<TwoFactorAuth, long>? twoFactorAuths = null) =>
+        new(persons, persons, googleUsers, googleUsers,
+            passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
+            emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
+            twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>());
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons, DateTime? anonymisedAt = null)
+        AsyncFakeRepository<Person, long> persons, DateTime? anonymisedAt = null)
     {
         var person = new Person
         {
@@ -42,6 +49,35 @@ public class ReapplyErasuresCommandHandlerTests
 
     private static ReapplyErasuresCommand Command(params Guid[] ids) =>
         new() { SubjectIds = ids, ActingRole = (int)Roles.SystemAdmin };
+
+    [UnitFact]
+    public async Task GivenARestoredIdentityWithDependents_WhenReapplying_ThenTheyAreRemovedToo()
+    {
+        // A restore brings back what the original erasure removed alongside the identity: the
+        // two-factor configuration (its encrypted TOTP secret, and through the cascade its codes)
+        // and any reset or verification tokens.
+        var (persons, googleUsers) = Fakes();
+        var person = await SeedPersonAsync(persons);
+        person.ErasureBlockedReason = "last owner";
+        var resetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var verificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth, long>();
+        await resetTokens.CreateAsync(new PasswordResetToken { PersonId = person.Id, TokenHash = "r" });
+        await verificationTokens.CreateAsync(new EmailVerificationToken { PersonId = person.Id, TokenHash = "v" });
+        await twoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+        });
+
+        var output = await Handler(persons, googleUsers, resetTokens, verificationTokens, twoFactorAuths)
+            .HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Empty(resetTokens.Query());
+        Assert.Empty(verificationTokens.Query());
+        Assert.Empty(twoFactorAuths.Query());
+        Assert.Null(person.ErasureBlockedReason);
+    }
 
     [UnitFact]
     public async Task GivenARestoredIdentity_WhenReapplying_ThenItIsAnonymisedAgain()

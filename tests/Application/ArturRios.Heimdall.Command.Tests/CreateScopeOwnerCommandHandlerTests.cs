@@ -37,9 +37,9 @@ public class CreateScopeOwnerCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<(AsyncFakeRepository<Scope> scopes, Scope scope)> ScopeStoreAsync()
+    private static async Task<(AsyncFakeRepository<Scope, long> scopes, Scope scope)> ScopeStoreAsync()
     {
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = false };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
@@ -60,7 +60,7 @@ public class CreateScopeOwnerCommandHandlerTests
     {
         // Given a SystemAdmin actor (ownership allowed) and an empty scope
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateScopeOwnerCommandHandler(
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
@@ -86,7 +86,7 @@ public class CreateScopeOwnerCommandHandlerTests
     {
         // Given the ownership checker rejects the actor (AF-06e)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateScopeOwnerCommandHandler(
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(allowed: false), email.Object);
@@ -102,8 +102,8 @@ public class CreateScopeOwnerCommandHandlerTests
     [UnitFact]
     public async Task GivenMissingScope_WhenHandlingCreateScopeOwner_ThenReturnsScopeNotFound()
     {
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var email = new Mock<IEmailVerificationService>();
         var handler = new CreateScopeOwnerCommandHandler(
             ValidValidator().Object, scopes, persons, persons, OwnershipChecker(), email.Object);
@@ -119,7 +119,7 @@ public class CreateScopeOwnerCommandHandlerTests
     {
         // Given an existing ScopeAdmin with the same email system-wide (AF-06a)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {
@@ -143,7 +143,7 @@ public class CreateScopeOwnerCommandHandlerTests
         // Given an existing ScopeAdmin whose email differs from the request only by case (AF-06a is
         // case-insensitive)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var command = Command(scope.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid());
         await persons.CreateAsync(new Person
         {

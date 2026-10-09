@@ -33,7 +33,7 @@ public class DeleteGoogleUserCommandHandlerTests
     }
 
     private static async Task<GoogleUser> SeedGoogleUserAsync(
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         bool isDeleted = false,
         Guid? scopePublicId = null)
     {
@@ -65,7 +65,7 @@ public class DeleteGoogleUserCommandHandlerTests
     public async Task GivenActiveGoogleUser_WhenHandlingDelete_ThenSetsIsDeletedAndStampsUpdatedAt()
     {
         // Given an authorized caller and an active Google User (UC-28 main flow)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var before = googleUser.UpdatedAt;
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
@@ -89,7 +89,7 @@ public class DeleteGoogleUserCommandHandlerTests
     public async Task GivenOwningScopeAdmin_WhenHandlingDelete_ThenChecksOwnershipOfTheGoogleUsersScope()
     {
         // Given a Scope Admin — UC-28 step 2 grants them the Google Users of the scopes they own
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var checker = new Mock<IScopeOwnershipChecker>();
         checker
@@ -113,7 +113,7 @@ public class DeleteGoogleUserCommandHandlerTests
     public async Task GivenNoSuchGoogleUser_WhenHandlingDelete_ThenReturnsNotFoundError()
     {
         // Given an id nobody holds (AF-28a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
 
@@ -130,7 +130,7 @@ public class DeleteGoogleUserCommandHandlerTests
     {
         // Given a Google User that exists but belongs to another scope — not the resource this path
         // addresses (AF-28a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, scopePublicId: Guid.NewGuid());
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
 
@@ -148,7 +148,7 @@ public class DeleteGoogleUserCommandHandlerTests
     {
         // Given a Google User already logically deleted (AF-28b). The lookup has to find it, which is
         // why it omits the !IsDeleted filter UC-27's default read applies.
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var before = googleUser.UpdatedAt;
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
@@ -171,7 +171,7 @@ public class DeleteGoogleUserCommandHandlerTests
     public async Task GivenNonOwningScopeAdmin_WhenHandlingDelete_ThenReturnsNotAuthorizedError()
     {
         // Given a Scope Admin who does not own the Google User's scope (AF-28c)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(false));
 
@@ -190,7 +190,7 @@ public class DeleteGoogleUserCommandHandlerTests
         // Given a record that is both already deleted and outside the caller's reach. AF-28c must win:
         // if AF-28b answered first, its idempotent 200 would confirm the record exists to a caller
         // who may not know that.
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(false));
 

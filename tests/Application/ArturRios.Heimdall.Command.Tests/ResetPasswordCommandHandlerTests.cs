@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -28,12 +29,12 @@ public class ResetPasswordCommandHandlerTests
     private static readonly DateTime Now = DateTime.UtcNow;
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<PasswordResetToken> Tokens,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<PasswordResetToken, long> Tokens,
         Person Person)
     {
         public ResetPasswordCommandHandler Handler(IValidator<ResetPasswordCommand>? validator = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, Persons);
+            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance);
     }
 
     private static IValidator<ResetPasswordCommand> PassingValidator()
@@ -52,7 +53,7 @@ public class ResetPasswordCommandHandlerTests
     /// </summary>
     private static async Task<Fixture> FixtureAsync(bool isDeleted = false, string password = OldPassword)
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -66,15 +67,15 @@ public class ResetPasswordCommandHandlerTests
 
         await persons.CreateAsync(person); // assigns person.Id
 
-        return new Fixture(persons, new AsyncFakeRepository<PasswordResetToken>(), person);
+        return new Fixture(persons, new AsyncFakeRepository<PasswordResetToken, long>(), person);
     }
 
     /// <summary>
     ///     Adds a token for a person. The <c>Person</c> navigation is set explicitly because
-    ///     <see cref="AsyncFakeRepository{T}" /> is an in-memory list and resolves no <c>Include</c>.
+    ///     <see cref="AsyncFakeRepository{T, TKey}" /> is an in-memory list and resolves no <c>Include</c>.
     /// </summary>
     private static async Task<PasswordResetToken> TokenForAsync(
-        AsyncFakeRepository<PasswordResetToken> tokens,
+        AsyncFakeRepository<PasswordResetToken, long> tokens,
         Person person,
         string value,
         DateTime? expiresAt = null,

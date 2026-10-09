@@ -109,9 +109,16 @@ sequenceDiagram
     end
 
     VH->>DB: SELECT person + active TwoFactorAuth
+    opt app code or recovery code (FR-2F-17)
+        VH->>DB: charge one guess to the challenge (UPDATE … WHERE attempts < 5)
+        alt no guesses left, or redeemed meanwhile
+            VH-->>C: 401 challenge invalid
+        end
+    end
     VH->>FV: TOTP? live email code? unused recovery code?
     alt none matches (AF-38b / AF-38c)
         FV-->>VH: no
+        VH->>DB: at the fifth guess, clear the challenge
         VH-->>C: 401 factor invalid
     end
 
@@ -120,8 +127,9 @@ sequenceDiagram
         VH-->>C: 401 scope no longer eligible
     end
 
-    VH->>DB: mark the redeemed recovery code Used + UsedAt
-    VH->>DB: mark the redeemed email code Used
+    VH->>DB: redeem the challenge (UPDATE … WHERE challenge_id = token's)
+    VH->>DB: spend the recovery code (UPDATE … WHERE NOT used) + UsedAt
+    VH->>DB: spend the email code (UPDATE … WHERE NOT used)
     VH->>TS: IssueAsync(subject)
     TS-->>VH: full authentication token
     VH-->>C: 200 {token, expiresAt, emailVerified}
@@ -146,6 +154,17 @@ observed code stayed usable for up to ninety seconds, across verify, disable, an
 **A wrong email code costs the code.** Five wrong guesses retire it (`failed_attempts`), so the
 million values a six-digit code can take are not a million attempts — guessing again costs a fresh
 login, which is rate limited and mails the account holder a code they did not ask for.
+
+**A challenge allows five guesses with an app code or a recovery code** (**FR-2F-17**). Neither has a
+row of its own to count on, so they are counted on the challenge (`challenge_attempts`), and at five
+the challenge is cleared: its token is refused as AF-38a from then on, and further guessing costs a
+fresh password check. A login resets the count with the challenge.
+
+**All of it holds when requests arrive together.** Redeeming the challenge, spending a code,
+accepting a TOTP step and charging a guess are each one conditional `UPDATE` (`IAtomicWrites`), and
+every guess is charged *before* it is compared. Of any number of simultaneous requests carrying the
+same challenge or the same code, exactly one gets a token; a parallel burst of guesses gets exactly
+the budget compared, no more.
 
 The final token is issued by `PersonAuthTokenService` — the same service a direct login uses — so a
 2FA-gated login ends with exactly the token a direct one would have produced.

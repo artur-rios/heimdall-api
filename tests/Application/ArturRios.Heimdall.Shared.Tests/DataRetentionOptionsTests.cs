@@ -218,6 +218,26 @@ public class DataRetentionOptionsTests
     }
 
     [UnitTheory]
+    [InlineData(DataRetentionOptions.PurgeIntervalMinutesVariable, "1")]
+    [InlineData(DataRetentionOptions.AuditActorRetentionDaysVariable, "30")]
+    [InlineData(DataRetentionOptions.LogRetentionDaysVariable, "1")]
+    [InlineData(DataRetentionOptions.MonitoringWindowMinutesVariable, "1")]
+    public void GivenTheDocumentedLowerBound_WhenReadFromEnvironment_ThenItIsAccepted(
+        string variable, string value)
+    {
+        // The Data Retention Schedule states these ranges inclusively ("1 to 10080", "30 to 3650"),
+        // so the bound itself is a value an operator may set.
+        ClearAll();
+        Environment.SetEnvironmentVariable(variable, value);
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Empty(options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitTheory]
     [InlineData("29")]
     [InlineData("0")]
     [InlineData("-1")]

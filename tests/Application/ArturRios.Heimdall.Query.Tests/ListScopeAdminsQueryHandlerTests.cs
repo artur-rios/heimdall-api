@@ -61,9 +61,9 @@ public class ListScopeAdminsQueryHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<T>> RepositoryWith<T>(params T[] items) where T : Entity
+    private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {
-        var repository = new AsyncFakeRepository<T>();
+        var repository = new AsyncFakeRepository<T, long>();
 
         foreach (var item in items)
         {
@@ -83,7 +83,7 @@ public class ListScopeAdminsQueryHandlerTests
     };
 
     private static ListScopeAdminsQueryHandler HandlerFor(
-        AsyncFakeRepository<Scope> scopes, AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true) =>
         new(scopes, persons, Ownership(ownershipAllowed), new ListScopeAdminsQueryValidator());
 
     [UnitFact]
@@ -104,6 +104,26 @@ public class ListScopeAdminsQueryHandlerTests
         Assert.Equal(2, output.TotalItems);
         Assert.Equal([ana.PublicId, bruno.PublicId], output.Data!.Select(x => x.Id));
         Assert.Contains(PersonMessages.PersonsRetrievedSuccessfully, output.Messages);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedScopeAdmin_WhenHandlingListScopeAdmins_ThenItIsWithheld()
+    {
+        // Given one Scope Admin under a restriction of processing (NFR-24), withheld from
+        // tenant-facing listings as ListScopePersons withholds a restricted User
+        var ana = Admin(10, "Ana", "ana@test.local");
+        var bruno = Admin(11, "Bruno", "bruno@test.local");
+        bruno.ProcessingRestrictedAt = DateTime.UtcNow;
+        var scopes = await RepositoryWith<Scope>();
+        var persons = await RepositoryWith(ana, bruno);
+        var handler = HandlerFor(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Query());
+
+        // Then
+        Assert.Equal(1, output.TotalItems);
+        Assert.Equal([ana.PublicId], output.Data!.Select(x => x.Id));
     }
 
     [UnitFact]

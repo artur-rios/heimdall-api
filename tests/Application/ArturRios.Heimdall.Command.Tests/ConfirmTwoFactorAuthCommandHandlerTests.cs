@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -24,10 +25,10 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     private const string EmailCode = "123456";
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
-        AsyncFakeRepository<TwoFactorEmailCode> EmailCodes,
-        AsyncFakeRepository<TwoFactorRecoveryCode> RecoveryCodes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<TwoFactorEmailCode, long> EmailCodes,
+        AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes,
         Mock<ITotpSecretProtector> Protector,
         Person Person)
     {
@@ -37,14 +38,14 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
                 TwoFactorAuths,
                 TwoFactorAuths,
                 EmailCodes,
-                EmailCodes,
+                InMemoryAtomicWrites.Instance,
                 RecoveryCodes,
                 RecoveryCodes,
                 TotpVerifier());
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
         // it enforces (a code cannot be presented twice) is part of what these tests exercise.
-        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, TwoFactorAuths);
+        public TotpCodeVerifier TotpVerifier() => new(Protector.Object, InMemoryAtomicWrites.Instance);
 
         public ConfirmTwoFactorAuthCommand Command(string? appCode = null, string? emailCode = null) => new()
         {
@@ -56,7 +57,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
     private static async Task<Fixture> FixtureAsync()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -71,9 +72,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         return new Fixture(
             persons,
-            new AsyncFakeRepository<TwoFactorAuth>(),
-            new AsyncFakeRepository<TwoFactorEmailCode>(),
-            new AsyncFakeRepository<TwoFactorRecoveryCode>(),
+            new AsyncFakeRepository<TwoFactorAuth, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            new AsyncFakeRepository<TwoFactorRecoveryCode, long>(),
             protector,
             person);
     }
@@ -127,7 +128,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
             fixture.TwoFactorAuths,
             fixture.TwoFactorAuths,
             fixture.EmailCodes,
-            fixture.EmailCodes,
+            InMemoryAtomicWrites.Instance,
             recoveryCodes,
             recoveryCodes,
             fixture.TotpVerifier());
@@ -179,9 +180,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     ///     cannot issue the codes it is about to promise.
     /// </summary>
     private sealed class FailingRecoveryCodeRepository
-        : AsyncFakeRepository<TwoFactorRecoveryCode>, IAsyncRepository<TwoFactorRecoveryCode>
+        : AsyncFakeRepository<TwoFactorRecoveryCode, long>, IAsyncRepository<TwoFactorRecoveryCode, long>
     {
-        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<TwoFactorRecoveryCode>.CreateRangeAsync(
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<TwoFactorRecoveryCode, long>.CreateRangeAsync(
             IEnumerable<TwoFactorRecoveryCode> entities, CancellationToken cancellationToken) =>
             Task.FromResult(DataOutput<IEnumerable<long>>.New
                 .WithError("recovery codes could not be written"));

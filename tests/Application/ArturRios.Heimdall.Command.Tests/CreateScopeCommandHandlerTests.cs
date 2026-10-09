@@ -25,9 +25,9 @@ public class CreateScopeCommandHandlerTests
         return validator;
     }
 
-    private static async Task<(AsyncFakeRepository<Person>, Guid)> PersonsWithScopeAdminOwner()
+    private static async Task<(AsyncFakeRepository<Person, long>, Guid)> PersonsWithScopeAdminOwner()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person
         {
@@ -41,7 +41,7 @@ public class CreateScopeCommandHandlerTests
     {
         // Given
         var (persons, ownerId) = await PersonsWithScopeAdminOwner();
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", Description = "Acme scope", OwnerIds = [ownerId] };
 
@@ -66,7 +66,7 @@ public class CreateScopeCommandHandlerTests
     {
         // Given a store that already contains a scope named "Acme"
         var (persons, ownerId) = await PersonsWithScopeAdminOwner();
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         await scopes.CreateAsync(new Scope { Name = "Acme" });
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
@@ -87,8 +87,8 @@ public class CreateScopeCommandHandlerTests
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<CreateScopeCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult([new ValidationFailure("OwnerIds", ScopeMessages.AtLeastOneOwnerRequired)]));
-        var persons = new AsyncFakeRepository<Person>();
-        var scopes = new AsyncFakeRepository<Scope>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = new CreateScopeCommandHandler(validator.Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [] };
 
@@ -104,10 +104,10 @@ public class CreateScopeCommandHandlerTests
     public async Task GivenOwnerIsNotScopeAdmin_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
     {
         // Given a person with the User role, not a ScopeAdmin (AF-01d)
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person { PublicId = ownerId, RoleId = (long)Roles.User });
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
 
@@ -123,13 +123,13 @@ public class CreateScopeCommandHandlerTests
     public async Task GivenDeletedScopeAdminOwner_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
     {
         // Given a logically deleted ScopeAdmin named as the initial owner (AF-01d)
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person
         {
             PublicId = ownerId, RoleId = (long)Roles.ScopeAdmin, IsDeleted = true
         });
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
 
@@ -147,7 +147,7 @@ public class CreateScopeCommandHandlerTests
         // Given a store already containing a scope named "Acme"; the request differs only by case
         // (name uniqueness is case-insensitive)
         var (persons, ownerId) = await PersonsWithScopeAdminOwner();
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         await scopes.CreateAsync(new Scope { Name = "Acme" });
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
         var command = new CreateScopeCommand { Name = "ACME", OwnerIds = [ownerId] };

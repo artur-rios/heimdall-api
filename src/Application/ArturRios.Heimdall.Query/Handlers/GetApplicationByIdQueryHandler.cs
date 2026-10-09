@@ -18,29 +18,35 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (<c>ApplicationNotFound</c>); an application the caller may not see is AF-17b
 ///     (<c>NotAuthorizedToViewApplication</c>). Both are returned as errors rather than thrown.
 /// </summary>
-public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application> applicationReader)
+public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application, long> applicationReader)
     : IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>
 {
-    public async Task<DataOutput<ApplicationOutput?>> HandleAsync(GetApplicationByIdQuery query)
+    public async Task<DataOutput<ApplicationOutput?>> HandleAsync(GetApplicationByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ApplicationOutput?>.New;
 
         // The route's scopeId qualifies the lookup: an application that exists in another scope is
         // not the resource this path addresses, so it falls out here rather than at the rule below.
-        var application = await applicationReader.Query()
+        var found = await applicationReader.Query()
             .Where(x => x.PublicId == query.Id && x.Scope.PublicId == query.ScopeId &&
                         (query.IncludeDeleted || !x.IsDeleted))
-            .Select(x => new ApplicationOutput
+            .Select(x => new
             {
-                Id = x.PublicId,
-                Name = x.Name,
-                ScopeId = x.Scope.PublicId,
-                OwnerId = x.Owner.PublicId,
-                IsDeleted = x.IsDeleted,
-                CreatedAt = x.CreatedAt,
-                UpdatedAt = x.UpdatedAt
+                Output = new ApplicationOutput
+                {
+                    Id = x.PublicId,
+                    Name = x.Name,
+                    ScopeId = x.Scope.PublicId,
+                    OwnerId = x.Owner.PublicId,
+                    IsDeleted = x.IsDeleted,
+                    CreatedAt = x.CreatedAt,
+                    UpdatedAt = x.UpdatedAt
+                },
+                OwnerOwnsScope = x.Owner.ScopeOwnerships.Any(ownership => ownership.ScopeId == x.ScopeId)
             })
             .FirstOrDefaultAsync();
+
+        var application = found?.Output;
 
         // AF-17a: no such application under this scope (or it is logically deleted and was not
         // explicitly requested). Checked before authorization, so both alternative flows stay
@@ -53,7 +59,13 @@ public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application
         // AF-17b (UC-17 step 2): a System Admin sees every application; anyone else must own it.
         // Owning the *scope* is not by itself grounds to read another owner's application, so the
         // rule compares the owner rather than consulting IScopeOwnershipChecker.
-        if (query.ActingRole != (int)Roles.SystemAdmin && application.OwnerId != query.ActingPersonId)
+        //
+        // Owning the application is not enough by itself either: FR-AP-03 makes an owner someone who
+        // owns the application's scope, and UC-22 can take that away while leaving them named as the
+        // owner. Without this a Scope Admin removed from a scope kept reading, renaming and deleting
+        // its applications — everything but listing them, which does check the scope.
+        if (query.ActingRole != (int)Roles.SystemAdmin &&
+            (application.OwnerId != query.ActingPersonId || !found!.OwnerOwnsScope))
         {
             return output.WithError(ApplicationMessages.NotAuthorizedToViewApplication);
         }

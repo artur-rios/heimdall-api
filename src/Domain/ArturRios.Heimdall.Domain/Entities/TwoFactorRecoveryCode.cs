@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     (see §4.10 of the System Requirements Document). Never addressed by ID; reached through the
 ///     owning <see cref="TwoFactorAuth" /> configuration.
 /// </summary>
-public class TwoFactorRecoveryCode : Entity
+public class TwoFactorRecoveryCode : Entity<long>
 {
     /// <summary>
     ///     Foreign key to the owning <see cref="TwoFactorAuth" /> configuration (internal Id).

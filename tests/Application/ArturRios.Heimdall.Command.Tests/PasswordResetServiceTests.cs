@@ -19,7 +19,7 @@ public class PasswordResetServiceTests
     {
         var person = new Person { Email = "user@test.local" };
 
-        await new AsyncFakeRepository<Person>().CreateAsync(person); // assigns person.Id
+        await new AsyncFakeRepository<Person, long>().CreateAsync(person); // assigns person.Id
 
         return person;
     }
@@ -43,7 +43,7 @@ public class PasswordResetServiceTests
     {
         // Given
         var delivered = new List<string>();
-        var tokens = new AsyncFakeRepository<PasswordResetToken>();
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var sender = RecordingSender(delivered);
         var options = new PasswordResetOptions { TokenLifetime = TimeSpan.FromHours(1) };
         var service = new PasswordResetService(tokens, sender.Object, options);
@@ -72,7 +72,7 @@ public class PasswordResetServiceTests
         // digest and nothing else: a row that also kept the token, in any column, would let anyone
         // who can read the table complete a reset for the account.
         var delivered = new List<string>();
-        var tokens = new AsyncFakeRepository<PasswordResetToken>();
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
             tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
 
@@ -89,7 +89,7 @@ public class PasswordResetServiceTests
     public async Task GivenAConfiguredLifetime_WhenIssuingAndSending_ThenExpiryHonoursIt()
     {
         // Given a lifetime far from the one-hour default, so the assertion cannot pass by accident
-        var tokens = new AsyncFakeRepository<PasswordResetToken>();
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var options = new PasswordResetOptions { TokenLifetime = TimeSpan.FromMinutes(15) };
         var service = new PasswordResetService(tokens, new Mock<IPasswordResetSender>().Object, options);
         var issuedAt = DateTime.UtcNow;
@@ -111,7 +111,7 @@ public class PasswordResetServiceTests
         // Given a service issuing twice for the same person: the token is what stands between an
         // intercepted mailbox and a changed password, so it must not be predictable from a prior one
         var delivered = new List<string>();
-        var tokens = new AsyncFakeRepository<PasswordResetToken>();
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
             tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
         var person = await PersonAsync();
@@ -136,7 +136,7 @@ public class PasswordResetServiceTests
         // Given / When — the token's secrecy rests on its length, and it travels inside a link in
         // an email, so it must survive a URL
         var delivered = new List<string>();
-        var tokens = new AsyncFakeRepository<PasswordResetToken>();
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
             tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
 

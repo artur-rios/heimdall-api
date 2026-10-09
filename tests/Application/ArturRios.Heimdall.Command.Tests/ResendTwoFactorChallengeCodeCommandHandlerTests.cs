@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -46,18 +47,21 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
     }
 
     private sealed record Fixture(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
         RecordingEmailCodeIssuer EmailCodeIssuer,
         Mock<ITwoFactorChallengeTokenValidator> Validator,
         Person Person)
     {
         public ResendTwoFactorChallengeCodeCommandHandler Handler() =>
-            new(Persons, TwoFactorAuths, TwoFactorAuths, Validator.Object, EmailCodeIssuer);
+            new(Persons, TwoFactorAuths, InMemoryAtomicWrites.Instance, Validator.Object, EmailCodeIssuer);
 
         public Task<ArturRios.Output.DataOutput<Command.Output.ResendTwoFactorChallengeCodeCommandOutput?>> ResendAsync() =>
             Handler().HandleAsync(new ResendTwoFactorChallengeCodeCommand { ChallengeToken = ChallengeToken });
     }
+
+    /// <summary>The challenge the seeded configuration has outstanding, and the stub token names.</summary>
+    private static readonly Guid OutstandingChallenge = Guid.NewGuid();
 
     /// <summary>
     ///     Seeds a person, optionally an active configuration, and a validator that resolves the
@@ -72,7 +76,8 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         int reissuesAlreadyMade = 0,
         bool challengeValid = true,
         bool personDeleted = false,
-        bool processingRestricted = false)
+        bool processingRestricted = false,
+        bool challengeRedeemed = false)
     {
         var person = new Person
         {
@@ -87,10 +92,10 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
             ProcessingRestrictedAt = processingRestricted ? DateTime.UtcNow : null
         };
 
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         await persons.CreateAsync(person);
 
-        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth>();
+        var twoFactorAuths = new AsyncFakeRepository<TwoFactorAuth, long>();
 
         if (withConfiguration)
         {
@@ -100,14 +105,15 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
                 IsActive = active,
                 AppEnabled = appEnabled,
                 EmailEnabled = emailEnabled,
-                EmailCodeReissueCount = reissuesAlreadyMade
+                EmailCodeReissueCount = reissuesAlreadyMade,
+                ChallengeId = challengeRedeemed ? null : OutstandingChallenge
             });
         }
 
         var validator = new Mock<ITwoFactorChallengeTokenValidator>();
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<string>()))
-            .ReturnsAsync(challengeValid ? new TwoFactorChallengePrincipal(person.PublicId) : null);
+            .ReturnsAsync(challengeValid ? new TwoFactorChallengePrincipal(person.PublicId, OutstandingChallenge) : null);
 
         return new Fixture(persons, twoFactorAuths, new RecordingEmailCodeIssuer(), validator, person);
     }
@@ -199,6 +205,22 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         // even though UC-11 refuses such a person, because the restriction can be applied after the
         // challenge was issued.
         var fixture = await FixtureAsync(processingRestricted: true);
+
+        // When
+        var output = await fixture.ResendAsync();
+
+        // Then
+        Assert.Empty(fixture.EmailCodeIssuer.Reissues);
+
+        AssertIndistinguishable(output);
+    }
+
+    [UnitFact]
+    public async Task GivenARedeemedChallenge_WhenResending_ThenNothingIsSentAndTheAnswerIsUnchanged()
+    {
+        // Given — FR-2F-10/FR-2F-16: a challenge already redeemed (or replaced by a newer login) is
+        // no longer outstanding, so it has no code to resend, however valid its signature still is
+        var fixture = await FixtureAsync(challengeRedeemed: true);
 
         // When
         var output = await fixture.ResendAsync();

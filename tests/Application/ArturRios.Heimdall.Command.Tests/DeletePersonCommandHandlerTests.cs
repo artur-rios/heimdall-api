@@ -57,9 +57,9 @@ public class DeletePersonCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<Person>> PersonsWith(params Person[] persons)
+    private static async Task<AsyncFakeRepository<Person, long>> PersonsWith(params Person[] persons)
     {
-        var repository = new AsyncFakeRepository<Person>();
+        var repository = new AsyncFakeRepository<Person, long>();
 
         foreach (var person in persons)
         {
@@ -70,7 +70,7 @@ public class DeletePersonCommandHandlerTests
     }
 
     private static DeletePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person> persons, bool ownershipAllowed = true) =>
+        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true) =>
         new(persons, persons, Ownership(ownershipAllowed));
 
     private static DeletePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()

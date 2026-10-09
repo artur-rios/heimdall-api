@@ -27,7 +27,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<CreateScopeCommand, CreateScopeCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<UpdateScopeCommand, UpdateScopeCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -57,7 +57,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<DeleteScopeCommand, DeleteScopeCommandOutput>(new DeleteScopeCommand { Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
             .ExecuteCommandAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>(
                 new HardDeleteScopeCommand { Id = id });
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -93,20 +93,28 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var result = await commandMediator
             .ExecuteCommandAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
-    ///     Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.
+    ///     Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists
+    ///     every scope; a Scope Admin only the scopes they own, with the total counting those alone.
     /// </summary>
+    /// <remarks>
+    ///     Ownership is read from the database rather than the token's owned-scope claim, so an owner
+    ///     removed from a scope stops seeing it at once. A <c>User</c> has one scope and reads it by
+    ///     id, so the collection is refused to them (403).
+    /// </remarks>
     [HttpGet]
-    [RoleRequirement((int)Roles.SystemAdmin)]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<PaginatedOutput<ScopeOutput>>> List([FromQuery] ListScopesQuery query)
     {
+        HttpContext.ApplyActor(query);
+
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopesQuery, ScopeOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -123,6 +131,6 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
 
         var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
 }

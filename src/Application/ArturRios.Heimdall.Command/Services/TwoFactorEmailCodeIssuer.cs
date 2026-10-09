@@ -1,7 +1,6 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Security;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,8 +8,8 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <inheritdoc cref="ITwoFactorEmailCodeIssuer" />
 public class TwoFactorEmailCodeIssuer(
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAsyncRepository<TwoFactorEmailCode, long> emailCodeWriter,
     ITwoFactorEmailSender emailSender) : ITwoFactorEmailCodeIssuer
 {
     private const int CodeLength = 6;
@@ -33,7 +32,8 @@ public class TwoFactorEmailCodeIssuer(
             IncludeSpecialCharacters = false
         });
 
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
+        // Under the process-wide Argon2id bound (TH-03), as every derivation on a request path is.
+        var (codeHash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(code);
 
         var creation = await emailCodeWriter.CreateAsync(new TwoFactorEmailCode
         {

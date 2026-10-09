@@ -25,13 +25,13 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     out before this runs, and this check answers for the Scope Admin the attribute cannot judge.
 /// </remarks>
 public class ListScopeGoogleUsersQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopeGoogleUsersQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>
 {
-    public async Task<PaginatedOutput<GoogleUserOutput>> HandleAsync(ListScopeGoogleUsersQuery query)
+    public async Task<PaginatedOutput<GoogleUserOutput>> HandleAsync(ListScopeGoogleUsersQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<GoogleUserOutput>.New;
 

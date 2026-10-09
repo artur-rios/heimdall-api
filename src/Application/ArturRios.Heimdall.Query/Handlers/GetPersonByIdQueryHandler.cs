@@ -17,7 +17,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (<c>PersonNotFound</c>); a person the caller may not see is AF-07b
 ///     (<c>NotAuthorizedToViewPerson</c>). Both are returned as errors rather than thrown.
 /// </summary>
-public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personReader)
+public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person, long> personReader)
     : IQueryHandlerAsync<GetPersonByIdQuery, PersonOutput>
 {
     /// <summary>
@@ -37,7 +37,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person> personRe
         public PersonOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<PersonOutput?>> HandleAsync(GetPersonByIdQuery query)
+    public async Task<DataOutput<PersonOutput?>> HandleAsync(GetPersonByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PersonOutput?>.New;
 

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
-using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using OtpNet;
 
 namespace ArturRios.Heimdall.Command.Services;
@@ -8,7 +8,7 @@ namespace ArturRios.Heimdall.Command.Services;
 /// <inheritdoc cref="ITotpCodeVerifier" />
 public class TotpCodeVerifier(
     ITotpSecretProtector totpSecretProtector,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter) : ITotpCodeVerifier
+    IAtomicWrites atomicWrites) : ITotpCodeVerifier
 {
     // A one time-step (30s) tolerance on either side of "now", the conventional allowance for clock
     // drift between the server and whatever device generated the code — wide enough to forgive a
@@ -49,19 +49,12 @@ public class TotpCodeVerifier(
         // across every endpoint that takes a second factor — verify, disable, and regenerate alike.
         // Strictly-greater rather than not-equal, so a replay of an older step inside the window is
         // refused as well.
-        if (twoFactorAuth.LastTotpTimeStepUsed is { } lastUsed && matchedTimeStep <= lastUsed)
-        {
-            return false;
-        }
-
-        twoFactorAuth.LastTotpTimeStepUsed = matchedTimeStep;
-        twoFactorAuth.UpdatedAt = DateTime.UtcNow;
-
-        // A failure to persist the step is treated as a failure to verify. Returning true anyway
-        // would hand out the very acceptance this method has just decided it cannot record, leaving
-        // the code replayable — the outcome the check above exists to prevent.
-        var update = await twoFactorWriter.UpdateAsync(twoFactorAuth);
-
-        return update.Success;
+        //
+        // The comparison is made by the database, in the write that records the step: two requests
+        // carrying the same code at the same moment both pass a check made in memory, and both used
+        // to be accepted. Only one of them can advance the step, and only that one is accepted. A
+        // failure to record it is a failure to verify for the same reason — accepting a code whose
+        // use was not recorded would leave it replayable.
+        return await atomicWrites.TryAdvanceTotpStepAsync(twoFactorAuth, matchedTimeStep, DateTime.UtcNow);
     }
 }

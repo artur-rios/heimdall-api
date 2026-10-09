@@ -19,11 +19,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class UpdateScopeCommandHandler(
     IValidator<UpdateScopeCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncRepository<Scope> scopeWriter)
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncRepository<Scope, long> scopeWriter)
     : ICommandHandlerAsync<UpdateScopeCommand, UpdateScopeCommandOutput>
 {
-    public async Task<DataOutput<UpdateScopeCommandOutput?>> HandleAsync(UpdateScopeCommand command)
+    public async Task<DataOutput<UpdateScopeCommandOutput?>> HandleAsync(UpdateScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdateScopeCommandOutput?>.New;
 

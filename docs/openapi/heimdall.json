@@ -2,13 +2,13 @@
   "openapi": "3.0.4",
   "info": {
     "title": "Heimdall API",
-    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. Every endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is rejected everywhere except `POST /api/auth/2fa/verify`.",
+    "description": "A centralized identity management API with scope-based multi-tenancy.\n\nEvery identifier in a path is a **PublicId** (GUID), never an internal id. Every endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, `PaginatedOutput<T>` for a listing.\n\nObtain a token from `POST /api/auth/login`, then authorize with it. A challenge token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer credential, and it is read only from the `challengeToken` body field of `POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
     "contact": {
       "name": "Artur Rios",
       "url": "https://github.com/artur-rios/heimdall-api"
     },
     "license": {
-      "name": "MIT",
+      "name": "ArturRios.Heimdall — Proprietary License",
       "url": "https://github.com/artur-rios/heimdall-api/blob/main/LICENSE"
     },
     "version": "v1"
@@ -1137,8 +1137,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Reports the caller's own two-factor authentication status (FR-2F-15): whether it is\nactive, which methods are configured, and how many recovery codes remain unused. The\nperson read is always the caller themselves — taken from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) — so a configuration is never addressed by an\nidentifier in a path.",
-        "description": "No `RoleRequirement`, for the same reason its `POST` siblings have none: the\nauthorization matrix grants two-factor management to all three person roles and withholds\nit from anonymous callers, which authentication alone enforces. A caller with no\nconfiguration is answered 200 with every flag false; a Google User is answered 403, since\nFR-2F-01 makes them permanently ineligible.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Returns a copy of everything held about the caller (UC-41, GDPR Art. 15 and 20, LGPD Art.\n18 II and V).",
+        "description": "\nNo `RoleRequirement`: access and portability are rights of the data subject\n                    rather than privileges of a role, and a Google User has them as much as a person.\n\n<b>\n    `POST`, for a read.</b> Two reasons. A `GET` response is cacheable, and\n                    this one is a document containing everything about a person — exactly what must never\n                    sit in a proxy or browser cache. And the export is the highest-value action a stolen\n                    token can take, so it has to reach the audit trail, which in this codebase means\n                    being a command.\n\nThe subject is the token's. There is no path parameter and no body field naming an\n                    identity, so one caller cannot export another's data.\n\nReachable by a subject whose processing is restricted, or who is suspended pending\n                    erasure (NFR-24): the right to a copy does not depend on the account's standing.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_ExportMyData",
         "responses": {
           "200": {
@@ -1178,7 +1178,7 @@
           "Auth"
         ],
         "summary": "Requests erasure of the caller's own identity (UC-42, GDPR Art. 17, LGPD Art. 18 VI).",
-        "description": "\nNo `RoleRequirement`: every role, and a Google User, may ask to be erased — it is\n                    a right of the data subject rather than a privilege of a role. Authentication alone\n                    enforces what matters, which is that somebody is asking for themselves.\n\nThe subject is never named in the request. There is no path parameter and no body\n                    field for it, so the endpoint has no shape in which one identity could ask for\n                    another's erasure.\n\nThe body carries a credential, and which one depends on the caller: a person presents\n                    their password, a Google User a freshly issued Google ID token. A bearer token alone\n                    is not enough for an irreversible operation. Because it verifies a password, this\n                    endpoint is governed by NFR-18 rather than NFR-05.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "\nNo `RoleRequirement`: every role, and a Google User, may ask to be erased — it is\n                    a right of the data subject rather than a privilege of a role. Authentication alone\n                    enforces what matters, which is that somebody is asking for themselves.\n\nThe subject is never named in the request. There is no path parameter and no body\n                    field for it, so the endpoint has no shape in which one identity could ask for\n                    another's erasure.\n\nThe body carries a credential, and which one depends on the caller: a person presents\n                    their password, a Google User a freshly issued Google ID token. A bearer token alone\n                    is not enough for an irreversible operation. Because it verifies a password, this\n                    endpoint is governed by NFR-18 rather than NFR-05.\n\nReachable by a subject whose processing is restricted (NFR-24). A suspended identity\n                    reaches the handler too, and is answered by AF-42c (409) if it asked already, AF-42b\n                    (403) otherwise.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_RequestErasure",
         "requestBody": {
           "content": {
@@ -1237,7 +1237,7 @@
           "Auth"
         ],
         "summary": "Restricts processing of the caller's own identity (UC-44, GDPR Art. 18, LGPD Art. 18\nIII–IV) — suspended without being deleted, while something about it is disputed.",
-        "description": "No credential is required, unlike UC-42's erasure request. A restriction destroys\nnothing and is liftable, and somebody asking for one may be doing so precisely because\nthey believe the account is compromised — demanding the password of a person in that\nposition would be the wrong way round.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No credential is required, unlike UC-42's erasure request. A restriction destroys\nnothing and is liftable, and somebody asking for one may be doing so precisely because\nthey believe the account is compromised — demanding the password of a person in that\nposition would be the wrong way round. Reachable by a suspended subject (UC-44), and by a\nrestricted one, who is answered by AF-44a (409).\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_RestrictProcessing",
         "requestBody": {
           "content": {
@@ -1358,7 +1358,7 @@
           "Auth"
         ],
         "summary": "Lifts a restriction on processing (UC-45, GDPR Art. 18(3)).",
-        "description": "No `RoleRequirement`, because the rule is data-dependent: a subject of any role may\nlift their own, and only a System Admin may lift somebody else's. The handler decides,\nand it informs the subject first in the second case — Art. 18(3) makes that a\nprecondition of the act rather than a courtesy afterwards, so a failed notification\nrefuses the lift.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No `RoleRequirement`, because the rule is data-dependent: a subject of any role may\nlift their own, and only a System Admin may lift somebody else's. The handler decides,\nand it informs the subject first in the second case — Art. 18(3) makes that a\nprecondition of the act rather than a courtesy afterwards, so a failed notification\nrefuses the lift. The subject can reach this with a restricted identity — it is how they\nlift their own (NFR-24) — but a System Admin who is restricted or suspended may not lift\nanyone else's (AF-45c, 403).\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_LiftProcessingRestriction",
         "requestBody": {
           "content": {
@@ -1484,7 +1484,8 @@
         "tags": [
           "Auth"
         ],
-        "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "summary": "Reports the caller's own two-factor authentication status (FR-2F-15): whether it is\nactive, which methods are configured, and how many recovery codes remain unused. The\nperson read is always the caller themselves — taken from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) — so a configuration is never addressed by an\nidentifier in a path.",
+        "description": "No `RoleRequirement`, for the same reason its `POST` siblings have none: the\nauthorization matrix grants two-factor management to all three person roles and withholds\nit from anonymous callers, which authentication alone enforces. A caller with no\nconfiguration is answered 200 with every flag false; a Google User is answered 403, since\nFR-2F-01 makes them permanently ineligible.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_GetTwoFactorStatus",
         "responses": {
           "200": {
@@ -2831,8 +2832,8 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Lists scopes with pagination and optional filtering (UC-02). Restricted to System Admins.",
-        "description": "**Requires role:** System Admin.",
+        "summary": "Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists\nevery scope; a Scope Admin only the scopes they own, with the total counting those alone.",
+        "description": "Ownership is read from the database rather than the token's owned-scope claim, so an owner\nremoved from a scope stops seeing it at once. A `User` has one scope and reads it by\nid, so the collection is refused to them (403).\n\n**Requires role:** System Admin or Scope Admin.",
         "operationId": "Scope_List",
         "parameters": [
           {

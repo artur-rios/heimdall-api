@@ -39,17 +39,17 @@ public class CreateApplicationCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<(AsyncFakeRepository<Scope> scopes, Scope scope)> ScopeStoreAsync(
+    private static async Task<(AsyncFakeRepository<Scope, long> scopes, Scope scope)> ScopeStoreAsync(
         bool isDeleted = false)
     {
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = isDeleted };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
     }
 
     private static async Task<Person> SeedScopeUserAsync(
-        AsyncFakeRepository<Person> persons, Scope scope, bool isDeleted = false)
+        AsyncFakeRepository<Person, long> persons, Scope scope, bool isDeleted = false)
     {
         var person = new Person
         {
@@ -65,7 +65,7 @@ public class CreateApplicationCommandHandlerTests
     }
 
     private static async Task<Person> SeedScopeAdminAsync(
-        AsyncFakeRepository<Person> persons, Scope? ownedScope = null, bool isDeleted = false)
+        AsyncFakeRepository<Person, long> persons, Scope? ownedScope = null, bool isDeleted = false)
     {
         var person = new Person
         {
@@ -96,9 +96,9 @@ public class CreateApplicationCommandHandlerTests
     };
 
     private static CreateApplicationCommandHandler Handler(
-        AsyncFakeRepository<Scope> scopes,
-        AsyncFakeRepository<Person> persons,
-        AsyncFakeRepository<Application> applications,
+        AsyncFakeRepository<Scope, long> scopes,
+        AsyncFakeRepository<Person, long> persons,
+        AsyncFakeRepository<Application, long> applications,
         IScopeOwnershipChecker? ownership = null,
         Mock<IValidator<CreateApplicationCommand>>? validator = null) =>
         new((validator ?? ValidValidator()).Object, scopes, persons, applications,
@@ -109,8 +109,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given a SystemAdmin actor and an owner who is a ScopeAdmin owning the scope (FR-AP-03)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications);
 
@@ -131,8 +131,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given a ScopeAdmin who owns the scope and names themself as owner (matrix: "self as owner")
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var caller = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: true));
 
@@ -150,8 +150,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications);
 
@@ -171,9 +171,9 @@ public class CreateApplicationCommandHandlerTests
     public async Task GivenMissingScope_WhenHandlingCreateApplication_ThenScopeNotFoundIsReported()
     {
         // Given an empty scope store (AF-16a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -191,8 +191,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given a logically deleted scope (AF-16a)
         var (scopes, scope) = await ScopeStoreAsync(isDeleted: true);
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -209,8 +209,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given the ownership checker rejects the acting ScopeAdmin (AF-16e)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: false));
 
@@ -230,8 +230,8 @@ public class CreateApplicationCommandHandlerTests
         // Given a ScopeAdmin who owns the scope naming a co-owner as the application's owner (AF-16c).
         // The co-owner would satisfy FR-AP-03, so the refusal is about who asked, not about the owner.
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var caller = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(scopes, persons, applications, OwnershipChecker(allowed: true));
@@ -252,8 +252,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given an owner id nobody holds (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var handler = Handler(scopes, persons, applications);
 
         // When
@@ -270,8 +270,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given a logically deleted ScopeAdmin owning the scope (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope, isDeleted: true);
         var handler = Handler(scopes, persons, applications);
 
@@ -290,8 +290,8 @@ public class CreateApplicationCommandHandlerTests
         // Given a User of the scope as the proposed owner: FR-AP-03 restricts ownership to a
         // ScopeAdmin who owns the scope, so a User is refused however well they belong to it (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var owner = await SeedScopeUserAsync(persons, scope);
         var handler = Handler(scopes, persons, applications);
 
@@ -312,8 +312,8 @@ public class CreateApplicationCommandHandlerTests
         var (scopes, scope) = await ScopeStoreAsync();
         var otherScope = new Scope { PublicId = Guid.NewGuid(), Name = "Other" };
         await scopes.CreateAsync(otherScope);
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var stranger = await SeedScopeAdminAsync(persons, ownedScope: otherScope);
         var handler = Handler(scopes, persons, applications);
 
@@ -332,8 +332,8 @@ public class CreateApplicationCommandHandlerTests
         // Given a SystemAdmin person as the proposed owner: they hold no SCOPE_OWNER row and do not
         // carry the ScopeAdmin role, so FR-AP-03 excludes them (AF-16b) without a rule of their own
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var systemAdmin = new Person
         {
             PublicId = Guid.NewGuid(),
@@ -358,8 +358,8 @@ public class CreateApplicationCommandHandlerTests
     {
         // Given a validator that rejects the command (AF-16d)
         var (scopes, scope) = await ScopeStoreAsync();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var validator = new Mock<IValidator<CreateApplicationCommand>>();
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<CreateApplicationCommand>(), It.IsAny<CancellationToken>()))

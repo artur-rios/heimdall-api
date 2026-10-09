@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -43,7 +44,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <para>
 ///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
 ///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
-///         <see cref="IAsyncRepository{T}.CreateRangeAsync" /> rather than ten separate inserts. The
+///         <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten separate inserts. The
 ///         repository layer exposes no transaction, so ordering is what stands in for one: the
 ///         dangerous half-write is "two-factor is active but the caller holds no recovery codes",
 ///         which would lock a caller out of their own account on the strength of a request this
@@ -54,13 +55,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ConfirmTwoFactorAuthCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
-    IAsyncRepository<TwoFactorRecoveryCode> recoveryCodeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAtomicWrites atomicWrites,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
+    IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
     ITotpCodeVerifier totpCodeVerifier)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {
@@ -68,7 +69,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
     private const int RecoveryCodeSegmentLength = 4;
 
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
-        ConfirmTwoFactorAuthCommand command)
+        ConfirmTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ConfirmTwoFactorAuthCommandOutput?>.New;
 
@@ -108,7 +109,10 @@ public class ConfirmTwoFactorAuthCommandHandler(
         {
             consumedEmailCode = await FindMatchingEmailCodeAsync(twoFactorAuth.Id, command.EmailCode);
 
-            if (consumedEmailCode is null)
+            // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write
+            // only one request can win, so two confirmations racing on the same code cannot both
+            // issue a set of recovery codes and activate.
+            if (consumedEmailCode is null || !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
             {
                 return output.WithError(TwoFactorMessages.EmailCodeInvalid);
             }
@@ -136,19 +140,6 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithErrors(activation.Errors);
         }
 
-        // UC-37 step 7: the email code that confirmed setup can never be replayed.
-        if (consumedEmailCode is not null)
-        {
-            consumedEmailCode.Used = true;
-
-            var consumption = await emailCodeWriter.UpdateAsync(consumedEmailCode);
-
-            if (!consumption.Success)
-            {
-                return output.WithErrors(consumption.Errors);
-            }
-        }
-
         return output
             .WithData(new ConfirmTwoFactorAuthCommandOutput { Enabled = true, RecoveryCodes = recoveryCodes })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
@@ -163,7 +154,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
     /// </summary>
     private Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? emailCode) =>
         TwoFactorEmailCodeVerification.FindMatchingAsync(
-            emailCodeReader, emailCodeWriter, twoFactorAuthId, emailCode);
+            emailCodeReader, atomicWrites, twoFactorAuthId, emailCode);
 
     /// <summary>
     ///     Persists <paramref name="recoveryCodes" /> as the configuration's whole recovery code set,

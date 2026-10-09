@@ -20,13 +20,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class UpdateScopePermissionCommandHandler(
     IValidator<UpdateScopePermissionCommand> validator,
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader,
-    IAsyncRepository<ScopePermission> permissionWriter,
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader,
+    IAsyncRepository<ScopePermission, long> permissionWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<UpdateScopePermissionCommand, UpdateScopePermissionCommandOutput>
 {
     public async Task<DataOutput<UpdateScopePermissionCommandOutput?>> HandleAsync(
-        UpdateScopePermissionCommand command)
+        UpdateScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdateScopePermissionCommandOutput?>.New;
 

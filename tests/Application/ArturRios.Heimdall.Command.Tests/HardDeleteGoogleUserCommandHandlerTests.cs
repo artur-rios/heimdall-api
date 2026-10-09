@@ -19,7 +19,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     private static readonly Guid ScopePublicId = Guid.NewGuid();
 
     private static async Task<GoogleUser> SeedGoogleUserAsync(
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         bool isDeleted = false,
         Guid? scopePublicId = null)
     {
@@ -50,7 +50,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     public async Task GivenGoogleUser_WhenHandlingHardDelete_ThenRemovesTheRecord()
     {
         // Given an active Google User (UC-29 main flow)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
 
@@ -71,7 +71,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     {
         // Given a Google User UC-28 already soft-deleted — exactly what a cleanup pass starts from,
         // which is why the lookup omits an !IsDeleted filter
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
 
@@ -87,7 +87,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     public async Task GivenNoSuchGoogleUser_WhenHandlingHardDelete_ThenReturnsNotFoundError()
     {
         // Given an id nobody holds (AF-29a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
         var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
 
@@ -105,7 +105,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     {
         // Given a Google User that exists but belongs to another scope — not the resource this path
         // addresses (AF-29a)
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, scopePublicId: Guid.NewGuid());
         var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
 
@@ -123,7 +123,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     {
         // Given a second call for a record the first one removed. UC-29 defines no idempotent path,
         // unlike UC-28's AF-28b, so the repeat is AF-29a.
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
         await handler.HandleAsync(Command(googleUser.PublicId));

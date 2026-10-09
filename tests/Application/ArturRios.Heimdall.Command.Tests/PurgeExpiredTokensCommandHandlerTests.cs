@@ -28,7 +28,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     };
 
     private static async Task<PasswordResetToken> SeedPasswordResetTokenAsync(
-        AsyncFakeRepository<PasswordResetToken> tokens, DateTime expiresAt, bool used = false)
+        AsyncFakeRepository<PasswordResetToken, long> tokens, DateTime expiresAt, bool used = false)
     {
         var token = new PasswordResetToken
         {
@@ -44,7 +44,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     }
 
     private static async Task<EmailVerificationToken> SeedEmailVerificationTokenAsync(
-        AsyncFakeRepository<EmailVerificationToken> tokens, DateTime expiresAt, bool used = false)
+        AsyncFakeRepository<EmailVerificationToken, long> tokens, DateTime expiresAt, bool used = false)
     {
         var token = new EmailVerificationToken
         {
@@ -60,7 +60,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     }
 
     private static async Task<TwoFactorEmailCode> SeedTwoFactorEmailCodeAsync(
-        AsyncFakeRepository<TwoFactorEmailCode> codes, DateTime expiresAt, bool used = false)
+        AsyncFakeRepository<TwoFactorEmailCode, long> codes, DateTime expiresAt, bool used = false)
     {
         var code = new TwoFactorEmailCode
         {
@@ -78,26 +78,26 @@ public class PurgeExpiredTokensCommandHandlerTests
     }
 
     private static PurgeExpiredTokensCommandHandler Handler(
-        AsyncFakeRepository<PasswordResetToken> passwordResetTokens,
-        AsyncFakeRepository<EmailVerificationToken> emailVerificationTokens,
-        AsyncFakeRepository<TwoFactorEmailCode> twoFactorEmailCodes,
+        AsyncFakeRepository<PasswordResetToken, long> passwordResetTokens,
+        AsyncFakeRepository<EmailVerificationToken, long> emailVerificationTokens,
+        AsyncFakeRepository<TwoFactorEmailCode, long> twoFactorEmailCodes,
         DataRetentionOptions? retention = null) =>
         new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
             retention ?? Retention());
 
-    private static async Task<int> CountAsync<T>(AsyncFakeRepository<T> repository)
-        where T : ArturRios.Data.Relational.Core.Entities.Entity =>
+    private static async Task<int> CountAsync<T>(AsyncFakeRepository<T, long> repository)
+        where T : ArturRios.Data.Relational.Core.Entities.Entity<long> =>
         (await repository.GetAllAsync()).Data!.Count();
 
     [UnitFact]
     public async Task GivenTokensPastTheGracePeriod_WhenPurging_ThenEveryTableIsCleared()
     {
         // Given one row per table, all expired well beyond the grace period
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
         var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
 
         await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired);
@@ -124,9 +124,9 @@ public class PurgeExpiredTokensCommandHandlerTests
     public async Task GivenATokenExpiredInsideTheGracePeriod_WhenPurging_ThenItIsKept()
     {
         // Given a token that expired an hour ago — past its life, nowhere near past its retention
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
 
         await SeedPasswordResetTokenAsync(passwordResetTokens, DateTime.UtcNow.AddHours(-1));
 
@@ -145,9 +145,9 @@ public class PurgeExpiredTokensCommandHandlerTests
     {
         // Given a token consumed a moment ago: consumption does not shorten its retention, because
         // UC-13's TokenAlreadyUsed answer depends on the row still being there
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
 
         await SeedPasswordResetTokenAsync(passwordResetTokens, DateTime.UtcNow.AddMinutes(30), used: true);
 
@@ -165,9 +165,9 @@ public class PurgeExpiredTokensCommandHandlerTests
     public async Task GivenALiveToken_WhenPurging_ThenItIsUntouched()
     {
         // Given a person mid-recovery, mid-verification and mid-second-factor
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
 
         await SeedPasswordResetTokenAsync(passwordResetTokens, DateTime.UtcNow.AddHours(1));
         await SeedEmailVerificationTokenAsync(emailVerificationTokens, DateTime.UtcNow.AddDays(1));
@@ -190,9 +190,9 @@ public class PurgeExpiredTokensCommandHandlerTests
     {
         // Given five purgeable rows and a batch size of two (SRD §6.3.2 — a purge is delete pressure
         // on tables the login path writes to, so a backlog drains over runs rather than in one)
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
         var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 5; i++)
@@ -222,9 +222,9 @@ public class PurgeExpiredTokensCommandHandlerTests
     public async Task GivenNothingToPurge_WhenPurging_ThenTheRunSucceedsWithNoCounts()
     {
         // Given empty tables — the state most runs find
-        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken>();
-        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken>();
-        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode>();
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
 
         // When
         var output = await Handler(passwordResetTokens, emailVerificationTokens, twoFactorEmailCodes)

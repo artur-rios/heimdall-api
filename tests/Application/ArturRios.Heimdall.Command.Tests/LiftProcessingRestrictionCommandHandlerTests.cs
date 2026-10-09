@@ -24,12 +24,12 @@ public class LiftProcessingRestrictionCommandHandlerTests
     }
 
     private static LiftProcessingRestrictionCommandHandler Handler(
-        AsyncFakeRepository<Person> persons,
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<Person, long> persons,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         IRestrictionLiftNotifier notifier) =>
         new(persons, persons, googleUsers, googleUsers, notifier);
 
-    private static async Task<Person> SeedRestrictedAsync(AsyncFakeRepository<Person> persons)
+    private static async Task<Person> SeedRestrictedAsync(AsyncFakeRepository<Person, long> persons)
     {
         var person = new Person
         {
@@ -49,7 +49,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
     [UnitFact]
     public async Task GivenASystemAdmin_WhenLifting_ThenTheSubjectIsInformedFirst()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = await SeedRestrictedAsync(persons);
         var notifier = new Mock<IRestrictionLiftNotifier>();
 
@@ -75,7 +75,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
     {
         // Art. 18(3) makes informing a precondition of the act. A lift that proceeded after a failed
         // send would be unlawful and would look identical to one that worked.
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = await SeedRestrictedAsync(persons);
 
         var output = await Handler(persons, new(), Notifier(succeeds: false))
@@ -97,7 +97,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
         // They are the person Art. 18(3) exists to inform. Requiring an email to somebody standing
         // in front of you, and refusing their request when it bounces, would be the article's letter
         // against its purpose.
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = await SeedRestrictedAsync(persons);
         var notifier = new Mock<IRestrictionLiftNotifier>();
 
@@ -115,9 +115,35 @@ public class LiftProcessingRestrictionCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenARestrictedSystemAdmin_WhenLiftingSomebodyElses_ThenItIsRefused()
+    {
+        // The lift endpoint lets a restricted caller through for their own restriction (UC-45,
+        // NFR-24). An administrator who is restricted themselves is a subject there, not an
+        // administrator: they may not process anyone else's record.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var subject = await SeedRestrictedAsync(persons);
+        var admin = await SeedRestrictedAsync(persons);
+        admin.RoleId = (long)Roles.SystemAdmin;
+        var notifier = new Mock<IRestrictionLiftNotifier>();
+
+        var output = await Handler(persons, new(), Notifier(true, notifier))
+            .HandleAsync(new LiftProcessingRestrictionCommand
+            {
+                SubjectId = subject.PublicId,
+                ActingPersonId = admin.PublicId,
+                ActingRole = (int)Roles.SystemAdmin
+            });
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotEligible, output.Errors);
+        notifier.Verify(n => n.NotifyAsync(It.IsAny<string>()), Times.Never);
+        Assert.NotNull(subject.ProcessingRestrictedAt);
+    }
+
+    [UnitFact]
     public async Task GivenANonAdminLiftingSomebodyElses_WhenLifting_ThenItIsRefused()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = await SeedRestrictedAsync(persons);
 
         var output = await Handler(persons, new(), Notifier(true))
@@ -136,7 +162,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
     [UnitFact]
     public async Task GivenNoRestriction_WhenLifting_ThenItIsReportedAsNotRestricted()
     {
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
             PublicId = Guid.NewGuid(), Name = "Ada", Email = "ada@test.local", RoleId = (long)Roles.User
@@ -156,7 +182,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
     [UnitFact]
     public async Task GivenARestrictedGoogleUser_WhenAnAdminLifts_ThenTheyAreInformedToo()
     {
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = new GoogleUser
         {
             PublicId = Guid.NewGuid(),

@@ -19,13 +19,13 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     A System Admin bypasses the ownership check.
 /// </summary>
 public class ListScopeOwnersQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopeOwnersQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeOwnersQuery, PersonOutput>
 {
-    public async Task<PaginatedOutput<PersonOutput>> HandleAsync(ListScopeOwnersQuery query)
+    public async Task<PaginatedOutput<PersonOutput>> HandleAsync(ListScopeOwnersQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<PersonOutput>.New;
 
@@ -54,6 +54,11 @@ public class ListScopeOwnersQueryHandler(
 
         var owners = personReader.Query()
             .Where(x => x.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
+
+        // NFR-24: a restricted identity is withheld from tenant-facing listings, whatever
+        // IncludeDeleted says — the same rule ListScopePersons and ListScopeGoogleUsers apply. An
+        // owner is no less a data subject than a User.
+        owners = owners.Where(x => x.ProcessingRestrictedAt == null);
 
         if (!query.IncludeDeleted)
         {

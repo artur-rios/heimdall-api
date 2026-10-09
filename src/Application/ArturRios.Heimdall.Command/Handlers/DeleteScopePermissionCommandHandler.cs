@@ -20,13 +20,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     rather than thrown.
 /// </summary>
 public class DeleteScopePermissionCommandHandler(
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader,
-    IAsyncRepository<ScopePermission> permissionWriter,
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader,
+    IAsyncRepository<ScopePermission, long> permissionWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeleteScopePermissionCommand, DeleteScopePermissionCommandOutput>
 {
     public async Task<DataOutput<DeleteScopePermissionCommandOutput?>> HandleAsync(
-        DeleteScopePermissionCommand command)
+        DeleteScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteScopePermissionCommandOutput?>.New;
 

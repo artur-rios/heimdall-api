@@ -3,7 +3,7 @@ title: "Operations & Infrastructure Document"
 linkTitle: "Operations & Infrastructure Document"
 weight: 70
 slug: "operations-infrastructure-document"
-description: "The technical foundation and the health-check feature."
+description: "Hosting, the four environments, the technical foundation and the health-check feature."
 ---
 
 # Operations & Infrastructure Document — Heimdall API
@@ -185,6 +185,34 @@ The step is safe to repeat — running it twice anonymises nothing extra — and
 list**, because a reconciliation with nothing to reconcile almost always means the ledger was not
 loaded, and reporting success there would let a restore be signed off with erased people back in the
 database.
+
+## 0.2 Environments
+
+The API runs in four environments. Three of them share one Ubuntu VPS — one Docker engine, one
+PostgreSQL instance — and are deployed by [yggdrasil](https://github.com/artur-rios/yggdrasil)'s
+Jenkins; the fourth is the developer's own machine. `example.com` stands for the real domain.
+
+| Environment | Where | Deployed by | `ASPNETCORE_ENVIRONMENT` | Public hosts | Database |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| `local` | The developer's Windows machine, Docker Desktop | By hand: `docker compose --env-file docker/local.env up -d --build` | `Development` | `http://localhost:8080` | `heimdall_local`, PostgreSQL on Windows |
+| `development` | The VPS, on demand (started only when used) | Jenkins, on every push to `develop`; a stopped environment stays stopped, and `scripts/ygg.sh env start development` on the VPS turns it on | `Development` | `heimdall-api-dev.example.com`; `/api/` under `heimdall-dev.example.com` | `heimdall_development`, PostgreSQL on the VPS |
+| `homologation` | The VPS, on demand | Jenkins, on every push of a `release/x.y.z` branch | `Staging` | `heimdall-api-hml.example.com`; `/api/` under `heimdall-hml.example.com` | `heimdall_homologation`, PostgreSQL on the VPS |
+| `production` | The VPS, always on | Jenkins, on a green `release/x.y.z → main` pull request, which it then merges and tags | `Production` | `heimdall-api.example.com`; `/api/` under `heimdall.example.com` | `heimdall`, PostgreSQL on the VPS |
+
+Each environment has its own database **and its own database login**, its own token signing secret
+and its own master user, so nothing issued or stored in one is accepted or readable in another. The
+env files of the three VPS environments are kept on the VPS (`/etc/yggdrasil/<environment>/`), filled
+in from the repository's `docker/<environment>.env.example` templates.
+
+**Development and homologation hold no real personal data.** Development and homologation run without Mailgun, so the
+API logs verification tokens, reset tokens and 2FA codes instead of sending them, and EF Core logs
+parameter values outside Production — which is what TH-23 in the
+[Threat Model Document](Threat%20Model%20Document.md) accepts for non-production deployments, on the
+condition that no real person's data is in them. They are tested with made-up people, and production
+data is never copied into them.
+
+The step-by-step setup of each environment is on the documentation site, under
+[Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/).
 
 ## 1. Introduction
 

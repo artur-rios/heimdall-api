@@ -33,13 +33,13 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class ListScopeAdminsQueryHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
     IValidator<ListScopeAdminsQuery> validator)
     : IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>
 {
-    public async Task<PaginatedOutput<PersonSummaryOutput>> HandleAsync(ListScopeAdminsQuery query)
+    public async Task<PaginatedOutput<PersonSummaryOutput>> HandleAsync(ListScopeAdminsQuery query, CancellationToken cancellationToken = default)
     {
         var output = PaginatedOutput<PersonSummaryOutput>.New;
 
@@ -77,7 +77,9 @@ public class ListScopeAdminsQueryHandler(
         // A logically deleted administrator is never a valid owner, so this listing has no
         // include-deleted mode at all — see ListScopeAdminsQuery.
         var admins = personReader.Query()
-            .Where(x => x.RoleId == (long)Roles.ScopeAdmin && !x.IsDeleted);
+            .Where(x => x.RoleId == (long)Roles.ScopeAdmin && !x.IsDeleted
+                        // NFR-24: withheld from tenant-facing listings, as in ListScopePersons.
+                        && x.ProcessingRestrictedAt == null);
 
         if (excludedScopeId is not null)
         {

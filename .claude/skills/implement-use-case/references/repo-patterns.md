@@ -36,11 +36,11 @@ Core LINQ. This is also what makes handlers unit-testable with `FakeRepository<T
 use internal `Id` (bigint). Never expose or accept internal `Id`. (System Requirements §4.0.)
 
 **Messages + status map.** Add user-facing strings to the entity's `*Messages` class and map each to
-an HTTP status in the `*MessageMap` (e.g. `ScopeMessageMap.StatusCodes`), which `ResponseResolver`
+an HTTP status in the `*MessageMap` (e.g. `ScopeMessageMap.StatusCodes`), which `ToActionResult`
 uses to choose the response code.
 
 **Controllers are thin.** A controller action binds input, dispatches through `CommandMediator` /
-`QueryMediator`, and returns `ResponseResolver.Resolve(result, statusMap: …)`. Authorization is
+`QueryMediator`, and returns `result.ToActionResult(statusMap: …)`. Authorization is
 declared with `[RoleRequirement((int)Roles.X)]` (or `[AllowAnonymous]` for public endpoints) — the
 authorization alternative flows are enforced here and verified by functional tests.
 

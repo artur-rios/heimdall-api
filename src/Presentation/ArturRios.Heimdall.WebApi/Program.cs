@@ -4,8 +4,8 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        var startup = new Startup(args);
+        var app = new Startup(args).CreateApplication();
 
-        startup.BuildAndRun();
+        app.Run();
     }
 }

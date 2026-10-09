@@ -37,8 +37,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     </para>
 /// </remarks>
 public class DetectSecuritySignalsQueryHandler(
-    IAsyncReadOnlyRepository<AuditLog> auditReader,
-    IAsyncReadOnlyRepository<Person> personReader,
+    IAsyncReadOnlyRepository<AuditLog, long> auditReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
     DataRetentionOptions options)
     : IQueryHandlerAsync<DetectSecuritySignalsQuery, SecuritySignalsOutput>
 {
@@ -54,7 +54,7 @@ public class DetectSecuritySignalsQueryHandler(
     /// </summary>
     public const string CredentialVerificationShedding = "CREDENTIAL_VERIFICATION_SHEDDING";
 
-    public async Task<DataOutput<SecuritySignalsOutput?>> HandleAsync(DetectSecuritySignalsQuery query)
+    public async Task<DataOutput<SecuritySignalsOutput?>> HandleAsync(DetectSecuritySignalsQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<SecuritySignalsOutput?>.New;
         var now = DateTime.UtcNow;

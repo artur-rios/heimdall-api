@@ -24,9 +24,9 @@ public class GetTwoFactorStatusQueryHandlerTests
         RoleId = (long)Roles.User
     };
 
-    private static async Task<AsyncFakeRepository<T>> RepositoryWith<T>(params T[] items) where T : Entity
+    private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {
-        var repository = new AsyncFakeRepository<T>();
+        var repository = new AsyncFakeRepository<T, long>();
 
         foreach (var item in items)
         {

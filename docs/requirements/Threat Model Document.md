@@ -80,10 +80,10 @@ expensive work is.
 
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
-| TH-01 | Password guessing against a known address | Per-account lockout after 10 failures for 15 minutes (FR-AU-09); per-IP fixed window of 10 requests a minute | Test | Low |
-| TH-02 | Enumerating which addresses and scopes exist, from the response or its timing | One message for every rejection, and a decoy Argon2id verification when no person matches (FR-AU-10) | Test + measurement (SRD §6.1) | Low |
+| TH-01 | Password guessing against a known address | Per-account lockout after 10 failures for 15 minutes (FR-AU-09), each attempt counted before its password is derived so a parallel burst cannot outrun it (NFR-27); per-IP fixed window of 10 requests a minute | Test | Low |
+| TH-02 | Enumerating which addresses and scopes exist, from the response or its timing | One message for every rejection, and a decoy Argon2id verification when no person matches (FR-AU-10). Password recovery answers before it looks anybody up — the lookup, the token and the email run in the background — so a registered address no longer answers a Mailgun round trip later than an unknown one (FR-PR-02) | Test + measurement (SRD §6.1) | Low |
 | TH-03 | Exhausting the API's memory through login | `PasswordHashGate` bounds concurrent Argon2id derivations process-wide and sheds with `503`, behind the per-IP rate limiter | Test + measurement (SRD §6.3.1) | Low |
-| TH-04 | Guessing a 6-digit second-factor code | Five attempts per code, hashed at rest, short lifetime, and at most three reissues per challenge — twenty attempts per authentication, after which a further code costs a fresh password check (FR-2F-13, FR-2F-16) | Test | Low |
+| TH-04 | Guessing a 6-digit second-factor code | Five attempts per email code, hashed at rest, short lifetime, and at most three reissues per challenge — twenty attempts per authentication, after which a further code costs a fresh password check (FR-2F-13, FR-2F-16). Five app-code or recovery-code guesses per challenge, after which the challenge is retired (FR-2F-17). Every budget is charged before the comparison, so parallel guesses get no more (NFR-27) | Test | Low |
 | TH-05 | Guessing a password-reset or verification token | 48 characters from a CSPRNG, single-use, expiring | Inspection | Low |
 | TH-06 | Using an MFA-pending challenge token as a full token | Distinct claim, 10-minute fixed lifetime matching the email code it is issued with, rejected everywhere but second-factor verification (NFR-17) | Test | Low |
 
@@ -169,7 +169,7 @@ one asks is what that reader can do with what they find.
 | TH-13 | Recovering passwords from stolen rows | Argon2id with a per-person salt (NFR-02) | Test | Low |
 | TH-14 | Taking over an account using a stolen password-reset or email-verification token | Both are stored as a SHA-256 digest and never in the form a caller presents (`SingleUseTokenHash`) | Test | Low |
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
-| TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) | Test | Low |
+| TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) — spent by a conditional write, so two simultaneous requests cannot both redeem it (NFR-27) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
 | TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly one `UPDATE` — clearing the actor attribution once due (NFR-21) | Test | Low — but see below on DDL and §6.1 |
 
@@ -319,7 +319,9 @@ staging deployment without Mailgun credentials logs verification tokens, reset t
 in plaintext, which is deliberate and documented: the functional suite and a local run both need
 those flows to work without credentials or network. It is listed here because a staging deployment
 with real users' addresses in it turns a convenience into an account-takeover primitive for anyone
-who can read a log.
+who can read a log. The development and homologation environments (the latter running as `Staging`) are exactly
+such deployments, which is why they hold made-up people only — §0.2 of the
+[Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md).
 
 ## 8.1 Detection
 

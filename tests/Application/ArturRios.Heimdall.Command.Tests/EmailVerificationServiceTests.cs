@@ -19,7 +19,7 @@ public class EmailVerificationServiceTests
     {
         // Given
         var delivered = new List<string>();
-        var tokens = new AsyncFakeRepository<EmailVerificationToken>();
+        var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         var sender = new Mock<IEmailVerificationSender>();
 
         sender.Setup(s => s.SendAsync(It.IsAny<string>(), It.IsAny<string>()))
@@ -29,7 +29,7 @@ public class EmailVerificationServiceTests
         var options = new EmailVerificationOptions { TokenLifetime = TimeSpan.FromHours(1) };
         var service = new EmailVerificationService(tokens, sender.Object, options);
         var person = new Person { Email = "user@test.local" };
-        await new AsyncFakeRepository<Person>().CreateAsync(person); // assigns person.Id
+        await new AsyncFakeRepository<Person, long>().CreateAsync(person); // assigns person.Id
 
         // When
         await service.IssueAndSendAsync(person);

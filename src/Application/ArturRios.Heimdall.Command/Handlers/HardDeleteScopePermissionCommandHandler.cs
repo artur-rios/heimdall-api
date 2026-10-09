@@ -18,12 +18,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class HardDeleteScopePermissionCommandHandler(
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader,
-    IAsyncRepository<ScopePermission> permissionWriter)
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader,
+    IAsyncRepository<ScopePermission, long> permissionWriter)
     : ICommandHandlerAsync<HardDeleteScopePermissionCommand, HardDeleteScopePermissionCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopePermissionCommandOutput?>> HandleAsync(
-        HardDeleteScopePermissionCommand command)
+        HardDeleteScopePermissionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteScopePermissionCommandOutput?>.New;
 

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Util.Hashing;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,9 +10,9 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <inheritdoc cref="ITwoFactorFactorVerifier" />
 public class TwoFactorFactorVerifier(
-    IAsyncReadOnlyRepository<TwoFactorEmailCode> emailCodeReader,
-    IAsyncRepository<TwoFactorEmailCode> emailCodeWriter,
-    IAsyncReadOnlyRepository<TwoFactorRecoveryCode> recoveryCodeReader,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
+    IAtomicWrites atomicWrites,
+    IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
     ITotpCodeVerifier totpCodeVerifier) : ITwoFactorFactorVerifier
 {
     public async Task<TwoFactorFactorVerificationResult> VerifyAsync(
@@ -50,18 +51,20 @@ public class TwoFactorFactorVerifier(
     ///     Finds a not-yet-used, not-yet-expired email code for this configuration that
     ///     <paramref name="code" /> hashes to — the same comparison
     ///     <c>ConfirmTwoFactorAuthCommandHandler</c> uses, through the shared
-    ///     <see cref="TwoFactorEmailCodeVerification" />. Returns <c>null</c> for a missing,
-    ///     incorrect, expired, already-used, or exhausted code, all alike.
+    ///     <see cref="TwoFactorEmailCodeVerification" />, which charges the guess against the code's
+    ///     budget first. Returns <c>null</c> for a missing, incorrect, expired, already-used, or
+    ///     exhausted code, all alike.
     /// </summary>
     private Task<TwoFactorEmailCode?> FindMatchingEmailCodeAsync(long twoFactorAuthId, string? code) =>
         TwoFactorEmailCodeVerification.FindMatchingAsync(
-            emailCodeReader, emailCodeWriter, twoFactorAuthId, code);
+            emailCodeReader, atomicWrites, twoFactorAuthId, code);
 
     /// <summary>
     ///     Finds an unused recovery code for this configuration whose hash matches
     ///     <paramref name="recoveryCode" />. An unknown code and an already-used one both return
     ///     <c>null</c> here — the query itself excludes used rows, so the two cases are
-    ///     indistinguishable by construction.
+    ///     indistinguishable by construction. A match is not spent here: the caller spends it, in a
+    ///     write that only one request can win (<see cref="IAtomicWrites.TryConsumeRecoveryCodeAsync" />).
     /// </summary>
     private async Task<TwoFactorRecoveryCode?> FindMatchingRecoveryCodeAsync(
         long twoFactorAuthId, string recoveryCode)

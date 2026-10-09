@@ -18,12 +18,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class HardDeleteApplicationCommandHandler(
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter)
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncRepository<Application, long> applicationWriter)
     : ICommandHandlerAsync<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput>
 {
     public async Task<DataOutput<HardDeleteApplicationCommandOutput?>> HandleAsync(
-        HardDeleteApplicationCommand command)
+        HardDeleteApplicationCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeleteApplicationCommandOutput?>.New;
 

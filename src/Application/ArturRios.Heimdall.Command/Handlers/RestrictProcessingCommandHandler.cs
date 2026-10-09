@@ -32,13 +32,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class RestrictProcessingCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter)
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter)
     : ICommandHandlerAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>
 {
-    public async Task<DataOutput<RestrictProcessingCommandOutput?>> HandleAsync(RestrictProcessingCommand command)
+    public async Task<DataOutput<RestrictProcessingCommandOutput?>> HandleAsync(RestrictProcessingCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RestrictProcessingCommandOutput?>.New;
 

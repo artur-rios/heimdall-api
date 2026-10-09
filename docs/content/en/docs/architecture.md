@@ -54,8 +54,8 @@ graph TB
 ```
 
 The arrows only ever point inwards or sideways: **Domain depends on nothing**, and Application
-depends on Infrastructure only through repository *interfaces* (`IAsyncRepository<T>`,
-`IAsyncReadOnlyRepository<T>`) that Infrastructure implements. Presentation supplies the concrete
+depends on Infrastructure only through repository *interfaces* (`IAsyncRepository<T, long>`,
+`IAsyncReadOnlyRepository<T, long>`) that Infrastructure implements. Presentation supplies the concrete
 adapters for the abstractions the Application layer declares — `IAuthTokenIssuer`,
 `IEmailVerificationSender`, `IGoogleIdTokenVerifier` — which is why swapping Mailgun for logging, or
 the real Google verifier for the refusing one, is a start-up registration decision and nothing else.
@@ -86,25 +86,25 @@ classDiagram
     }
     class ICommandHandlerAsync~TCommand, TOutput~ {
         <<interface>>
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
     class IQueryHandlerAsync~TQuery, TOutput~ {
         <<interface>>
-        +HandleAsync(query) DataOutput~TOutput~
+        +HandleAsync(query, cancellationToken) DataOutput~TOutput~
     }
     class IPaginatedQueryHandlerAsync~TQuery, TOutput~ {
         <<interface>>
-        +HandleAsync(query) PaginatedOutput~TOutput~
+        +HandleAsync(query, cancellationToken) PaginatedOutput~TOutput~
     }
     class AuditingCommandHandler~TCommand, TOutput~ {
         -ICommandHandlerAsync inner
         -IAuditLogWriter auditLogWriter
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
     class ConcreteCommandHandler {
         -IValidator~TCommand~ validator
         -IAsyncRepository~T~ repository
-        +HandleAsync(command) DataOutput~TOutput~
+        +HandleAsync(command, cancellationToken) DataOutput~TOutput~
     }
 
     Controller --> CommandMediator
@@ -128,12 +128,12 @@ public async Task<ActionResult<DataOutput<CreateScopeCommandOutput?>>> Create(
     var result = await commandMediator
         .ExecuteCommandAsync<CreateScopeCommand, CreateScopeCommandOutput>(command);
 
-    return ResponseResolver.Resolve(result, statusMap: ScopeMessageMap.StatusCodes);
+    return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
 }
 ```
 
 No business rule lives in a controller. The handler returns a `DataOutput<T>` carrying data,
-messages, and errors; `ResponseResolver` turns that into an HTTP status using the per-area
+messages, and errors; Util.WebApi's `ToActionResult` turns that into an HTTP status using the per-area
 **message map** — a dictionary from message text to status code — so "which error is a 404 and which
 is a 409" is a single table per area rather than scattered `return NotFound()` calls.
 
@@ -166,7 +166,7 @@ See [Audit logging](../flows/audit-logging/) for the sequence.
 
 ## How a failure becomes a status
 
-`ResponseResolver` resolves the HTTP status from the envelope's first error (or, on success, its
+`ToActionResult` resolves the HTTP status from the envelope's first error (or, on success, its
 first message) against the map the controller passes it, falling back to 200 on success and 400 on
 failure. Each use case owns a `*MessageMap` naming its own outcomes — `InvalidCredentials` is a 401,
 `EmailAlreadyExists` a 409, and so on.
@@ -177,7 +177,7 @@ value, or the column and its type. Nothing stable could be keyed off that, so ev
 through to the 400 default — a duplicate that lost a race and a database that had gone away were
 both reported as bad requests, and the message leaked schema detail to the caller.
 
-`ArturRios.Data.Relational.Core` 4.0.0 classifies each failure into one of five fixed, caller-safe
+`ArturRios.Data.Relational.Core` (since 4.0.0) classifies each failure into one of five fixed, caller-safe
 messages instead, reading the provider text only to decide which. `DataAccessMessageMap` folds four
 of them into every use case's map:
 
@@ -200,12 +200,14 @@ vocabulary the use case defines.
 
 ```mermaid
 graph LR
-    REQ([Request]) --> EX[ExceptionMiddleware]
+    REQ([Request]) --> FWD["Forwarded headers<br/>trusted proxies only"]
+    FWD --> HTTPS[HTTPS redirect]
+    HTTPS --> TRACE[TraceActivityMiddleware]
+    TRACE --> EX[ExceptionMiddleware]
     EX --> CORS["CORS<br/>configured origins only"]
-    CORS --> HTTPS[HTTPS redirect]
-    HTTPS --> RL[Rate limiter<br/>auth endpoints only]
-    RL --> AUTHN[Authentication +<br/>AuthenticationMiddleware]
-    AUTHN --> MFA[MfaPendingGuardFilter]
+    CORS --> AUTHN[AuthenticationMiddleware]
+    AUTHN --> RL[Rate limiter<br/>credential-checking endpoints only]
+    RL --> MFA[MfaPendingGuardFilter]
     MFA --> LIVE[ActorLivenessFilter]
     LIVE --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
     ROLE --> CTRL[Controller action]
@@ -213,11 +215,19 @@ graph LR
     MED --> H[Handler]
     H --> DB[(PostgreSQL)]
     H --> RES[DataOutput]
-    RES --> RR["ResponseResolver<br/>+ message map"]
+    RES --> RR["ToActionResult<br/>+ message map"]
     RR --> RESP([HTTP response])
 ```
 
-Four things about this pipeline are worth knowing before reading any handler:
+Everything from `TraceActivityMiddleware` to `AuthenticationMiddleware` is Util.WebApi's standard
+pipeline, which `Startup` derives from `WebApiStartup` to get. What it has no place for is added
+around it: the metrics scrape branch (on its own port, ahead of everything — see
+[Operations](../operations/)), forwarded headers and HTTPS redirection go in front through a startup
+filter, and the rate limiter goes after it. `TraceActivityMiddleware` logs every request with the
+caller's IP address — the real caller's when `HEIMDALL_TRUSTED_PROXIES` names the proxy in front of
+the API, the proxy's otherwise.
+
+Five things about this pipeline are worth knowing before reading any handler:
 
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
@@ -230,7 +240,16 @@ whole lifetime after the account behind it was deleted — and the handlers comp
 `ScopeOwnershipChecker` excluded a deleted Scope Admin, while every System Admin bypass and every
 "acting on yourself" branch trusted the role claim alone, leaving the protection in place for the
 lesser role and absent for the greater one. It costs one indexed read per authenticated request, and
-two for a Google User, since the token does not say which table its subject lives in.
+two for a Google User, since the token does not say which table its subject lives in. A restricted
+identity (**NFR-24**) is refused the same way — except on the four actions marked
+`[DataSubjectRight]` (export, erasure request, restriction, lifting one's own restriction), where a
+restricted or suspended subject still reaches the handler and the use case's own flows answer.
+
+**Single-use state is spent in the database, not in memory.** The repositories write whole rows —
+read, change, save — so two requests that read the same recovery code, token, challenge or counter
+before either saved would both act on it. `IAtomicWrites` (Domain, implemented in Data on
+`ExecuteUpdate`) makes each of those a single conditional `UPDATE … WHERE` whose affected-row count
+says who won, and charges every guess budget before the comparison it guards.
 
 **One class owns both directions of the claims.** `IdentityUserMapper` writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a
@@ -279,7 +298,7 @@ query reaches the database.
 
 `AppDbContext` applies one **entity map** per entity (`PersonDbMap`, `ScopeDbMap`, …) rather than
 annotating the domain classes, keeping storage concerns out of the domain. Handlers never touch the
-context: they depend on `IAsyncRepository<T>` for writes and `IAsyncReadOnlyRepository<T>` for reads,
+context: they depend on `IAsyncRepository<T, long>` for writes and `IAsyncReadOnlyRepository<T, long>` for reads,
 the latter exposing `Query()` so a handler can compose an `IQueryable` and let the database do the
 filtering.
 

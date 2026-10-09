@@ -41,17 +41,17 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
     private static AnonymiseExpiredDeletionsCommandHandler Handler(AppDbContext context)
     {
-        var persons = new EfRepository<Person>(context);
-        var googleUsers = new EfRepository<GoogleUser>(context);
-        var passwordResetTokens = new EfRepository<PasswordResetToken>(context);
-        var emailVerificationTokens = new EfRepository<EmailVerificationToken>(context);
-        var twoFactorAuths = new EfRepository<TwoFactorAuth>(context);
+        var persons = new EfRepository<Person, long>(context);
+        var googleUsers = new EfRepository<GoogleUser, long>(context);
+        var passwordResetTokens = new EfRepository<PasswordResetToken, long>(context);
+        var emailVerificationTokens = new EfRepository<EmailVerificationToken, long>(context);
+        var twoFactorAuths = new EfRepository<TwoFactorAuth, long>(context);
 
         return new AnonymiseExpiredDeletionsCommandHandler(
             persons, persons, googleUsers, googleUsers,
-            passwordResetTokens, passwordResetTokens,
-            emailVerificationTokens, emailVerificationTokens,
-            twoFactorAuths, twoFactorAuths,
+            passwordResetTokens,
+            emailVerificationTokens,
+            twoFactorAuths,
             Retention);
     }
 

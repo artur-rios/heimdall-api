@@ -34,12 +34,12 @@ public class AuditRetentionTests(PostgresFixture fixture)
 
     private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context)
     {
-        var entries = new EfRepository<AuditLog>(context);
+        var entries = new EfRepository<AuditLog, long>(context);
 
         return new PseudonymiseAuditActorsCommandHandler(
             entries, entries,
-            new EfRepository<Person>(context),
-            new EfRepository<GoogleUser>(context),
+            new EfRepository<Person, long>(context),
+            new EfRepository<GoogleUser, long>(context),
             new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = 500 });
     }
 

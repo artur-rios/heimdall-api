@@ -41,7 +41,7 @@ public class UpdateScopePermissionCommandHandlerTests
         return checker.Object;
     }
 
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
@@ -49,7 +49,7 @@ public class UpdateScopePermissionCommandHandlerTests
     }
 
     private static async Task<ScopePermission> SeedPermissionAsync(
-        AsyncFakeRepository<ScopePermission> permissions, Scope scope, bool isDeleted = false)
+        AsyncFakeRepository<ScopePermission, long> permissions, Scope scope, bool isDeleted = false)
     {
         var permission = new ScopePermission
         {
@@ -80,21 +80,21 @@ public class UpdateScopePermissionCommandHandlerTests
     };
 
     private static UpdateScopePermissionCommandHandler Handler(
-        AsyncFakeRepository<ScopePermission> permissions,
+        AsyncFakeRepository<ScopePermission, long> permissions,
         IScopeOwnershipChecker? ownership = null,
         Mock<IValidator<UpdateScopePermissionCommand>>? validator = null) =>
         new((validator ?? ValidValidator()).Object, permissions, permissions, ownership ?? OwnershipChecker());
 
     private static async Task<ScopePermission> StoredAsync(
-        AsyncFakeRepository<ScopePermission> permissions, Guid publicId) =>
+        AsyncFakeRepository<ScopePermission, long> permissions, Guid publicId) =>
         (await permissions.GetAllAsync()).Data!.Single(p => p.PublicId == publicId);
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingUpdateScopePermission_ThenPermissionIsUpdated()
     {
         // Given a permission a SystemAdmin renames, re-describes, and clears the JWT flag on
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -120,8 +120,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenOwningScopeAdmin_WhenHandlingUpdateScopePermission_ThenPermissionIsUpdated()
     {
         // Given a ScopeAdmin who owns the scope updating the permission (UC-33 step 3)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var caller = Guid.NewGuid();
@@ -140,8 +140,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenUpdatedPermission_WhenInspectingRow_ThenUpdatedAtIsStampedAndCreatedAtIsNot()
     {
         // Given an existing permission (UC-33 step 5: no DB trigger maintains UpdatedAt)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var createdAt = permission.CreatedAt;
@@ -162,8 +162,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenOutput_WhenInspectingFields_ThenItCarriesPublicIdentifiersOnly()
     {
         // Given internal ids that must never leave the data layer (SRD §4.0)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -182,8 +182,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenUnknownPermission_WhenHandlingUpdateScopePermission_ThenNotFoundIsReported()
     {
         // Given a permission id nobody holds (AF-33a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var handler = Handler(permissions);
 
@@ -200,8 +200,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenPermissionOfADifferentScope_WhenHandlingUpdateScopePermission_ThenNotFoundIsReported()
     {
         // Given a permission addressed through a scope it does not belong to (AF-33a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var permission = await SeedPermissionAsync(permissions, otherScope);
@@ -221,8 +221,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingUpdateScopePermission_ThenNotFoundIsReported()
     {
         // Given a scope id nobody holds (AF-33a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions);
@@ -240,8 +240,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenLogicallyDeletedPermission_WhenHandlingUpdateScopePermission_ThenNotFoundIsReported()
     {
         // Given a logically deleted permission: the precondition excludes it (AF-33a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope, isDeleted: true);
         var handler = Handler(permissions);
@@ -260,8 +260,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenNonOwningScopeAdmin_WhenHandlingUpdateScopePermission_ThenNotScopeOwnerIsReported()
     {
         // Given the ownership checker rejects the acting ScopeAdmin (AF-33e)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions, OwnershipChecker(allowed: false));
@@ -280,8 +280,8 @@ public class UpdateScopePermissionCommandHandlerTests
     public async Task GivenInvalidInput_WhenHandlingUpdateScopePermission_ThenNothingIsChanged()
     {
         // Given a validator that rejects the command (UC-33 step 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var validator = new Mock<IValidator<UpdateScopePermissionCommand>>();
@@ -308,8 +308,8 @@ public class UpdateScopePermissionCommandHandlerTests
     {
         // Given a non-owner with a request that would otherwise change the row: AF-33e runs before
         // mutation so the refusing handler leaves every field untouched
-        var scopes = new AsyncFakeRepository<Scope>();
-        var permissions = new AsyncFakeRepository<ScopePermission>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var permissions = new AsyncFakeRepository<ScopePermission, long>();
         var scope = await SeedScopeAsync(scopes);
         var permission = await SeedPermissionAsync(permissions, scope);
         var handler = Handler(permissions, OwnershipChecker(allowed: false));

@@ -21,17 +21,17 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class HardDeletePersonCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter,
-    IAsyncReadOnlyRepository<PasswordResetToken> passwordResetTokenReader,
-    IAsyncRepository<PasswordResetToken> passwordResetTokenWriter,
-    IAsyncReadOnlyRepository<EmailVerificationToken> emailVerificationTokenReader,
-    IAsyncRepository<EmailVerificationToken> emailVerificationTokenWriter)
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncRepository<Application, long> applicationWriter,
+    IAsyncReadOnlyRepository<PasswordResetToken, long> passwordResetTokenReader,
+    IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
+    IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter)
     : ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>
 {
-    public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command)
+    public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<HardDeletePersonCommandOutput?>.New;
 
@@ -138,7 +138,7 @@ public class HardDeletePersonCommandHandler(
     /// </summary>
     private static async Task<IEnumerable<string>> DeleteAllAsync<T>(
         IReadOnlyCollection<T> dependents,
-        IAsyncRepository<T> writer) where T : Entity
+        IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         if (dependents.Count == 0)
         {

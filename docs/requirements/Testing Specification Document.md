@@ -135,7 +135,7 @@ From `ArturRios.Util.Test`, always prefer the provided building blocks instead o
   `WebApplicationFactory<T>`, and exposes:
   - `Gateway` — an `HttpGateway` for issuing HTTP requests.
   - `AuthenticateAsync`, `Authorize`, `AuthenticateAndAuthorizeAsync` — for authenticated calls.
-- **`FakeRepository<T>`** — in-memory repository test double for unit tests (seed it in *Given*).
+- **`FakeRepository<T, long>`** — in-memory repository test double for unit tests (seed it in *Given*).
 - **`FakeScheduler`** — simulates delayed command/query dispatch.
 - **`CustomAssert`** — extra assertions (`NullOrEmpty`, `NotNullOrEmpty`, `NullOrWhiteSpace`, …).
 
@@ -189,8 +189,8 @@ Unit tests therefore assert on `output.Success`, `output.Errors`, `output.Messag
 
 ### 6.2 Test doubles
 
-- Replace **repository** dependencies (`IAsyncReadOnlyRepository<T>`, `IAsyncRepository<T>`) with
-  `FakeRepository<T>` from `ArturRios.Util.Test`, seeded in the *Given* step to represent the
+- Replace **repository** dependencies (`IAsyncReadOnlyRepository<T, long>`, `IAsyncRepository<T, long>`) with
+  `FakeRepository<T, long>` from `ArturRios.Util.Test`, seeded in the *Given* step to represent the
   database state the scenario assumes.
 - Replace **other collaborators** (validators, mediators, e-mail/token/clock services) with a **Moq**
   mock configured to return the value the scenario needs (`new Mock<IValidator<T>>()`,
@@ -239,9 +239,9 @@ public class CreateScopeCommandHandlerTests
     public async Task GivenUniqueNameAndValidOwners_WhenHandlingCreateScope_ThenScopeIsCreated()
     {
         // Given
-        var scopeReader = new FakeRepository<Scope>();
+        var scopeReader = new FakeRepository<Scope, long>();
         var scopeWriter = scopeReader;                     // same in-memory store
-        var roleReader = new FakeRepository<Role>();
+        var roleReader = new FakeRepository<Role, long>();
         var scopeAdminRole = new Role { Name = nameof(Roles.ScopeAdmin) };
         roleReader.Create(scopeAdminRole);
 
@@ -251,7 +251,7 @@ public class CreateScopeCommandHandlerTests
             .RuleFor(p => p.RoleId, _ => scopeAdminRole.Id)
             .RuleFor(p => p.IsDeleted, _ => false)
             .Generate();
-        var personReader = new FakeRepository<Person>();
+        var personReader = new FakeRepository<Person, long>();
         personReader.Create(owner);
 
         // Moq stubs the non-repository collaborator (the validator).
@@ -486,7 +486,7 @@ registered in the solution under the `Tests` folder. Six projects mirror the `sr
 `AuthControllerVerifyEmail`, `AuthControllerResendVerification`, `AuthControllerGoogleSignIn`, `AuthControllerGoogleSignOut`, `GoogleUserControllerView`, `GoogleUserControllerDelete`, `GoogleUserControllerHardDelete`, `ApplicationController*`, `ScopePermissionController*`, `AuthControllerScopePermissionClaim`, `HealthCheck`), plus `SchemaTests`, `SeedingTests`, the unit-tested `IdentityUserMapperTests` and `MailgunSenderTests`, and `Support/` (`PostgresFixture`, `FunctionalCollection`, `TestTokens`, `TestGoogleTokens`) |
 
 Suite totals as of UC-35: **520 unit** and **428 functional** tests, all passing. Run them separately
-with `--filter "Category=Unit"` / `"Category=Functional"` (see the README).
+with `--filter "Category=Unit"` / `"Category=Functional"` (see CONTRIBUTING.md).
 
 UC-18 added `UpdateApplicationCommandHandlerTests` and `UpdateApplicationCommandValidatorTests` to
 the Command.Tests project, and `ApplicationControllerUpdateTests` to the functional suite.

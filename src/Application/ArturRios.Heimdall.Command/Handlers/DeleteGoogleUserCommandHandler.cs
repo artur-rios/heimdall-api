@@ -39,12 +39,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class DeleteGoogleUserCommandHandler(
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>
 {
-    public async Task<DataOutput<DeleteGoogleUserCommandOutput?>> HandleAsync(DeleteGoogleUserCommand command)
+    public async Task<DataOutput<DeleteGoogleUserCommandOutput?>> HandleAsync(DeleteGoogleUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteGoogleUserCommandOutput?>.New;
 

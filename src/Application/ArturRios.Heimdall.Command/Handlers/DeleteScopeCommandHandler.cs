@@ -20,17 +20,17 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class DeleteScopeCommandHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncRepository<Scope> scopeWriter,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
-    IAsyncReadOnlyRepository<Application> applicationReader,
-    IAsyncRepository<Application> applicationWriter)
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncRepository<Scope, long> scopeWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAsyncReadOnlyRepository<Application, long> applicationReader,
+    IAsyncRepository<Application, long> applicationWriter)
     : ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>
 {
-    public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command)
+    public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DeleteScopeCommandOutput?>.New;
 
@@ -113,7 +113,7 @@ public class DeleteScopeCommandHandler(
         IEnumerable<T> members,
         Func<T, bool> isDeleted,
         Action<T> markDeleted,
-        IAsyncRepository<T> writer) where T : Entity
+        IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         var pending = members.Where(member => !isDeleted(member)).ToList();
 

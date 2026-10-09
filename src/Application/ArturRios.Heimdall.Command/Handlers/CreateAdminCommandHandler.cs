@@ -21,12 +21,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class CreateAdminCommandHandler(
     IValidator<CreateAdminCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateAdminCommand, CreatePersonCommandOutput>
 {
-    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateAdminCommand command)
+    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateAdminCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 

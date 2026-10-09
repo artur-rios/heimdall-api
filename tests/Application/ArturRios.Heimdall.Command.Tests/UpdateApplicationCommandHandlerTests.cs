@@ -31,7 +31,7 @@ public class UpdateApplicationCommandHandlerTests
         return validator;
     }
 
-    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope> scopes, string name = "Acme")
+    private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
         var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
         await scopes.CreateAsync(scope);
@@ -39,7 +39,7 @@ public class UpdateApplicationCommandHandlerTests
     }
 
     private static async Task<Person> SeedScopeAdminAsync(
-        AsyncFakeRepository<Person> persons, Scope? ownedScope = null, bool isDeleted = false)
+        AsyncFakeRepository<Person, long> persons, Scope? ownedScope = null, bool isDeleted = false)
     {
         var person = new Person
         {
@@ -59,7 +59,7 @@ public class UpdateApplicationCommandHandlerTests
         return person;
     }
 
-    private static async Task<Person> SeedScopeUserAsync(AsyncFakeRepository<Person> persons, Scope scope)
+    private static async Task<Person> SeedScopeUserAsync(AsyncFakeRepository<Person, long> persons, Scope scope)
     {
         var person = new Person
         {
@@ -73,7 +73,7 @@ public class UpdateApplicationCommandHandlerTests
         return person;
     }
 
-    private static async Task<Person> SeedSystemAdminAsync(AsyncFakeRepository<Person> persons)
+    private static async Task<Person> SeedSystemAdminAsync(AsyncFakeRepository<Person, long> persons)
     {
         var person = new Person
         {
@@ -87,7 +87,7 @@ public class UpdateApplicationCommandHandlerTests
     }
 
     private static async Task<Application> SeedApplicationAsync(
-        AsyncFakeRepository<Application> applications, Scope scope, Person owner, bool isDeleted = false)
+        AsyncFakeRepository<Application, long> applications, Scope scope, Person owner, bool isDeleted = false)
     {
         var application = new Application
         {
@@ -115,8 +115,8 @@ public class UpdateApplicationCommandHandlerTests
     };
 
     private static UpdateApplicationCommandHandler Handler(
-        AsyncFakeRepository<Application> applications,
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Application, long> applications,
+        AsyncFakeRepository<Person, long> persons,
         Mock<IValidator<UpdateApplicationCommand>>? validator = null) =>
         new((validator ?? ValidValidator()).Object, applications, persons, applications);
 
@@ -124,9 +124,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenSystemAdmin_WhenHandlingUpdateApplication_ThenApplicationIsUpdated()
     {
         // Given an application owned by a ScopeAdmin who owns its scope, renamed by a System Admin
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -148,9 +148,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenOwningScopeAdmin_WhenHandlingUpdateApplication_ThenApplicationIsUpdated()
     {
         // Given the ScopeAdmin who owns the application renaming it (UC-18 step 3)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -169,9 +169,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenUpdatedApplication_WhenHandlingUpdateApplication_ThenUpdatedAtIsStampedAndCreatedAtIsNot()
     {
         // Given an existing application (UC-18 step 5: no DB trigger maintains UpdatedAt)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -193,9 +193,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenOutput_WhenHandlingUpdateApplication_ThenItCarriesPublicIdentifiers()
     {
         // Given internal ids that must never leave the data layer (SRD §4.0)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -216,9 +216,9 @@ public class UpdateApplicationCommandHandlerTests
     {
         // Given the owning ScopeAdmin naming a co-owner of the scope as the new owner. UC-18 defines
         // no equivalent of UC-16's AF-16c, so giving away an application one owns is allowed
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -240,9 +240,9 @@ public class UpdateApplicationCommandHandlerTests
     {
         // Given an application whose existing owner has since been logically deleted: main flow step 4
         // verifies only a *change* of owner, so a plain rename still goes through
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope, isDeleted: true);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -262,9 +262,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenUnknownApplication_WhenHandlingUpdateApplication_ThenApplicationNotFoundIsReported()
     {
         // Given an application id nobody holds (AF-18a)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var handler = Handler(applications, persons);
@@ -282,9 +282,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenApplicationOfADifferentScope_WhenHandlingUpdateApplication_ThenApplicationNotFoundIsReported()
     {
         // Given an application addressed through a scope it does not belong to (AF-18a, Decision 3)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: otherScope);
@@ -305,9 +305,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenUnknownScope_WhenHandlingUpdateApplication_ThenApplicationNotFoundIsReported()
     {
         // Given a scope id nobody holds (AF-18a, Decision 3)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -326,9 +326,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenLogicallyDeletedApplication_WhenHandlingUpdateApplication_ThenApplicationNotFoundIsReported()
     {
         // Given a logically deleted application: the precondition excludes it (AF-18a, Decision 8)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         await SeedApplicationAsync(applications, scope, owner, isDeleted: true);
@@ -350,9 +350,9 @@ public class UpdateApplicationCommandHandlerTests
     {
         // Given a co-owner of the scope acting on somebody else's application: owning the scope is not
         // grounds to modify it (AF-18c, Decision 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var coOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -373,9 +373,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenUnrelatedScopeAdmin_WhenHandlingUpdateApplication_ThenNotAuthorizedIsReported()
     {
         // Given a ScopeAdmin with nothing to do with this scope (AF-18c)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -396,9 +396,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenUnknownNewOwner_WhenHandlingUpdateApplication_ThenOwnerNotValidIsReported()
     {
         // Given an owner id nobody holds (AF-18b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);
@@ -421,9 +421,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenLogicallyDeletedNewOwner_WhenHandlingUpdateApplication_ThenOwnerNotValidIsReported()
     {
         // Given a logically deleted ScopeAdmin as the proposed new owner (AF-18b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var newOwner = await SeedScopeAdminAsync(persons, ownedScope: scope, isDeleted: true);
@@ -444,9 +444,9 @@ public class UpdateApplicationCommandHandlerTests
     {
         // Given a User of the scope as the proposed new owner: FR-AP-03 restricts ownership to a
         // ScopeAdmin who owns the scope, so belonging to it is not enough (AF-18b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var newOwner = await SeedScopeUserAsync(persons, scope);
@@ -468,9 +468,9 @@ public class UpdateApplicationCommandHandlerTests
     {
         // Given a SystemAdmin person as the proposed new owner: they hold no SCOPE_OWNER row and do
         // not carry the ScopeAdmin role, so FR-AP-03 excludes them (AF-18b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var newOwner = await SeedSystemAdminAsync(persons);
@@ -490,9 +490,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenNewOwnerScopeAdminOfADifferentScope_WhenHandlingUpdateApplication_ThenOwnerNotValidIsReported()
     {
         // Given a ScopeAdmin who owns another scope entirely (AF-18b)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes, "Other");
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
@@ -513,9 +513,9 @@ public class UpdateApplicationCommandHandlerTests
     public async Task GivenInvalidInput_WhenHandlingUpdateApplication_ThenNothingIsChanged()
     {
         // Given a validator that rejects the command (UC-18 step 2)
-        var scopes = new AsyncFakeRepository<Scope>();
-        var persons = new AsyncFakeRepository<Person>();
-        var applications = new AsyncFakeRepository<Application>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
         var scope = await SeedScopeAsync(scopes);
         var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
         var application = await SeedApplicationAsync(applications, scope, owner);

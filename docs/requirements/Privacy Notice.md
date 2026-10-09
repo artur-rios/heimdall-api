@@ -7,7 +7,7 @@ description: "What Heimdall does with personal data, told to the people it belon
 
 # Privacy Notice — Heimdall API
 
-**Version 1.1 — 10 September 2026**
+**Version 1.2 — 5 October 2026**
 
 ## 1. What this is
 
@@ -49,8 +49,9 @@ raise anything with the address above, and it will be answered or passed to them
 | **Failed sign-in attempts and lockout state** | To stop somebody guessing your password |
 | **A record of actions taken on your account** | To be able to say what happened, and when, if it is ever disputed |
 
-Your IP address is used briefly, in memory only, to limit how many sign-in attempts can come from
-one place in a minute. It is not stored and not written to logs.
+Your IP address is recorded, with the time, in the service's logs for every request you make, so
+that attempts to break into accounts can be detected and investigated. It is also used briefly, in
+memory, to limit how many sign-in attempts can come from one place in a minute.
 
 **Nothing here is sold, and nothing is used for advertising or profiling.** No decision affecting
 you is made automatically.
@@ -98,6 +99,7 @@ short version:
 | **If an administrator deletes your account** | Anonymised after **90 days**, so a mistake can be undone |
 | **Password reset and verification links** | A week after they expire |
 | **Records of actions on your account** | 18 months, then stripped of anything identifying you |
+| **Logs of your requests, including your IP address** | 12 months, then deleted |
 
 "Anonymised" means the name, address and credentials are overwritten and cannot be recovered. The
 row itself stays, because other records point at it, but nothing in it refers to you any more.
@@ -131,5 +133,6 @@ recorded against your account.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2 | 5 October 2026 | Your IP address is now recorded in the request logs, kept for 12 months |
 | 1.1 | 10 September 2026 | Confirmed the GDPR applies; corrected Google's role from recipient to source |
 | 1.0 | 9 September 2026 | First published |

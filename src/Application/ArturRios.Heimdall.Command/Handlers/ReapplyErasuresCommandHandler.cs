@@ -35,13 +35,16 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class ReapplyErasuresCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter)
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter)
     : ICommandHandlerAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>
 {
-    public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command)
+    public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ReapplyErasuresCommandOutput?>.New;
         var requested = command.SubjectIds.Distinct().ToList();
@@ -82,6 +85,9 @@ public class ReapplyErasuresCommandHandler(
 
             IdentityAnonymiser.Anonymise(person, now);
 
+            // Nothing blocks it any more; it is done — as the scheduled pass leaves it.
+            person.ErasureBlockedReason = null;
+
             toWrite.Add(person);
             anonymised++;
         }
@@ -105,6 +111,21 @@ public class ReapplyErasuresCommandHandler(
 
             googleUsersToWrite.Add(googleUser);
             anonymised++;
+        }
+
+        // The restored copy brought back what the original erasure removed alongside the identity —
+        // the two-factor secret with its codes, and any reset or verification tokens. Removed before
+        // the identity is overwritten, as the scheduled pass does, so a failure here leaves the
+        // record selectable for another attempt rather than anonymised with its secret kept.
+        var (_, dependentErrors) = await PersonDependentsRemoval.RemoveAsync(
+            toWrite.Select(person => person.Id).ToList(),
+            passwordResetTokenWriter,
+            emailVerificationTokenWriter,
+            twoFactorAuthWriter);
+
+        if (dependentErrors.Count > 0)
+        {
+            return output.WithErrors(dependentErrors);
         }
 
         var errors = new List<string>();

@@ -18,9 +18,9 @@ public class AuditingCommandHandler<TCommand, TOutput>(
     where TCommand : BaseCommand
     where TOutput : CommandOutput
 {
-    public async Task<DataOutput<TOutput?>> HandleAsync(TCommand command)
+    public async Task<DataOutput<TOutput?>> HandleAsync(TCommand command, CancellationToken cancellationToken = default)
     {
-        var result = await inner.HandleAsync(command);
+        var result = await inner.HandleAsync(command, cancellationToken);
 
         var action = typeof(TCommand).Name;
         var targetId = ResolveTargetId(result.Data);

@@ -50,15 +50,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>
 {
-    public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command)
+    public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<RequestErasureCommandOutput?>.New;
 
@@ -73,21 +73,28 @@ public class RequestErasureCommandHandler(
         // The person table first, then the Google User table — the same order UC-36 uses, and for
         // the same reason: the two identity tables are never joined, and a PublicId belongs to one
         // of them.
+        //
+        // The lookups include logically deleted identities so that a subject whose first request
+        // suspended them is told AF-42c — the request they are repeating exists — rather than the
+        // generic AF-42b. The endpoint admits such a caller because it is a data subject right; any
+        // other deleted identity is refused with AF-42b once AF-42c has been ruled out.
         var person = await personReader.Query()
             .Include(x => x.ScopeOwnerships)
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
 
         if (person is not null)
         {
-            return await RequestForPersonAsync(output, command, person);
+            return person.ErasureRequestedAt is null && person.IsDeleted
+                ? output.WithError(ErasureMessages.NotEligible)
+                : await RequestForPersonAsync(output, command, person);
         }
 
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
 
-        return googleUser is not null
-            ? await RequestForGoogleUserAsync(output, command, googleUser)
-            : output.WithError(ErasureMessages.NotEligible);
+        return googleUser is null || (googleUser.ErasureRequestedAt is null && googleUser.IsDeleted)
+            ? output.WithError(ErasureMessages.NotEligible)
+            : await RequestForGoogleUserAsync(output, command, googleUser);
     }
 
     private async Task<DataOutput<RequestErasureCommandOutput?>> RequestForPersonAsync(

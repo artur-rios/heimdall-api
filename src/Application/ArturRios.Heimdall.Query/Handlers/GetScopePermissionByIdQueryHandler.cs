@@ -21,11 +21,11 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     before authorization — mirroring the UC-34 delete handler.
 /// </summary>
 public class GetScopePermissionByIdQueryHandler(
-    IAsyncReadOnlyRepository<ScopePermission> permissionReader,
+    IAsyncReadOnlyRepository<ScopePermission, long> permissionReader,
     IScopeOwnershipChecker scopeOwnership)
     : IQueryHandlerAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>
 {
-    public async Task<DataOutput<ScopePermissionOutput?>> HandleAsync(GetScopePermissionByIdQuery query)
+    public async Task<DataOutput<ScopePermissionOutput?>> HandleAsync(GetScopePermissionByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ScopePermissionOutput?>.New;
 

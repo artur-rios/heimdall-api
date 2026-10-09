@@ -44,9 +44,9 @@ public class ListScopeGoogleUsersQueryHandlerTests
         return checker.Object;
     }
 
-    private static async Task<AsyncFakeRepository<Scope>> ScopesWith(params Scope[] scopes)
+    private static async Task<AsyncFakeRepository<Scope, long>> ScopesWith(params Scope[] scopes)
     {
-        var repository = new AsyncFakeRepository<Scope>();
+        var repository = new AsyncFakeRepository<Scope, long>();
 
         foreach (var scope in scopes)
         {
@@ -56,9 +56,9 @@ public class ListScopeGoogleUsersQueryHandlerTests
         return repository;
     }
 
-    private static async Task<AsyncFakeRepository<GoogleUser>> GoogleUsersWith(params GoogleUser[] googleUsers)
+    private static async Task<AsyncFakeRepository<GoogleUser, long>> GoogleUsersWith(params GoogleUser[] googleUsers)
     {
-        var repository = new AsyncFakeRepository<GoogleUser>();
+        var repository = new AsyncFakeRepository<GoogleUser, long>();
 
         foreach (var googleUser in googleUsers)
         {

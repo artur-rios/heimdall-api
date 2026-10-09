@@ -9,12 +9,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     non-logically-deleted <c>ScopeAdmin</c> who owns that scope. A <c>User</c> may never own an
 ///     application (FR-AP-03).
 /// </summary>
-public class Application : Entity
+public class Application : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the application is
     ///     addressed from outside the database (API paths, response bodies). The internal
-    ///     <see cref="Entity.Id" /> is never exposed to callers.
+    ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

@@ -42,9 +42,9 @@ public class GetApplicationByIdQueryHandlerTests
         UpdatedAt = DateTime.UtcNow
     };
 
-    private static async Task<AsyncFakeRepository<Application>> ApplicationsWith(params Application[] applications)
+    private static async Task<AsyncFakeRepository<Application, long>> ApplicationsWith(params Application[] applications)
     {
-        var repository = new AsyncFakeRepository<Application>();
+        var repository = new AsyncFakeRepository<Application, long>();
 
         foreach (var application in applications)
         {

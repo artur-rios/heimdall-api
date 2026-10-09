@@ -11,15 +11,15 @@ namespace ArturRios.Heimdall.WebApi.Documentation;
 ///     The OpenAPI document's title, security, and per-operation documentation.
 ///
 ///     Applied in two places, which is the point of it living here rather than in either of them.
-///     <c>Startup</c> layers it over the SwaggerGen that ArturRios.Util.WebApi registers, so the
-///     running API's Swagger UI shows the controllers' own summaries and marks which endpoints need a
-///     token. tools/ArturRios.Heimdall.OpenApiGen applies the same method to produce
+///     <c>Startup</c> hands it to ArturRios.Util.WebApi as the Swagger generator's configuration, so
+///     the running API's Swagger UI shows the controllers' own summaries and marks which endpoints
+///     need a token. tools/ArturRios.Heimdall.OpenApiGen applies the same method to produce
 ///     docs/openapi/heimdall.json, the document the documentation site publishes. One definition, so
 ///     the published page and the running API cannot describe the same endpoint differently.
 /// </summary>
 public static class SwaggerConfiguration
 {
-    /// <summary>The document name Util.WebApi registers, and the one served at /swagger/v1/…</summary>
+    /// <summary>The document name Swagger UI looks for by default, and the one served at /swagger/v1/…</summary>
     public const string DocumentName = "v1";
 
     private const string BearerScheme = "Bearer";
@@ -36,24 +36,27 @@ public static class SwaggerConfiguration
                 + "endpoint answers one of two envelopes — `DataOutput<T>` for a single resource, "
                 + "`PaginatedOutput<T>` for a listing.\n\n"
                 + "Obtain a token from `POST /api/auth/login`, then authorize with it. A challenge "
-                + "token issued by a 2FA-gated login is rejected everywhere except "
-                + "`POST /api/auth/2fa/verify`.",
+                + "token issued by a 2FA-gated login is not one: no endpoint accepts it as a bearer "
+                + "credential, and it is read only from the `challengeToken` body field of "
+                + "`POST /api/auth/2fa/verify` and `POST /api/auth/2fa/challenge/resend`.",
             Contact = new OpenApiContact
             {
                 Name = "Artur Rios",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api")
             },
+            // The repository's own LICENSE, by the name its first line gives it: the software is
+            // proprietary, all rights reserved, so no SPDX identifier applies.
             License = new OpenApiLicense
             {
-                Name = "MIT",
+                Name = "ArturRios.Heimdall — Proprietary License",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api/blob/main/LICENSE")
             }
         });
 
-        // Assigned rather than added through AddSecurityDefinition, which throws on a duplicate key.
-        // Util.WebApi's UseSwaggerGen(jwtAuthentication: true) has already defined "Bearer" by the
-        // time this runs inside the API, and has not when the generator runs it — so the one call
-        // that works in both places is the one that overwrites instead of insisting on being first.
+        // The only definition of "Bearer" in either place: Startup leaves Util.WebApi's JWT scheme
+        // off, because AddSecurityDefinition throws on a duplicate key and the library's runs after
+        // this method. Assigned rather than added all the same, so a second definition overwrites
+        // this one instead of failing start-up.
         options.SwaggerGeneratorOptions.SecuritySchemes[BearerScheme] = new OpenApiSecurityScheme
         {
             Type = SecuritySchemeType.Http,
@@ -125,9 +128,8 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
                 },
                 description => ((ControllerActionDescriptor)description.ActionDescriptor).MethodInfo);
 
-        // The document-wide default: authenticated unless an operation says otherwise. Util.WebApi
-        // sets one of these too when it runs inside the API; assigning rather than appending keeps a
-        // single requirement either way, so the API's document and the generated one stay the same.
+        // The document-wide default: authenticated unless an operation says otherwise. Assigned
+        // rather than appended, so it stays the single requirement even if something else adds one.
         document.Security =
         [
             new OpenApiSecurityRequirement

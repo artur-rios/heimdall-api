@@ -40,13 +40,13 @@ The project is built on a set of the author's own reusable libraries, all publis
 
 | Package | Version | Referenced by | Role |
 | --- | --- | --- | --- |
-| **ArturRios.Util** | `1.5.0` | Command, Domain, Shared, Data | Core cross-cutting utilities. Provides the standard `DataOutput<T>` result type (namespace `ArturRios.Output`) that handlers return, password **hashing** helpers (`ArturRios.Util.Hashing`), **HTTP** helpers (`ArturRios.Util.Http`), cryptographically strong random text (`ArturRios.Util.Random.CustomRandom`, used to mint the verification and password reset tokens), and general-purpose helpers used throughout the codebase. **1.5.0 is a floor, not a preference:** earlier versions ignored `CustomRandom.Text`'s character-set flags for all but the first character of each set and drew from `System.Random` rather than `RandomNumberGenerator`, which made the security tokens neither URL-safe nor cryptographically sourced. |
-| **ArturRios.Util.WebApi** | `3.0.0` | WebApi | Web API foundation. Supplies the `WebApiStartup` base class, environment/configuration loading (`ArturRios.Util.WebApi.Configuration`), the security stack (role attributes/enums/extensions/middleware — e.g. `[AllowAnonymous]`, role requirements), **JWT** issuance & validation (namespace `ArturRios.Jwt`), exception & authentication middleware, Swagger-with-JWT wiring, and the `ResponseResolver` that maps a `DataOutput<T>` to an HTTP response. |
-| **ArturRios.Mediator** | `1.0.3` | Command, Query, WebApi | Lightweight **CQRS mediator**. Provides `CommandMediator` / `QueryMediator` and the handler contracts (`ICommandHandlerAsync`, `IQueryHandlerAsync`, `IPaginatedQueryHandlerAsync`) that dispatch a command/query to its single handler. |
-| **ArturRios.Data.Relational.Core** | `3.0.2` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T>`, `IAsyncReadOnlyRepository<T>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. |
-| **ArturRios.Data.PostgreSql** | `3.0.0` | Data | **PostgreSQL binding** for the relational core. Provides `AddPostgreSqlProvider()`, which wires EF Core to Npgsql so the relational layer runs against PostgreSQL. |
-| **ArturRios.Messaging** | `1.1.0` | WebApi | **Outbound email.** Provides `IEmailService` and `MailgunEmailService` (namespace `ArturRios.Messaging.Email`), which sends plain-text transactional mail through the Mailgun HTTP API. Used by UC-06's verification email and UC-12's password reset email. Reads `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and the optional `MAILGUN_API_VERSION` from the environment at call time. |
-| **ArturRios.Util.Test** | `2.2.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T>`, `AsyncFakeRepository<T>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
+| **ArturRios.Util** | `2.1.0` | Command, Domain, Shared, Data | Core cross-cutting utilities. Provides the standard `DataOutput<T>` result type (namespace `ArturRios.Output`) that handlers return, password **hashing** helpers (`ArturRios.Util.Hashing`), **HTTP** helpers (`ArturRios.Util.Http`), cryptographically strong random text (`ArturRios.Util.Random.CustomRandom`, used to mint the verification and password reset tokens), and general-purpose helpers used throughout the codebase. **1.5.0 is a floor, not a preference:** earlier versions ignored `CustomRandom.Text`'s character-set flags for all but the first character of each set and drew from `System.Random` rather than `RandomNumberGenerator`, which made the security tokens neither URL-safe nor cryptographically sourced. |
+| **ArturRios.Util.WebApi** | `5.1.0` | WebApi | Web API foundation. Supplies the `WebApiStartup` base class — a fixed standard sequence (configuration, controllers, Swagger, then forwarded headers, tracing, exception handling, CORS and authentication in the pipeline) that `Startup` completes in `ConfigureServices` — environment/configuration loading (`ArturRios.Util.WebApi.Configuration`), the security stack (role attributes/enums/extensions/middleware — e.g. `[AllowAnonymous]`, role requirements), **JWT** issuance & validation (namespace `ArturRios.Jwt`), exception & authentication middleware, Swagger wiring, and the `ToActionResult` extensions that map a `DataOutput<T>` to an HTTP response. 5.x requires `ArturRios.Util` 2.1.0 and `Google.Apis.Auth` 1.76.0, which is why both are pinned there. |
+| **ArturRios.Mediator** | `2.0.0` | Command, Query, WebApi | Lightweight **CQRS mediator**. Provides `CommandMediator` / `QueryMediator` and the handler contracts (`ICommandHandlerAsync`, `IQueryHandlerAsync`, `IPaginatedQueryHandlerAsync`) that dispatch a command/query to its single handler. |
+| **ArturRios.Data.Relational.Core** | `5.0.0` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T, long>`, `IAsyncReadOnlyRepository<T, long>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. Entities derive from `Entity<long>`, and the repository contracts carry the key type. |
+| **ArturRios.Data.PostgreSql** | `3.0.2` | Data | **PostgreSQL binding** for the relational core. Provides `AddPostgreSqlProvider()`, which wires EF Core to Npgsql so the relational layer runs against PostgreSQL. |
+| **ArturRios.Messaging** | `1.3.0` | WebApi | **Outbound email.** Provides `IEmailService` and `MailgunEmailService` (namespace `ArturRios.Messaging.Email`), which sends plain-text transactional mail through the Mailgun HTTP API. Used by UC-06's verification email and UC-12's password reset email. Reads `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and the optional `MAILGUN_API_VERSION` from the environment at call time. |
+| **ArturRios.Util.Test** | `4.0.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
 
 > `ArturRios.Output` and `ArturRios.Jwt` are **namespaces** surfaced by the packages above (the `ArturRios.Util` family and `ArturRios.Util.WebApi` respectively), not separately referenced packages.
 
@@ -69,13 +69,13 @@ PostgreSQL is used in **every** environment, including automated tests — funct
 | Concern | Choice | Version |
 | --- | --- | --- |
 | ORM | **Entity Framework Core** (code-first) | 10.x |
-| Design-time / migrations | `Microsoft.EntityFrameworkCore.Design` (enables `dotnet ef`; the `Data` library is its own startup project) | `10.0.10` |
+| Design-time / migrations | `Microsoft.EntityFrameworkCore.Design` (enables `dotnet ef`; the `Data` library is its own startup project) | `10.0.12` |
 | Naming convention | `EFCore.NamingConventions` — maps entities to **`snake_case`, singular** table/column names | `10.0.1` |
 | Context | `AppDbContext`, based on the `ArturRios.Data.Relational.Core` context base, configured via entity maps (`ArturRios.Heimdall.Data.EntityMaps`) | — |
 | Diagnostics | `DbContextDiagnosticsOptions` — sensitive-data logging & detailed errors are **on only outside Production** (they would expose password hashes, salts, e-mails) | — |
 | Startup seeding | `DatabaseSeeder` seeds the roles and the master System Admin on startup | — |
 
-The data access pattern is **repository-based**: application handlers depend on `IAsyncReadOnlyRepository<T>` / `IAsyncRepository<T>` (from `ArturRios.Data.Relational.Core`) rather than on `DbContext` directly, which is also what makes them unit-testable with `FakeRepository<T>`.
+The data access pattern is **repository-based**: application handlers depend on `IAsyncReadOnlyRepository<T, long>` / `IAsyncRepository<T, long>` (from `ArturRios.Data.Relational.Core`) rather than on `DbContext` directly, which is also what makes them unit-testable with `FakeRepository<T, long>`.
 
 ---
 
@@ -86,12 +86,12 @@ The data access pattern is **repository-based**: application handlers depend on 
 | Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
 | Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`) | `4.4.0` / `10.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory and the retention period are configurable via environment variables (NFR-22). |
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` (namespace `ArturRios.Jwt`) | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `HEIMDALL_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
-| Google ID token verification | **Google.Apis.Auth** | `1.75.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
-| Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.19.2` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
-| Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ResponseResolver` maps it to an HTTP response. |
-| API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Enabled with JWT auth support (`UseSwaggerGen(jwtAuthentication: true)`). |
+| Google ID token verification | **Google.Apis.Auth** | `1.77.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
+| Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.23.0` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
+| Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ToActionResult` maps it to an HTTP response. |
+| API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Generated and served by the standard sequence in the environments it allows, described by `SwaggerConfiguration` (`options.Swagger.ConfigureGenerator`), which also defines the bearer scheme. |
 | Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `Startup.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
-| Metrics | **OpenTelemetry** (`OpenTelemetry.Extensions.Hosting`, `.Instrumentation.AspNetCore`, `.Instrumentation.Http`, `.Exporter.Prometheus.AspNetCore`) | `1.18.0` / exporter `1.18.0-beta.1` | ASP.NET Core, `HttpClient`, `System.Runtime`, Kestrel, EF Core and Npgsql meters, served for Prometheus at `/metrics` on the private port `HEIMDALL_METRICS_PORT` (9464) only. The exporter has never had a stable release; it is accepted as a beta because it only formats what the stable SDK collected, on a port that is never published. |
+| Metrics | **OpenTelemetry** (`OpenTelemetry.Extensions.Hosting`, `.Instrumentation.AspNetCore`, `.Instrumentation.Http`, `.Exporter.Prometheus.AspNetCore`) | `1.19.1` (instrumentation `1.19.0`) / exporter `1.19.1-beta.1` | ASP.NET Core, `HttpClient`, `System.Runtime`, Kestrel, EF Core and Npgsql meters, served for Prometheus at `/metrics` on the private port `HEIMDALL_METRICS_PORT` (9464) only. The exporter has never had a stable release; it is accepted as a beta because it only formats what the stable SDK collected, on a port that is never published. |
 | Configuration | `.env.<environment>` files + environment variables | — | Loaded by the `ArturRios.Util.WebApi` configuration loader; `.env*` files are copied next to the built assembly. |
 
 ---
@@ -102,13 +102,13 @@ These are the technologies mandated for tests. **How** they are applied to each 
 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
-| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `3.1.5` | The test framework for every test project. |
-| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.8.1` | Test host/runner integration for `dotnet test` and IDEs. |
-| Coverage | `coverlet.collector` | `10.0.1` | Collects code coverage during test runs. |
-| Test helpers & doubles | **`ArturRios.Util.Test`** | `2.2.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T>`, `AsyncFakeRepository<T>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T>`/`IAsyncRepository<T>`), `FakeScheduler`, and `CustomAssert`. |
-| Mocking | **Moq** | `4.20.72` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
-| Test data generation | **Bogus** | `35.6.3` | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
-| Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.13.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
+| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `4.0.0` | The test framework for every test project. |
+| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.10.1` | Test host/runner integration for `dotnet test` and IDEs. |
+| Coverage | `coverlet.collector` | `10.1.0` | Collects code coverage during test runs. |
+| Test helpers & doubles | **`ArturRios.Util.Test`** | `4.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
+| Mocking | **Moq** | `4.21.0` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
+| Test data generation | **Bogus** | `35.6.5` | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
+| Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.15.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
 
 > **Note:** Moq and Bogus were pinned to the versions above when the first tests needing them were written (UC-03's handler unit tests). Keep every test project on the same versions.
 
@@ -122,28 +122,28 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | --- | --- | --- |
 | Platform | .NET | `10` (`net10.0`) |
 | Language | C# | `14` (framework default) |
-| First-party | ArturRios.Util | `1.5.0` |
-| First-party | ArturRios.Util.WebApi | `3.0.0` |
-| First-party | ArturRios.Messaging | `1.1.0` |
-| First-party | ArturRios.Util.Test | `2.2.0` |
-| First-party | ArturRios.Mediator | `1.0.3` |
-| First-party | ArturRios.Data.Relational.Core | `3.0.2` |
-| First-party | ArturRios.Data.PostgreSql | `3.0.0` |
-| Data | Microsoft.EntityFrameworkCore.Design | `10.0.10` |
+| First-party | ArturRios.Util | `2.1.0` |
+| First-party | ArturRios.Util.WebApi | `5.1.0` |
+| First-party | ArturRios.Messaging | `1.3.0` |
+| First-party | ArturRios.Util.Test | `4.0.0` |
+| First-party | ArturRios.Mediator | `2.0.0` |
+| First-party | ArturRios.Data.Relational.Core | `5.0.0` |
+| First-party | ArturRios.Data.PostgreSql | `3.0.2` |
+| Data | Microsoft.EntityFrameworkCore.Design | `10.0.12` |
 | Data | EFCore.NamingConventions | `10.0.1` |
-| Authentication | Google.Apis.Auth | `1.75.0` |
-| Authentication | Microsoft.IdentityModel.JsonWebTokens | `8.19.2` |
+| Authentication | Google.Apis.Auth | `1.77.0` |
+| Authentication | Microsoft.IdentityModel.JsonWebTokens | `8.23.0` |
 | Validation | FluentValidation | `12.1.1` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
-| Metrics | OpenTelemetry.Extensions.Hosting | `1.18.0` |
-| Metrics | OpenTelemetry.Instrumentation.AspNetCore | `1.18.0` |
-| Metrics | OpenTelemetry.Instrumentation.Http | `1.18.0` |
-| Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.18.0-beta.1` |
+| Metrics | OpenTelemetry.Extensions.Hosting | `1.19.1` |
+| Metrics | OpenTelemetry.Instrumentation.AspNetCore | `1.19.0` |
+| Metrics | OpenTelemetry.Instrumentation.Http | `1.19.0` |
+| Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.19.1-beta.1` |
 | Testing | xunit | `2.9.3` |
-| Testing | xunit.runner.visualstudio | `3.1.5` |
-| Testing | Microsoft.NET.Test.Sdk | `18.8.1` |
-| Testing | coverlet.collector | `10.0.1` |
-| Testing | Testcontainers.PostgreSql | `4.13.0` |
-| Testing | Moq | `4.20.72` |
-| Testing | Bogus | `35.6.3` |
+| Testing | xunit.runner.visualstudio | `4.0.0` |
+| Testing | Microsoft.NET.Test.Sdk | `18.10.1` |
+| Testing | coverlet.collector | `10.1.0` |
+| Testing | Testcontainers.PostgreSql | `4.15.0` |
+| Testing | Moq | `4.21.0` |
+| Testing | Bogus | `35.6.5` |

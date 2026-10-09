@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Query.HealthChecks;
 ///     database being unreachable throws on execution) is treated as unhealthy rather than
 ///     propagated, so the detailed health check can still report the aggregate status (AF-30c).
 /// </summary>
-public class DatabaseHealthCheck(IAsyncReadOnlyRepository<Role> roleReader) : IServiceHealthCheck
+public class DatabaseHealthCheck(IAsyncReadOnlyRepository<Role, long> roleReader) : IServiceHealthCheck
 {
     public string ServiceName => "Database";
 

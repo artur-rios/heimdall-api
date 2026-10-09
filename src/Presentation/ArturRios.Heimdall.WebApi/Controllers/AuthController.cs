@@ -34,7 +34,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<LoginCommand, LoginCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -57,7 +57,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<PasswordRecoveryCommand, PasswordRecoveryCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<ResetPasswordCommand, ResetPasswordCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -104,7 +104,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<VerifyEmailCommand, VerifyEmailCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
             .ExecuteCommandAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>(
                 command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<GoogleSignInCommand, GoogleSignInCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -184,7 +184,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<GoogleSignOutCommand, GoogleSignOutCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: AuthMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -210,7 +210,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -229,6 +229,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     names a <c>GoogleUser</c>, never a row this lookup could find.
     /// </remarks>
     [HttpPost("2fa/confirm")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ConfirmTwoFactorAuthCommandOutput?>>> ConfirmTwoFactorAuth(
         [FromBody] ConfirmTwoFactorAuthCommand command)
     {
@@ -237,7 +238,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -264,7 +265,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<VerifyTwoFactorAuthCommand, VerifyTwoFactorAuthCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -308,7 +309,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
             .ExecuteCommandAsync<ResendTwoFactorChallengeCodeCommand,
                 ResendTwoFactorChallengeCodeCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -329,6 +330,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     merged here.
     /// </remarks>
     [HttpPost("2fa/disable")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<DisableTwoFactorAuthCommandOutput?>>> DisableTwoFactorAuth(
         [FromBody] DisableTwoFactorAuthCommand command)
     {
@@ -337,7 +339,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -357,6 +359,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     UC-38's "factor invalid" messages rather than inventing new ones.
     /// </remarks>
     [HttpPost("2fa/recovery-codes/regenerate")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<RegenerateRecoveryCodesCommandOutput?>>> RegenerateRecoveryCodes(
         [FromBody] RegenerateRecoveryCodesCommand command)
     {
@@ -365,23 +368,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 
-    /// <summary>
-    ///     Reports the caller's own two-factor authentication status (FR-2F-15): whether it is
-    ///     active, which methods are configured, and how many recovery codes remain unused. The
-    ///     person read is always the caller themselves — taken from the bearer token, the same as
-    ///     <see cref="EnableTwoFactorAuth" /> — so a configuration is never addressed by an
-    ///     identifier in a path.
-    /// </summary>
-    /// <remarks>
-    ///     No <c>RoleRequirement</c>, for the same reason its <c>POST</c> siblings have none: the
-    ///     authorization matrix grants two-factor management to all three person roles and withholds
-    ///     it from anonymous callers, which authentication alone enforces. A caller with no
-    ///     configuration is answered 200 with every flag false; a Google User is answered 403, since
-    ///     FR-2F-01 makes them permanently ineligible.
-    /// </remarks>
     /// <summary>
     ///     Returns a copy of everything held about the caller (UC-41, GDPR Art. 15 and 20, LGPD Art.
     ///     18 II and V).
@@ -402,8 +391,13 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///         The subject is the token's. There is no path parameter and no body field naming an
     ///         identity, so one caller cannot export another's data.
     ///     </para>
+    ///     <para>
+    ///         Reachable by a subject whose processing is restricted, or who is suspended pending
+    ///         erasure (NFR-24): the right to a copy does not depend on the account's standing.
+    ///     </para>
     /// </remarks>
     [HttpPost("data-export")]
+    [DataSubjectRight]
     public async Task<ActionResult<DataOutput<DataExportCommandOutput?>>> ExportMyData()
     {
         var command = new ExportMyDataCommand();
@@ -415,7 +409,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         // A copy of everything about one person must not be cached anywhere on its way back.
         Response.Headers.CacheControl = "no-store";
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -438,8 +432,15 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///         is not enough for an irreversible operation. Because it verifies a password, this
     ///         endpoint is governed by NFR-18 rather than NFR-05.
     ///     </para>
+    ///     <para>
+    ///         Reachable by a subject whose processing is restricted (NFR-24). A suspended identity
+    ///         reaches the handler too, and is answered by AF-42c (409) if it asked already, AF-42b
+    ///         (403) otherwise.
+    ///     </para>
     /// </remarks>
     [HttpPost("erasure-request")]
+    [DataSubjectRight]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<RequestErasureCommandOutput?>>> RequestErasure(
         [FromBody] RequestErasureCommand command)
     {
@@ -448,7 +449,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<RequestErasureCommand, RequestErasureCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -459,9 +460,11 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     No credential is required, unlike UC-42's erasure request. A restriction destroys
     ///     nothing and is liftable, and somebody asking for one may be doing so precisely because
     ///     they believe the account is compromised — demanding the password of a person in that
-    ///     position would be the wrong way round.
+    ///     position would be the wrong way round. Reachable by a suspended subject (UC-44), and by a
+    ///     restricted one, who is answered by AF-44a (409).
     /// </remarks>
     [HttpPost("processing-restriction")]
+    [DataSubjectRight]
     public async Task<ActionResult<DataOutput<RestrictProcessingCommandOutput?>>> RestrictProcessing(
         [FromBody] RestrictProcessingCommand command)
     {
@@ -470,7 +473,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -492,7 +495,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -503,9 +506,12 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     lift their own, and only a System Admin may lift somebody else's. The handler decides,
     ///     and it informs the subject first in the second case — Art. 18(3) makes that a
     ///     precondition of the act rather than a courtesy afterwards, so a failed notification
-    ///     refuses the lift.
+    ///     refuses the lift. The subject can reach this with a restricted identity — it is how they
+    ///     lift their own (NFR-24) — but a System Admin who is restricted or suspended may not lift
+    ///     anyone else's (AF-45c, 403).
     /// </remarks>
     [HttpPost("processing-restriction/lift")]
+    [DataSubjectRight]
     public async Task<ActionResult<DataOutput<LiftProcessingRestrictionCommandOutput?>>>
         LiftProcessingRestriction([FromBody] LiftProcessingRestrictionCommand command)
     {
@@ -514,7 +520,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await commandMediator
             .ExecuteCommandAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>(command);
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
     /// <summary>
@@ -536,9 +542,23 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListErasureRequestsQuery, ErasureRequestOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: ErasureMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
 
+    /// <summary>
+    ///     Reports the caller's own two-factor authentication status (FR-2F-15): whether it is
+    ///     active, which methods are configured, and how many recovery codes remain unused. The
+    ///     person read is always the caller themselves — taken from the bearer token, the same as
+    ///     <see cref="EnableTwoFactorAuth" /> — so a configuration is never addressed by an
+    ///     identifier in a path.
+    /// </summary>
+    /// <remarks>
+    ///     No <c>RoleRequirement</c>, for the same reason its <c>POST</c> siblings have none: the
+    ///     authorization matrix grants two-factor management to all three person roles and withholds
+    ///     it from anonymous callers, which authentication alone enforces. A caller with no
+    ///     configuration is answered 200 with every flag false; a Google User is answered 403, since
+    ///     FR-2F-01 makes them permanently ineligible.
+    /// </remarks>
     [HttpGet("2fa")]
     public async Task<ActionResult<DataOutput<TwoFactorStatusOutput?>>> GetTwoFactorStatus()
     {
@@ -548,6 +568,6 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         var result = await queryMediator
             .ExecuteQueryAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>(query);
 
-        return ResponseResolver.Resolve(result, statusMap: TwoFactorMessageMap.StatusCodes);
+        return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }
 }

@@ -23,14 +23,14 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class CreateScopeOwnerCommandHandler(
     IValidator<CreateScopeOwnerCommand> validator,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IEmailVerificationService emailVerification)
     : ICommandHandlerAsync<CreateScopeOwnerCommand, CreatePersonCommandOutput>
 {
-    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateScopeOwnerCommand command)
+    public async Task<DataOutput<CreatePersonCommandOutput?>> HandleAsync(CreateScopeOwnerCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 

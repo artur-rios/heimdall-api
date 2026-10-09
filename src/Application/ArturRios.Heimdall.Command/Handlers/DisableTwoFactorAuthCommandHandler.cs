@@ -32,14 +32,14 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     name which factor was expected.
 /// </remarks>
 public class DisableTwoFactorAuthCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorFactorVerifier factorVerifier)
     : ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>
 {
     public async Task<DataOutput<DisableTwoFactorAuthCommandOutput?>> HandleAsync(
-        DisableTwoFactorAuthCommand command)
+        DisableTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<DisableTwoFactorAuthCommandOutput?>.New;
 

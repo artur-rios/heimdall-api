@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -35,12 +36,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class ResetPasswordCommandHandler(
     IValidator<ResetPasswordCommand> validator,
-    IAsyncReadOnlyRepository<PasswordResetToken> tokenReader,
-    IAsyncRepository<PasswordResetToken> tokenWriter,
-    IAsyncRepository<Person> personWriter)
+    IAsyncReadOnlyRepository<PasswordResetToken, long> tokenReader,
+    IAsyncRepository<PasswordResetToken, long> tokenWriter,
+    IAsyncRepository<Person, long> personWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<ResetPasswordCommand, ResetPasswordCommandOutput>
 {
-    public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command)
+    public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ResetPasswordCommandOutput?>.New;
 
@@ -88,6 +90,15 @@ public class ResetPasswordCommandHandler(
 
         var (newHash, newSalt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.NewPassword);
 
+        // UC-13 step 4, for the presented token, brought forward and made atomic: the token is spent
+        // before the password changes, by a write only one request can win. Two requests carrying
+        // the same token both pass the checks above; only one may set a password with it, and the
+        // other is told what is now true — the token was used (AF-13b).
+        if (!await atomicWrites.TryConsumePasswordResetTokenAsync(token, now))
+        {
+            return output.WithError(AuthMessages.TokenAlreadyUsed);
+        }
+
         person.PasswordHash = newHash;
         person.Salt = newSalt;
         person.UpdatedAt = now;
@@ -99,7 +110,7 @@ public class ResetPasswordCommandHandler(
             return output.WithErrors(update.Errors);
         }
 
-        // UC-13 step 4.
+        // UC-13 step 4, for every other token the person still holds.
         var consumption = await ConsumeTokensAsync(token, now);
 
         if (consumption is not null)

@@ -26,14 +26,14 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class GoogleSignInCommandHandler(
     IGoogleIdTokenVerifier tokenVerifier,
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAuthTokenIssuer tokenIssuer)
     : ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>
 {
-    public async Task<DataOutput<GoogleSignInCommandOutput?>> HandleAsync(GoogleSignInCommand command)
+    public async Task<DataOutput<GoogleSignInCommandOutput?>> HandleAsync(GoogleSignInCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<GoogleSignInCommandOutput?>.New;
 
@@ -78,8 +78,11 @@ public class GoogleSignInCommandHandler(
 
             googleUser = signUp.googleUser;
         }
-        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted.
-        else if (googleUser.IsDeleted)
+        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted. A
+        // restriction of processing is refused the same way and for the same reason UC-11 refuses
+        // one with its own uniform answer: a restricted identity may not authenticate (NFR-24,
+        // UC-44 step 4), and the subject who asked for it already knows why.
+        else if (googleUser.IsDeleted || googleUser.ProcessingRestrictedAt is not null)
         {
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }

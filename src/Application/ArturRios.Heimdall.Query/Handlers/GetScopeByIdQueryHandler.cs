@@ -17,7 +17,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (<c>ScopeNotFound</c>); a scope the caller may not see is AF-02b
 ///     (<c>NotAuthorizedToViewScope</c>). Both are returned as errors rather than thrown.
 /// </summary>
-public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReader)
+public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope, long> scopeReader)
     : IQueryHandlerAsync<GetScopeByIdQuery, ScopeOutput>
 {
     /// <summary>
@@ -32,7 +32,7 @@ public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope> scopeReade
         public ScopeOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<ScopeOutput?>> HandleAsync(GetScopeByIdQuery query)
+    public async Task<DataOutput<ScopeOutput?>> HandleAsync(GetScopeByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<ScopeOutput?>.New;
 

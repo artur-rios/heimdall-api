@@ -17,7 +17,7 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     therefore URL-safe — throughout.
 /// </remarks>
 public class EmailVerificationService(
-    IAsyncRepository<EmailVerificationToken> tokenWriter,
+    IAsyncRepository<EmailVerificationToken, long> tokenWriter,
     IEmailVerificationSender sender,
     EmailVerificationOptions options)
     : IEmailVerificationService

@@ -53,16 +53,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class AnonymiseExpiredDeletionsCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
-    IAsyncReadOnlyRepository<PasswordResetToken> passwordResetTokenReader,
-    IAsyncRepository<PasswordResetToken> passwordResetTokenWriter,
-    IAsyncReadOnlyRepository<EmailVerificationToken> emailVerificationTokenReader,
-    IAsyncRepository<EmailVerificationToken> emailVerificationTokenWriter,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorAuthReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorAuthWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
+    IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
@@ -82,7 +79,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     neither worth the six lines saved.
     /// </remarks>
     public async Task<DataOutput<AnonymiseExpiredDeletionsCommandOutput?>> HandleAsync(
-        AnonymiseExpiredDeletionsCommand command)
+        AnonymiseExpiredDeletionsCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<AnonymiseExpiredDeletionsCommandOutput?>.New;
         var now = DateTime.UtcNow;
@@ -109,8 +106,13 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         }
 
         var persons = await personReader.Query()
+            // A restricted record is preserved exactly as it stands rather than entering the window
+            // (NFR-24): restriction and deletion are independent, so a record can be both — deleted
+            // by an administrator while under dispute, or restricted by a subject already pending
+            // erasure (UC-44). It is picked up again once the restriction is lifted (UC-45).
             .Where(person => person.IsDeleted
                              && person.AnonymisedAt == null
+                             && person.ProcessingRestrictedAt == null
                              && ((person.ErasureDueAt != null && person.ErasureDueAt <= now)
                                  || (person.ErasureDueAt == null
                                      && person.DeletedAt != null
@@ -124,6 +126,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         var googleUsers = await googleUserReader.Query()
             .Where(googleUser => googleUser.IsDeleted
                                  && googleUser.AnonymisedAt == null
+                                 && googleUser.ProcessingRestrictedAt == null
                                  && ((googleUser.ErasureDueAt != null && googleUser.ErasureDueAt <= now)
                                      || (googleUser.ErasureDueAt == null
                                          && googleUser.DeletedAt != null
@@ -202,7 +205,9 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             .Include(person => person.ScopeOwnerships)
             .Where(person => !person.IsDeleted
                              && person.ErasureRequestedAt != null
-                             && person.ErasureBlockedReason != null)
+                             && person.ErasureBlockedReason != null
+                             // NFR-24, as above: a restricted record is not moved toward erasure.
+                             && person.ProcessingRestrictedAt == null)
             .ToListAsync();
 
         if (blocked.Count == 0)
@@ -232,68 +237,19 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     }
 
     /// <summary>
-    ///     Permanently removes the rows that hold data belonging to the persons being anonymised:
-    ///     their password reset and email verification tokens, and their two-factor configuration —
-    ///     whose <c>ON DELETE CASCADE</c> foreign keys take the recovery codes and email codes with
-    ///     it.
+    ///     Permanently removes the rows that hold data belonging to the persons being anonymised —
+    ///     see <see cref="PersonDependentsRemoval" />, which the re-application of erasures shares.
     /// </summary>
     private async Task<(int Removed, IEnumerable<string> Errors)> RemovePersonDependentsAsync(
-        IReadOnlyCollection<Person> persons)
-    {
-        var personIds = persons.Select(person => person.Id).ToList();
-        var removed = 0;
-        var errors = new List<string>();
-
-        var passwordResetTokenIds = await passwordResetTokenReader.Query()
-            .Where(token => personIds.Contains(token.PersonId))
-            .Select(token => token.Id)
-            .ToListAsync();
-
-        var emailVerificationTokenIds = await emailVerificationTokenReader.Query()
-            .Where(token => personIds.Contains(token.PersonId))
-            .Select(token => token.Id)
-            .ToListAsync();
-
-        var twoFactorAuthIds = await twoFactorAuthReader.Query()
-            .Where(configuration => personIds.Contains(configuration.PersonId))
-            .Select(configuration => configuration.Id)
-            .ToListAsync();
-
-        Collect(await DeleteAllAsync(passwordResetTokenIds, passwordResetTokenWriter));
-        Collect(await DeleteAllAsync(emailVerificationTokenIds, emailVerificationTokenWriter));
-        Collect(await DeleteAllAsync(twoFactorAuthIds, twoFactorAuthWriter));
-
-        return (removed, errors);
-
-        void Collect((int Removed, IEnumerable<string> Errors) result)
-        {
-            removed += result.Removed;
-            errors.AddRange(result.Errors);
-        }
-    }
-
-    /// <summary>
-    ///     Permanently removes the entities with the given ids, or does nothing when there are none.
-    ///     Reports how many rows were actually removed, which is what the delete reported rather
-    ///     than what was selected.
-    /// </summary>
-    private static async Task<(int Removed, IEnumerable<string> Errors)> DeleteAllAsync<T>(
-        IReadOnlyCollection<long> ids, IAsyncRepository<T> writer) where T : Entity
-    {
-        if (ids.Count == 0)
-        {
-            return (0, []);
-        }
-
-        var deletion = await writer.DeleteRangeAsync(ids);
-
-        return deletion.Success
-            ? (deletion.Data?.Count() ?? 0, [])
-            : (0, deletion.Errors);
-    }
+        IReadOnlyCollection<Person> persons) =>
+        await PersonDependentsRemoval.RemoveAsync(
+            persons.Select(person => person.Id).ToList(),
+            passwordResetTokenWriter,
+            emailVerificationTokenWriter,
+            twoFactorAuthWriter);
 
     private static async Task<IEnumerable<string>> SaveAsync<T>(
-        IReadOnlyCollection<T> records, IAsyncRepository<T> writer) where T : Entity
+        IReadOnlyCollection<T> records, IAsyncRepository<T, long> writer) where T : Entity<long>
     {
         if (records.Count == 0)
         {

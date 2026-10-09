@@ -9,7 +9,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     (confirm), shaped after <see cref="PasswordResetToken" />. Never addressed by ID; a person's
 ///     current code is reached through their <see cref="TwoFactorAuth" /> configuration.
 /// </summary>
-public class TwoFactorEmailCode : Entity
+public class TwoFactorEmailCode : Entity<long>
 {
     /// <summary>
     ///     Foreign key to the owning <see cref="TwoFactorAuth" /> configuration (internal Id).

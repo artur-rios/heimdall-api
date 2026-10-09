@@ -13,14 +13,14 @@ namespace ArturRios.Heimdall.Command.Tests;
 // stands, which is the opposite of what the deletion flag sets in motion.
 public class RestrictProcessingCommandHandlerTests
 {
-    private static (AsyncFakeRepository<Person>, AsyncFakeRepository<GoogleUser>) Fakes() => (new(), new());
+    private static (AsyncFakeRepository<Person, long>, AsyncFakeRepository<GoogleUser, long>) Fakes() => (new(), new());
 
     private static RestrictProcessingCommandHandler Handler(
-        AsyncFakeRepository<Person> persons, AsyncFakeRepository<GoogleUser> googleUsers) =>
+        AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers) =>
         new(persons, persons, googleUsers, googleUsers);
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons, bool isDeleted = false, DateTime? restrictedAt = null)
+        AsyncFakeRepository<Person, long> persons, bool isDeleted = false, DateTime? restrictedAt = null)
     {
         var person = new Person
         {

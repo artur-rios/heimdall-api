@@ -49,4 +49,12 @@ public sealed record IdentityUser(
     ///     rejects every request where this is <c>true</c>, per FR-2F-10.
     /// </summary>
     public bool MfaPending { get; init; }
+
+    /// <summary>
+    ///     Which challenge a UC-38 challenge token stands for — set alongside <see cref="MfaPending" />
+    ///     by <c>JwtTwoFactorChallengeTokenIssuer</c>, <c>null</c> on every other token. UC-38 honours
+    ///     the token only while this still equals the configuration's outstanding challenge, which is
+    ///     what makes a challenge redeemable once (FR-2F-10).
+    /// </summary>
+    public Guid? ChallengeId { get; init; }
 }

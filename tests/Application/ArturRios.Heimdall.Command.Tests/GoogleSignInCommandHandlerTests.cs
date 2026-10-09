@@ -52,7 +52,7 @@ public class GoogleSignInCommandHandlerTests
     }
 
     private static async Task<Scope> SeedScopeAsync(
-        AsyncFakeRepository<Scope> scopes, bool googleSignInEnabled = true, bool isDeleted = false)
+        AsyncFakeRepository<Scope, long> scopes, bool googleSignInEnabled = true, bool isDeleted = false)
     {
         var scope = new Scope
         {
@@ -68,7 +68,7 @@ public class GoogleSignInCommandHandlerTests
     }
 
     private static async Task<GoogleUser> SeedGoogleUserAsync(
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         Scope scope,
         string googleId = GoogleSubject,
         string email = Email,
@@ -91,7 +91,7 @@ public class GoogleSignInCommandHandlerTests
     }
 
     private static async Task SeedUserPersonAsync(
-        AsyncFakeRepository<Person> persons, Scope scope, string email, bool isDeleted = false)
+        AsyncFakeRepository<Person, long> persons, Scope scope, string email, bool isDeleted = false)
     {
         var person = new Bogus.Faker<Person>()
             .RuleFor(p => p.PublicId, _ => Guid.NewGuid())
@@ -111,12 +111,12 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenNoExistingGoogleUser_WhenHandlingGoogleSignIn_ThenCreatesGoogleUserFromTokenClaimsAndIssuesToken()
     {
         // Given a scope with Google sign-in on and no Google User yet (UC-25 main flow, FR-GO-09)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var (issuer, _) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -143,13 +143,13 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenExistingGoogleUser_WhenHandlingGoogleSignIn_ThenIssuesTokenWithoutCreatingDuplicate()
     {
         // Given the Google account already signed up in this scope (FR-GO-10)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var existing = await SeedGoogleUserAsync(googleUsers, scope);
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -169,12 +169,12 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given a first sign-in, so the token is issued for the row just created (UC-25 step 8,
         // FR-GO-04: Google authentication never yields a ScopeAdmin or SystemAdmin)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
 
         // When
         await handler.HandleAsync(Command(scope.PublicId));
@@ -195,11 +195,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenTokenFailsVerification_WhenHandlingGoogleSignIn_ThenReturnsAuthenticationFailedError()
     {
         // Given a token the verifier rejects — invalid, expired, or for another audience (AF-25a)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(null), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(null), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -215,11 +215,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenScopeDoesNotExist_WhenHandlingGoogleSignIn_ThenReturnsSignInUnavailableError()
     {
         // Given a scope identifier matching nothing (AF-25b)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -235,11 +235,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenScopeIsLogicallyDeleted_WhenHandlingGoogleSignIn_ThenReturnsSignInUnavailableError()
     {
         // Given the scope is logically deleted (AF-25b, FR-GO-13)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, isDeleted: true);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -254,11 +254,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenScopeHasGoogleSignInDisabled_WhenHandlingGoogleSignIn_ThenReturnsSignInUnavailableError()
     {
         // Given the scope exists and is active but UC-24 left the setting off (AF-25b, FR-GO-03)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes, googleSignInEnabled: false);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -275,12 +275,12 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the address is already held in this scope by a Google User with a different 'sub'
         // (AF-25c, FR-GO-07)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub");
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -297,11 +297,11 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the address belongs to a password-authenticated User of the same scope — the half of
         // FR-GO-07 no database index can enforce, since it spans two tables (AF-25c)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         await SeedUserPersonAsync(persons, scope, Email);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer);
 
@@ -319,12 +319,12 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the address is taken in a different case — uniqueness is case-insensitive, as it is
         // when a User is created (AF-25c)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub", email: Email.ToUpper());
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -340,12 +340,12 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the address is held in a *different* scope — FR-GO-07 is scoped, so it does not
         // collide here
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var targetScope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, otherScope, googleId: "another-google-sub");
-        var persons = new AsyncFakeRepository<Person>();
+        var persons = new AsyncFakeRepository<Person, long>();
         await SeedUserPersonAsync(persons, otherScope, Email);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer);
@@ -364,12 +364,12 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenExistingGoogleUserIsLogicallyDeleted_WhenHandlingGoogleSignIn_ThenReturnsAuthenticationFailedError()
     {
         // Given the account signed up before and was logically deleted since (AF-25d, FR-GO-12)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, isDeleted: true);
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers,
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer);
 
         // When
@@ -387,14 +387,14 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the same Google account already signed up in a different scope — FR-GO-06/08 make a
         // Google User single-scope, so signing in to a second scope registers a second account
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var targetScope = await SeedScopeAsync(scopes);
         var otherScope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var existing = await SeedGoogleUserAsync(googleUsers, otherScope);
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
 
         // When
         var output = await handler.HandleAsync(Command(targetScope.PublicId));
@@ -416,11 +416,11 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given a token whose issuer withheld the profile claims — the account is still created, with
         // the optional fields left empty (FR-GO-05)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(name: null, pictureUrl: null)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(name: null, pictureUrl: null)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
 
         // When
@@ -437,11 +437,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenPayloadReportsVerifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedTrue()
     {
         // Given Google asserting the address is verified (FR-EV-05)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
 
         // When
@@ -456,11 +456,11 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenPayloadReportsUnverifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedFalse()
     {
         // Given Google asserting the address is not verified — email_verified can be false
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
 
         // When
@@ -476,12 +476,12 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given a returning Google User stored as unverified whose token now says verified: the
         // token just verified in this request is the fresher truth (design: source of the value)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
 
         // When
@@ -497,17 +497,17 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given a returning Google User stored as unverified whose address has since been verified
         // at Google: FR-GO-10 must not leave the row stale forever (FR-GO-19)
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         // A mock writer, not the fake repository: the fake holds entity references, so the handler's
         // in-memory assignment alone would satisfy a GetAllAsync() assertion whether or not the row
         // was ever written back. Verifying the write is the only way this test can fail if the
         // UpdateAsync call goes away.
-        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, writer.Object, TokenIssuer().issuer);
 
         // When
@@ -523,13 +523,13 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given the refresh running in the other direction too — the rule is "match the token",
         // not "only ever turn the flag on"
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, writer.Object, TokenIssuer().issuer);
 
         // When
@@ -544,13 +544,13 @@ public class GoogleSignInCommandHandlerTests
     public async Task GivenStoredValueAlreadyAgrees_WhenHandlingGoogleSignIn_ThenNoUpdateIsWritten()
     {
         // Given a row already matching the token: the ordinary sign-in path stays read-only
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, writer.Object, TokenIssuer().issuer);
 
         // When
@@ -567,13 +567,13 @@ public class GoogleSignInCommandHandlerTests
         // Given a returning Google User stored as verified whose client obtained a token without the
         // email scope, so it carries no email_verified claim at all: silence is not an assertion
         // that the address is unverified, so FR-GO-19's refresh must leave the row alone
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser>>();
+        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, writer.Object, TokenIssuer().issuer);
 
         // When
@@ -592,11 +592,11 @@ public class GoogleSignInCommandHandlerTests
     {
         // Given a first sign-in with a token carrying no email_verified claim: there is nothing
         // stored to preserve, and the column is not nullable, so the new row starts unverified
-        var scopes = new AsyncFakeRepository<Scope>();
+        var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person>(),
+            Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
 
         // When

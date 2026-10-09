@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Query.Handlers;
 ///     (<c>NotAuthorizedToViewGoogleUser</c>). Both are returned as errors rather than thrown.
 /// </summary>
 public class GetGoogleUserByIdQueryHandler(
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IScopeOwnershipChecker scopeOwnership)
     : IQueryHandlerAsync<GetGoogleUserByIdQuery, GoogleUserOutput>
 {
@@ -33,7 +33,7 @@ public class GetGoogleUserByIdQueryHandler(
         public GoogleUserOutput Output { get; init; } = null!;
     }
 
-    public async Task<DataOutput<GoogleUserOutput?>> HandleAsync(GetGoogleUserByIdQuery query)
+    public async Task<DataOutput<GoogleUserOutput?>> HandleAsync(GetGoogleUserByIdQuery query, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<GoogleUserOutput?>.New;
 

@@ -21,13 +21,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class PromoteScopeUserCommandHandler(
-    IAsyncReadOnlyRepository<Scope> scopeReader,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>
 {
-    public async Task<DataOutput<PromoteScopeUserCommandOutput?>> HandleAsync(PromoteScopeUserCommand command)
+    public async Task<DataOutput<PromoteScopeUserCommandOutput?>> HandleAsync(PromoteScopeUserCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<PromoteScopeUserCommandOutput?>.New;
 

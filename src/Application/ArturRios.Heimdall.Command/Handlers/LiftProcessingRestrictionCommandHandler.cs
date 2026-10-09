@@ -33,15 +33,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 /// </remarks>
 public class LiftProcessingRestrictionCommandHandler(
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<GoogleUser> googleUserReader,
-    IAsyncRepository<GoogleUser> googleUserWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncRepository<Person, long> personWriter,
+    IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IRestrictionLiftNotifier notifier)
     : ICommandHandlerAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>
 {
     public async Task<DataOutput<LiftProcessingRestrictionCommandOutput?>> HandleAsync(
-        LiftProcessingRestrictionCommand command)
+        LiftProcessingRestrictionCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<LiftProcessingRestrictionCommandOutput?>.New;
 
@@ -52,6 +52,15 @@ public class LiftProcessingRestrictionCommandHandler(
         // because a subject of any role may lift their own, so the rule is data-dependent and lives
         // here.
         if (!liftingOwn && command.ActingRole != (int)Roles.SystemAdmin)
+        {
+            return output.WithError(ErasureMessages.NotEligible);
+        }
+
+        // The endpoint admits a restricted or suspended caller, because lifting their own restriction
+        // is a right of theirs (NFR-24). Lifting somebody else's is not: an administrator who is
+        // restricted or suspended themselves acts here as a subject, not as an administrator.
+        if (!liftingOwn && await personReader.Query().AnyAsync(x =>
+                x.PublicId == command.ActingPersonId && (x.IsDeleted || x.ProcessingRestrictedAt != null)))
         {
             return output.WithError(ErasureMessages.NotEligible);
         }

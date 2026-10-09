@@ -30,19 +30,19 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     };
 
     private sealed record Fakes(
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<GoogleUser> GoogleUsers,
-        AsyncFakeRepository<PasswordResetToken> PasswordResetTokens,
-        AsyncFakeRepository<EmailVerificationToken> EmailVerificationTokens,
-        AsyncFakeRepository<TwoFactorAuth> TwoFactorAuths)
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers,
+        AsyncFakeRepository<PasswordResetToken, long> PasswordResetTokens,
+        AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths)
     {
         public static Fakes New() => new(new(), new(), new(), new(), new());
 
         public AnonymiseExpiredDeletionsCommandHandler Handler(DataRetentionOptions? retention = null) =>
             new(Persons, Persons, GoogleUsers, GoogleUsers,
-                PasswordResetTokens, PasswordResetTokens,
-                EmailVerificationTokens, EmailVerificationTokens,
-                TwoFactorAuths, TwoFactorAuths,
+                PasswordResetTokens,
+                EmailVerificationTokens,
+                TwoFactorAuths,
                 retention ?? Retention());
     }
 
@@ -115,6 +115,52 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(1, output.Data!.PersonsAnonymised);
         Assert.Equal(IdentityAnonymiser.AnonymisedName, person.Name);
         Assert.NotNull(person.AnonymisedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedRecordPastItsWindow_WhenAnonymising_ThenItIsPreservedAsItStands()
+    {
+        // NFR-24: restriction and deletion are independent, and a restricted record is preserved
+        // exactly as it stands rather than entering the anonymisation window — here, an overdue
+        // administrative deletion of a person and of a Google User, each under a restriction.
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            (int)DeletionKinds.Administrative);
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-5);
+        var googleUser = await SeedGoogleUserAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            (int)DeletionKinds.Administrative);
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-5);
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.True(output.Success);
+        Assert.Equal(0, output.Data!.TotalAnonymised);
+        Assert.Equal("Ada Lovelace", person.Name);
+        Assert.Null(person.AnonymisedAt);
+        Assert.Equal("Ada Lovelace", googleUser.Name);
+        Assert.Null(googleUser.AnonymisedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenABlockedErasureOfARestrictedPerson_WhenTheBlockClears_ThenItIsNotSuspended()
+    {
+        // The subject asked for erasure, was blocked as a scope's last owner (NFR-12), and has since
+        // restricted processing (UC-44 allows it). The block no longer holding is not enough to move
+        // a restricted record toward erasure.
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-40),
+            erasureBlockedReason: "last owner");
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-5);
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.True(output.Success);
+        Assert.False(person.IsDeleted);
+        Assert.Null(person.AnonymisedAt);
     }
 
     [UnitFact]

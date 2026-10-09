@@ -37,15 +37,15 @@ public class RequestErasureCommandHandlerTests
         new(subject, "ada@test.local", true, "Ada", null);
 
     private static RequestErasureCommandHandler Handler(
-        AsyncFakeRepository<Person> persons,
-        AsyncFakeRepository<GoogleUser> googleUsers,
+        AsyncFakeRepository<Person, long> persons,
+        AsyncFakeRepository<GoogleUser, long> googleUsers,
         GoogleIdTokenPayload? payload = null) =>
         new(new RequestErasureCommandValidator(),
             persons, persons, googleUsers, googleUsers,
             Verifier(payload), Retention());
 
     private static async Task<Person> SeedPersonAsync(
-        AsyncFakeRepository<Person> persons,
+        AsyncFakeRepository<Person, long> persons,
         Roles role = Roles.User,
         DateTime? erasureRequestedAt = null,
         params long[] ownedScopeIds)
@@ -71,7 +71,7 @@ public class RequestErasureCommandHandlerTests
         return person;
     }
 
-    private static async Task<GoogleUser> SeedGoogleUserAsync(AsyncFakeRepository<GoogleUser> googleUsers)
+    private static async Task<GoogleUser> SeedGoogleUserAsync(AsyncFakeRepository<GoogleUser, long> googleUsers)
     {
         var googleUser = new GoogleUser
         {
@@ -93,8 +93,8 @@ public class RequestErasureCommandHandlerTests
     [UnitFact]
     public async Task GivenAPersonWithTheirPassword_WhenRequestingErasure_ThenItIsRecordedAndTheyAreSuspended()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons);
 
         var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
@@ -122,8 +122,8 @@ public class RequestErasureCommandHandlerTests
     {
         // A bearer token is not proof the person is present. One left open on a shared machine must
         // not be enough to destroy the account it belongs to.
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons);
 
         var output = await Handler(persons, googleUsers)
@@ -138,8 +138,8 @@ public class RequestErasureCommandHandlerTests
     [UnitFact]
     public async Task GivenNoCredential_WhenRequestingErasure_ThenItIsRefused()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons);
 
         var output = await Handler(persons, googleUsers)
@@ -152,8 +152,8 @@ public class RequestErasureCommandHandlerTests
     [UnitFact]
     public async Task GivenAnErasureAlreadyRequested_WhenRequestingAgain_ThenItIsRefused()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons, erasureRequestedAt: DateTime.UtcNow.AddDays(-1));
 
         // Deliberately with the wrong password: the repeat is caught before the credential, so a
@@ -166,10 +166,43 @@ public class RequestErasureCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenASuspendedPersonWhoAlreadyAsked_WhenRequestingAgain_ThenTheRepeatIsNamed()
+    {
+        // A subject suspended by their own request reaches this handler (the endpoint is a data
+        // subject right, so the liveness filter lets them through). AF-42c — "already requested" —
+        // is the true answer for them, not AF-42b's generic "not eligible".
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, erasureRequestedAt: DateTime.UtcNow.AddDays(-1));
+        person.IsDeleted = true;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.ErasureAlreadyRequested, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonSuspendedByAnAdministrator_WhenRequestingErasure_ThenNotEligible()
+    {
+        // AF-42b: a logically deleted identity that never asked is not a live one
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        person.IsDeleted = true;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotEligible, output.Errors);
+        Assert.Null(person.ErasureRequestedAt);
+    }
+
+    [UnitFact]
     public async Task GivenATokenNamingNobody_WhenRequestingErasure_ThenItIsRefused()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
 
         var output = await Handler(persons, googleUsers).HandleAsync(Command(Guid.NewGuid()));
 
@@ -183,8 +216,8 @@ public class RequestErasureCommandHandlerTests
         // NFR-12: suspending them would leave the scope ownerless. The request is still recorded and
         // the deadline still runs — the subject's right does not depend on the scope's ownership
         // arrangements, and Art. 12(3)'s clock starts at the request.
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
 
         var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
@@ -204,8 +237,8 @@ public class RequestErasureCommandHandlerTests
     [UnitFact]
     public async Task GivenAScopeWithAnotherOwner_WhenRequestingErasure_ThenItProceeds()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
         await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
 
@@ -221,8 +254,8 @@ public class RequestErasureCommandHandlerTests
     {
         // A Google User has no password, so the equivalent proof of presence is a token Google
         // minted for them just now
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
 
         var output = await Handler(persons, googleUsers, Payload())
@@ -239,8 +272,8 @@ public class RequestErasureCommandHandlerTests
     {
         // Verifying the signature is not enough: without matching the subject claim, any valid token
         // for any Google account would erase whichever account the bearer token named.
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
 
         var output = await Handler(persons, googleUsers, Payload(subject: "999999999999999999999"))
@@ -254,8 +287,8 @@ public class RequestErasureCommandHandlerTests
     [UnitFact]
     public async Task GivenAnUnverifiableToken_WhenRequestingErasure_ThenItIsRefused()
     {
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
 
         var output = await Handler(persons, googleUsers, payload: null)
@@ -270,8 +303,8 @@ public class RequestErasureCommandHandlerTests
     public async Task GivenAGoogleUserPresentingAPassword_WhenRequestingErasure_ThenItIsRefused()
     {
         // The credential required is decided by identity type, not by what the caller chose to send
-        var persons = new AsyncFakeRepository<Person>();
-        var googleUsers = new AsyncFakeRepository<GoogleUser>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
 
         var output = await Handler(persons, googleUsers, Payload())

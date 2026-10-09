@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     reached implicitly through their authenticated identity (see §4.1 of the System Requirements
 ///     Document).
 /// </summary>
-public class TwoFactorAuth : Entity
+public class TwoFactorAuth : Entity<long>
 {
     /// <summary>Foreign key to the owning <see cref="Person" /> (internal Id). Required, unique.</summary>
     public long PersonId { get; set; }
@@ -56,6 +56,35 @@ public class TwoFactorAuth : Entity
     ///     reissued cannot be incremented, which leaves the count on the server.
     /// </remarks>
     public int EmailCodeReissueCount { get; set; }
+
+    /// <summary>
+    ///     Identifies the one challenge UC-11 most recently issued for this configuration and UC-38 has
+    ///     not yet redeemed, or <c>null</c> when none is outstanding. The challenge token carries the
+    ///     same value as a claim, and is honoured only while the two agree (FR-2F-10).
+    /// </summary>
+    /// <remarks>
+    ///     A signature and an expiry say a challenge token is genuine and recent; neither says it has
+    ///     not already been spent. Without this a redeemed challenge stayed redeemable for the rest of
+    ///     its ten minutes, so whoever held it could trade any further factor for another full token
+    ///     without the password. Redeeming clears it, and a new login replaces it, so only the latest
+    ///     unredeemed challenge is ever accepted — the same "only the newest is live" rule the email
+    ///     codes issued alongside it already follow.
+    /// </remarks>
+    public Guid? ChallengeId { get; set; }
+
+    /// <summary>
+    ///     Guesses made at the outstanding challenge with an authenticator-app code or a recovery code.
+    ///     Reset with <see cref="ChallengeId" /> whenever UC-11 issues a challenge; at the cap the
+    ///     challenge is cleared, so further guessing costs a fresh password check.
+    /// </summary>
+    /// <remarks>
+    ///     The email code has always had its own cap (FR-2F-13): five wrong guesses retire it. An app
+    ///     code and a recovery code had none — only the per-address rate limit — so a challenge could
+    ///     be guessed at for its whole ten minutes from as many addresses as an attacker could muster.
+    ///     This gives them the same five, counted on the challenge because neither has a row of its
+    ///     own to count on: a TOTP code is computed, and a guessed recovery code matches no row.
+    /// </remarks>
+    public int ChallengeAttempts { get; set; }
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

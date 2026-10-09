@@ -9,12 +9,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     a <c>ScopeAdmin</c> owns one or more scopes (via <c>SCOPE_OWNER</c>), and a
 ///     <c>SystemAdmin</c> belongs to no scope.
 /// </summary>
-public class Person : Entity
+public class Person : Entity<long>
 {
     /// <summary>
     ///     External identifier, generated on creation and used everywhere the person is addressed
     ///     from outside the database (API paths, response bodies, token claims). The internal
-    ///     <see cref="Entity.Id" /> is never exposed to callers.
+    ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
     public Guid PublicId { get; set; } = Guid.NewGuid();
 

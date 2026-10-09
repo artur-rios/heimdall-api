@@ -19,9 +19,9 @@ public class PseudonymiseAuditActorsCommandHandlerTests
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
 
     private sealed record Fakes(
-        AsyncFakeRepository<AuditLog> Entries,
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<GoogleUser> GoogleUsers)
+        AsyncFakeRepository<AuditLog, long> Entries,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers)
     {
         public static Fakes New() => new(new(), new(), new());
 

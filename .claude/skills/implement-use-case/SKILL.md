@@ -85,11 +85,11 @@ is the first review gate. Adjust the plan based on their feedback.
 
 ## Step 3 — Branch and move the issue to In Progress
 
-Once the plan is approved, create the feature branch from an up-to-date `main` using the exact naming
+Once the plan is approved, create the feature branch from an up-to-date `develop` using the exact naming
 pattern from the workflow doc — `feature/uc-##-use-case-name` (zero-padded number, kebab-case name):
 
 ```bash
-git switch main && git pull
+git switch develop && git pull
 git switch -c feature/uc-03-update-scope
 ```
 
@@ -129,11 +129,11 @@ Report the passing results. **Do not open a PR yet — stop and ask.**
 
 ## Step 7 — Open the pull request (after approval)
 
-Once the user approves, push the branch and open a PR into `main` that references the issue so the
+Once the user approves, push the branch and open a PR into `develop` that references the issue so the
 merge closes it:
 
 ```bash
-gh pr create --repo artur-rios/heimdall-api --base main \
+gh pr create --repo artur-rios/heimdall-api --base develop \
   --title "UC-03: Update Scope" \
   --body "Implements UC-03. Closes #4."
 ```
@@ -152,11 +152,11 @@ still verify the board shows **Done**).
 
 Mirror the workflow doc's checklist before calling the use case complete:
 
-- [ ] Implemented on a `feature/uc-##-use-case-name` branch from `main`.
+- [ ] Implemented on a `feature/uc-##-use-case-name` branch from `develop`.
 - [ ] Main flow and every alternative flow implemented.
 - [ ] Unit tests cover handlers + new domain behavior; functional tests cover endpoints (incl. auth).
 - [ ] Full suite passes (`Category=Unit` and `Category=Functional`).
-- [ ] PR reviewed by a human and merged to `main`; feature branch deleted.
+- [ ] PR reviewed by a human and merged to `develop`; feature branch deleted.
 - [ ] Issue in **Done** and closed.
 
 ## Reference files

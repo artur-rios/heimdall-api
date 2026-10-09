@@ -14,9 +14,8 @@ python scripts/migrations.py
 ```
 
 The script asks which environment file to load (for the connection string), then offers **list**,
-**create (generate)**, and **apply**. Creating a migration prompts for its name and adds it to
-`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. It needs `dotnet tool restore` to have been
-run once, for the pinned EF Core CLI tool.
+**create (generate)**, and **apply**. It needs `dotnet tool restore` to have been run once, for the
+pinned EF Core CLI tool. Authoring a migration is covered in [Contributing](../contributing/#migrations).
 
 **The API never migrates on startup, and refuses to start when migrations are pending.** The seeder
 checks `GetPendingMigrationsAsync` first and throws with the missing migration names:
@@ -100,17 +99,18 @@ heap, thread pool, exceptions), EF Core, and the Npgsql connection pool. Every s
 | `HEIMDALL_METRICS_PORT` | `9464` | The port `/metrics` answers on. Blank means the default; `0` switches metrics off entirely — no exporter is registered and nothing is collected. |
 
 **The endpoint is recognised by the port the connection arrived on, never by the `Host` header.**
-In production the API runs behind Traefik, which forwards the client's own `Host` header — a check
-on it would be a check on a value any caller chooses. The local port of the socket is the one thing
-a caller cannot pick: Traefik reaches the container on 8080, Prometheus reaches it directly on 9464
-over a private Docker network, and a request for `/metrics` on 8080 falls through to the API, which
-has no such route (401 without a token, 404 with one).
+On the VPS (development, homologation, production) the API runs behind Traefik, which forwards the
+client's own `Host` header — a check on it would be a check on a value any caller chooses. The local
+port of the socket is the one thing a caller cannot pick: Traefik reaches the container on 8080,
+Prometheus reaches it directly on 9464 over a private Docker network, and a request for `/metrics`
+on 8080 falls through to the API, which has no such route (401 without a token, 404 with one).
 
 That guarantee holds only while 9464 stays private, so:
 
 - **Never publish 9464.** `docker-compose.yml` maps only the API's port; the image listens on both
   (`ASPNETCORE_HTTP_PORTS=8080;9464`). Put Prometheus on a network it shares with the `api` service
-  and scrape `api:9464`.
+  and scrape it there — under yggdrasil, `heimdall-api.<environment>:9464` on the `telemetry`
+  network.
 - **Never route Traefik to 9464.** With two ports exposed, give Traefik the service port explicitly
   (`traefik.http.services.<name>.loadbalancer.server.port=8080`) rather than letting it pick.
 - **Moving the port means moving both.** A `HEIMDALL_METRICS_PORT` other than 9464 must also be
@@ -165,12 +165,16 @@ hash it and look for it. What it defeats is reading addresses out of the logs in
 
 Brute force is bounded in two independent places, because each covers what the other misses.
 
-**Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**,
-applied to `AuthController`'s anonymous, credential-checking endpoints: login, password recovery,
-password reset, email verification, Google sign-in, and second-factor verification. Rejections
+**Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**
+(an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
+`AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
+reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
 answer **429**. None of these requires a bearer token, so nothing else bounds how fast one caller
 can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
-hashing library's defaults) — so memory exhaustion is realistic without it.
+hashing library's defaults) — so memory exhaustion is realistic without it. The authenticated
+endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
+regeneration, and the erasure request — share the same limit: a bearer token is not the password,
+and without it whoever held one could test passwords or six-digit codes against them unthrottled.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -180,6 +184,16 @@ defeats the limiter with:
 | Password (UC-11) | 10 consecutive failures | The account is locked for 15 minutes. `PERSON.failed_login_attempts` counts, `PERSON.locked_out_until` holds the window; a successful login clears both. |
 | 2FA email code (UC-37, UC-38) | 5 wrong guesses per issued code | The code is retired. `TWO_FACTOR_EMAIL_CODE.failed_attempts` counts; guessing again costs a fresh login, which is itself limited and mails the account holder a code they did not ask for. |
 | 2FA app code | Single use | `TWO_FACTOR_AUTH.last_totp_time_step_used` records the accepted time step, so an observed code cannot be replayed within the ±1-step verification window (RFC 6238 §5.2). |
+| 2FA challenge (UC-38) | Single redemption | `TWO_FACTOR_AUTH.challenge_id` holds the one outstanding challenge, which the challenge token names. Redeeming it clears it and a newer login replaces it, so a challenge token is refused once spent (FR-2F-10). |
+| 2FA challenge guesses (UC-38) | 5 guesses with an app code or a recovery code per challenge | The challenge is cleared, so its token is refused and guessing again costs a fresh login (FR-2F-17). `TWO_FACTOR_AUTH.challenge_attempts` counts; a new login resets it. An email-only configuration is bounded by its code's budget instead. |
+
+Every budget, and every single-use item — recovery codes, reset and verification tokens, the
+challenge, the TOTP step — is charged or spent by **one conditional `UPDATE`** whose `WHERE` clause
+is the rule itself ("unused", "under the cap", "still outstanding"), and before the comparison it
+guards rather than after it. A burst of parallel requests therefore cannot outrun a budget or spend
+one code twice: the database lets exactly as many through as the rule allows. A login attempt is
+counted in `failed_login_attempts` while it is in flight and cleared if the password turns out to
+be right.
 
 A lockout is a window rather than a latch an administrator clears: reaching the threshold needs
 nothing but wrong guesses, so a permanent lock would hand any anonymous caller a denial of service
@@ -188,9 +202,10 @@ same Argon2id work a real check would, so it is not observable — by message or
 caller who does not already know the password.
 
 {{% alert title="Not a substitute for a gateway" color="warning" %}}
-The limiter's partition key is the connection's remote IP. Behind a reverse proxy or load balancer
-that does not forward the real client IP (via `X-Forwarded-For` with `ForwardedHeadersMiddleware`
-configured), **every caller shares one partition**. This is a per-instance, defence-in-depth
+The limiter's partition key is the connection's remote IP — the real caller's only when
+`HEIMDALL_TRUSTED_PROXIES` names the proxy in front of the API
+([Client addresses behind a proxy](#client-addresses-behind-a-proxy)). Without it, **every caller
+shares the proxy's partition**. This is a per-instance, defence-in-depth
 throttle — not a replacement for a WAF or an API gateway's own rate limiting in front of a real
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
@@ -451,6 +466,28 @@ origin" would instead leave a deployment open with nothing to indicate it.
 Server-to-server callers are unaffected: CORS is a browser rule, and non-browser clients send no
 `Origin` header.
 
+## Client addresses behind a proxy
+
+On the VPS every connection reaches the API from Traefik, so the connection's address is
+Traefik's. The caller's own address travels in `X-Forwarded-For`, and the scheme they used in
+`X-Forwarded-Proto`. `HEIMDALL_TRUSTED_PROXIES` lists the proxies those headers are believed from —
+addresses and CIDR networks, comma separated:
+
+| Traefik reaches the API | Value |
+| --- | --- |
+| From a container on a Docker network shared with `api` | That network's subnet, e.g. `172.18.0.0/16` — Traefik's own address changes when its container is recreated. The VPS templates use `172.16.0.0/12`, the range Docker allocates every network from, which covers yggdrasil's `edge` network whatever subnet it was given |
+| From the host, through the published `API_PORT` | The Compose network's gateway, e.g. `172.19.0.1` — what published-port traffic arrives from |
+
+Two things read the result: the rate limiter, which partitions on it, and the request log, which
+records it (`Started request with TraceId … from <address>` on every request). **Unset, nothing is
+trusted** and both see Traefik — one rate-limit bucket for every caller, and a log that names the
+proxy. Start-up warns when that is the case.
+
+Only the headers' last hop is read: Traefik appends the address it saw to whatever the caller sent,
+so the rightmost entry is the only one it vouches for, and an earlier entry a caller forged is
+ignored. Never list a range a caller can originate from — anything trusted here can claim any
+address it likes. `X-Forwarded-Host` is not read; nothing in the API decides on the host name.
+
 ## Integrations
 
 ### Email delivery (Mailgun)
@@ -481,6 +518,18 @@ when **both** credentials are present:
 Each page finishes the job by posting its token back — the verification page to
 `POST /api/auth/verify-email`, the reset page to `POST /api/auth/password-reset` with the new
 password. If no link is configured the email carries the bare token instead, which still works.
+
+**Password recovery is answered before it is worked.** `POST /api/auth/password-recovery` only
+validates the request and puts it on an in-process queue; a background worker then looks the address
+up, issues the token and sends the email. So the response takes the same time whether or not the
+address is registered — otherwise the Mailgun round trip a registered address waited for would give
+away what the uniform answer hides (AF-12a). Two consequences for operators:
+
+- A restart drops whatever is still queued — at most a few seconds' worth. Nobody is told; the
+  person asks again, as they would for an email that never arrived.
+- The queue holds 1,024 requests. Beyond that a request is dropped and the log says
+  `The password recovery queue is full` — a sign that Mailgun is down or very slow, not that the
+  endpoint is under attack (the rate limiter caps that first).
 
 | State | Behaviour |
 | --- | --- |
@@ -555,6 +604,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_LOG_DIRECTORY` | | `logs` |
 | `HEIMDALL_METRICS_PORT` | | `9464`; `0` → metrics off |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
+| `HEIMDALL_TRUSTED_PROXIES` | | unset → forwarded headers ignored; every caller is the proxy |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
@@ -572,9 +622,12 @@ per-account failure budgets above live in the database instead.
 
 A token still carries no revocation list, but it no longer outlives the identity it names:
 `ActorLivenessFilter` resolves the caller on every authenticated request and refuses a token whose
-person or Google User has been deleted (**FR-AU-05**, **FR-GO-12**). That costs one indexed read per
-request — the price of making logical deletion take effect immediately rather than whenever the
-token happens to expire.
+person or Google User has been deleted (**FR-AU-05**, **FR-GO-12**) or is under a restriction of
+processing (**NFR-24**). That costs one indexed read per request — the price of making logical
+deletion and restriction take effect immediately rather than whenever the token happens to expire.
+The four endpoints through which a subject exercises their own rights — data export, erasure request,
+restriction and lifting their own restriction — still admit a restricted or suspended (not yet
+anonymised) subject, and leave the answer to the use case.
 
 The full operational specification is the
 [Operations & Infrastructure Document](../requirements/operations-infrastructure-document/).

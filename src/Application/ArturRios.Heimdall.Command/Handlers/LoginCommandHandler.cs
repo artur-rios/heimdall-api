@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -41,10 +42,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class LoginCommandHandler(
     IValidator<LoginCommand> validator,
-    IAsyncReadOnlyRepository<Person> personReader,
-    IAsyncRepository<Person> personWriter,
-    IAsyncReadOnlyRepository<TwoFactorAuth> twoFactorReader,
-    IAsyncRepository<TwoFactorAuth> twoFactorWriter,
+    IAsyncReadOnlyRepository<Person, long> personReader,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    IAtomicWrites atomicWrites,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITwoFactorChallengeTokenIssuer challengeTokenIssuer,
     PersonAuthTokenService personAuthTokenService)
@@ -68,7 +68,7 @@ public class LoginCommandHandler(
         return (hash, salt);
     }
 
-    public async Task<DataOutput<LoginCommandOutput?>> HandleAsync(LoginCommand command)
+    public async Task<DataOutput<LoginCommandOutput?>> HandleAsync(LoginCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<LoginCommandOutput?>.New;
 
@@ -94,27 +94,33 @@ public class LoginCommandHandler(
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        // A locked-out account is refused before its password is even considered (FR-AU-09). The
-        // decoy keeps the cost of that refusal equal to a real check's, so a lockout cannot be
-        // detected by how quickly it answers.
-        if (person.LockedOutUntil is { } lockedUntil && lockedUntil > DateTime.UtcNow)
+        var now = DateTime.UtcNow;
+
+        // FR-AU-09: the attempt is charged before the password is considered, and an account that
+        // is locked out — or whose remaining attempts parallel requests have already taken — is
+        // refused without considering it at all. The decoy keeps the cost of that refusal equal to a
+        // real check's, so a lockout cannot be detected by how quickly it answers.
+        if (!await atomicWrites.TryReserveLoginAttemptAsync(person, MaxFailedLoginAttempts, now))
         {
             await VerifyAgainstDecoy(command.Password);
 
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        // UC-11 step 3 (AF-11b).
+        // UC-11 step 3 (AF-11b). The reserved attempt stands as a failure; at the tenth the account
+        // locks.
         if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
         {
-            await RecordFailedAttemptAsync(person);
+            await atomicWrites.LockOutIfExhaustedAsync(person, MaxFailedLoginAttempts, now.Add(LockoutDuration));
 
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        await ClearFailedAttemptsAsync(person);
+        // The password checked out: the threshold counts consecutive failures, so the count — this
+        // attempt's reservation included — starts again.
+        await atomicWrites.ClearLoginAttemptsAsync(person);
 
-        // AF-11h (NFR-24): processing is restricted, so authenticating would be processing it.
+        // NFR-24 (UC-44 step 4): processing is restricted, so authenticating would be processing it.
         // Answered with the same message as every other refusal here, so the endpoint cannot be
         // used to discover that an account is under dispute — and the subject who asked for the
         // restriction already knows why.
@@ -154,59 +160,21 @@ public class LoginCommandHandler(
             .WithMessage(AuthMessages.LoginSuccessful);
     }
 
-    /// <summary>
-    ///     Counts a wrong password and, at <see cref="MaxFailedLoginAttempts" /> consecutive misses,
-    ///     locks the account for <see cref="LockoutDuration" /> (FR-AU-09).
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         The per-IP limiter in <c>Startup</c> bounds how fast one source can guess; this bounds
-    ///         how many guesses an account will accept in total, which is the half a distributed
-    ///         attacker defeats by spreading requests across addresses.
-    ///     </para>
-    ///     <para>
-    ///         The lockout is a window rather than a latch that an administrator has to clear: a
-    ///         permanent lock would hand any anonymous caller a denial of service against any account
-    ///         whose address they know, since reaching the threshold needs nothing but wrong
-    ///         passwords. Fifteen minutes cuts a sustained guessing rate to a few hundred attempts a
-    ///         day while costing a caller who genuinely mistyped their password one coffee break.
-    ///     </para>
-    ///     <para>
-    ///         A failure to persist the counter is swallowed rather than surfaced. It is
-    ///         bookkeeping — the credentials were wrong either way, and UC-11 defines no flow in
-    ///         which a caller is told that the count of their failures could not be written.
-    ///     </para>
-    /// </remarks>
-    private async Task RecordFailedAttemptAsync(Person person)
-    {
-        person.FailedLoginAttempts++;
-
-        if (person.FailedLoginAttempts >= MaxFailedLoginAttempts)
-        {
-            person.LockedOutUntil = DateTime.UtcNow.Add(LockoutDuration);
-            person.FailedLoginAttempts = 0;
-        }
-
-        await personWriter.UpdateAsync(person);
-    }
-
-    /// <summary>
-    ///     Clears the failure counter once the password checks out, so the threshold counts
-    ///     consecutive failures rather than every failure the account has ever had. Nothing is written
-    ///     when there is nothing to clear, keeping an ordinary login read-only on this table.
-    /// </summary>
-    private async Task ClearFailedAttemptsAsync(Person person)
-    {
-        if (person is { FailedLoginAttempts: 0, LockedOutUntil: null })
-        {
-            return;
-        }
-
-        person.FailedLoginAttempts = 0;
-        person.LockedOutUntil = null;
-
-        await personWriter.UpdateAsync(person);
-    }
+    // FR-AU-09, how the count is kept.
+    //
+    // The per-IP limiter in Startup bounds how fast one source can guess; the count bounds how many
+    // guesses an account will accept in total, which is the half a distributed attacker defeats by
+    // spreading requests across addresses. The lockout is a window rather than a latch an
+    // administrator has to clear: a permanent lock would hand any anonymous caller a denial of
+    // service against any account whose address they know. Fifteen minutes cuts a sustained guessing
+    // rate to a few hundred attempts a day while costing a caller who mistyped one coffee break.
+    //
+    // Each attempt reserves itself in the count before the password is derived (IAtomicWrites), and
+    // a wrong password leaves the reservation standing. Counting after the derivation instead let a
+    // burst of parallel guesses all read the same count, all pass the "not locked" check, and then
+    // overwrite each other's increments — ten simultaneous wrong passwords were recorded as one, and
+    // the lock never came. Reserving first means no more than ten derivations can ever run between
+    // lockouts, however the requests are timed.
 
     /// <summary>
     ///     Runs one password verification against a hash that belongs to nobody, so that AF-11a costs
@@ -226,20 +194,20 @@ public class LoginCommandHandler(
     private async Task<DataOutput<LoginCommandOutput?>> IssueChallengeAsync(
         DataOutput<LoginCommandOutput?> output, Person person, TwoFactorAuth twoFactorAuth)
     {
-        // UC-46's reissue budget is per authentication attempt (FR-2F-13): this challenge starts
-        // with all of its reissues available, whatever the previous one spent. Written before the
-        // code goes out, so a send that fails cannot leave the budget overstating what was used.
-        if (twoFactorAuth.EmailCodeReissueCount != 0)
-        {
-            twoFactorAuth.EmailCodeReissueCount = 0;
+        // FR-2F-10: this challenge becomes the configuration's one outstanding challenge, replacing
+        // any earlier one, and UC-38 honours a challenge token only while it still names it — so a
+        // challenge is redeemable once, and never after a newer login.
+        //
+        // UC-46's reissue budget is per authentication attempt (FR-2F-13), and so is the guess
+        // budget of FR-2F-17: this challenge starts with all of both available, whatever the previous
+        // one spent. All are written before the code goes out, so a send that fails cannot leave the
+        // budget overstating what was used.
+        //
+        // Written as targeted columns rather than the whole row, so a login cannot write back a stale
+        // copy of what a parallel request has just recorded — an accepted TOTP step, for one.
+        var challengeId = Guid.NewGuid();
 
-            var reset = await twoFactorWriter.UpdateAsync(twoFactorAuth);
-
-            if (!reset.Success)
-            {
-                return output.WithErrors(reset.Errors);
-            }
-        }
+        await atomicWrites.StartChallengeAsync(twoFactorAuth, challengeId);
 
         if (twoFactorAuth.EmailEnabled)
         {
@@ -251,7 +219,7 @@ public class LoginCommandHandler(
             }
         }
 
-        var challenge = await challengeTokenIssuer.IssueAsync(person.PublicId, (int)person.RoleId);
+        var challenge = await challengeTokenIssuer.IssueAsync(person.PublicId, (int)person.RoleId, challengeId);
 
         var methods = new List<string>();
 
@@ -287,7 +255,14 @@ public class LoginCommandHandler(
             .Include(person => person.ScopeMembership)
             .ThenInclude(membership => membership!.Scope)
             .Include(person => person.ScopeOwnerships)
-            .ThenInclude(ownership => ownership.Scope);
+            .ThenInclude(ownership => ownership.Scope)
+            // Live persons first. Email uniqueness (FR-PE-09) holds among live persons only, so a
+            // logically deleted person awaiting anonymisation can share an address with the live
+            // person who replaced them. Without an order the database chose between the two, and
+            // choosing the deleted one refused the live person for as long as the other remained.
+            // A deleted person is still found when nobody live holds the address, which is what
+            // lets the deleted-person check reject them.
+            .OrderBy(person => person.IsDeleted);
 
         if (command.ScopeId is null)
         {

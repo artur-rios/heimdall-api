@@ -14,10 +14,10 @@ public class DeleteScopeCommandHandlerTests
 {
     // One fake per aggregate; each is passed as BOTH the reader and the writer argument.
     private sealed record Fakes(
-        AsyncFakeRepository<Scope> Scopes,
-        AsyncFakeRepository<Person> Persons,
-        AsyncFakeRepository<GoogleUser> GoogleUsers,
-        AsyncFakeRepository<Application> Applications)
+        AsyncFakeRepository<Scope, long> Scopes,
+        AsyncFakeRepository<Person, long> Persons,
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers,
+        AsyncFakeRepository<Application, long> Applications)
     {
         public DeleteScopeCommandHandler Handler() => new(
             Scopes, Scopes, Persons, Persons, GoogleUsers, GoogleUsers, Applications, Applications);
@@ -27,10 +27,10 @@ public class DeleteScopeCommandHandlerTests
     {
         await Task.CompletedTask;
         return new Fakes(
-            new AsyncFakeRepository<Scope>(),
-            new AsyncFakeRepository<Person>(),
-            new AsyncFakeRepository<GoogleUser>(),
-            new AsyncFakeRepository<Application>());
+            new AsyncFakeRepository<Scope, long>(),
+            new AsyncFakeRepository<Person, long>(),
+            new AsyncFakeRepository<GoogleUser, long>(),
+            new AsyncFakeRepository<Application, long>());
     }
 
     private static async Task<Scope> SeedScopeAsync(Fakes fakes, bool isDeleted = false)
