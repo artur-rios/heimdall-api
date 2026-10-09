@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Every dependency is on its latest stable release again: `Testcontainers.PostgreSql` 4.15.0 → 4.16.0 and
+  `xunit.runner.visualstudio` 4.0.0 → 4.0.1 (both test-only), and the documentation site's Docsy theme 0.16.0 →
+  0.18.0, which now needs Dart Sass (1.105.1 in the docs workflow) to build its stylesheets and takes the Mermaid
+  settings in `docs/hugo.toml` under `params.docsy.plugins.mermaid`. The theme submodule now points at Docsy's new
+  home, `github.com/docsy/docsy`. The HTTP API and the OpenAPI document are unchanged.
+- The functional tests run against PostgreSQL 18 (`postgres:18-alpine`, was `postgres:16-alpine`), the major
+  version the deployed environments run.
+
 ## [1.1.1] - 2026-10-09
 
 ### Fixed

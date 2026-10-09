@@ -102,13 +102,13 @@ These are the technologies mandated for tests. **How** they are applied to each 
 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
-| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `4.0.0` | The test framework for every test project. |
+| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `4.0.1` | The test framework for every test project. |
 | Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.10.1` | Test host/runner integration for `dotnet test` and IDEs. |
 | Coverage | `coverlet.collector` | `10.1.0` | Collects code coverage during test runs. |
 | Test helpers & doubles | **`ArturRios.Util.Test`** | `4.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
 | Mocking | **Moq** | `4.21.0` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
 | Test data generation | **Bogus** | `35.6.5` | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
-| Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.15.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
+| Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.16.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
 
 > **Note:** Moq and Bogus were pinned to the versions above when the first tests needing them were written (UC-03's handler unit tests). Keep every test project on the same versions.
 
@@ -141,9 +141,9 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Metrics | OpenTelemetry.Instrumentation.Http | `1.19.0` |
 | Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.19.1-beta.1` |
 | Testing | xunit | `2.9.3` |
-| Testing | xunit.runner.visualstudio | `4.0.0` |
+| Testing | xunit.runner.visualstudio | `4.0.1` |
 | Testing | Microsoft.NET.Test.Sdk | `18.10.1` |
 | Testing | coverlet.collector | `10.1.0` |
-| Testing | Testcontainers.PostgreSql | `4.15.0` |
+| Testing | Testcontainers.PostgreSql | `4.16.0` |
 | Testing | Moq | `4.21.0` |
 | Testing | Bogus | `35.6.5` |

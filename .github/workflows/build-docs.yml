@@ -74,11 +74,30 @@ jobs:
         with:
           node-version: '24'
 
-      # Docsy builds its stylesheets with PostCSS/Autoprefixer, so its npm dependencies must be
-      # present before Hugo runs. The submodule root is an npm workspace covering the theme itself.
+      # Docsy builds its stylesheets from the Bootstrap and Font Awesome sources in its npm
+      # dependencies, so they must be present before Hugo runs. install:theme-deps (Docsy 0.17+) is
+      # a lock-exact `npm ci` of the theme's own runtime dependencies, without the submodule root's
+      # workspace of tooling for Docsy's own site.
       - name: Install theme dependencies
-        run: npm install
+        run: npm run install:theme-deps
         working-directory: docs/themes/docsy
+
+      # Docsy 0.17+ compiles its SCSS with Dart Sass, which Hugo looks up as the `sass` CLI on PATH;
+      # Hugo bundles none, and the theme no longer builds with Hugo's embedded LibSass. The
+      # standalone release is used because this site has no package.json for sass-embedded to live
+      # in. The checksum is the one GitHub publishes for the release asset.
+      - name: Install Dart Sass
+        env:
+          DART_SASS_VERSION: 1.105.1
+          DART_SASS_SHA256: 9046fdd4a31a524a0020298c55d9e155d4c22363ef268e8992574335a72c6a6f
+        run: |
+          archive="dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz"
+          curl -sSfLO "https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/${archive}"
+          echo "${DART_SASS_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p "${HOME}/.local"
+          tar -xzf "${archive}" -C "${HOME}/.local"
+          rm "${archive}"
+          echo "${HOME}/.local/dart-sass" >> "${GITHUB_PATH}"
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v3

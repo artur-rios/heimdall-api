@@ -76,7 +76,9 @@ public sealed class PostgresFixture : IAsyncLifetime
         [Roles.User] = new("00000000-0000-0000-0000-00000000ad03")
     };
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine")
+    // The major version the deployed environments run (PostgreSQL 18 on the VPS and the local
+    // Windows install); the tag floats to its latest minor release.
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18-alpine")
         .Build();
 
     /// <summary>The connection string of the running container's database.</summary>
