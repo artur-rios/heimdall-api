@@ -145,7 +145,7 @@ graph LR
 | **Name** | Create Scope |
 | **Actors** | System Admin |
 | **Description** | Allows a System Admin to create a new scope to onboard a client system, designating at least one Scope Admin as its initial owner |
-| **Preconditions** | Actor is authenticated and has the `SystemAdmin` role; each specified initial owner is an existing, non-logically-deleted person with the `ScopeAdmin` role |
+| **Preconditions** | Actor is authenticated and has the `SystemAdmin` role; each specified initial owner is an existing, non-logically-deleted person with the `ScopeAdmin` or `SystemAdmin` role |
 | **Postconditions** | A new scope record exists in the system, with one or more `SCOPE_OWNER` rows linking it to its initial owners |
 
 **Main Flow:**
@@ -160,7 +160,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>DB: Check scope name uniqueness
     DB-->>API: Name is unique
-    API->>DB: Verify each ownerId is a non-logically-deleted ScopeAdmin
+    API->>DB: Verify each ownerId is a non-logically-deleted ScopeAdmin or SystemAdmin
     DB-->>API: Owners found
     API->>DB: Insert scope record
     API->>DB: Insert SCOPE_OWNER row for each owner
@@ -171,7 +171,7 @@ sequenceDiagram
 1. System Admin sends a request with scope name, optional description, and at least one owner ID.
 2. The system validates the input fields.
 3. The system verifies the scope name is unique.
-4. The system verifies each referenced owner is an existing, non-logically-deleted person with the `ScopeAdmin` role.
+4. The system verifies each referenced owner is an existing, non-logically-deleted person with the `ScopeAdmin` or `SystemAdmin` role (FR-SC-08).
 5. The system creates the scope record with `IsDeleted = false` and a `SCOPE_OWNER` row for each initial owner.
 6. The system returns the created scope.
 
@@ -182,7 +182,7 @@ sequenceDiagram
 | AF-01a | Scope name already exists | Return `409 Conflict` |
 | AF-01b | Invalid input data, or no owner specified | Return `400 Bad Request` with validation errors |
 | AF-01c | Actor is not System Admin | Return `403 Forbidden` |
-| AF-01d | An owner ID does not reference an existing, non-logically-deleted `ScopeAdmin` | Return `400 Bad Request` |
+| AF-01d | An owner ID does not reference an existing, non-logically-deleted `ScopeAdmin` or `SystemAdmin` | Return `400 Bad Request` |
 
 ---
 
@@ -457,7 +457,7 @@ sequenceDiagram
 | **ID** | UC-07 |
 | **Name** | View Person |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve a person's details or list persons. There are four distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the `ScopeAdmin` owners of a scope, via `GET /api/scopes/{scopeId}/owners`; or (d) the `ScopeAdmin` persons of the system, via `GET /api/persons/scope-admins` |
+| **Description** | Retrieve a person's details or list persons. There are four distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the owners of a scope, via `GET /api/scopes/{scopeId}/owners`; or (d) the persons who may own a scope, via `GET /api/persons/scope-admins` |
 | **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted; for read (d), the scope named for exclusion — if any — exists and is not logically deleted |
 | **Postconditions** | Person information is returned, never including `PasswordHash` or `Salt` |
 
@@ -483,13 +483,13 @@ sequenceDiagram
 
 1. A System Admin or a Scope Admin requests the owners of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
 2. The system applies the same scope and authorization checks as read (b).
-3. The system returns the scope's `ScopeAdmin` owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
+3. The system returns the scope's owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
 
 **Main Flow (read d — list the system's Scope Admins):**
 
-1. A System Admin or a Scope Admin requests the system's `ScopeAdmin` persons, optionally filtering by name or email, optionally naming a scope whose current owners are to be excluded, and paging the result (FR-PE-12).
+1. A System Admin or a Scope Admin requests the persons who may own a scope, optionally filtering by name or email, optionally naming a scope whose current owners are to be excluded, and paging the result (FR-PE-12).
 2. If a scope was named for exclusion, the system verifies it exists, is not logically deleted, and that the actor may manage it: a System Admin always may; a Scope Admin must own it.
-3. The system returns every `ScopeAdmin` person that is not logically deleted, less the named scope's current owners if one was named, projected to the person's identifier, name, and email only.
+3. The system returns every `ScopeAdmin` person that is not logically deleted — and, for a System Admin caller, every such `SystemAdmin` person too — less the named scope's current owners if one was named, projected to the person's identifier, name, and email only.
 
 **Alternative Flows:**
 
@@ -593,7 +593,7 @@ sequenceDiagram
 | AF-09b | Already logically deleted | Return `200 OK` (idempotent) |
 | AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
 | AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
-| AF-09e | Person is a `ScopeAdmin` and is the sole owner of one or more scopes (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-09e | Person is the sole owner of one or more scopes, whatever their role (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
 > person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
@@ -618,7 +618,7 @@ sequenceDiagram
 | **Name** | Hard Delete Person |
 | **Actors** | System Admin |
 | **Description** | Permanently remove a person record from the database |
-| **Preconditions** | Actor is authenticated with `SystemAdmin` role; person exists; the actor is not the person being deleted; if the person is a `ScopeAdmin`, removing them must not leave any owned scope without an owner |
+| **Preconditions** | Actor is authenticated with `SystemAdmin` role; person exists; the actor is not the person being deleted; if the person owns any scope, removing them must not leave it without an owner |
 | **Postconditions** | Person record, all associated tokens, their `SCOPE_USER`/`SCOPE_OWNER` rows, and any applications they own are permanently removed |
 
 **Main Flow:**
@@ -626,10 +626,10 @@ sequenceDiagram
 1. System Admin sends a hard delete request to `DELETE /api/persons/{id}/hard`.
 2. The system loads the person **in any deletion state** — a logically deleted person is exactly what a
    cleanup pass starts from, so soft deletion must not block a hard one.
-3. If the person is a `ScopeAdmin`, the system verifies that every scope they own has at least one other owner.
+3. If the person owns any scope, the system verifies that every scope they own has at least one other owner.
 4. The system permanently deletes all tokens (password reset, email verification) associated with the person.
 5. The system permanently deletes any applications owned by the person.
-6. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if a `ScopeAdmin`).
+6. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
 7. The system permanently deletes the person record.
 8. The system returns success, reporting how many applications and tokens went with the person.
 
@@ -912,8 +912,8 @@ sequenceDiagram
 | **Name** | Create Application |
 | **Actors** | System Admin, Scope Admin |
 | **Description** | Register a new application (a non-person identity representing another system) within a scope |
-| **Preconditions** | Actor is authenticated; target scope exists and is not logically deleted; the owner is an existing, non-logically-deleted `ScopeAdmin` who owns the scope (via `SCOPE_OWNER`) |
-| **Postconditions** | A new application record exists, associated with the scope and owned by the specified `ScopeAdmin` |
+| **Preconditions** | Actor is authenticated; target scope exists and is not logically deleted; the owner is an existing, non-logically-deleted `ScopeAdmin` or `SystemAdmin` who owns the scope (via `SCOPE_OWNER`) |
+| **Postconditions** | A new application record exists, associated with the scope and owned by the specified owner |
 
 **Main Flow:**
 
@@ -927,7 +927,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>DB: Verify scope exists and is not logically deleted
     DB-->>API: Scope found
-    API->>DB: Verify owner is a ScopeAdmin with a SCOPE_OWNER row for the scope, and not logically deleted
+    API->>DB: Verify owner is a ScopeAdmin or SystemAdmin with a SCOPE_OWNER row for the scope, and not logically deleted
     DB-->>API: Owner found
     API->>DB: Insert application record
     DB-->>API: Application created
@@ -937,7 +937,7 @@ sequenceDiagram
 1. Caller sends a request with application data (name, ownerId) targeting a scope.
 2. The system validates all fields.
 3. The system verifies the target scope exists and is not logically deleted.
-4. The system verifies the owner is an existing, non-logically-deleted `ScopeAdmin` who owns the scope.
+4. The system verifies the owner is an existing, non-logically-deleted `ScopeAdmin` or `SystemAdmin` who owns the scope.
 5. The system creates the application record with `IsDeleted = false`.
 6. The system returns the created application.
 
@@ -946,7 +946,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-16a | Scope not found or logically deleted | Return `404 Not Found` |
-| AF-16b | Owner not found, logically deleted, not a `ScopeAdmin`, or not an owner of the scope (no `SCOPE_OWNER` row) | Return `400 Bad Request` |
+| AF-16b | Owner not found, logically deleted, neither a `ScopeAdmin` nor a `SystemAdmin`, or not an owner of the scope (no `SCOPE_OWNER` row) | Return `400 Bad Request` |
 | AF-16c | Scope Admin attempts to set an owner other than themself | Return `403 Forbidden` |
 | AF-16d | Invalid input | Return `400 Bad Request` |
 | AF-16e | Scope Admin does not own the target scope | Return `403 Forbidden` |
@@ -1000,7 +1000,7 @@ sequenceDiagram
 3. The system checks authorization:
    - System Admin: can update any application.
    - Scope Admin: can update only the applications they own.
-4. If the owner changes, the system verifies the new owner is an existing, non-logically-deleted `ScopeAdmin` who owns the application's scope.
+4. If the owner changes, the system verifies the new owner is an existing, non-logically-deleted `ScopeAdmin` or `SystemAdmin` who owns the application's scope.
 5. The system applies the updates and sets `UpdatedAt`.
 6. The system returns the updated application.
 
@@ -1009,7 +1009,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-18a | Application not found or logically deleted | Return `404 Not Found` |
-| AF-18b | New owner not found, logically deleted, not a `ScopeAdmin`, or not an owner of the application's scope | Return `400 Bad Request` |
+| AF-18b | New owner not found, logically deleted, neither a `ScopeAdmin` nor a `SystemAdmin`, or not an owner of the application's scope | Return `400 Bad Request` |
 | AF-18c | Actor not authorized | Return `403 Forbidden` |
 
 ---
@@ -1074,8 +1074,8 @@ sequenceDiagram
 | **ID** | UC-21 |
 | **Name** | Add Scope Owner |
 | **Actors** | System Admin, Scope Admin (existing owner) |
-| **Description** | Add an existing `ScopeAdmin` person as an additional owner of a scope. To make a brand-new person a co-owner, see UC-06 (path c); to make an existing `User` of the scope a co-owner, see UC-23 (Promote User to Scope Owner) |
-| **Preconditions** | Actor is authenticated with `SystemAdmin` role, or is an existing owner of the target scope; the target person exists, is not logically deleted, and has the `ScopeAdmin` role |
+| **Description** | Add an existing `ScopeAdmin` or `SystemAdmin` person as an additional owner of a scope. To make a brand-new person a co-owner, see UC-06 (path c); to make an existing `User` of the scope a co-owner, see UC-23 (Promote User to Scope Owner) |
+| **Preconditions** | Actor is authenticated with `SystemAdmin` role, or is an existing owner of the target scope; the target person exists, is not logically deleted, and has the `ScopeAdmin` or `SystemAdmin` role |
 | **Postconditions** | A new `SCOPE_OWNER` row links the scope to the person |
 
 **Main Flow:**
@@ -1089,7 +1089,7 @@ sequenceDiagram
     Admin->>API: POST /api/scopes/{id}/owners/{personId}
     API->>DB: Verify scope exists and is not logically deleted
     DB-->>API: Scope found
-    API->>DB: Verify person exists, is not logically deleted, and has the ScopeAdmin role
+    API->>DB: Verify person exists, is not logically deleted, and has the ScopeAdmin or SystemAdmin role
     DB-->>API: Person found
     API->>DB: Insert SCOPE_OWNER row { ScopeId, PersonId }
     DB-->>API: Owner added
@@ -1098,7 +1098,7 @@ sequenceDiagram
 
 1. Actor sends a request to add a person as an owner of a scope.
 2. The system verifies the scope exists and is not logically deleted.
-3. The system verifies the person exists, is not logically deleted, and has the `ScopeAdmin` role.
+3. The system verifies the person exists, is not logically deleted, and has the `ScopeAdmin` or `SystemAdmin` role.
 4. The system inserts a `SCOPE_OWNER` row linking the scope to the person (no-op if it already exists).
 5. The system returns success.
 
@@ -1107,7 +1107,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-21a | Scope not found or logically deleted | Return `404 Not Found` |
-| AF-21b | Person not found, logically deleted, or not a `ScopeAdmin` | Return `400 Bad Request` |
+| AF-21b | Person not found, logically deleted, or neither a `ScopeAdmin` nor a `SystemAdmin` | Return `400 Bad Request` |
 | AF-21c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-21d | Person is already an owner of the scope | Return `200 OK` (idempotent) |
 

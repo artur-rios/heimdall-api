@@ -3,9 +3,9 @@ using ArturRios.Mediator.Command;
 namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
-///     Intent to create a new scope (UC-01), designating one or more existing
-///     <c>ScopeAdmin</c> persons as its initial owners. Owners are referenced by their
-///     <c>PublicId</c> (GUID), never by internal Id.
+///     Intent to create a new scope (UC-01), designating one or more existing administrators —
+///     <c>ScopeAdmin</c> or <c>SystemAdmin</c> persons — as its initial owners. Owners are
+///     referenced by their <c>PublicId</c> (GUID), never by internal Id.
 /// </summary>
 public class CreateScopeCommand : BaseCommand
 {
@@ -17,7 +17,8 @@ public class CreateScopeCommand : BaseCommand
 
     /// <summary>
     ///     Public identifiers of the persons to designate as initial owners. Each must reference an
-    ///     existing, non-logically-deleted person with the <c>ScopeAdmin</c> role. At least one is required.
+    ///     existing, non-logically-deleted person with the <c>ScopeAdmin</c> or <c>SystemAdmin</c> role.
+    ///     At least one is required.
     /// </summary>
     public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
 }

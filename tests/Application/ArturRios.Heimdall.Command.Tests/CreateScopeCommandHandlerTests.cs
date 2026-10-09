@@ -62,6 +62,27 @@ public class CreateScopeCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenSystemAdminOwner_WhenHandlingCreateScope_ThenScopeIsCreatedWithThatOwner()
+    {
+        // Given a live SystemAdmin named as the initial owner — the System Admin creating the scope
+        // may own it themselves (FR-SC-08)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var ownerId = Guid.NewGuid();
+        await persons.CreateAsync(new Person { PublicId = ownerId, RoleId = (long)Roles.SystemAdmin });
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);
+        var command = new CreateScopeCommand { Name = "Acme", OwnerIds = [ownerId] };
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([ownerId], output.Data!.OwnerIds);
+        Assert.Single((await scopes.GetAllAsync()).Data!.Single().Owners);
+    }
+
+    [UnitFact]
     public async Task GivenNameAlreadyExists_WhenHandlingCreateScope_ThenReturnsNameAlreadyExistsError()
     {
         // Given a store that already contains a scope named "Acme"
@@ -101,9 +122,9 @@ public class CreateScopeCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenOwnerIsNotScopeAdmin_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
+    public async Task GivenOwnerIsUser_WhenHandlingCreateScope_ThenReturnsOwnerNotValidError()
     {
-        // Given a person with the User role, not a ScopeAdmin (AF-01d)
+        // Given a person with the User role, who may not own a scope (AF-01d)
         var persons = new AsyncFakeRepository<Person, long>();
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person { PublicId = ownerId, RoleId = (long)Roles.User });

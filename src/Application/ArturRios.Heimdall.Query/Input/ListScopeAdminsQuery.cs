@@ -5,7 +5,8 @@ using ArturRios.Mediator.Query;
 namespace ArturRios.Heimdall.Query.Input;
 
 /// <summary>
-///     Request to list the system's <c>ScopeAdmin</c> persons, with pagination and optional filtering
+///     Request to list the administrators who may own a scope — every <c>ScopeAdmin</c>, and for a
+///     System Admin caller every <c>SystemAdmin</c> too — with pagination and optional filtering
 ///     (UC-07 read d, FR-PE-12). This is what backs an owner picker: UI-11 selects a scope's first
 ///     owners before the scope exists, and UI-14 adds an existing Scope Admin as a co-owner.
 ///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the controller from the

@@ -101,15 +101,15 @@ graph LR
 
 | ID | Requirement | Priority |
 | ---- | ------------ | ---------- |
-| FR-SC-01 | The system shall allow System Admins to **create** a new scope with a unique name and at least one initial owner (a person with the `ScopeAdmin` role) | High |
+| FR-SC-01 | The system shall allow System Admins to **create** a new scope with a unique name and at least one initial owner (a person with the `ScopeAdmin` or `SystemAdmin` role — the System Admin creating it may own it) | High |
 | FR-SC-02 | The system shall allow authorized users to **read** scope details by ID: a System Admin any scope, a Scope Admin the scopes they own, a User the scope they belong to | High |
 | FR-SC-03 | The system shall allow System Admins to **list** all scopes, and Scope Admins to list the scopes they own, with pagination and an optional case-insensitive name filter. A Scope Admin's listing is filtered by ownership as recorded in the database — not by the token's owned-scope claim — before pagination, so its total counts their own scopes and nothing about other tenants. The collection endpoint is not exposed to Users, who reach their one scope through FR-SC-02 | High |
 | FR-SC-04 | The system shall allow System Admins to **update** scope information | High |
 | FR-SC-05 | The system shall allow System Admins to **logically delete** a scope by setting `IsDeleted = true` | High |
 | FR-SC-06 | The system shall allow System Admins to **hard delete** a scope, permanently removing it and its associated users and applications | High |
 | FR-SC-07 | Logically deleted scopes shall not appear in default query results unless explicitly requested | Medium |
-| FR-SC-08 | A scope shall be able to have **one or more owners**, each of which must be a person with the `ScopeAdmin` role | High |
-| FR-SC-09 | The system shall allow System Admins and existing owners of a scope to **add** an existing Scope Admin as an additional owner of that scope | High |
+| FR-SC-08 | A scope shall be able to have **one or more owners**, each of which must be a person with the `ScopeAdmin` or `SystemAdmin` role. A System Admin governs every scope whether or not they own it; owning one makes them a named owner of it, which FR-AP-03 and NFR-12 then count | High |
+| FR-SC-09 | The system shall allow System Admins and existing owners of a scope to **add** an existing Scope Admin or System Admin as an additional owner of that scope | High |
 | FR-SC-10 | The system shall allow System Admins and existing owners of a scope to **remove** an owner from a scope, provided at least one owner remains | High |
 | FR-SC-11 | A scope shall be able to contain **one or more Persons** with the `User` role | High |
 | FR-SC-12 | The system shall allow System Admins and existing owners of a scope to add a new co-owner by **creating a brand-new `ScopeAdmin` person**, directly made an owner of that scope | High |
@@ -130,7 +130,7 @@ graph LR
 | FR-PE-09 | A `User` person's email must be unique among the `User`s of their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique among all `ScopeAdmin` and `SystemAdmin` persons system-wide. The two namespaces are independent: an admin address and a scoped `User` address never collide with each other, because login resolves them by different lookups (FR-AU-01/02). Comparison is case-insensitive | High |
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
-| FR-PE-12 | The system shall allow listing the `ScopeAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
+| FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
 
 ### 3.3 Role Assignment
 
@@ -183,7 +183,7 @@ graph LR
 | ---- | ------------ | ---------- |
 | FR-AP-01 | The system shall allow creation of an application with: `Id`, `Name`, `ScopeId`, `OwnerId`, `IsDeleted` | High |
 | FR-AP-02 | Every application must be associated with exactly **one** scope at creation time | High |
-| FR-AP-03 | Every application must have exactly **one** owner, which must be an existing, non-logically-deleted `ScopeAdmin` person who owns the application's scope. A `User` may never own an application | High |
+| FR-AP-03 | Every application must have exactly **one** owner, which must be an existing, non-logically-deleted `ScopeAdmin` or `SystemAdmin` person who owns the application's scope. A `User` may never own an application | High |
 | FR-AP-04 | The system shall allow reading an application's details by ID | High |
 | FR-AP-05 | The system shall allow listing applications within a scope (with pagination and filtering) | High |
 | FR-AP-06 | The system shall allow updating an application's name and owner | High |
@@ -450,7 +450,7 @@ A person has no `ScopeId` column. Its relationship to scopes is derived from its
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | ScopeId | BigInt | Foreign key to Scope.Id (internal), part of composite primary key |
-| PersonId | BigInt | Foreign key to Person.Id (internal), part of composite primary key; the referenced person must have the `ScopeAdmin` role |
+| PersonId | BigInt | Foreign key to Person.Id (internal), part of composite primary key; the referenced person must have the `ScopeAdmin` or `SystemAdmin` role (FR-SC-08) |
 
 A scope may have many rows (one or more owners); a person may have many rows (a Scope Admin may own several scopes). Composite key `(ScopeId, PersonId)` must be unique. This join table has no `PublicId` — it is not an independently addressable API resource.
 
@@ -1003,7 +1003,7 @@ Notes on cascading behavior:
 - Hard deleting a scope permanently removes its `SCOPE_OWNER` and `SCOPE_USER` rows, its Users, its Google Users, its applications, and its scope permissions (the latter via the `scope_permission → scope` foreign key's `ON DELETE CASCADE`). It does not remove Scope Admin person records themselves, since they may still own other scopes. NFR-12 does **not** guard this direction: it protects a scope from losing its owners, and a scope that no longer exists has nothing to protect. A `ScopeAdmin` whose only scope was hard-deleted is therefore left owning none — see the note below.
 - Hard deleting a `User` person removes their `SCOPE_USER` row. A `User` cannot own an application (FR-AP-03), so there is nothing further to cascade.
 - Hard deleting a `ScopeAdmin` person removes all of their `SCOPE_OWNER` rows and any applications they own; per NFR-12, this is rejected if it would leave any owned scope with zero owners.
-- Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `ScopeAdmin` who owns the scope), so no further cascade is needed.
+- Hard deleting a Google User simply removes its record. A Google User cannot own an application (FR-AP-03 restricts application ownership to a `ScopeAdmin` or `SystemAdmin` who owns the scope), so no further cascade is needed.
 - Hard deleting a scope permission simply removes its record. A scope permission is a leaf in the data model — no entity carries a foreign key to it — so nothing further cascades (FR-SP-08).
 - Logically deleting a scope permission flips only its own `IsDeleted` flag (FR-SP-07); nothing cascades, for the same leaf reason.
 - Hard deleting a person permanently removes their `TWO_FACTOR_AUTH` row and its `TWO_FACTOR_RECOVERY_CODE` rows, via the `two_factor_recovery_code → two_factor_auth → person` foreign keys' `ON DELETE CASCADE`. Logical deletion of a person does not touch two-factor state — a restored person keeps whatever 2FA configuration they had.
