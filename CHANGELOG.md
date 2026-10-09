@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-09
+
 ### Added
 
 - `HEIMDALL_TRUSTED_PROXIES` lists the reverse proxies (addresses and CIDR networks) whose `X-Forwarded-For` and
@@ -126,5 +128,6 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/artur-rios/heimdall-api/releases/tag/v1.0.0
