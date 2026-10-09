@@ -146,14 +146,16 @@ publishes the committed file and nothing else regenerates it.
 ## Documentation site
 
 The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme from
-`docs/`. To preview it locally — Hugo Extended and Node.js 24+ required:
+`docs/`. To preview it locally — Hugo Extended 0.160.1+, Node.js 24+, and
+[Dart Sass](https://sass-lang.com/install/) 1.95.0+ (the `sass` CLI on `PATH`, which Docsy 0.17+ compiles its
+stylesheets with) required:
 
 ```bash
 git submodule update --init --recursive
 ```
 
 ```bash
-npm install --prefix docs/themes/docsy
+npm run install:theme-deps --prefix docs/themes/docsy
 ```
 
 ```bash
