@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The health check moved to `GET /api/healthcheck` and `GET /api/healthcheck/detailed`. At the root it was
+  unreachable from the web UI's host, which routes only `/api/` to the API, so heimdall-ui's health screen showed
+  errors in every deployed environment. The root `/healthcheck` addresses still answer, for the container health
+  check and yggdrasil's status page, but are no longer in the OpenAPI document.
+
 ## [1.1.0] - 2026-10-09
 
 ### Added

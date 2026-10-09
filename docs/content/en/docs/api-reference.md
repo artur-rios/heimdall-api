@@ -141,12 +141,16 @@ grants. The listing admits none of them.
 Both deletions take the scope's `PublicId` in the path and refuse a Google User reached through the
 wrong scope.
 
-## Health check — `/healthcheck`
+## Health check — `/api/healthcheck`
 
 | Method & path | Who | Use case |
 | --- | --- | --- |
-| `GET /healthcheck` | Anonymous | UC-30 — liveness; the process is up (no database read) |
-| `GET /healthcheck/detailed` | System Admin | UC-30 — per-dependency status |
+| `GET /api/healthcheck` | Anonymous | UC-30 — liveness; the process is up (no database read) |
+| `GET /api/healthcheck/detailed` | System Admin | UC-30 — per-dependency status |
+
+The API also answers both at the root, `/healthcheck` and `/healthcheck/detailed`, for the container
+health check and yggdrasil's status page, which call it on its own port. Behind Traefik, only the
+`/api/` addresses reach it from the web UI's host.
 
 ## Response shape
 

@@ -16,8 +16,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class HealthCheckTests() : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string HealthCheckRoute = "/HealthCheck";
-    private const string DetailedHealthCheckRoute = "/HealthCheck/detailed";
+    private const string HealthCheckRoute = "/api/healthcheck";
+    private const string DetailedHealthCheckRoute = "/api/healthcheck/detailed";
+
+    // The root addresses the container probe and yggdrasil's status catalog call. They stay outside
+    // the published contract, so only these tests hold them in place.
+    private const string RootHealthCheckRoute = "/healthcheck";
+    private const string RootDetailedHealthCheckRoute = "/healthcheck/detailed";
 
     // UC-30 liveness main flow (FR-HC-01) — public, no authentication.
     [FunctionalFact]
@@ -75,6 +80,50 @@ public class HealthCheckTests() : WebApiTest<Program>(EnvironmentType.Local)
         var output = await Gateway.GetAsync<DataOutput<HealthCheckOutput>>(DetailedHealthCheckRoute);
 
         // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, output.StatusCode);
+    }
+
+    // The probes reach the API on its own port, not through Traefik, so they keep the root address.
+    [FunctionalFact]
+    public async Task GivenApiWorking_WhenRootHealthCheckCalled_ThenEndpointReturnsOk()
+    {
+        var output = await Gateway.GetAsync<DataOutput<string>>(RootHealthCheckRoute);
+
+        Assert.Equal(HttpStatusCode.OK, output.StatusCode);
+        Assert.Equal("Hello world!", output.Body?.Data);
+    }
+
+    // Case-insensitive, as routing is: the address has been documented both as /HealthCheck and as
+    // /healthcheck.
+    [FunctionalFact]
+    public async Task GivenApiWorking_WhenRootHealthCheckCalledInPascalCase_ThenEndpointReturnsOk()
+    {
+        var output = await Gateway.GetAsync<DataOutput<string>>("/HealthCheck");
+
+        Assert.Equal(HttpStatusCode.OK, output.StatusCode);
+        Assert.Equal("Hello world!", output.Body?.Data);
+    }
+
+    [FunctionalFact]
+    public async Task GivenSystemAdmin_WhenRootDetailedHealthCheckCalled_ThenReturnsHealthy()
+    {
+        // Given
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var output = await Gateway.GetAsync<DataOutput<HealthCheckOutput>>(RootDetailedHealthCheckRoute);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, output.StatusCode);
+        Assert.Equal(HealthStatuses.Healthy, output.Body?.Data?.Status);
+    }
+
+    // The alias must not become a way around authorization.
+    [FunctionalFact]
+    public async Task GivenNoToken_WhenRootDetailedHealthCheckCalled_ThenUnauthorized()
+    {
+        var output = await Gateway.GetAsync<DataOutput<HealthCheckOutput>>(RootDetailedHealthCheckRoute);
+
         Assert.Equal(HttpStatusCode.Unauthorized, output.StatusCode);
     }
 }

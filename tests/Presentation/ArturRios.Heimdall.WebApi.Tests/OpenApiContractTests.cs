@@ -62,6 +62,27 @@ public class OpenApiContractTests
         Assert.True(violations.Count == 0, Report(violations));
     }
 
+    // yggdrasil hands the web UI's host to the API only for paths under /api/ (its
+    // heimdall-api.proxy.yml); anything else on that host is served by heimdall-ui's nginx, which
+    // answers every unknown path with index.html. A route outside /api/ therefore works locally, where
+    // the UI calls the API directly, and fails in every deployed environment — which is how the health
+    // screen broke in production on 2026-10-09.
+    [UnitFact]
+    public void GivenPublishedDocument_WhenPathsInspected_ThenEveryPathIsUnderApi()
+    {
+        using var document = LoadDocument();
+
+        var outside = document.RootElement.GetProperty("paths").EnumerateObject()
+            .Select(path => path.Name)
+            .Where(path => !path.StartsWith("/api/", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(outside.Count == 0,
+            $"{outside.Count} published path(s) are outside /api/ and unreachable from the web UI:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, outside));
+    }
+
     private static bool IsServerPopulated(string name) =>
         ServerPopulated.Contains(name, StringComparer.OrdinalIgnoreCase);
 
