@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-09
+
 ### Changed
 
 - A System Admin may own a scope (FR-SC-08). `POST /api/scopes` and `POST /api/scopes/{scopeId}/owners/{personId}`
@@ -155,7 +157,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/artur-rios/heimdall-api/releases/tag/v1.0.0
