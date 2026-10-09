@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The tests run on xUnit v3: `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2 and `ArturRios.Util.Test` 4.0.0 → 5.0.0,
+  the release built on xUnit v3. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its filters and the
+  `.trx` logger work as before. Test-only; the HTTP API and the OpenAPI document are unchanged.
+
 ## [1.2.0] - 2026-10-09
 
 ### Changed
