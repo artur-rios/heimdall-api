@@ -94,11 +94,12 @@ public static class PersonMessages
     public const string AlreadyScopeOwner = "Person is already an owner of this scope.";
 
     /// <summary>
-    ///     AF-21b: the person named as the new owner does not exist, is logically deleted, or does
-    ///     not hold the <c>ScopeAdmin</c> role. All three answer alike so the endpoint cannot be used
-    ///     to probe which persons exist.
+    ///     AF-21b: the person named as the new owner does not exist, is logically deleted, or holds
+    ///     neither the <c>ScopeAdmin</c> nor the <c>SystemAdmin</c> role (FR-SC-08). All three answer
+    ///     alike so the endpoint cannot be used to probe which persons exist.
     /// </summary>
-    public const string PersonNotValidScopeAdmin = "The person must be an existing, non-deleted ScopeAdmin.";
+    public const string PersonNotValidScopeAdmin =
+        "The person must be an existing, non-deleted Scope Admin or System Admin.";
 
     /// <summary>UC-22 success: the person's ownership of the scope was removed.</summary>
     public const string ScopeOwnerRemovedSuccessfully = "Scope owner removed successfully.";

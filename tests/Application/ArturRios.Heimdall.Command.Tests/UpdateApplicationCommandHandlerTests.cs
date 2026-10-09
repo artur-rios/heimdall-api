@@ -464,10 +464,10 @@ public class UpdateApplicationCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenNewOwnerWhoIsASystemAdmin_WhenHandlingUpdateApplication_ThenOwnerNotValidIsReported()
+    public async Task GivenNewOwnerWhoIsASystemAdminNotOwningTheScope_WhenHandlingUpdateApplication_ThenOwnerNotValidIsReported()
     {
-        // Given a SystemAdmin person as the proposed new owner: they hold no SCOPE_OWNER row and do
-        // not carry the ScopeAdmin role, so FR-AP-03 excludes them (AF-18b)
+        // Given a SystemAdmin person as the proposed new owner who holds no SCOPE_OWNER row for the
+        // scope: the role alone does not make them an owner, so FR-AP-03 excludes them (AF-18b)
         var scopes = new AsyncFakeRepository<Scope, long>();
         var persons = new AsyncFakeRepository<Person, long>();
         var applications = new AsyncFakeRepository<Application, long>();
@@ -484,6 +484,29 @@ public class UpdateApplicationCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(ApplicationMessages.OwnerNotValidForScope, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenNewOwnerWhoIsASystemAdminOwningTheScope_WhenHandlingUpdateApplication_ThenOwnerIsChanged()
+    {
+        // Given a SystemAdmin who owns the application's scope as the proposed new owner (FR-AP-03)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
+        var newOwner = await SeedScopeAdminAsync(persons, ownedScope: scope);
+        newOwner.RoleId = (long)Roles.SystemAdmin;
+        var application = await SeedApplicationAsync(applications, scope, owner);
+        var handler = Handler(applications, persons);
+
+        // When
+        var output = await handler.HandleAsync(Command(
+            scope.PublicId, application.PublicId, newOwner.PublicId, (int)Roles.SystemAdmin, Guid.NewGuid()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(newOwner.Id, application.OwnerId);
     }
 
     [UnitFact]

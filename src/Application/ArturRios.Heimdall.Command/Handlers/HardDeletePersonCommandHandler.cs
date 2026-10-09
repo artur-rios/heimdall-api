@@ -115,7 +115,8 @@ public class HardDeletePersonCommandHandler(
     /// </summary>
     private async Task<bool> WouldStripLastOwnerAsync(Person person)
     {
-        if (person.RoleId != (long)Roles.ScopeAdmin || person.ScopeOwnerships.Count == 0)
+        // Whatever the role: a SystemAdmin may own a scope too (FR-SC-08).
+        if (person.ScopeOwnerships.Count == 0)
         {
             return false;
         }

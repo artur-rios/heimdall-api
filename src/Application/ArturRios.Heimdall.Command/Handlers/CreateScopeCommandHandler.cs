@@ -13,7 +13,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="CreateScopeCommand" /> (UC-01): validates the request, verifies the scope
-///     name is unique and every owner is an existing, non-logically-deleted <c>ScopeAdmin</c>, then
+///     name is unique and every owner is an existing, non-logically-deleted administrator — a
+///     <c>ScopeAdmin</c> or a <c>SystemAdmin</c> (FR-SC-08) — then
 ///     persists the scope together with a <c>SCOPE_OWNER</c> row for each owner. All failures are
 ///     returned as errors on the <see cref="DataOutput{T}" /> rather than thrown, using the canonical
 ///     <see cref="ScopeMessages" /> so the response resolver can pick the matching status code.
@@ -48,11 +49,13 @@ public class CreateScopeCommandHandler(
             output.AddError(ScopeMessages.NameAlreadyExists);
         }
 
-        // Step 4 (AF-01d): every owner must be an existing, non-logically-deleted ScopeAdmin. The
-        // role is identified by its Roles enum value, which DatabaseSeeder writes as the role row's
-        // id on every startup — the same way every other handler resolves a role.
+        // Step 4 (AF-01d): every owner must be an existing, non-logically-deleted administrator —
+        // a ScopeAdmin, or a SystemAdmin, who may own a scope as well as govern it (FR-SC-08). The
+        // roles are identified by their Roles enum values, which DatabaseSeeder writes as the role
+        // rows' ids on every startup — the same way every other handler resolves a role.
         var owners = await personReader.Query()
-            .Where(x => ownerIds.Contains(x.PublicId) && !x.IsDeleted && x.RoleId == (long)Roles.ScopeAdmin)
+            .Where(x => ownerIds.Contains(x.PublicId) && !x.IsDeleted &&
+                        (x.RoleId == (long)Roles.ScopeAdmin || x.RoleId == (long)Roles.SystemAdmin))
             .ToListAsync();
 
         if (owners.Count != ownerIds.Count)

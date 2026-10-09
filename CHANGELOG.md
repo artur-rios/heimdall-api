@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A System Admin may own a scope (FR-SC-08). `POST /api/scopes` and `POST /api/scopes/{scopeId}/owners/{personId}`
+  accept a live `SystemAdmin` as an owner as well as a `ScopeAdmin`, so a System Admin can create a scope with
+  themselves as its owner when no Scope Admin exists yet — before, the request was refused with "One or more owners
+  do not reference an existing, non-deleted ScopeAdmin." A System Admin who owns a scope may also own its
+  applications (FR-AP-03). `GET /api/persons/scope-admins` lists System Admins too when a System Admin calls it;
+  a Scope Admin still sees Scope Admins only. The owner-validation messages name both roles. NFR-12 counts a
+  System Admin owner like any other: deleting, hard-deleting, or erasing the last owner of a scope is refused
+  whatever their role.
 - Every dependency is on its latest stable release again: `Testcontainers.PostgreSql` 4.15.0 → 4.16.0 and
   `xunit.runner.visualstudio` 4.0.0 → 4.0.1 (both test-only), and the documentation site's Docsy theme 0.16.0 →
   0.18.0, which now needs Dart Sass (1.105.1 in the docs workflow) to build its stylesheets and takes the Mermaid
