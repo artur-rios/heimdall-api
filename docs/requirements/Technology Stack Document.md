@@ -46,7 +46,7 @@ The project is built on a set of the author's own reusable libraries, all publis
 | **ArturRios.Data.Relational.Core** | `5.0.0` | Command, Query, Domain | Provider-agnostic **relational data layer**. Provides entity base types, the repository abstractions the handlers depend on (`IAsyncRepository<T, long>`, `IAsyncReadOnlyRepository<T, long>`), the EF Core `DbContext` base plus diagnostics options, and the DI entry point `AddDataConfigFromEnvironment<TDbContext>(prefix)` that binds the context to a connection from the environment. Entities derive from `Entity<long>`, and the repository contracts carry the key type. |
 | **ArturRios.Data.PostgreSql** | `3.0.2` | Data | **PostgreSQL binding** for the relational core. Provides `AddPostgreSqlProvider()`, which wires EF Core to Npgsql so the relational layer runs against PostgreSQL. |
 | **ArturRios.Messaging** | `1.3.0` | WebApi | **Outbound email.** Provides `IEmailService` and `MailgunEmailService` (namespace `ArturRios.Messaging.Email`), which sends plain-text transactional mail through the Mailgun HTTP API. Used by UC-06's verification email and UC-12's password reset email. Reads `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and the optional `MAILGUN_API_VERSION` from the environment at call time. |
-| **ArturRios.Util.Test** | `4.0.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
+| **ArturRios.Util.Test** | `5.0.0` | all test projects | **Testing toolkit** (see §7). Provides the category test attributes (`[UnitFact]`/`[UnitTheory]`, `[FunctionalFact]`/`[FunctionalTheory]`), the `WebApiTest<TEntryPoint>` functional base class, `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake with an async-capable `Query()`), `FakeScheduler`, and `CustomAssert`. |
 
 > `ArturRios.Output` and `ArturRios.Jwt` are **namespaces** surfaced by the packages above (the `ArturRios.Util` family and `ArturRios.Util.WebApi` respectively), not separately referenced packages.
 
@@ -102,10 +102,10 @@ These are the technologies mandated for tests. **How** they are applied to each 
 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
-| Test framework | **xUnit** (`xunit`, `xunit.runner.visualstudio`) | `2.9.3` / `4.0.1` | The test framework for every test project. |
+| Test framework | **xUnit v3** (`xunit.v3.mtp-off`, `xunit.runner.visualstudio`) | `4.0.2` / `4.0.1` | The test framework for every test project. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its `--filter` and the `.trx` logger work as before. |
 | Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.10.1` | Test host/runner integration for `dotnet test` and IDEs. |
 | Coverage | `coverlet.collector` | `10.1.0` | Collects code coverage during test runs. |
-| Test helpers & doubles | **`ArturRios.Util.Test`** | `4.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
+| Test helpers & doubles | **`ArturRios.Util.Test`** | `5.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
 | Mocking | **Moq** | `4.21.0` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
 | Test data generation | **Bogus** | `35.6.5` | The standard way to generate entities/commands/DTOs (`Faker<T>`) instead of large inline literals or shared fixtures. |
 | Functional database | **Testcontainers** (`Testcontainers.PostgreSql`) | `4.16.0` | Provisions a real, throwaway **PostgreSQL** container for functional (end-to-end) tests, so tests run against the same engine as production. |
@@ -125,7 +125,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | First-party | ArturRios.Util | `2.1.0` |
 | First-party | ArturRios.Util.WebApi | `5.1.0` |
 | First-party | ArturRios.Messaging | `1.3.0` |
-| First-party | ArturRios.Util.Test | `4.0.0` |
+| First-party | ArturRios.Util.Test | `5.0.0` |
 | First-party | ArturRios.Mediator | `2.0.0` |
 | First-party | ArturRios.Data.Relational.Core | `5.0.0` |
 | First-party | ArturRios.Data.PostgreSql | `3.0.2` |
@@ -140,7 +140,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Metrics | OpenTelemetry.Instrumentation.AspNetCore | `1.19.0` |
 | Metrics | OpenTelemetry.Instrumentation.Http | `1.19.0` |
 | Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.19.1-beta.1` |
-| Testing | xunit | `2.9.3` |
+| Testing | xunit.v3.mtp-off | `4.0.2` |
 | Testing | xunit.runner.visualstudio | `4.0.1` |
 | Testing | Microsoft.NET.Test.Sdk | `18.10.1` |
 | Testing | coverlet.collector | `10.1.0` |
