@@ -49,9 +49,12 @@ public static class ScopeMessages
     /// <summary>AF-01a: a scope with the requested name already exists.</summary>
     public const string NameAlreadyExists = "A scope with this name already exists.";
 
-    /// <summary>AF-01d: an owner does not reference an existing, non-deleted ScopeAdmin.</summary>
+    /// <summary>
+    ///     AF-01d: an owner does not reference an existing, non-deleted administrator — a ScopeAdmin
+    ///     or a SystemAdmin (FR-SC-08).
+    /// </summary>
     public const string OwnerNotValidScopeAdmin =
-        "One or more owners do not reference an existing, non-deleted ScopeAdmin.";
+        "One or more owners do not reference an existing, non-deleted Scope Admin or System Admin.";
 
     /// <summary>UC-24 success: the scope's Google Sign-In setting was changed.</summary>
     public const string GoogleSignInUpdatedSuccessfully = "Google Sign-In setting updated successfully.";

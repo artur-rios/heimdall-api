@@ -375,7 +375,7 @@ just derive from the functional base class and use it.
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+        .WithImage("postgres:18-alpine")
         .Build();
 
     public string ConnectionString => _container.GetConnectionString();
@@ -677,7 +677,8 @@ first.
 
 ### 10.1 Functional database
 
-`PostgresFixture` starts a `postgres:16-alpine` container, points
+`PostgresFixture` starts a `postgres:18-alpine` container, the PostgreSQL major the deployed
+environments run. It points
 `HEIMDALL_DATA_CONNECTIONSTRING` / `…_DATABASETYPE` at it before the host is built — so the
 suite never touches a developer's local `.env.local` database — and creates the schema by applying
 **the real EF Core migrations** (`context.Database.MigrateAsync()`). Migrations were chosen over

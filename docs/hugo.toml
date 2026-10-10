@@ -90,19 +90,20 @@ offlineSearch = true
 # Several diagrams here are far wider than that column — the domain-model class diagram is
 # ~2570px — and fitting them to it shrank their 16px labels to about 4px. They now overflow and
 # their container scrolls (see assets/scss/_styles_project.scss), which keeps the text readable.
-[params.mermaid]
-[params.mermaid.flowchart]
-useMaxWidth = false
-[params.mermaid.sequence]
-useMaxWidth = false
-[params.mermaid.class]
-useMaxWidth = false
-[params.mermaid.er]
-useMaxWidth = false
-[params.mermaid.state]
-useMaxWidth = false
-[params.mermaid.block]
-useMaxWidth = false
+#
+# Since Docsy 0.18, Mermaid is a theme plugin: its settings are this JSON string, handed to
+# mermaid.initialize() as written, so the keys keep their camelCase here (Hugo lowercases the keys
+# of a TOML table, which is why it is a string rather than a table). `enable` and the pinned
+# `version` are left to the theme's defaults.
+[params.docsy.plugins.mermaid]
+options = '''{
+  "flowchart": { "useMaxWidth": false },
+  "sequence": { "useMaxWidth": false },
+  "class": { "useMaxWidth": false },
+  "er": { "useMaxWidth": false },
+  "state": { "useMaxWidth": false },
+  "block": { "useMaxWidth": false }
+}'''
 
 [params.ui]
 sidebar_menu_compact = false

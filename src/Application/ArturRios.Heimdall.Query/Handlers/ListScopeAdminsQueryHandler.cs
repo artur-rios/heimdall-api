@@ -14,8 +14,10 @@ namespace ArturRios.Heimdall.Query.Handlers;
 
 /// <summary>
 ///     Handles <see cref="ListScopeAdminsQuery" /> (UC-07 read d, FR-PE-12): lists every live
-///     <c>ScopeAdmin</c> with pagination and optional name/email filters, projected to identifier,
-///     name, and email only. Backs UI-11's owner selector and UI-14's "add an existing Scope Admin".
+///     administrator who may own a scope — every <c>ScopeAdmin</c>, and for a System Admin caller
+///     every <c>SystemAdmin</c> too — with pagination and optional name/email filters, projected to
+///     identifier, name, and email only. Backs UI-11's owner selector and UI-14's "add an existing
+///     Scope Admin".
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -74,10 +76,17 @@ public class ListScopeAdminsQueryHandler(
             excludedScopeId = scope.Id;
         }
 
+        // Who may own a scope (FR-SC-08): a ScopeAdmin, or a SystemAdmin. System Admins are offered
+        // only to a System Admin — their addresses are not tenant-facing, and a Scope Admin choosing
+        // co-owners for their scope has no need of them.
+        var ownerRoles = query.ActingRole == (int)Roles.SystemAdmin
+            ? new[] { (long)Roles.ScopeAdmin, (long)Roles.SystemAdmin }
+            : [(long)Roles.ScopeAdmin];
+
         // A logically deleted administrator is never a valid owner, so this listing has no
         // include-deleted mode at all — see ListScopeAdminsQuery.
         var admins = personReader.Query()
-            .Where(x => x.RoleId == (long)Roles.ScopeAdmin && !x.IsDeleted
+            .Where(x => ownerRoles.Contains(x.RoleId) && !x.IsDeleted
                         // NFR-24: withheld from tenant-facing listings, as in ListScopePersons.
                         && x.ProcessingRestrictedAt == null);
 

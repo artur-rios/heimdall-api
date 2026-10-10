@@ -73,13 +73,14 @@ public class ListScopeAdminsQueryHandlerTests
         return repository;
     }
 
-    private static ListScopeAdminsQuery Query(Guid? excludeOwnersOfScopeId = null, int pageSize = 10) => new()
+    private static ListScopeAdminsQuery Query(
+        Guid? excludeOwnersOfScopeId = null, int pageSize = 10, Roles actingRole = Roles.SystemAdmin) => new()
     {
         PageNumber = 1,
         PageSize = pageSize,
         ExcludeOwnersOfScopeId = excludeOwnersOfScopeId,
         ActingPersonId = Guid.NewGuid(),
-        ActingRole = (int)Roles.SystemAdmin
+        ActingRole = (int)actingRole
     };
 
     private static ListScopeAdminsQueryHandler HandlerFor(
@@ -87,9 +88,31 @@ public class ListScopeAdminsQueryHandlerTests
         new(scopes, persons, Ownership(ownershipAllowed), new ListScopeAdminsQueryValidator());
 
     [UnitFact]
-    public async Task GivenMixedRoles_WhenHandlingListScopeAdmins_ThenOnlyScopeAdminsAreReturned()
+    public async Task GivenMixedRolesAndSystemAdminActor_WhenHandlingListScopeAdmins_ThenBothAdministratorRolesAreReturned()
     {
-        // Given two Scope Admins, one User, and one System Admin
+        // Given two Scope Admins, one User, and one System Admin — either administrator may own a
+        // scope (FR-SC-08), so a System Admin choosing owners sees both kinds
+        var ana = Admin(10, "Ana", "ana@test.local");
+        var bruno = Admin(11, "Bruno", "bruno@test.local");
+        var root = NonAdmin(13, Roles.SystemAdmin);
+        var scopes = await RepositoryWith<Scope>();
+        var persons = await RepositoryWith(ana, bruno, NonAdmin(12, Roles.User), root);
+        var handler = HandlerFor(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Query());
+
+        // Then — "person-13" sorts after the two names
+        Assert.True(output.Success);
+        Assert.Equal(3, output.TotalItems);
+        Assert.Equal([ana.PublicId, bruno.PublicId, root.PublicId], output.Data!.Select(x => x.Id));
+    }
+
+    [UnitFact]
+    public async Task GivenMixedRolesAndScopeAdminActor_WhenHandlingListScopeAdmins_ThenOnlyScopeAdminsAreReturned()
+    {
+        // Given two Scope Admins, one User, and one System Admin. A Scope Admin is not shown System
+        // Admins: their addresses are not tenant-facing data (FR-PE-12)
         var ana = Admin(10, "Ana", "ana@test.local");
         var bruno = Admin(11, "Bruno", "bruno@test.local");
         var scopes = await RepositoryWith<Scope>();
@@ -97,7 +120,7 @@ public class ListScopeAdminsQueryHandlerTests
         var handler = HandlerFor(scopes, persons);
 
         // When
-        var output = await handler.HandleAsync(Query());
+        var output = await handler.HandleAsync(Query(actingRole: Roles.ScopeAdmin));
 
         // Then
         Assert.True(output.Success);

@@ -31,7 +31,8 @@ public static class LastScopeOwnerGuard
     public static async Task<bool> WouldStripLastOwnerAsync(
         Person person, IAsyncReadOnlyRepository<Person, long> personReader)
     {
-        if (person.RoleId != (long)Roles.ScopeAdmin || person.ScopeOwnerships.Count == 0)
+        // Whatever the role: a SystemAdmin may own a scope too (FR-SC-08).
+        if (person.ScopeOwnerships.Count == 0)
         {
             return false;
         }

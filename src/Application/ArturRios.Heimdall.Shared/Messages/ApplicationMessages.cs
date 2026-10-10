@@ -19,10 +19,11 @@ public static class ApplicationMessages
     public const string CannotSetAnotherOwner = "You may only create applications you own.";
 
     /// <summary>
-    ///     AF-16b: the owner does not exist, is logically deleted, does not carry the
-    ///     <c>ScopeAdmin</c> role, or does not own the target scope (FR-AP-03).
+    ///     AF-16b: the owner does not exist, is logically deleted, carries neither the
+    ///     <c>ScopeAdmin</c> nor the <c>SystemAdmin</c> role, or does not own the target scope (FR-AP-03).
     /// </summary>
-    public const string OwnerNotValidForScope = "Owner must be a Scope Admin who owns the target scope.";
+    public const string OwnerNotValidForScope =
+        "Owner must be a Scope Admin or System Admin who owns the target scope.";
 
     /// <summary>AF-16d: the application name was not supplied.</summary>
     public const string NameRequired = "Application name is required.";

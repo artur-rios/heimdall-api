@@ -232,17 +232,14 @@ public class AddScopeOwnerCommandHandlerTests
         Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
     }
 
-    [UnitTheory]
-    [InlineData(Roles.User)]
-    [InlineData(Roles.SystemAdmin)]
-    public async Task GivenPersonWithoutScopeAdminRole_WhenHandlingAddScopeOwner_ThenPersonNotValidScopeAdminIsReported(
-        Roles role)
+    [UnitFact]
+    public async Task GivenPersonWithUserRole_WhenHandlingAddScopeOwner_ThenPersonNotValidScopeAdminIsReported()
     {
-        // Given a person who is not a ScopeAdmin — only a ScopeAdmin may own a scope (FR-SC-08, AF-21b)
+        // Given a User — only an administrator may own a scope (FR-SC-08, AF-21b)
         var scopes = new AsyncFakeRepository<Scope, long>();
         var persons = new AsyncFakeRepository<Person, long>();
         var scope = await SeedScopeAsync(scopes);
-        var person = await SeedPersonAsync(persons, role);
+        var person = await SeedPersonAsync(persons, Roles.User);
         var handler = Handler(scopes, persons);
 
         // When
@@ -252,6 +249,25 @@ public class AddScopeOwnerCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.PersonNotValidScopeAdmin, output.Errors);
         Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
+    [UnitFact]
+    public async Task GivenSystemAdminPerson_WhenHandlingAddScopeOwner_ThenOwnershipIsAdded()
+    {
+        // Given a live SystemAdmin — an administrator of either kind may own a scope (FR-SC-08)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, Roles.SystemAdmin);
+        var handler = Handler(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(output.Data!.AlreadyOwner);
+        Assert.Equal(scope.Id, Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships).ScopeId);
     }
 
     [UnitFact]

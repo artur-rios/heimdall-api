@@ -7,6 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-09
+
+### Changed
+
+- A System Admin may own a scope (FR-SC-08). `POST /api/scopes` and `POST /api/scopes/{scopeId}/owners/{personId}`
+  accept a live `SystemAdmin` as an owner as well as a `ScopeAdmin`, so a System Admin can create a scope with
+  themselves as its owner when no Scope Admin exists yet — before, the request was refused with "One or more owners
+  do not reference an existing, non-deleted ScopeAdmin." A System Admin who owns a scope may also own its
+  applications (FR-AP-03). `GET /api/persons/scope-admins` lists System Admins too when a System Admin calls it;
+  a Scope Admin still sees Scope Admins only. The owner-validation messages name both roles. NFR-12 counts a
+  System Admin owner like any other: deleting, hard-deleting, or erasing the last owner of a scope is refused
+  whatever their role.
+- Every dependency is on its latest stable release again: `Testcontainers.PostgreSql` 4.15.0 → 4.16.0 and
+  `xunit.runner.visualstudio` 4.0.0 → 4.0.1 (both test-only), and the documentation site's Docsy theme 0.16.0 →
+  0.18.0, which now needs Dart Sass (1.105.1 in the docs workflow) to build its stylesheets and takes the Mermaid
+  settings in `docs/hugo.toml` under `params.docsy.plugins.mermaid`. The theme submodule now points at Docsy's new
+  home, `github.com/docsy/docsy`. The HTTP API and the OpenAPI document are unchanged.
+- The functional tests run against PostgreSQL 18 (`postgres:18-alpine`, was `postgres:16-alpine`), the major
+  version the deployed environments run.
+
 ## [1.1.1] - 2026-10-09
 
 ### Fixed
@@ -137,7 +157,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/artur-rios/heimdall-api/releases/tag/v1.0.0

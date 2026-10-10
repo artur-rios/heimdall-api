@@ -248,6 +248,26 @@ public class CreateApplicationCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenSystemAdminOwningTheScope_WhenHandlingCreateApplication_ThenApplicationIsCreated()
+    {
+        // Given a SystemAdmin who owns the scope, naming themselves as the owner (FR-AP-03)
+        var (scopes, scope) = await ScopeStoreAsync();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var applications = new AsyncFakeRepository<Application, long>();
+        var owner = await SeedScopeAdminAsync(persons, ownedScope: scope);
+        owner.RoleId = (long)Roles.SystemAdmin;
+        var handler = Handler(scopes, persons, applications);
+
+        // When
+        var output = await handler.HandleAsync(
+            Command(scope.PublicId, owner.PublicId, (int)Roles.SystemAdmin, owner.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Single((await applications.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
     public async Task GivenUnknownOwner_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
     {
         // Given an owner id nobody holds (AF-16b)
@@ -327,10 +347,10 @@ public class CreateApplicationCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenSystemAdminAsOwner_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
+    public async Task GivenSystemAdminNotOwningTheScope_WhenHandlingCreateApplication_ThenOwnerNotValidIsReported()
     {
-        // Given a SystemAdmin person as the proposed owner: they hold no SCOPE_OWNER row and do not
-        // carry the ScopeAdmin role, so FR-AP-03 excludes them (AF-16b) without a rule of their own
+        // Given a SystemAdmin person as the proposed owner who holds no SCOPE_OWNER row for the
+        // scope: the role alone does not make them an owner, so FR-AP-03 excludes them (AF-16b)
         var (scopes, scope) = await ScopeStoreAsync();
         var persons = new AsyncFakeRepository<Person, long>();
         var applications = new AsyncFakeRepository<Application, long>();

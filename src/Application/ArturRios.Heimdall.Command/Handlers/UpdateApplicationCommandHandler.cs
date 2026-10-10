@@ -79,12 +79,13 @@ public class UpdateApplicationCommandHandler(
         // leave such an application uneditable.
         if (command.OwnerId != currentOwnerId)
         {
-            // FR-AP-03: the new owner must be an existing, non-logically-deleted ScopeAdmin who owns
-            // the application's scope. Same shape as UC-16's owner check, against the scope the
-            // application already belongs to (FR-AP-02 fixes that at creation time).
+            // FR-AP-03: the new owner must be an existing, non-logically-deleted administrator — a
+            // ScopeAdmin or a SystemAdmin — who owns the application's scope. Same shape as UC-16's
+            // owner check, against the scope the application already belongs to (FR-AP-02 fixes
+            // that at creation time).
             var newOwner = await personReader.Query().FirstOrDefaultAsync(person =>
                 person.PublicId == command.OwnerId && !person.IsDeleted &&
-                person.RoleId == (long)Roles.ScopeAdmin &&
+                (person.RoleId == (long)Roles.ScopeAdmin || person.RoleId == (long)Roles.SystemAdmin) &&
                 person.ScopeOwnerships.Any(ownership => ownership.ScopeId == application.ScopeId));
 
             if (newOwner is null)

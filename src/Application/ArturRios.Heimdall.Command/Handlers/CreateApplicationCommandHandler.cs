@@ -66,12 +66,13 @@ public class CreateApplicationCommandHandler(
             return output.WithError(ApplicationMessages.CannotSetAnotherOwner);
         }
 
-        // AF-16b / FR-AP-03: the owner must be an existing, non-logically-deleted ScopeAdmin who owns
-        // the scope. The role is asserted alongside the SCOPE_OWNER row: SRD §4.5 already restricts
-        // that table to ScopeAdmins, so this states the requirement rather than adding to it.
+        // AF-16b / FR-AP-03: the owner must be an existing, non-logically-deleted administrator — a
+        // ScopeAdmin or a SystemAdmin — who owns the scope. The role is asserted alongside the
+        // SCOPE_OWNER row: SRD §4.5 already restricts that table to administrators, so this states
+        // the requirement rather than adding to it.
         var owner = await personReader.Query().FirstOrDefaultAsync(person =>
             person.PublicId == command.OwnerId && !person.IsDeleted &&
-            person.RoleId == (long)Roles.ScopeAdmin &&
+            (person.RoleId == (long)Roles.ScopeAdmin || person.RoleId == (long)Roles.SystemAdmin) &&
             person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
 
         if (owner is null)
