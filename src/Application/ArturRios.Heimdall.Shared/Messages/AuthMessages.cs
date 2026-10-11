@@ -29,6 +29,15 @@ public static class AuthMessages
     public const string TwoFactorRequired = "Two-factor verification required.";
 
     /// <summary>
+    ///     UC-11, UC-25 and UC-38 for a restricted identity (NFR-24): the credential checked out, but
+    ///     processing is restricted, so the token issued admits only the endpoints through which the
+    ///     subject exercises their own rights (UC-41, UC-42, UC-44, UC-45). Only somebody holding the
+    ///     account's credential learns of the restriction — every refusal still answers alike.
+    /// </summary>
+    public const string SubjectRightsOnlySignIn =
+        "Signed in with access limited to your data-protection rights, because processing of your identity is restricted.";
+
+    /// <summary>
     ///     UC-11 AF-11a…AF-11e: the credentials were not accepted. Deliberately one message for all
     ///     five conditions — unknown person, wrong password, deleted person, deleted scope, and a
     ///     Scope Admin whose every owned scope is deleted — so a caller cannot use the login

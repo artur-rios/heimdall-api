@@ -51,7 +51,11 @@ public class LiftProcessingRestrictionCommandHandler(
         // Only a System Admin may lift somebody else's. The endpoint carries no role requirement,
         // because a subject of any role may lift their own, so the rule is data-dependent and lives
         // here.
-        if (!liftingOwn && command.ActingRole != (int)Roles.SystemAdmin)
+        //
+        // A subject-rights-only token acts as a subject and never as an administrator (AF-45c),
+        // including after its own restriction was lifted: it was issued to a restricted identity,
+        // and that is all it ever stands for.
+        if (!liftingOwn && (command.ActingRole != (int)Roles.SystemAdmin || command.ActingSubjectRightsOnly))
         {
             return output.WithError(ErasureMessages.NotEligible);
         }

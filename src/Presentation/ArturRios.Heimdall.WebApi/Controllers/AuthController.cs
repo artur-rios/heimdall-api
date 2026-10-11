@@ -10,6 +10,7 @@ using ArturRios.Output;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
+using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -519,6 +520,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         LiftProcessingRestriction([FromBody] LiftProcessingRestrictionCommand command)
     {
         HttpContext.ApplyActor(command);
+        command.ActingSubjectRightsOnly = HttpContext.GetUser<IdentityUser>()!.SubjectRightsOnly;
 
         var result = await commandMediator
             .ExecuteCommandAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>(command);
