@@ -16,10 +16,29 @@ public class StubOutput : CommandOutput
     public Guid Id { get; set; }
 }
 
+public class StubOutputWithSideEffects : CommandOutput, IAuditedSideEffects
+{
+    public Guid Id { get; set; }
+
+    public List<string> SideEffects { get; set; } = [];
+
+    public IEnumerable<string> AuditedSideEffects() => SideEffects;
+}
+
 public class AuditingCommandHandlerTests
 {
     private static ILogger<AuditingCommandHandler<StubCommand, StubOutput>> NullLogger() =>
         NullLogger<AuditingCommandHandler<StubCommand, StubOutput>>.Instance;
+
+    private static AuditingCommandHandler<StubCommand, StubOutputWithSideEffects> SideEffectsHandler(
+        DataOutput<StubOutputWithSideEffects?> result, IAuditLogWriter writer)
+    {
+        var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutputWithSideEffects>>();
+        inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>())).ReturnsAsync(result);
+
+        return new AuditingCommandHandler<StubCommand, StubOutputWithSideEffects>(
+            inner.Object, writer, NullLogger<AuditingCommandHandler<StubCommand, StubOutputWithSideEffects>>.Instance);
+    }
 
     [UnitFact]
     public async Task GivenSuccessfulInnerHandler_WhenHandling_ThenWriterIsCalledWithActionAndTargetId()
@@ -113,5 +132,81 @@ public class AuditingCommandHandlerTests
 
         // Then
         writer.Verify(w => w.WriteAsync(nameof(StubCommand), null, true, null), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutputReportingASideEffect_WhenHandling_ThenItIsRecordedAsItsOwnEntryOnTheSameTarget()
+    {
+        // Given a command that also carried out an action with a use case of its own — as an erasure
+        // request lifts the subject's restriction (UC-42) — the trail must show that action under
+        // its own name, or a reader looking for it would never find it
+        var targetId = Guid.NewGuid();
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = SideEffectsHandler(
+            DataOutput<StubOutputWithSideEffects?>.New.WithData(
+                new StubOutputWithSideEffects { Id = targetId, SideEffects = ["LiftSomethingCommand"] }),
+            writer.Object);
+
+        // When
+        await handler.HandleAsync(new StubCommand());
+
+        // Then — the command's own entry, and one for the side effect, both on the same target
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), targetId, true, null), Times.Once);
+        writer.Verify(w => w.WriteAsync("LiftSomethingCommand", targetId, true, null), Times.Once);
+        writer.VerifyNoOtherCalls();
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutputReportingNoSideEffect_WhenHandling_ThenOnlyTheCommandIsRecorded()
+    {
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = SideEffectsHandler(
+            DataOutput<StubOutputWithSideEffects?>.New.WithData(new StubOutputWithSideEffects { Id = Guid.NewGuid() }),
+            writer.Object);
+
+        await handler.HandleAsync(new StubCommand());
+
+        writer.Verify(
+            w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>()),
+            Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenARefusedCommandWhoseOutputReportsASideEffect_WhenHandling_ThenOnlyTheRefusalIsRecorded()
+    {
+        // A side effect only happened if the command did
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = SideEffectsHandler(
+            DataOutput<StubOutputWithSideEffects?>.New
+                .WithData(new StubOutputWithSideEffects { Id = Guid.NewGuid(), SideEffects = ["LiftSomethingCommand"] })
+                .WithError("refused"),
+            writer.Object);
+
+        await handler.HandleAsync(new StubCommand());
+
+        writer.Verify(
+            w => w.WriteAsync(nameof(StubCommand), It.IsAny<Guid?>(), false, "refused"), Times.Once);
+        writer.Verify(
+            w => w.WriteAsync("LiftSomethingCommand", It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenTheCommandEntryFailsToWrite_WhenHandling_ThenTheSideEffectIsStillRecorded()
+    {
+        // Each entry is written on its own, so losing one does not lose the other
+        var targetId = Guid.NewGuid();
+        var writer = new Mock<IAuditLogWriter>();
+        writer.Setup(w => w.WriteAsync(nameof(StubCommand), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>()))
+            .ThrowsAsync(new InvalidOperationException("db unavailable"));
+        var handler = SideEffectsHandler(
+            DataOutput<StubOutputWithSideEffects?>.New.WithData(
+                new StubOutputWithSideEffects { Id = targetId, SideEffects = ["LiftSomethingCommand"] }),
+            writer.Object);
+
+        var result = await handler.HandleAsync(new StubCommand());
+
+        Assert.True(result.Success);
+        writer.Verify(w => w.WriteAsync("LiftSomethingCommand", targetId, true, null), Times.Once);
     }
 }

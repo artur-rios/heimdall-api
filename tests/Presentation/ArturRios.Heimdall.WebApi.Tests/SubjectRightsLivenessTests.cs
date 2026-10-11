@@ -120,7 +120,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     }
 
     [FunctionalFact]
-    public async Task GivenARestrictedPerson_WhenRequestingErasure_ThenTheRequestIsRecorded()
+    public async Task GivenARestrictedPerson_WhenRequestingErasure_ThenTheRequestIsRecordedAndTheRestrictionLifted()
     {
         // Given — UC-42 is self-service whatever the account's standing (DPIA R-06); the request is
         // the subject's own, so Art. 18(2)'s consent condition is met by asking
@@ -138,8 +138,10 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
 
         Assert.NotNull(stored.ErasureRequestedAt);
 
-        // The restriction still stands: the record waits, unanonymised, until it is lifted (NFR-24)
-        Assert.NotNull(stored.ProcessingRestrictedAt);
+        // The request lifts the subject's own restriction (UC-42), or NFR-24 would keep the record
+        // out of the anonymisation pass while the deadline ran out
+        Assert.True(response.Body?.Data?.RestrictionLifted);
+        Assert.Null(stored.ProcessingRestrictedAt);
     }
 
     // A restricted subject: everything else is still refused

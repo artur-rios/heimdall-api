@@ -433,7 +433,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///         endpoint is governed by NFR-18 rather than NFR-05.
     ///     </para>
     ///     <para>
-    ///         Reachable by a subject whose processing is restricted (NFR-24). A suspended identity
+    ///         Reachable by a subject whose processing is restricted (NFR-24), and a successful request
+    ///         lifts that restriction — without the Art. 18(3) notice, since the subject is lifting
+    ///         their own — so the erasure is not held behind it; <c>restrictionLifted</c> in the
+    ///         response says whether it did. A suspended identity
     ///         reaches the handler too, and is answered by AF-42c (409) if it asked already, AF-42b
     ///         (403) otherwise.
     ///     </para>

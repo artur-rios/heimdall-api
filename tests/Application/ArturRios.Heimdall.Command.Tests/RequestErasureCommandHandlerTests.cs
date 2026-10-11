@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
@@ -12,10 +13,11 @@ using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
-// Unit tests for RequestErasureCommandHandler (UC-42). Three properties matter more than the rest:
+// Unit tests for RequestErasureCommandHandler (UC-42). Four properties matter more than the rest:
 // that the subject is always the caller, that a bearer token alone cannot trigger an irreversible
-// operation, and that a request NFR-12 blocks is still recorded with its deadline running rather
-// than refused.
+// operation, that a request NFR-12 blocks is still recorded with its deadline running rather than
+// refused, and that a request lifts the subject's own restriction rather than waiting behind it
+// (NFR-24).
 public class RequestErasureCommandHandlerTests
 {
     private const string Password = "Str0ng-Pass!";
@@ -235,6 +237,118 @@ public class RequestErasureCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAnUnrestrictedPerson_WhenRequestingErasure_ThenNoRestrictionIsReportedLifted()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.False(output.Data!.RestrictionLifted);
+
+        // Nothing was lifted, so the audit trail records the request alone
+        Assert.Empty(((IAuditedSideEffects)output.Data).AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedPerson_WhenRequestingErasure_ThenTheRestrictionIsLiftedWithTheRequest()
+    {
+        // NFR-24 keeps a restricted record out of the anonymisation pass, so a request left behind the
+        // restriction would wait unerased while its deadline ran out. Only the subject can impose a
+        // restriction (UC-44), and asking to be erased — credential in hand — is their later and
+        // more specific instruction.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-3);
+        person.RestrictionGround = (int)RestrictionGrounds.AccuracyContested;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Equal(ErasureMessages.ErasureRequested, output.Messages.First());
+        Assert.True(output.Data!.RestrictionLifted);
+
+        // Lifted as UC-45 lifts a subject's own: no Art. 18(3) notice is owed to the person lifting it
+        Assert.Null(person.ProcessingRestrictedAt);
+        Assert.Null(person.RestrictionGround);
+        Assert.Null(person.RestrictionLiftNotifiedAt);
+
+        // And the request proceeds exactly as it would have unrestricted
+        Assert.True(person.IsDeleted);
+        Assert.Equal((int)DeletionKinds.SubjectRequested, person.DeletionKind);
+        Assert.NotNull(person.ErasureDueAt);
+
+        // The lift is recorded in the audit trail under the name a reader looking for lifts searches
+        Assert.Equal(
+            [nameof(LiftProcessingRestrictionCommand)],
+            ((IAuditedSideEffects)output.Data).AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedLastOwnerOfAScope_WhenRequestingErasure_ThenTheRestrictionIsLiftedThoughBlocked()
+    {
+        // AF-42d: the suspension waits for an owner to be transferred, but the restriction does not
+        // wait with it — the request's deadline is running either way, and a subject left restricted
+        // could take no part in the transfer that unblocks it.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-3);
+        person.RestrictionGround = (int)RestrictionGrounds.ObjectionPending;
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Equal(ErasureMessages.ErasureRequestedButBlocked, output.Messages.First());
+        Assert.True(output.Data!.Blocked);
+        Assert.True(output.Data.RestrictionLifted);
+        Assert.Null(person.ProcessingRestrictedAt);
+        Assert.Null(person.RestrictionGround);
+        Assert.False(person.IsDeleted);
+        Assert.NotNull(person.ErasureRequestedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedPersonWithTheWrongPassword_WhenRequestingErasure_ThenTheRestrictionStands()
+    {
+        // The lift is part of the request, so a refused request lifts nothing
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        var restrictedAt = DateTime.UtcNow.AddDays(-3);
+        person.ProcessingRestrictedAt = restrictedAt;
+        person.RestrictionGround = (int)RestrictionGrounds.AccuracyContested;
+
+        var output = await Handler(persons, googleUsers)
+            .HandleAsync(Command(person.PublicId, password: WrongPassword));
+
+        Assert.False(output.Success);
+        Assert.Equal(restrictedAt, person.ProcessingRestrictedAt);
+        Assert.Equal((int)RestrictionGrounds.AccuracyContested, person.RestrictionGround);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictionImposedAfterTheRequest_WhenRequestingAgain_ThenTheRestrictionStands()
+    {
+        // A subject pending erasure may restrict afterwards (UC-44) — that later instruction is
+        // theirs to lift (UC-45). Repeating the erasure request is AF-42c and changes nothing.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, erasureRequestedAt: DateTime.UtcNow.AddDays(-5));
+        person.IsDeleted = true;
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-1);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.ErasureAlreadyRequested, output.Errors);
+        Assert.NotNull(person.ProcessingRestrictedAt);
+    }
+
+    [UnitFact]
     public async Task GivenAScopeWithAnotherOwner_WhenRequestingErasure_ThenItProceeds()
     {
         var persons = new AsyncFakeRepository<Person, long>();
@@ -265,6 +379,47 @@ public class RequestErasureCommandHandlerTests
         Assert.False(output.Data!.Blocked);
         Assert.True(googleUser.IsDeleted);
         Assert.Equal((int)DeletionKinds.SubjectRequested, googleUser.DeletionKind);
+        Assert.False(output.Data.RestrictionLifted);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedGoogleUser_WhenRequestingErasure_ThenTheRestrictionIsLiftedWithTheRequest()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-3);
+        googleUser.RestrictionGround = (int)RestrictionGrounds.UnlawfulButErasureOpposed;
+
+        var output = await Handler(persons, googleUsers, Payload())
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: "a-fresh-token"));
+
+        Assert.True(output.Success);
+        Assert.True(output.Data!.RestrictionLifted);
+        Assert.Null(googleUser.ProcessingRestrictedAt);
+        Assert.Null(googleUser.RestrictionGround);
+        Assert.Null(googleUser.RestrictionLiftNotifiedAt);
+        Assert.True(googleUser.IsDeleted);
+        Assert.Equal(
+            [nameof(LiftProcessingRestrictionCommand)],
+            ((IAuditedSideEffects)output.Data).AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedGoogleUserWithAnUnverifiableToken_WhenRequestingErasure_ThenTheRestrictionStands()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-3);
+        googleUser.RestrictionGround = (int)RestrictionGrounds.UnlawfulButErasureOpposed;
+
+        var output = await Handler(persons, googleUsers, payload: null)
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: "forged"));
+
+        Assert.False(output.Success);
+        Assert.NotNull(googleUser.ProcessingRestrictedAt);
+        Assert.False(googleUser.IsDeleted);
     }
 
     [UnitFact]
