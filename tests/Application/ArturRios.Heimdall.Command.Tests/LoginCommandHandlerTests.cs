@@ -92,11 +92,20 @@ public class LoginCommandHandlerTests
     {
         public AuthTokenSubject? Subject { get; private set; }
 
+        public (Guid SubjectId, int RoleId)? RightsOnlySubject { get; private set; }
+
         public Task<AuthToken> IssueAsync(AuthTokenSubject subject)
         {
             Subject = subject;
             return Task.FromResult(
                 new AuthToken("issued-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+        }
+
+        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+        {
+            RightsOnlySubject = (subjectId, roleId);
+            return Task.FromResult(
+                new AuthToken("rights-only-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
     }
 
@@ -658,5 +667,110 @@ public class LoginCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.False(output.Data!.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedPerson_WhenHandlingLogin_ThenOnlyASubjectRightsTokenIsIssued()
+    {
+        // Given — NFR-24: processing of this User's identity is restricted
+        var scope = Scope(1);
+        var person = User(10, "restricted@test.local", scope);
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-1);
+        person.EmailVerified = true;
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("restricted@test.local", scopeId: scope.PublicId));
+
+        // Then — a subject-rights-only token for the person and their role, never a full one
+        Assert.True(output.Success);
+        Assert.Equal("rights-only-token", output.Data!.Token);
+        Assert.True(output.Data.ProcessingRestricted);
+        Assert.False(output.Data.RequiresTwoFactor);
+        Assert.True(output.Data.EmailVerified);
+        Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, output.Messages);
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.Equal((person.PublicId, (int)Roles.User), fixture.TokenIssuer.RightsOnlySubject);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedPersonWithAWrongPassword_WhenHandlingLogin_ThenReturnsInvalidCredentials()
+    {
+        // Given — the restriction is disclosed only to the holder of the password
+        var person = Person(10, "restricted@test.local", Roles.SystemAdmin);
+        person.ProcessingRestrictedAt = DateTime.UtcNow;
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("restricted@test.local", password: "Wr0ngPass!"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.InvalidCredentials, output.Errors);
+        Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedAndSuspendedPerson_WhenHandlingLogin_ThenOnlyASubjectRightsTokenIsIssued()
+    {
+        // Given — a suspended subject keeps their rights until anonymised (UC-41, UC-44), and their
+        // scope's deletion does not matter to a token that claims no scope
+        var scope = Scope(1, isDeleted: true);
+        var person = User(10, "restricted@test.local", scope, isDeleted: true);
+        person.ProcessingRestrictedAt = DateTime.UtcNow;
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("restricted@test.local", scopeId: scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.ProcessingRestricted);
+        Assert.Equal(person.PublicId, fixture.TokenIssuer.RightsOnlySubject!.Value.SubjectId);
+        Assert.Null(fixture.TokenIssuer.Subject);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedPersonWithActiveTwoFactorAuth_WhenHandlingLogin_ThenAChallengeIsIssuedFirst()
+    {
+        // Given — the second factor guards the rights the token would admit
+        var person = Person(10, "restricted@test.local", Roles.SystemAdmin);
+        person.ProcessingRestrictedAt = DateTime.UtcNow;
+        var fixture = FixtureFor(await PersonsWith(person));
+        await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+        });
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("restricted@test.local"));
+
+        // Then — a challenge, and the email code the subject asked for
+        Assert.True(output.Success);
+        Assert.True(output.Data!.RequiresTwoFactor);
+        Assert.False(output.Data.ProcessingRestricted);
+        Assert.Null(output.Data.Token);
+        Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
+        Assert.Equal(person.PublicId, fixture.ChallengeTokenIssuer.PersonId);
+        Assert.Single(fixture.EmailCodes.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenAnonymisedPerson_WhenHandlingLogin_ThenReturnsInvalidCredentials()
+    {
+        // Given — NFR-20: nobody's any more, restricted or not
+        var person = Person(10, "gone@test.local", Roles.SystemAdmin, isDeleted: true);
+        person.AnonymisedAt = DateTime.UtcNow;
+        person.ProcessingRestrictedAt = DateTime.UtcNow;
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("gone@test.local"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.InvalidCredentials, output.Errors);
+        Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
+        Assert.Null(fixture.TokenIssuer.Subject);
     }
 }

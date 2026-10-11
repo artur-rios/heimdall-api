@@ -924,6 +924,11 @@ public class Startup : WebApiStartup
         {
             options.Filters.Add<MfaPendingGuardFilter>();
 
+            // NFR-24: a subject-rights-only token, issued to a restricted identity at sign-in, is
+            // confined to the data-subject-rights actions — on its claims alone, so before the
+            // liveness check's database read, like the guard above.
+            options.Filters.Add<SubjectRightsOnlyGuardFilter>();
+
             // Runs after the guard above, which is the cheap check: a challenge token misused as a
             // bearer credential is rejected on its claims alone, without spending the database read
             // this one makes. Global for the same reason — a token naming a deleted identity must be

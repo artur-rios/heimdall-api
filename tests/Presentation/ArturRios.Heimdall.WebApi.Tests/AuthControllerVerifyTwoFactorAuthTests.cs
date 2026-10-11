@@ -225,10 +225,11 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     }
 
     [FunctionalFact]
-    public async Task GivenAPersonRestrictedAfterTheirChallenge_WhenPostVerify_ThenNoTokenIsIssued()
+    public async Task GivenAPersonRestrictedAfterTheirChallenge_WhenPostVerify_ThenOnlyASubjectRightsTokenIsIssued()
     {
-        // NFR-24 / UC-44 step 4: a restricted identity does not authenticate. UC-11 refuses one; a
-        // restriction applied between UC-11 and UC-38 is refused here the same way.
+        // NFR-24 / UC-44 step 4: a restricted identity authenticates for its own rights only. A
+        // restriction applied between UC-11 and UC-38 ends the login the way UC-11's AF-11i would
+        // have — never with the full token the challenge was issued towards.
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted-challenge"));
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
@@ -247,9 +248,43 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         var verify = await VerifyAsync(login.Body!.Data!.ChallengeToken!, recoveryCode: recoveryCode);
 
         // Then
-        Assert.Equal(HttpStatusCode.Unauthorized, verify.StatusCode);
-        Assert.Null(verify.Body?.Data?.Token);
-        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, verify.Body!.Errors);
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+        Assert.True(verify.Body!.Data!.ProcessingRestricted);
+        Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, verify.Body.Messages);
+
+        Authorize(verify.Body.Data.Token!);
+        var elsewhere = await Gateway.GetAsync<DataOutput<object>>($"/api/persons/{person.PublicId}");
+        Assert.Equal(HttpStatusCode.Forbidden, elsewhere.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedPersonWithTwoFactor_WhenLoggingIn_ThenTheChallengeComesFirst()
+    {
+        // AF-11g still applies to a restricted person: the second factor guards the rights the token
+        // admits, so the password alone yields a challenge, not the subject-rights-only token
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted-login"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.FirstAsync(x => x.Id == person.Id);
+            stored.ProcessingRestrictedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        // When
+        var login = await LoginAsync(person.Email);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.True(login.Body!.Data!.RequiresTwoFactor);
+        Assert.Null(login.Body.Data.Token);
+
+        var verify = await VerifyAsync(login.Body.Data.ChallengeToken!, recoveryCode: recoveryCode);
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+        Assert.True(verify.Body!.Data!.ProcessingRestricted);
     }
 
     [FunctionalFact]

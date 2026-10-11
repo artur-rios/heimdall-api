@@ -9,6 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A subject whose processing is restricted (NFR-24) can sign in again, for their own rights only (#145). Until now
+  `POST /api/auth/login`, `POST /api/auth/2fa/verify` and `POST /api/auth/google` refused a restricted identity
+  with the uniform `401`, so once the token held at the time of the restriction expired the subject could no longer
+  lift it (UC-45), export (UC-41) or request erasure (UC-42) without a System Admin. They now answer `200` with a
+  **subject-rights-only token** and a new `processingRestricted: true` field (UC-11 AF-11i, UC-25 AF-25e). That
+  token claims no scope, and every endpoint other than `data-export`, `erasure-request`, `processing-restriction`
+  and `processing-restriction/lift` answers it `403` — still so after the restriction is lifted, when the subject
+  signs in again for a full token. It never lifts anybody else's restriction, whatever role it claims. The check
+  comes after the password, lockout and second-factor checks, so every refusal still answers alike, and a
+  suspended (not yet anonymised) restricted subject is admitted too. A restricted person with email two-factor
+  authentication is now sent the code they sign in with, and `2fa/resend` sends it again on request.
+
 - `ArturRios.Messaging` 1.3.0 → 1.4.0 (#147). Email no longer goes out as "Mailgun Sandbox": the new `MAILGUN_FROM`
   variable sets the sender (`Heimdall <no-reply@example.com>`, or a bare address), and without it mail is sent from
   a bare `postmaster@<MAILGUN_DOMAIN>`. **Operators:** set `MAILGUN_FROM` in each environment's env file — the

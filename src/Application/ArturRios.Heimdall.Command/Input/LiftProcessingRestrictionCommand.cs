@@ -31,4 +31,13 @@ public class LiftProcessingRestrictionCommand : BaseCommand, IActorScoped
 
     [JsonIgnore]
     public int ActingRole { get; set; }
+
+    /// <summary>
+    ///     Whether the caller's token is subject-rights-only (NFR-24) — issued to a restricted
+    ///     identity at sign-in. Such a token acts for its subject alone, so it never lifts anybody
+    ///     else's restriction, whatever role it claims and even once its own restriction is gone.
+    ///     Taken from the token, never from the request.
+    /// </summary>
+    [JsonIgnore]
+    public bool ActingSubjectRightsOnly { get; set; }
 }

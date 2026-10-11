@@ -52,4 +52,12 @@ public class PersonAuthTokenService(IAuthTokenIssuer tokenIssuer)
 
     /// <summary>Issues the full authentication token for a subject already built by <see cref="TryBuildSubject" />.</summary>
     public Task<AuthToken> IssueAsync(AuthTokenSubject subject) => tokenIssuer.IssueAsync(subject);
+
+    /// <summary>
+    ///     Issues the subject-rights-only token a restricted person receives instead of a full one
+    ///     (NFR-24). No subject is built first: the scope-eligibility rules decide what a token may
+    ///     claim, and this one claims no scope at all.
+    /// </summary>
+    public Task<AuthToken> IssueSubjectRightsOnlyAsync(Person person) =>
+        tokenIssuer.IssueSubjectRightsOnlyAsync(person.PublicId, (int)person.RoleId);
 }

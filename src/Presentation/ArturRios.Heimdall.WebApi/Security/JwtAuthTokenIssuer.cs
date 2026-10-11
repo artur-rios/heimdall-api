@@ -20,7 +20,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     (UC-31…UC-35, FR-SP) and folded into the token, so a downstream caller can authorize on them.
 ///     A User claims the permissions of the scope they belong to; a Scope Admin the union over the
 ///     scopes they own; a System Admin none, since they belong to no scope. Logically deleted scopes
-///     and permissions are excluded, as a deleted resource is never claimed.
+///     and permissions are excluded, as a deleted resource is never claimed. A restricted identity
+///     is issued a subject-rights-only token instead (NFR-24), which claims none of this.
 /// </remarks>
 public class JwtAuthTokenIssuer(
     JwtConfiguration configuration,
@@ -46,6 +47,20 @@ public class JwtAuthTokenIssuer(
         return new AuthToken(
             jwtHandler.CreateToken(tokenConfiguration),
             DateTime.UtcNow.AddSeconds(configuration.ExpirationInSeconds));
+    }
+
+    public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+    {
+        // Built from the subject and role alone: the token admits nothing a scope, an ownership or
+        // a permission would matter to, so it claims none — and no display name, since it is not
+        // a token any downstream service should provision a profile from.
+        var user = new IdentityUser(subjectId, roleId) { SubjectRightsOnly = true };
+
+        var tokenConfiguration = configuration with { Claims = mapper.ToClaims(user) };
+
+        return Task.FromResult(new AuthToken(
+            jwtHandler.CreateToken(tokenConfiguration),
+            DateTime.UtcNow.AddSeconds(configuration.ExpirationInSeconds)));
     }
 
     /// <summary>

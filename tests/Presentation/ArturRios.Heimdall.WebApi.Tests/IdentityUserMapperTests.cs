@@ -81,6 +81,52 @@ public class IdentityUserMapperTests
     }
 
     [UnitFact]
+    public void GivenSubjectRightsOnlyIdentity_WhenRoundTrippingClaims_ThenTheMarkIsPreserved()
+    {
+        // Given the token a restricted identity is issued at sign-in (NFR-24): subject and role only
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin) { SubjectRightsOnly = true };
+
+        // When
+        var claims = Mapper.ToClaims(user);
+        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+
+        // Then
+        Assert.True(restored.SubjectRightsOnly);
+        Assert.Equal("true", claims[IdentityUserMapper.SubjectRightsOnlyClaim]);
+    }
+
+    [UnitFact]
+    public void GivenFullIdentity_WhenWritingClaims_ThenNoSubjectRightsOnlyClaimIsEmitted()
+    {
+        // Given
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), []);
+
+        // When
+        var claims = Mapper.ToClaims(user);
+
+        // Then
+        Assert.DoesNotContain(IdentityUserMapper.SubjectRightsOnlyClaim, claims.Keys);
+        Assert.False(((IdentityUser)Mapper.FromClaims(claims)!).SubjectRightsOnly);
+    }
+
+    [UnitTheory]
+    [InlineData("false")]
+    [InlineData("yes")]
+    [InlineData("")]
+    public void GivenUnreadableSubjectRightsOnlyClaim_WhenReadingClaims_ThenTheTokenIsNotMarked(string value)
+    {
+        // Given a claim that is not exactly a boolean true
+        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.User));
+        claims[IdentityUserMapper.SubjectRightsOnlyClaim] = value;
+
+        // When
+        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+
+        // Then
+        Assert.False(restored.SubjectRightsOnly);
+    }
+
+    [UnitFact]
     public void GivenNoClaims_WhenReadingClaims_ThenReturnsNull()
     {
         // Given / When

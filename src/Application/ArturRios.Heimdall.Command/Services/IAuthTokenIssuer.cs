@@ -38,4 +38,15 @@ public interface IAuthTokenIssuer
     /// <param name="subject">The person the token represents, and the scopes it should claim.</param>
     /// <returns>The signed token and its expiry.</returns>
     Task<AuthToken> IssueAsync(AuthTokenSubject subject);
+
+    /// <summary>
+    ///     Issues the token a restricted identity receives when its credential checks out (NFR-24,
+    ///     UC-45): it names the subject and their role and nothing else — no scope, no owned scopes,
+    ///     no scope permissions — and is marked as admitting only the endpoints through which a
+    ///     subject exercises a right over their own identity (UC-41, UC-42, UC-44, UC-45).
+    /// </summary>
+    /// <param name="subjectId">The restricted identity's <c>PublicId</c>.</param>
+    /// <param name="roleId">Its role value (see <c>Roles</c>); a Google User's is always <c>User</c>.</param>
+    /// <returns>The signed token and its expiry.</returns>
+    Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId);
 }

@@ -57,4 +57,12 @@ public sealed record IdentityUser(
     ///     what makes a challenge redeemable once (FR-2F-10).
     /// </summary>
     public Guid? ChallengeId { get; init; }
+
+    /// <summary>
+    ///     Whether this identity comes from a subject-rights-only token — issued at sign-in to an
+    ///     identity whose processing is restricted (NFR-24), by <c>JwtAuthTokenIssuer</c>.
+    ///     <see cref="SubjectRightsOnlyGuardFilter" /> refuses such a token on every action not marked
+    ///     <see cref="DataSubjectRightAttribute" />.
+    /// </summary>
+    public bool SubjectRightsOnly { get; init; }
 }

@@ -713,6 +713,7 @@ sequenceDiagram
 3. The system hashes the provided password using the person's stored `Salt` and compares it to the stored `PasswordHash`.
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
+   If processing of the person is restricted (NFR-24), steps 4 and 5 do not apply and the login ends in AF-11i instead.
 6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
 
 **Alternative Flows:**
@@ -727,6 +728,7 @@ sequenceDiagram
 | AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
 | AF-11g | Person has active two-factor authentication (FR-2F-07) | Return `200 OK` with a short-lived challenge token and the available second-factor methods, instead of the full authentication token; if the Email method is enabled, also send a fresh email code (FR-2F-08). See UC-38 for how the login is completed |
 | AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09) | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
+| AF-11i | The password checks out and processing of the person is restricted (NFR-24, UC-44), whether or not they are logically deleted | Return `200 OK` with a **subject-rights-only token** and `processingRestricted: true`, instead of the full token. The token names the person and their role and claims no scope; it is accepted only by UC-41, UC-42, UC-44 and UC-45, and every other endpoint answers it `403 Forbidden`. A person with active two-factor authentication gets AF-11g's challenge first, and UC-38 ends the same way |
 
 > **On the lockout.** AF-11h joins the collapse deliberately. Answering it distinctly would tell an
 > anonymous caller that an address is registered *and* that they have made it stop responding,
@@ -741,6 +743,16 @@ sequenceDiagram
 > login endpoint into a directory — confirming which emails are registered, which accounts have been
 > deleted, and which scopes still exist — to a caller who has proved nothing. UC-12 takes the same
 > position for password recovery.
+>
+> **On AF-11i.** A restriction used to be a refusal here, folded into the uniform `401`. That left
+> a restricted subject only the token they held when they asked for it — an hour by default — to
+> lift their own restriction (UC-45), export (UC-41) or erase (UC-42); after that only a System Admin
+> could act for them. A token confined to those four endpoints gives the subject their rights back
+> without letting the restricted record be processed for anything else. It comes after the password
+> and lockout checks, so only someone holding the credential learns that the account is restricted,
+> and it skips the deletion and scope checks because a suspended subject keeps their rights until
+> the record is anonymised (NFR-20), and a token that claims no scope has no scope to check. It stays
+> confined once the restriction is lifted: the subject signs in again for a full token.
 >
 > **On AF-11f.** NFR-10 requires every input to be validated, so a request missing an email or
 > password is refused as malformed before any lookup happens. The validation deliberately stops
@@ -1296,7 +1308,7 @@ sequenceDiagram
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
 6. If none exists: the system verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
-7. If one exists: the system confirms it is not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
+7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
 8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
 **Alternative Flows:**
@@ -1306,7 +1318,8 @@ sequenceDiagram
 | AF-25a | ID token invalid, expired, or fails verification | Return `401 Unauthorized` |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
-| AF-25d | Existing Google User is logically deleted, or under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
+| AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
+| AF-25e | Existing Google User is under a restriction on processing (NFR-24), whether or not logically deleted | Return `200 OK` with a subject-rights-only token and `processingRestricted: true`, as UC-11's AF-11i. Nothing is refreshed from the ID token, since that would be processing the record |
 
 ---
 
@@ -1721,13 +1734,13 @@ sequenceDiagram
 2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token. The token must also still name the person's outstanding challenge: redeeming a challenge spends it, and a newer login replaces it, so a challenge is redeemable once (FR-2F-10).
 3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13).
 4. If a recovery code was used, the system marks it consumed — it cannot be used again.
-5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success.
+5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success. A person whose processing is restricted (NFR-24) — including one restricted after the challenge was issued — gets UC-11's AF-11i subject-rights-only token instead, and AF-38d's scope check does not apply to them.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), or naming a person who is logically deleted or under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
+| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
 | AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
@@ -1871,7 +1884,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10) | Return `200 OK`, identical to the main flow. Nothing is sent |
-| AF-46b | The challenge names a person who no longer exists, is logically deleted, or is under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46b | The challenge names a person who no longer exists, is anonymised, or is logically deleted and not under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent. A restricted person's code is sent: they asked for it to finish signing in for their own rights (UC-11 AF-11i), which is the consent Art. 18(2) asks for |
 | AF-46c | The person has no active two-factor configuration, or has one without the email method — an authenticator-app holder has no code to resend | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46d | The challenge has already authorized its maximum reissues (FR-2F-13) | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46e | A full authentication token is presented in place of a challenge token | Treated as AF-46a — the MFA-pending claim is absent, so it is not a challenge token (FR-2F-10) |
@@ -1975,7 +1988,7 @@ sequenceDiagram
 1. The caller names one of Art. 18(1)'s four grounds.
 2. The system resolves the subject from the authentication token — never from the request.
 3. The system records the restriction and the ground.
-4. From that moment the identity cannot authenticate, receives no email, and is withheld from tenant-facing listings.
+4. From that moment the identity can authenticate only for its subject's own rights (a subject-rights-only token — UC-11 AF-11i, UC-25 AF-25e), receives no email but the second-factor codes its subject asks for when signing in, and is withheld from tenant-facing listings.
 
 **Alternative flows**
 
@@ -2018,12 +2031,13 @@ sequenceDiagram
 | --- | --- | --- |
 | AF-45a | The identity is not restricted | `NotRestricted` (404) |
 | AF-45b | The subject could not be informed | `RestrictionLiftNotificationFailed` (503). The restriction stands |
-| AF-45c | A non-System-Admin names somebody else, or a System Admin who is themselves restricted or suspended does | `NotEligible` (403) |
+| AF-45c | A non-System-Admin names somebody else, or a System Admin who is themselves restricted or suspended, or who holds a subject-rights-only token, does | `NotEligible` (403) |
 
 **Notes**
 
 - **AF-45b is the opposite of how every other delivery in this API behaves.** Elsewhere a failed send is deliberately not the caller's problem: a verification email that does not arrive is re-requested, and surfacing the failure would leak whether an address exists. Art. 18(3) makes this one a precondition — the subject "shall be informed before the restriction is lifted" — so a lift that proceeded after a failed send would be unlawful, and would look identical to one that worked.
 - **The subject can reach this while restricted.** Their token is refused everywhere else (NFR-24), but lifting their own restriction is their right, so this endpoint admits it. It admits nothing more: a restricted System Admin is a subject here, not an administrator (AF-45c).
+- **Signing in still reaches it.** A subject whose earlier tokens have expired signs in as usual and is issued a subject-rights-only token (UC-11 AF-11i, UC-25 AF-25e, UC-38), which this endpoint admits. That token acts for its subject alone — a System Admin holding one is refused somebody else's (AF-45c) — and stays confined to UC-41, UC-42, UC-44 and UC-45 after the lift, so the subject signs in again for a full token.
 - **A subject lifting their own needs no notification.** They are the person Art. 18(3) exists to inform. Requiring an email to somebody standing in front of you, and refusing their request when it bounces, would be the article's letter against its purpose.
 
 ---
