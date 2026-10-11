@@ -513,6 +513,7 @@ when **both** credentials are present:
 | `MAILGUN_API_KEY` | Your Mailgun private API key |
 | `MAILGUN_DOMAIN` | The Mailgun sending domain |
 | `MAILGUN_API_VERSION` | Optional; defaults to `v3` |
+| `MAILGUN_FROM` | Optional; the sender, as `Name <address>` or a bare address, e.g. `Heimdall <no-reply@example.com>`. Unset, mail goes out from a bare `postmaster@<MAILGUN_DOMAIN>` |
 
 | Variable | Value |
 | --- | --- |

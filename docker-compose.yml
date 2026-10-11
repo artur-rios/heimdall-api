@@ -80,6 +80,9 @@ services:
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
       MAILGUN_API_VERSION: ${MAILGUN_API_VERSION:-}
+      # The sender, "Name <address>" or a bare address. Unset, mail goes out from a bare
+      # postmaster@$MAILGUN_DOMAIN.
+      MAILGUN_FROM: ${MAILGUN_FROM:-}
 
       # Comma-separated Google OAuth client IDs accepted as an ID token's audience. Unset, Google
       # sign-in refuses every token rather than trusting an unverified one.
