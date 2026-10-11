@@ -38,11 +38,20 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     {
         public AuthTokenSubject? Subject { get; private set; }
 
+        public (Guid SubjectId, int RoleId)? RightsOnlySubject { get; private set; }
+
         public Task<AuthToken> IssueAsync(AuthTokenSubject subject)
         {
             Subject = subject;
             return Task.FromResult(
                 new AuthToken("full-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+        }
+
+        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+        {
+            RightsOnlySubject = (subjectId, roleId);
+            return Task.FromResult(
+                new AuthToken("rights-only-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
     }
 
@@ -426,9 +435,9 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAPersonRestrictedSinceTheirChallenge_WhenHandlingVerify_ThenNoTokenIsIssued()
+    public async Task GivenARestrictedPerson_WhenHandlingVerify_ThenOnlyASubjectRightsTokenIsIssued()
     {
-        // Given — NFR-24 / UC-44 step 4: restricted after UC-11 issued the challenge
+        // Given — NFR-24: restricted, whether before UC-11 issued the challenge or since
         var fixture = await FixtureAsync();
         await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
         fixture.Person.ProcessingRestrictedAt = DateTime.UtcNow;
@@ -436,9 +445,47 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         // When
         var output = await fixture.Handler(null).HandleAsync(fixture.Command(CurrentTotpCode()));
 
+        // Then — a subject-rights-only token, never a full one
+        Assert.True(output.Success);
+        Assert.Equal("rights-only-token", output.Data!.Token);
+        Assert.True(output.Data.ProcessingRestricted);
+        Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, output.Messages);
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.Equal((fixture.Person.PublicId, (int)fixture.Person.RoleId), fixture.TokenIssuer.RightsOnlySubject);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedPersonWithAWrongCode_WhenHandlingVerify_ThenNoTokenIsIssued()
+    {
+        // Given — the second factor still guards the rights the token would admit
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.ProcessingRestrictedAt = DateTime.UtcNow;
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command("000000"));
+
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, output.Errors);
+        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
+    }
+
+    [UnitFact]
+    public async Task GivenASuspendedRestrictedPerson_WhenHandlingVerify_ThenOnlyASubjectRightsTokenIsIssued()
+    {
+        // Given — a suspended subject keeps their rights until anonymised (UC-41, UC-44)
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.ProcessingRestrictedAt = DateTime.UtcNow;
+        fixture.Person.IsDeleted = true;
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.ProcessingRestricted);
         Assert.Null(fixture.TokenIssuer.Subject);
     }
 

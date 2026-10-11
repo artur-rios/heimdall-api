@@ -505,10 +505,11 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     [FunctionalFact]
-    public async Task GivenRestrictedGoogleUser_WhenPostAuthGoogle_ThenReturnsUnauthorizedAndLeavesTheRowAlone()
+    public async Task GivenRestrictedGoogleUser_WhenPostAuthGoogle_ThenOnlyASubjectRightsTokenAndTheRowIsLeftAlone()
     {
         // Given an account under a restriction of processing (UC-44): from that moment the identity
-        // cannot authenticate (NFR-24), and its record is preserved exactly as it stands
+        // authenticates for its own rights only (NFR-24, AF-25e), and its record is preserved exactly
+        // as it stands
         var scope = await SeedScopeAsync();
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("restricted");
@@ -525,11 +526,19 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(subject, email));
 
         // Then
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(AuthMessages.GoogleAuthenticationFailed, response.Body!.Errors);
-        Assert.Null(response.Body.Data?.Token);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body!.Data!.ProcessingRestricted);
+        Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, response.Body.Messages);
         var after = Assert.Single(await StoredAsync(scope));
         Assert.False(after.EmailVerified);
+
+        // And the token reaches the subject's rights, and nothing else
+        Authorize(response.Body.Data.Token!);
+        var export = await Gateway.PostAsync<DataOutput<DataExportCommandOutput?>>("/api/auth/data-export", new { });
+        Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+        var view = await Gateway.GetAsync<DataOutput<object>>(
+            $"/api/scopes/{scope.PublicId}/google-users/{googleUser.PublicId}");
+        Assert.Equal(HttpStatusCode.Forbidden, view.StatusCode);
     }
 
     [FunctionalFact]

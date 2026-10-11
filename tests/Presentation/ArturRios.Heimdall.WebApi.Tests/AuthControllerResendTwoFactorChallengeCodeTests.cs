@@ -372,10 +372,10 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenAChallengeNamingARestrictedPerson_WhenPostResend_ThenNothingIsSent()
+    public async Task GivenAChallengeNamingARestrictedPerson_WhenPostResend_ThenTheCodeIsSent()
     {
-        // AF-46b (NFR-24): mailing a restricted identity would be processing it. Reachable because
-        // the restriction can be applied after UC-11 issued the challenge.
+        // AF-46b (NFR-24): a restricted person signs in for their own rights (UC-11 AF-11i), and the
+        // code finishing that login goes out at their own request — the consent Art. 18(2) asks for.
         var person = await SeedPersonAsync(UniqueEmail("resend-restricted"), restricted: true);
         await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
 
@@ -384,9 +384,9 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         // When
         var response = await ResendAsync(challengeToken);
 
-        // Then — answered like every other path, and nothing issued
+        // Then — answered like every other path, and the code issued
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Empty(await CodesForAsync(person.Id));
+        Assert.Single(await CodesForAsync(person.Id));
     }
 
     [FunctionalFact]

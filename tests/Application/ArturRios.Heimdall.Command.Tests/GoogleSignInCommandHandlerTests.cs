@@ -383,6 +383,84 @@ public class GoogleSignInCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenExistingGoogleUserIsRestricted_WhenHandlingGoogleSignIn_ThenOnlyASubjectRightsTokenIsIssued()
+    {
+        // Given the account's processing is restricted (NFR-24), and the stored flag disagrees with
+        // the token — which must not be written back, since that would be processing the record
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
+        var (issuer, issuerMock) = TokenIssuer();
+        issuerMock
+            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User))
+            .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
+            googleUsers, issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — a subject-rights-only token, never a full one, and the row untouched
+        Assert.True(output.Success);
+        Assert.Equal("rights-only-token", output.Data!.Token);
+        Assert.True(output.Data.ProcessingRestricted);
+        Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, output.Messages);
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+        Assert.False(googleUser.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenExistingGoogleUserIsRestrictedAndSuspended_WhenHandlingGoogleSignIn_ThenOnlyASubjectRightsTokenIsIssued()
+    {
+        // Given — a suspended subject keeps their rights until anonymised (UC-41, UC-44)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers, scope, isDeleted: true);
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
+        var (issuer, issuerMock) = TokenIssuer();
+        issuerMock
+            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User))
+            .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.ProcessingRestricted);
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenExistingGoogleUserIsAnonymised_WhenHandlingGoogleSignIn_ThenReturnsAuthenticationFailedError()
+    {
+        // Given — NFR-20: nobody's any more
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers, scope, isDeleted: true);
+        googleUser.AnonymisedAt = DateTime.UtcNow;
+        googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
+        var (issuer, issuerMock) = TokenIssuer();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.GoogleAuthenticationFailed, output.Errors);
+        issuerMock.Verify(i => i.IssueSubjectRightsOnlyAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [UnitFact]
     public async Task GivenSameGoogleIdInAnotherScope_WhenHandlingGoogleSignIn_ThenCreatesSeparateGoogleUser()
     {
         // Given the same Google account already signed up in a different scope — FR-GO-06/08 make a

@@ -208,7 +208,8 @@ graph LR
     CORS --> AUTHN[AuthenticationMiddleware]
     AUTHN --> RL[Rate limiter<br/>credential-checking endpoints only]
     RL --> MFA[MfaPendingGuardFilter]
-    MFA --> LIVE[ActorLivenessFilter]
+    MFA --> SRO[SubjectRightsOnlyGuardFilter]
+    SRO --> LIVE[ActorLivenessFilter]
     LIVE --> ROLE["RoleRequirement /<br/>AllowAnonymous"]
     ROLE --> CTRL[Controller action]
     CTRL --> MED[Mediator]
@@ -227,7 +228,7 @@ filter, and the rate limiter goes after it. `TraceActivityMiddleware` logs every
 caller's IP address — the real caller's when `HEIMDALL_TRUSTED_PROXIES` names the proxy in front of
 the API, the proxy's otherwise.
 
-Five things about this pipeline are worth knowing before reading any handler:
+Six things about this pipeline are worth knowing before reading any handler:
 
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
@@ -259,6 +260,13 @@ is issued and reads them when one is validated, so the two cannot drift. Every c
 globally and rejects any request whose identity carries `MfaPending` with a 401 (**FR-2F-10**,
 **NFR-17**). The second-factor endpoint itself is unaffected because it is `[AllowAnonymous]` and
 takes the challenge token as a *body field*, never as a bearer credential.
+
+**A subject-rights-only token is confined to four actions.** A restricted identity that signs in
+(**NFR-24**, UC-11 AF-11i, UC-25 AF-25e) is issued a token carrying the `subjectRightsOnly` claim and
+no scope. `SubjectRightsOnlyGuardFilter`, registered globally after the challenge-token guard, answers
+it `403` on every action not marked `[DataSubjectRight]` — on its claims alone, before the liveness
+check's read. The liveness check would refuse it there too while the restriction stands; the guard
+keeps it confined after the restriction is lifted, so a lift never turns it into a full token.
 
 ## Authorization
 

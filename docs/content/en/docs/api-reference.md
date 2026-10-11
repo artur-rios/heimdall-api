@@ -65,6 +65,11 @@ refused everywhere with a 401 — except `data-export`, `erasure-request`, `proc
 answer with the use case's own flows instead: a restricted subject can export, request erasure, lift
 their own restriction, and is told a second restriction is a conflict (AF-44a).
 
+A restricted identity can still sign in — `login`, `2fa/verify` and `google` answer `200` with
+`processingRestricted: true` and a **subject-rights-only token** (UC-11 AF-11i, UC-25 AF-25e). That
+token claims no scope and only those four endpoints accept it; every other endpoint answers `403`,
+even after the restriction is lifted, when the subject signs in again for a full token.
+
 ## Scopes — `/api/scopes`
 
 | Method & path | Who | Use case |
