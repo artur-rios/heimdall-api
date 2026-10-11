@@ -45,7 +45,7 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /2fa/recovery-codes/regenerate` | Authenticated (self) | UC-40 — issue a fresh set of ten |
 | `GET /2fa` | Any authenticated | FR-2F-15 — the caller's own two-factor status; 403 for a Google User |
 | `POST /data-export` | Any authenticated (self) | UC-41 — a copy of everything held about you, with recipients and retention |
-| `POST /erasure-request` | Any authenticated (self) | UC-42 — ask for your own erasure; requires a password or a fresh Google ID token |
+| `POST /erasure-request` | Any authenticated (self) | UC-42 — ask for your own erasure; requires a password or a fresh Google ID token, and lifts your own restriction if you have one (`restrictionLifted`) |
 | `POST /processing-restriction` | Any authenticated (self) | UC-44 — suspend processing without deleting, on an Art. 18(1) ground |
 | `POST /processing-restriction/lift` | Self, or System Admin for another | UC-45 — lift it; an admin must inform the subject first |
 | `GET /erasure-requests` | System Admin | UC-43 — the outstanding erasure requests, soonest deadline first |
@@ -62,8 +62,9 @@ so a caller can only ever act on their own configuration.
 A token naming a restricted identity (UC-44), or one logically deleted and not yet anonymised, is
 refused everywhere with a 401 — except `data-export`, `erasure-request`, `processing-restriction` and
 `processing-restriction/lift`, through which the subject exercises their own rights (NFR-24). Those
-answer with the use case's own flows instead: a restricted subject can export, request erasure, lift
-their own restriction, and is told a second restriction is a conflict (AF-44a).
+answer with the use case's own flows instead: a restricted subject can export, request erasure —
+which lifts the restriction, so the erasure is not held behind it — lift their own restriction, and is
+told a second restriction is a conflict (AF-44a).
 
 A restricted identity can still sign in — `login`, `2fa/verify` and `google` answer `200` with
 `processingRestricted: true` and a **subject-rights-only token** (UC-11 AF-11i, UC-25 AF-25e). That

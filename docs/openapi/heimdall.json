@@ -1178,7 +1178,7 @@
           "Auth"
         ],
         "summary": "Requests erasure of the caller's own identity (UC-42, GDPR Art. 17, LGPD Art. 18 VI).",
-        "description": "\nNo `RoleRequirement`: every role, and a Google User, may ask to be erased — it is\n                    a right of the data subject rather than a privilege of a role. Authentication alone\n                    enforces what matters, which is that somebody is asking for themselves.\n\nThe subject is never named in the request. There is no path parameter and no body\n                    field for it, so the endpoint has no shape in which one identity could ask for\n                    another's erasure.\n\nThe body carries a credential, and which one depends on the caller: a person presents\n                    their password, a Google User a freshly issued Google ID token. A bearer token alone\n                    is not enough for an irreversible operation. Because it verifies a password, this\n                    endpoint is governed by NFR-18 rather than NFR-05.\n\nReachable by a subject whose processing is restricted (NFR-24). A suspended identity\n                    reaches the handler too, and is answered by AF-42c (409) if it asked already, AF-42b\n                    (403) otherwise.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "\nNo `RoleRequirement`: every role, and a Google User, may ask to be erased — it is\n                    a right of the data subject rather than a privilege of a role. Authentication alone\n                    enforces what matters, which is that somebody is asking for themselves.\n\nThe subject is never named in the request. There is no path parameter and no body\n                    field for it, so the endpoint has no shape in which one identity could ask for\n                    another's erasure.\n\nThe body carries a credential, and which one depends on the caller: a person presents\n                    their password, a Google User a freshly issued Google ID token. A bearer token alone\n                    is not enough for an irreversible operation. Because it verifies a password, this\n                    endpoint is governed by NFR-18 rather than NFR-05.\n\nReachable by a subject whose processing is restricted (NFR-24), and a successful request\n                    lifts that restriction — without the Art. 18(3) notice, since the subject is lifting\n                    their own — so the erasure is not held behind it; `restrictionLifted` in the\n                    response says whether it did. A suspended identity\n                    reaches the handler too, and is answered by AF-42c (409) if it asked already, AF-42b\n                    (403) otherwise.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_RequestErasure",
         "requestBody": {
           "content": {
@@ -6207,6 +6207,9 @@
           "blockedReason": {
             "type": "string",
             "nullable": true
+          },
+          "restrictionLifted": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

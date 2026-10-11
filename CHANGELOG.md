@@ -25,6 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the release built on xUnit v3. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its filters and the
   `.trx` logger work as before. Test-only; the HTTP API and the OpenAPI document are unchanged.
 
+### Fixed
+
+- An erasure requested while the subject's processing was restricted could miss its legal deadline: NFR-24 kept the
+  restricted record out of the anonymisation pass, so the request waited, unanonymised, until somebody lifted the
+  restriction. `POST /api/auth/erasure-request` (UC-42) now lifts the subject's own restriction in the same write —
+  only the subject can impose one (UC-44), and the request already demands their credential — whether the request
+  suspends the identity or is recorded but blocked (AF-42d), for persons and Google Users alike. It is lifted as a
+  subject lifts their own (UC-45), so no Art. 18(3) notification is sent. The response carries a new boolean,
+  `restrictionLifted` (additive), and the audit trail records a `LiftProcessingRestrictionCommand` entry on the
+  subject beside the request's own. A restriction imposed after the request still holds the erasure until it is
+  lifted. UC-42, UC-44, NFR-24 and the API reference say so; the OpenAPI document is regenerated (#146).
+
 ## [1.2.0] - 2026-10-09
 
 ### Changed

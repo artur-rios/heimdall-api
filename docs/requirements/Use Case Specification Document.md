@@ -1942,7 +1942,7 @@ sequenceDiagram
 | **Actor** | Any authenticated identity — a person of any role, or a Google User |
 | **Description** | A data subject asks for their own identity to be erased (GDPR Art. 17, LGPD Art. 18 VI). The request is recorded, the deadline starts, and the identity is suspended immediately; the anonymisation pass (NFR-20) carries the erasure out. |
 | **Preconditions** | The caller holds a valid authentication token and has not already requested erasure. |
-| **Postconditions** | The request and its deadline are recorded. The identity is suspended, unless something blocks it, in which case the blocking reason is recorded and the deadline still runs. |
+| **Postconditions** | The request and its deadline are recorded, and any restriction the subject had in place (UC-44) is lifted. The identity is suspended, unless something blocks it, in which case the blocking reason is recorded and the deadline still runs. |
 
 **Main flow**
 
@@ -1950,8 +1950,9 @@ sequenceDiagram
 2. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
 3. The system verifies the credential against that identity.
 4. The system records `ErasureRequestedAt` and computes `ErasureDueAt` from the statutory deadline, storing it so a later configuration change cannot move an obligation that has already attached.
-5. The system suspends the identity, marking the deletion as subject-requested so the shorter deadline applies.
-6. The system returns the request timestamp and the deadline.
+5. If the subject's processing is restricted (UC-44), the system lifts the restriction in the same write, as UC-45 does for a subject lifting their own — no notification — and records the lift in the audit trail (NFR-09).
+6. The system suspends the identity, marking the deletion as subject-requested so the shorter deadline applies.
+7. The system returns the request timestamp, the deadline, and whether a restriction was lifted.
 
 **Alternative flows**
 
@@ -1960,14 +1961,15 @@ sequenceDiagram
 | AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account | `CredentialNotAccepted` (401). Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
-| AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. The anonymisation pass retries it once an owner has been transferred (UC-21). |
+| AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
 
 **Notes**
 
 - The suspension is immediate and deliberate: a subject who has asked to be erased has withdrawn the basis on which the account operates, so continuing to authenticate them while the deadline runs would be processing they have objected to.
 - AF-42d is a success rather than a refusal. The subject's right does not depend on the scope's ownership arrangements, and GDPR Art. 12(3)'s clock starts at the request whether or not anything blocks it. Answering 4xx would tell the subject their right had been refused when it has not.
 - Because it verifies a password, this use case's endpoint is governed by NFR-18 rather than NFR-05.
-- **A restricted subject may request erasure** (NFR-24). The right does not lapse with the restriction, and the request is the subject's own consent to the processing it involves (Art. 18(2)). The record is suspended and the deadline runs, but NFR-24 keeps it out of the anonymisation pass until the restriction is lifted — by the subject (UC-45) or a System Admin — and UC-43 shows it meanwhile.
+- **A restricted subject may request erasure, and the request lifts the restriction** (NFR-24). The right does not lapse with the restriction, and the request is the subject's own consent to the processing it involves (Art. 18(2)). Left in place, the restriction would keep the record out of the anonymisation pass while the deadline ran out. Only the subject can impose a restriction (UC-44), and only the subject, credential in hand, can reach this step — so the request is their later and more specific instruction, and it supersedes their wish that the record be preserved. No Art. 18(3) notification is sent: the subject is the person it would inform (UC-45). The response says so (`restrictionLifted`), and the audit trail records a `LiftProcessingRestrictionCommand` entry on the subject beside the request's own.
+- **A restriction imposed after the request holds the erasure.** A suspended identity may still restrict (UC-44), and that later instruction is not overridden: NFR-24 keeps the record out of the anonymisation pass until it is lifted — by the subject (UC-45), or by a System Admin after informing them — and UC-43 shows it meanwhile. Repeating the erasure request is AF-42c and lifts nothing.
 - This use case does **not** change UC-09 or UC-10. Those remain administrative operations and keep refusing self-deletion; this is a separate path with a different actor and a different meaning.
 
 ---
@@ -2002,7 +2004,7 @@ sequenceDiagram
 
 - **Restriction is not deletion, and the two are independent states.** `IsDeleted` means the identity is on its way out — excluded from reads, cascaded by UC-04, eventually anonymised by NFR-20. A restriction means the opposite: the record is disputed and must be preserved exactly as it stands. Reusing the flag would start an erasure clock on data the subject has specifically asked be kept.
 - **No credential is required, unlike UC-42.** Erasure is irreversible and demands proof the person is present. A restriction destroys nothing and is liftable, and somebody asking for one may be doing so precisely because they believe the account is compromised — demanding the password of a person in that position would be the wrong way round.
-- **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them.
+- **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them. Such a restriction holds the erasure until it is lifted (UC-45), because it is the subject's later instruction; the reverse order differs — an erasure request lifts a restriction already in place (UC-42).
 - **A restricted identity can still reach this use case and its siblings.** Every other endpoint refuses its token (NFR-24), but UC-41, UC-42, UC-44 and UC-45 are how the subject exercises their rights over the restricted record, so they admit a restricted or suspended (not anonymised) subject and answer with their own flows — here, AF-44a.
 - The grounds are an enum rather than free text: Art. 18(1) is exhaustive, so prose would add unbounded personal data with no purpose the ground does not already serve.
 
