@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `ArturRios.Messaging` 1.3.0 → 1.4.0 (#147). Email no longer goes out as "Mailgun Sandbox": the new `MAILGUN_FROM`
+  variable sets the sender (`Heimdall <no-reply@example.com>`, or a bare address), and without it mail is sent from
+  a bare `postmaster@<MAILGUN_DOMAIN>`. **Operators:** set `MAILGUN_FROM` in each environment's env file — the
+  templates in `docker/` and `docker-compose.yml` now carry it. A value that is not exactly one address makes every
+  send fail, logged with the variable's name. The library also stops writing recipient addresses to the log; its
+  lines carry a pseudonymous `RecipientRef` instead.
+
 - The tests run on xUnit v3: `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2 and `ArturRios.Util.Test` 4.0.0 → 5.0.0,
   the release built on xUnit v3. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its filters and the
   `.trx` logger work as before. Test-only; the HTTP API and the OpenAPI document are unchanged.
