@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-11
+
 ### Changed
 
 - A subject whose processing is restricted (NFR-24) can sign in again, for their own rights only (#145). Until now
@@ -194,7 +196,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0
