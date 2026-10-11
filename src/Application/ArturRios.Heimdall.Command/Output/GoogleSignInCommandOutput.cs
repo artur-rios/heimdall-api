@@ -30,4 +30,13 @@ public class GoogleSignInCommandOutput : CommandOutput
     ///     answer.
     /// </summary>
     public bool EmailVerified { get; set; }
+
+    /// <summary>
+    ///     True when processing of the identity is restricted (NFR-24), so <see cref="Token" /> is a
+    ///     subject-rights-only token: it is accepted only where the subject exports, erases, restricts,
+    ///     or lifts their own restriction (UC-41, UC-42, UC-44, UC-45), and refused everywhere else.
+    ///     A client should offer those actions — lifting the restriction above all — and ask the
+    ///     subject to sign in again once it is lifted, for a full token.
+    /// </summary>
+    public bool ProcessingRestricted { get; set; }
 }

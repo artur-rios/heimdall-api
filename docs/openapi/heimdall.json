@@ -5053,6 +5053,9 @@
           },
           "emailVerified": {
             "type": "boolean"
+          },
+          "processingRestricted": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -5634,6 +5637,9 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "processingRestricted": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -7267,6 +7273,9 @@
             "format": "date-time"
           },
           "emailVerified": {
+            "type": "boolean"
+          },
+          "processingRestricted": {
             "type": "boolean"
           }
         },

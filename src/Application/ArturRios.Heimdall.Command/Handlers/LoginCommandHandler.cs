@@ -22,6 +22,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     issues a token carrying their <c>PublicId</c>, role, and scope claims (FR-AU-03/04) — unless
 ///     the person has active two-factor authentication, in which case AF-11g diverts to a short-lived
 ///     challenge token instead (FR-2F-07…FR-2F-08; see UC-38 for how the login is then completed).
+///     A person whose processing is restricted (NFR-24) is issued a subject-rights-only token
+///     instead of a full one.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -120,34 +122,66 @@ public class LoginCommandHandler(
         // attempt's reservation included — starts again.
         await atomicWrites.ClearLoginAttemptsAsync(person);
 
-        // NFR-24 (UC-44 step 4): processing is restricted, so authenticating would be processing it.
-        // Answered with the same message as every other refusal here, so the endpoint cannot be
-        // used to discover that an account is under dispute — and the subject who asked for the
-        // restriction already knows why.
-        if (person.ProcessingRestrictedAt is not null)
+        // NFR-20: an anonymised identity is nobody's any more. Its address is overwritten, so the
+        // lookup should never find one; this is the guard for the day that assumption breaks.
+        if (person.AnonymisedAt is not null)
         {
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        // UC-11 step 4 (AF-11c, FR-AU-05).
-        if (person.IsDeleted)
+        // NFR-24 (UC-44 step 4): processing is restricted, so the person may not authenticate for
+        // anything but their own rights over the record. They get a subject-rights-only token rather
+        // than a refusal, because a refusal left them no way to lift their own restriction (UC-45)
+        // once every token issued before it had expired. Only the holder of the password learns
+        // that the account is restricted: every refusal above still answers alike.
+        //
+        // The deletion and scope checks below do not apply to such a token. It claims no scope, and
+        // a suspended subject keeps their rights over the record until it is anonymised (UC-41,
+        // UC-44) — the use cases behind the token decide what each of them may do.
+        var restricted = person.ProcessingRestrictedAt is not null;
+
+        AuthTokenSubject? subject = null;
+
+        if (!restricted)
         {
-            return output.WithError(AuthMessages.InvalidCredentials);
+            // UC-11 step 4 (AF-11c, FR-AU-05).
+            if (person.IsDeleted)
+            {
+                return output.WithError(AuthMessages.InvalidCredentials);
+            }
+
+            // UC-11 step 5 (AF-11d/AF-11e, FR-AU-06/07).
+            if (!personAuthTokenService.TryBuildSubject(person, out subject))
+            {
+                return output.WithError(AuthMessages.InvalidCredentials);
+            }
         }
 
-        // UC-11 step 5 (AF-11d/AF-11e, FR-AU-06/07).
-        if (!personAuthTokenService.TryBuildSubject(person, out var subject))
-        {
-            return output.WithError(AuthMessages.InvalidCredentials);
-        }
-
-        // UC-11 step 6, AF-11g (FR-2F-07): an active 2FA configuration diverts to a challenge token.
+        // UC-11 step 6, AF-11g (FR-2F-07): an active 2FA configuration diverts to a challenge token —
+        // for a restricted person too. A second factor guards the rights the token admits as much as
+        // it guards anything else, and the email code goes out at the subject's own request, which
+        // is the consent Art. 18(2) asks for (NFR-24).
         var twoFactorAuth = await twoFactorReader.Query()
             .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
 
         if (twoFactorAuth is not null)
         {
             return await IssueChallengeAsync(output, person, twoFactorAuth);
+        }
+
+        if (restricted)
+        {
+            var rightsOnly = await personAuthTokenService.IssueSubjectRightsOnlyAsync(person);
+
+            return output
+                .WithData(new LoginCommandOutput
+                {
+                    Token = rightsOnly.Token,
+                    ExpiresAt = rightsOnly.ExpiresAt,
+                    EmailVerified = person.EmailVerified,
+                    ProcessingRestricted = true
+                })
+                .WithMessage(AuthMessages.SubjectRightsOnlySignIn);
         }
 
         var token = await personAuthTokenService.IssueAsync(subject!);

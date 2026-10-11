@@ -141,6 +141,54 @@ public class LiftProcessingRestrictionCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenASystemAdminWithASubjectRightsOnlyToken_WhenLiftingSomebodyElses_ThenItIsRefused()
+    {
+        // A subject-rights-only token (NFR-24) acts for its subject alone — even once its own
+        // restriction is gone, so the admin here is no longer restricted.
+        var persons = new AsyncFakeRepository<Person, long>();
+        var subject = await SeedRestrictedAsync(persons);
+        var admin = await SeedRestrictedAsync(persons);
+        admin.RoleId = (long)Roles.SystemAdmin;
+        admin.ProcessingRestrictedAt = null;
+        var notifier = new Mock<IRestrictionLiftNotifier>();
+
+        var output = await Handler(persons, new(), Notifier(true, notifier))
+            .HandleAsync(new LiftProcessingRestrictionCommand
+            {
+                SubjectId = subject.PublicId,
+                ActingPersonId = admin.PublicId,
+                ActingRole = (int)Roles.SystemAdmin,
+                ActingSubjectRightsOnly = true
+            });
+
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotEligible, output.Errors);
+        notifier.Verify(n => n.NotifyAsync(It.IsAny<string>()), Times.Never);
+        Assert.NotNull(subject.ProcessingRestrictedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenASubjectRightsOnlyToken_WhenLiftingTheirOwn_ThenItIsLiftedWithoutNotification()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var person = await SeedRestrictedAsync(persons);
+        var notifier = new Mock<IRestrictionLiftNotifier>();
+
+        var output = await Handler(persons, new(), Notifier(true, notifier))
+            .HandleAsync(new LiftProcessingRestrictionCommand
+            {
+                ActingPersonId = person.PublicId,
+                ActingRole = (int)person.RoleId,
+                ActingSubjectRightsOnly = true
+            });
+
+        Assert.True(output.Success);
+        Assert.False(output.Data!.SubjectNotified);
+        notifier.Verify(n => n.NotifyAsync(It.IsAny<string>()), Times.Never);
+        Assert.Null(person.ProcessingRestrictedAt);
+    }
+
+    [UnitFact]
     public async Task GivenANonAdminLiftingSomebodyElses_WhenLifting_ThenItIsRefused()
     {
         var persons = new AsyncFakeRepository<Person, long>();

@@ -78,20 +78,22 @@ public class VerifyTwoFactorAuthCommandHandler(
             .ThenInclude(membership => membership!.Scope)
             .Include(person => person.ScopeOwnerships)
             .ThenInclude(ownership => ownership.Scope)
-            .FirstOrDefaultAsync(person => person.PublicId == principal.PersonId && !person.IsDeleted);
+            // A suspended person is no longer let in, unless they are restricted: UC-11 issues a
+            // restricted person a subject-rights-only token whatever else about their standing, so
+            // the login it diverted here ends the same way (NFR-24).
+            .FirstOrDefaultAsync(person => person.PublicId == principal.PersonId &&
+                                           person.AnonymisedAt == null &&
+                                           (!person.IsDeleted || person.ProcessingRestrictedAt != null));
 
         var twoFactorAuth = person is null
             ? null
             : await twoFactorReader.Query()
                 .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
 
-        // AF-38a again, for what a signature cannot say. A person under a restriction of processing
-        // may not authenticate (NFR-24, UC-44 step 4) — UC-11 refuses them, and one restricted after
-        // their challenge was issued is refused here the same way rather than handed a full token.
-        // And a challenge is redeemable once (FR-2F-10): the token must still name the
-        // configuration's outstanding challenge, which redemption clears and a newer login replaces.
+        // AF-38a again, for what a signature cannot say. A challenge is redeemable once (FR-2F-10):
+        // the token must still name the configuration's outstanding challenge, which redemption
+        // clears and a newer login replaces.
         if (person is null || twoFactorAuth is null ||
-            person.ProcessingRestrictedAt is not null ||
             twoFactorAuth.ChallengeId != principal.ChallengeId)
         {
             return output.WithError(TwoFactorMessages.ChallengeTokenInvalid);
@@ -127,7 +129,16 @@ public class VerifyTwoFactorAuthCommandHandler(
         // UC-11 step 6 / UC-38 step 5 (FR-2F-09): the same scope-eligibility rules a direct login
         // enforces still apply to a 2FA-gated one. The factor already checked out, so this is a
         // distinct rejection from AF-38a rather than a reuse of ChallengeTokenInvalid.
-        if (!personAuthTokenService.TryBuildSubject(person, out var subject))
+        //
+        // A person under a restriction of processing (NFR-24) is issued a subject-rights-only token
+        // instead, as UC-11 would have issued one had they no second factor — including one
+        // restricted after their challenge was issued, who is not handed a full token. That token
+        // claims no scope, so the rules do not apply to it.
+        var restricted = person.ProcessingRestrictedAt is not null;
+
+        AuthTokenSubject? subject = null;
+
+        if (!restricted && !personAuthTokenService.TryBuildSubject(person, out subject))
         {
             return output.WithError(TwoFactorMessages.ScopeNoLongerEligible);
         }
@@ -155,6 +166,21 @@ public class VerifyTwoFactorAuthCommandHandler(
             !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
         {
             return output.WithError(TwoFactorMessages.FactorInvalid);
+        }
+
+        if (restricted)
+        {
+            var rightsOnly = await personAuthTokenService.IssueSubjectRightsOnlyAsync(person);
+
+            return output
+                .WithData(new VerifyTwoFactorAuthCommandOutput
+                {
+                    Token = rightsOnly.Token,
+                    ExpiresAt = rightsOnly.ExpiresAt,
+                    EmailVerified = person.EmailVerified,
+                    ProcessingRestricted = true
+                })
+                .WithMessage(AuthMessages.SubjectRightsOnlySignIn);
         }
 
         var token = await personAuthTokenService.IssueAsync(subject!);

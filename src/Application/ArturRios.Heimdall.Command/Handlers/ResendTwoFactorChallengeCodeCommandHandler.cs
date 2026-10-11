@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <remarks>
 ///     <para>
 ///         <b>Every path answers the same.</b> A valid challenge, an unknown one, a forged one, an
-///         expired one, one naming a person who no longer exists or is under a restriction, one
+///         expired one, one naming a person who no longer exists or has been suspended, one
 ///         naming a person with no email method, and one that has spent its reissues all return
 ///         <see cref="TwoFactorMessages.ChallengeCodeResent" /> and no data. This is the endpoint's
 ///         security design rather than an economy of writing: it is anonymous, and an answer that
@@ -129,12 +129,14 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
         }
 
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(person => person.PublicId == principal.PersonId && !person.IsDeleted);
+            // AF-46b. A restricted person is the exception to both halves (NFR-24): UC-11 lets them
+            // sign in for their own rights, suspended or not, and a code they asked for is sent at
+            // their request — the consent Art. 18(2) asks for — so the login it belongs to can finish.
+            .FirstOrDefaultAsync(person => person.PublicId == principal.PersonId &&
+                                           person.AnonymisedAt == null &&
+                                           (!person.IsDeleted || person.ProcessingRestrictedAt != null));
 
-        // AF-46b. The restriction check mirrors UC-12's: sending to a restricted identity would be
-        // processing it (NFR-24), and a person who acquired the restriction after UC-11 issued their
-        // challenge could otherwise still be mailed.
-        if (person is null || person.ProcessingRestrictedAt is not null)
+        if (person is null)
         {
             return null;
         }
