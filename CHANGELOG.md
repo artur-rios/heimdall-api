@@ -7,6 +7,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-11
+
+### Changed
+
+- A subject whose processing is restricted (NFR-24) can sign in again, for their own rights only (#145). Until now
+  `POST /api/auth/login`, `POST /api/auth/2fa/verify` and `POST /api/auth/google` refused a restricted identity
+  with the uniform `401`, so once the token held at the time of the restriction expired the subject could no longer
+  lift it (UC-45), export (UC-41) or request erasure (UC-42) without a System Admin. They now answer `200` with a
+  **subject-rights-only token** and a new `processingRestricted: true` field (UC-11 AF-11i, UC-25 AF-25e). That
+  token claims no scope, and every endpoint other than `data-export`, `erasure-request`, `processing-restriction`
+  and `processing-restriction/lift` answers it `403` — still so after the restriction is lifted, when the subject
+  signs in again for a full token. It never lifts anybody else's restriction, whatever role it claims. The check
+  comes after the password, lockout and second-factor checks, so every refusal still answers alike, and a
+  suspended (not yet anonymised) restricted subject is admitted too. A restricted person with email two-factor
+  authentication is now sent the code they sign in with, and `2fa/resend` sends it again on request.
+
+- `ArturRios.Messaging` 1.3.0 → 1.4.0 (#147). Email no longer goes out as "Mailgun Sandbox": the new `MAILGUN_FROM`
+  variable sets the sender (`Heimdall <no-reply@example.com>`, or a bare address), and without it mail is sent from
+  a bare `postmaster@<MAILGUN_DOMAIN>`. **Operators:** set `MAILGUN_FROM` in each environment's env file — the
+  templates in `docker/` and `docker-compose.yml` now carry it. A value that is not exactly one address makes every
+  send fail, logged with the variable's name. The library also stops writing recipient addresses to the log; its
+  lines carry a pseudonymous `RecipientRef` instead.
+
+- The tests run on xUnit v3: `xunit` 2.9.3 → `xunit.v3.mtp-off` 4.0.2 and `ArturRios.Util.Test` 4.0.0 → 5.0.0,
+  the release built on xUnit v3. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its filters and the
+  `.trx` logger work as before. Test-only; the HTTP API and the OpenAPI document are unchanged.
+
+### Fixed
+
+- An erasure requested while the subject's processing was restricted could miss its legal deadline: NFR-24 kept the
+  restricted record out of the anonymisation pass, so the request waited, unanonymised, until somebody lifted the
+  restriction. `POST /api/auth/erasure-request` (UC-42) now lifts the subject's own restriction in the same write —
+  only the subject can impose one (UC-44), and the request already demands their credential — whether the request
+  suspends the identity or is recorded but blocked (AF-42d), for persons and Google Users alike. It is lifted as a
+  subject lifts their own (UC-45), so no Art. 18(3) notification is sent. The response carries a new boolean,
+  `restrictionLifted` (additive), and the audit trail records a `LiftProcessingRestrictionCommand` entry on the
+  subject beside the request's own. A restriction imposed after the request still holds the erasure until it is
+  lifted. UC-42, UC-44, NFR-24 and the API reference say so; the OpenAPI document is regenerated (#146).
+
 ## [1.2.0] - 2026-10-09
 
 ### Changed
@@ -157,7 +196,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/artur-rios/heimdall-api/compare/v1.0.0...v1.1.0

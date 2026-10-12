@@ -120,7 +120,7 @@ Rules:
 
 ## 5. Tooling & packages
 
-Every test project uses the same stack: **xUnit** as the test framework, `coverlet.collector` for coverage, **`ArturRios.Util.Test`** for shared helpers & test doubles, **Moq** for mocking, **Bogus** for test-data generation, and **Testcontainers** (`Testcontainers.PostgreSql`) for the functional database.
+Every test project uses the same stack: **xUnit v3** as the test framework, `coverlet.collector` for coverage, **`ArturRios.Util.Test`** for shared helpers & test doubles, **Moq** for mocking, **Bogus** for test-data generation, and **Testcontainers** (`Testcontainers.PostgreSql`) for the functional database.
 
 > The canonical list of these testing technologies **and their pinned versions** lives in the [Technology Stack Document](Technology%20Stack%20Document.md) §7. This section covers *how* to use them; see that document for *what* (packages and versions).
 
@@ -380,7 +380,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public string ConnectionString => _container.GetConnectionString();
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _container.StartAsync();
         Environment.SetEnvironmentVariable("HEIMDALL_DATA_CONNECTIONSTRING", ConnectionString);
@@ -390,7 +390,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await context.Database.MigrateAsync();
     }
 
-    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
+    public ValueTask DisposeAsync() => _container.DisposeAsync();
 }
 
 [CollectionDefinition(nameof(FunctionalCollection))]

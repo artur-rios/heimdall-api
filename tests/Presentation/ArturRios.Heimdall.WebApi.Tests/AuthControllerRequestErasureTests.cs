@@ -1,6 +1,8 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
+using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
@@ -17,8 +19,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Functional tests for POST /api/auth/erasure-request and GET /api/auth/erasure-requests (UC-42,
 // UC-43) over the real pipeline. The behaviours that matter end to end are that a bearer token
 // alone cannot trigger an irreversible operation, that the subject is always the caller, that a
-// blocked request is still recorded with its deadline running, and that the queue is System Admin
-// only.
+// blocked request is still recorded with its deadline running, that a request lifts the subject's
+// own restriction rather than waiting behind it, and that the queue is System Admin only.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -26,7 +28,8 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
-    private async Task<Person> SeedPersonAsync(Roles role = Roles.User, Scope? ownedScope = null)
+    private async Task<Person> SeedPersonAsync(
+        Roles role = Roles.User, Scope? ownedScope = null, bool restricted = false)
     {
         await using var context = db.CreateContext();
         var person = new Person
@@ -37,7 +40,9 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
             PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
             Salt = salt,
             RoleId = (long)role,
-            EmailVerified = true
+            EmailVerified = true,
+            ProcessingRestrictedAt = restricted ? DateTime.UtcNow.AddDays(-3) : null,
+            RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null
         };
 
         context.Persons.Add(person);
@@ -141,6 +146,115 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
 
         // NFR-12 holds: the scope keeps its owner
         Assert.False(stored.IsDeleted);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedPerson_WhenRequestingErasure_ThenTheRestrictionIsLiftedAndTheLiftAudited()
+    {
+        // NFR-24 keeps a restricted record out of the anonymisation pass, so a request left behind
+        // the restriction would wait unerased while its deadline ran out
+        var person = await SeedPersonAsync(restricted: true);
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
+            "/api/auth/erasure-request", new { password = Password });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body?.Data?.RestrictionLifted);
+
+        var stored = await ReloadAsync(person);
+
+        Assert.True(stored.IsDeleted);
+        Assert.NotNull(stored.ErasureRequestedAt);
+        Assert.Null(stored.ProcessingRestrictedAt);
+        Assert.Null(stored.RestrictionGround);
+
+        // The subject lifted their own, so no Art. 18(3) notice is owed or recorded (UC-45)
+        Assert.Null(stored.RestrictionLiftNotifiedAt);
+
+        // The trail shows both: the request, and the lift under the name a reader looking for lifts
+        // searches
+        await using var context = db.CreateContext();
+        var actions = await context.AuditLogs.AsNoTracking()
+            .Where(a => a.TargetId == person.PublicId && a.Succeeded)
+            .Select(a => a.Action)
+            .ToListAsync();
+
+        Assert.Contains(nameof(RequestErasureCommand), actions);
+        Assert.Contains(nameof(LiftProcessingRestrictionCommand), actions);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnUnrestrictedPerson_WhenRequestingErasure_ThenNoLiftIsReportedOrAudited()
+    {
+        var person = await SeedPersonAsync();
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
+            "/api/auth/erasure-request", new { password = Password });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Body?.Data?.RestrictionLifted);
+
+        await using var context = db.CreateContext();
+
+        Assert.False(await context.AuditLogs.AnyAsync(a =>
+            a.TargetId == person.PublicId && a.Action == nameof(LiftProcessingRestrictionCommand)));
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedLastOwnerOfAScope_WhenRequestingErasure_ThenTheRestrictionIsLiftedThoughBlocked()
+    {
+        // AF-42d: the suspension waits for an ownership transfer; the restriction does not
+        var scope = await SeedScopeAsync();
+        var owner = await SeedPersonAsync(Roles.ScopeAdmin, scope, restricted: true);
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
+
+        var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
+            "/api/auth/erasure-request", new { password = Password });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Body?.Data?.Blocked);
+        Assert.True(response.Body?.Data?.RestrictionLifted);
+
+        var stored = await ReloadAsync(owner);
+
+        Assert.False(stored.IsDeleted);
+        Assert.Null(stored.ProcessingRestrictedAt);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedPersonsRequestPastItsDeadline_WhenAnonymising_ThenTheRecordIsErased()
+    {
+        // The point of lifting: once the deadline arrives, the pass treats the record like any other
+        var person = await SeedPersonAsync(restricted: true);
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
+            "/api/auth/erasure-request", new { password = Password });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The deadline is stored rather than derived, so bringing it forward stands in for the wait
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+            stored.ErasureDueAt = DateTime.UtcNow.AddMinutes(-1);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = db.CreateContext())
+        {
+            var pass = await IdentityAnonymisationTests.Handler(context)
+                .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+            Assert.True(pass.Success);
+        }
+
+        var erased = await ReloadAsync(person);
+
+        Assert.NotNull(erased.AnonymisedAt);
+        Assert.Equal(IdentityAnonymiser.AnonymisedName, erased.Name);
     }
 
     [FunctionalFact]

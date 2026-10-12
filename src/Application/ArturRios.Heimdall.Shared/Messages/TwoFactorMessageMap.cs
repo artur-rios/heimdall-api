@@ -29,6 +29,8 @@ public static class TwoFactorMessageMap
             [TwoFactorMessages.EmailCodeInvalid] = HttpStatusCodes.BadRequest,
             // UC-38 main flow — challenge redeemed, full token issued.
             [TwoFactorMessages.VerificationSuccessful] = HttpStatusCodes.Ok,
+            // UC-38 for a restricted person (NFR-24) — a subject-rights-only token.
+            [AuthMessages.SubjectRightsOnlySignIn] = HttpStatusCodes.Ok,
             // AF-38a — challenge token missing, invalid, or expired.
             [TwoFactorMessages.ChallengeTokenInvalid] = HttpStatusCodes.Unauthorized,
             // UC-46 — the one answer every flow gives, main and alternative alike (FR-2F-16).

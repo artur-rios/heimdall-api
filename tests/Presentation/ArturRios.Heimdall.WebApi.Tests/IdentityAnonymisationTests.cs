@@ -39,7 +39,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         PurgeBatchSize = 500
     };
 
-    private static AnonymiseExpiredDeletionsCommandHandler Handler(AppDbContext context)
+    internal static AnonymiseExpiredDeletionsCommandHandler Handler(AppDbContext context)
     {
         var persons = new EfRepository<Person, long>(context);
         var googleUsers = new EfRepository<GoogleUser, long>(context);

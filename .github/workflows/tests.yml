@@ -132,8 +132,9 @@ jobs:
         run: python3 scripts/coverage.py --report-only
 
       - name: Upload coverage report
-        # build-docs.yml downloads this artifact by name from the latest successful run on main and
-        # unpacks it into docs/coverage-report before Hugo builds. Renaming it breaks that job.
+        # build-docs.yml downloads this artifact by name — from this run when the docs job below
+        # calls it, otherwise from the latest successful run on main — and unpacks it into
+        # docs/coverage-report before Hugo builds. Renaming it breaks that job.
         #
         # always(), because the step before this one now fails the build when coverage drops below
         # the minimum — and that is the run whose report somebody actually needs to open. The report
@@ -155,6 +156,23 @@ jobs:
           name: test-results
           path: '**/TestResults/*.trx'
           if-no-files-found: warn
+
+  # Publishes the docs site with this run's coverage report once the suites pass on main. Calling
+  # build-docs.yml from here, rather than having it listen for this workflow to complete, keeps the
+  # build on main: a workflow_run run belongs to the default branch, develop, and the github-pages
+  # environment refuses to deploy from it.
+  docs:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # What build-docs.yml declares for itself; a called workflow gets no more than its caller grants.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/build-docs.yml
+    with:
+      coverage-from-caller: true
 
   # Nothing else in CI builds the container image, and it can break on its own: the Dockerfile
   # restores from a hand-listed set of project files rather than the whole tree, so a new file that

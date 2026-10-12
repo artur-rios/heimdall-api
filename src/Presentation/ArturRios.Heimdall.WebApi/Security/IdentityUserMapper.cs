@@ -43,6 +43,13 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
     /// </summary>
     public const string ChallengeIdClaim = "challengeId";
 
+    /// <summary>
+    ///     The claim marking a token as subject-rights-only (NFR-24): issued to a restricted identity,
+    ///     and admitted only where the subject exercises their own rights. Present and <c>"true"</c>
+    ///     only on such a token.
+    /// </summary>
+    public const string SubjectRightsOnlyClaim = "subjectRightsOnly";
+
     private const char OwnedScopeIdsSeparator = ',';
 
     public Dictionary<string, string> ToClaims(IAuthenticatedUser user)
@@ -98,6 +105,12 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             claims[ChallengeIdClaim] = identityUser.ChallengeId.Value.ToString();
         }
 
+        // NFR-24: likewise present only when true.
+        if (identityUser.SubjectRightsOnly)
+        {
+            claims[SubjectRightsOnlyClaim] = "true";
+        }
+
         return claims;
     }
 
@@ -128,7 +141,10 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
                          parsedMfaPending,
             ChallengeId = TryReadGuid(claims, ChallengeIdClaim, out var challengeId)
                 ? challengeId
-                : null
+                : null,
+            SubjectRightsOnly = claims.TryGetValue(SubjectRightsOnlyClaim, out var rawSubjectRightsOnly) &&
+                                bool.TryParse(rawSubjectRightsOnly, out var parsedSubjectRightsOnly) &&
+                                parsedSubjectRightsOnly
         };
     }
 

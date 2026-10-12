@@ -349,6 +349,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`) — fortuna-api in the same environment is given the same value |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |
+| `MAILGUN_FROM` | The sender, e.g. `Heimdall <no-reply@example.com>` on the Mailgun domain — without it mail goes out from a bare `postmaster@` address |
 
 What the templates already set, and how the three differ:
 

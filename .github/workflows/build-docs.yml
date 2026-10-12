@@ -1,9 +1,15 @@
 name: Build Docs
 
-# The published coverage report is not committed. This workflow downloads it from the latest
-# successful Tests run on main and unpacks it into docs/coverage-report, which hugo.toml mounts at
-# static/coverage-report. That is why Tests completing is a trigger here: a change under src/ moves
-# the coverage numbers without touching docs/, and the push trigger below would never notice.
+# The published coverage report is not committed. This workflow unpacks it into
+# docs/coverage-report, which hugo.toml mounts at static/coverage-report. A change under src/ moves
+# the coverage numbers without touching docs/, and the push trigger below would never notice, so
+# the Tests workflow also calls this one (workflow_call) once its suites pass on a push to main,
+# and hands it the report from that same run.
+#
+# Tests calls this workflow rather than this workflow listening for Tests to complete
+# (workflow_run). A workflow_run run belongs to the default branch, develop, whatever branch the
+# Tests run was on: it checked out develop, and the github-pages environment, which only lets main
+# deploy, refused it. A called workflow runs as part of its caller, on main.
 #
 # Publishing goes through the GitHub Pages deployment API (configure-pages / upload-pages-artifact /
 # deploy-pages) rather than committing the built site to a gh-pages branch. The site is then a
@@ -20,12 +26,13 @@ on:
       - 'CHANGELOG.md'
       - 'CONTRIBUTING.md'
       - '.github/workflows/build-docs.yml'
-  workflow_run:
-    workflows: ['Tests']
-    types:
-      - completed
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      coverage-from-caller:
+        description: 'Take the coverage report from the calling run instead of the latest one on main'
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
     inputs:
       reason:
@@ -48,18 +55,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # A workflow_run trigger fires on completion, failed runs included. A failed Tests run has no
-    # coverage artifact and nothing worth publishing, so only a successful one continues.
-    #
-    # The event check is not redundant with the branches filter above. That filter matches the head
-    # branch of the triggering run, and a pull request opened from a branch named `main` — which is
-    # what a fork's default branch looks like — has exactly that head branch. Without this clause,
-    # anyone could deploy the site from an unmerged pull request by naming their branch main.
-    #
-    # The other triggers set no workflow_run context and pass on the first clause.
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Called from Tests, github.ref is the caller's. Tests only calls this on a push to main, and
+    # the github-pages environment refuses any other branch; this check makes the build job stop
+    # there too rather than build a site the deploy job would refuse.
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -111,10 +110,19 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
 
-      - name: Download coverage report
-        # Always the latest successful Tests run pushed to main, whatever triggered this build: on a
-        # workflow_run that is the run that just finished, and on a docs-only push it is whichever
-        # run last covered main. A docs change must not republish the site without the report.
+      - name: Download coverage report from the calling Tests run
+        # Called from Tests, the report is an artifact of the run this job is part of. That run is
+        # still in progress, so the gh run list lookup below would not find it yet.
+        if: inputs.coverage-from-caller
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+          path: docs/coverage-report
+
+      - name: Download coverage report from the latest Tests run on main
+        # On a docs-only push or a manual run: the latest successful Tests run pushed to main,
+        # whichever run last covered main. A docs change must not republish the site without the
+        # report.
         #
         # --event push is what confines publishing to main. --branch filters the head branch, and a
         # pull request run carries its own head branch — normally harmless, since feat/x never
@@ -124,6 +132,7 @@ jobs:
         # The job fails rather than deploying without it. The alternative — warn and continue —
         # publishes a site whose "Test Coverage" nav link 404s, with nobody forced to notice. If
         # this fails because the artifact aged out of its retention window, re-run Tests on main.
+        if: ${{ !inputs.coverage-from-caller }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

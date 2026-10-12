@@ -110,9 +110,10 @@ If `REPORTGENERATOR_LICENSE` is set, the script passes it to ReportGenerator and
 report; the key is never echoed. CI reads it from the repository secret of the same name. Unset — as on a pull
 request from a fork, where GitHub withholds secrets — generation still succeeds with the free version.
 
-The published report is not committed. The Tests workflow uploads it as an artifact, and the Build Docs workflow
-unpacks the one from the latest successful run on `main` into `docs/coverage-report` before Hugo builds, so a
-change under `src/` moves the published numbers once it reaches `main`. The report itself is the only statement of
+The published report is not committed. The Tests workflow uploads it as an artifact and, once its suites pass on
+`main`, calls the Build Docs workflow, which unpacks that run's report into `docs/coverage-report` before Hugo
+builds, so a change under `src/` moves the published numbers once it reaches `main`. A docs-only push takes the
+report from the latest successful Tests run on `main`. The report itself is the only statement of
 the current numbers; figures quoted in prose go stale.
 
 ## Migrations

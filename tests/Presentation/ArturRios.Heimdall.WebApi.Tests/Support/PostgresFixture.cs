@@ -84,7 +84,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>The connection string of the running container's database.</summary>
     public string ConnectionString => _container.GetConnectionString();
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _container.StartAsync();
 
@@ -197,5 +197,5 @@ public sealed class PostgresFixture : IAsyncLifetime
         NullLoggerFactory.Instance,
         DbContextDiagnosticsOptions.Disabled);
 
-    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
+    public ValueTask DisposeAsync() => _container.DisposeAsync();
 }

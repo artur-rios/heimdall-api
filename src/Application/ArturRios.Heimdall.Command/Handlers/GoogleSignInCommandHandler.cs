@@ -78,11 +78,34 @@ public class GoogleSignInCommandHandler(
 
             googleUser = signUp.googleUser;
         }
-        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted. A
-        // restriction of processing is refused the same way and for the same reason UC-11 refuses
-        // one with its own uniform answer: a restricted identity may not authenticate (NFR-24,
-        // UC-44 step 4), and the subject who asked for it already knows why.
-        else if (googleUser.IsDeleted || googleUser.ProcessingRestrictedAt is not null)
+        // NFR-20: an anonymised account is nobody's any more, and its Google subject is no longer
+        // stored, so the lookup should never find one; this guards the day that assumption breaks.
+        else if (googleUser.AnonymisedAt is not null)
+        {
+            return output.WithError(AuthMessages.GoogleAuthenticationFailed);
+        }
+        // NFR-24 (UC-44 step 4): processing is restricted, so the account may not authenticate for
+        // anything but its subject's own rights over the record — the same subject-rights-only
+        // token UC-11 issues a restricted person, for the same reason: without it nobody could lift
+        // their own restriction (UC-45) once their earlier tokens had expired. Checked before
+        // deletion, because a suspended subject keeps those rights until the record is anonymised.
+        // Nothing is refreshed from the ID token first: that would be processing the record.
+        else if (googleUser.ProcessingRestrictedAt is not null)
+        {
+            var rightsOnly = await tokenIssuer.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User);
+
+            return output
+                .WithData(new GoogleSignInCommandOutput
+                {
+                    Token = rightsOnly.Token,
+                    ExpiresAt = rightsOnly.ExpiresAt,
+                    EmailVerified = googleUser.EmailVerified,
+                    ProcessingRestricted = true
+                })
+                .WithMessage(AuthMessages.SubjectRightsOnlySignIn);
+        }
+        // UC-25 step 7 (AF-25d, FR-GO-12): the account exists but has been logically deleted.
+        else if (googleUser.IsDeleted)
         {
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }

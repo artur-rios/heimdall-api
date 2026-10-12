@@ -199,18 +199,34 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenTheChallengeNamesARestrictedPerson_WhenResending_ThenNothingIsSentAndTheAnswerIsUnchanged()
+    public async Task GivenTheChallengeNamesARestrictedPerson_WhenResending_ThenTheCodeIsSent()
     {
-        // Given — AF-46b (NFR-24): mailing a restricted identity would be processing it. Reachable
-        // even though UC-11 refuses such a person, because the restriction can be applied after the
-        // challenge was issued.
+        // Given — NFR-24: UC-11 lets a restricted person sign in for their own rights, and the code
+        // goes out at their own request, so the login it belongs to can finish
         var fixture = await FixtureAsync(processingRestricted: true);
 
         // When
         var output = await fixture.ResendAsync();
 
         // Then
-        Assert.Empty(fixture.EmailCodeIssuer.Reissues);
+        var reissue = Assert.Single(fixture.EmailCodeIssuer.Reissues);
+        Assert.Equal(Email, reissue.Email);
+
+        AssertIndistinguishable(output);
+    }
+
+    [UnitFact]
+    public async Task GivenTheChallengeNamesASuspendedRestrictedPerson_WhenResending_ThenTheCodeIsSent()
+    {
+        // Given — a suspended subject keeps their rights until anonymised, so a restricted one may
+        // still finish signing in for them (NFR-24)
+        var fixture = await FixtureAsync(personDeleted: true, processingRestricted: true);
+
+        // When
+        var output = await fixture.ResendAsync();
+
+        // Then
+        Assert.Single(fixture.EmailCodeIssuer.Reissues);
 
         AssertIndistinguishable(output);
     }

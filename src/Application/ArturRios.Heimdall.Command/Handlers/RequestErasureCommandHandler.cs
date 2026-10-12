@@ -15,9 +15,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="RequestErasureCommand" /> (UC-42): re-authenticates the caller, records
-///     their erasure request against their own record, and suspends the identity so the request
-///     takes effect immediately. The anonymisation pass (NFR-20) completes it on the deadline. All
-///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
+///     their erasure request against their own record, lifts any restriction on processing they
+///     had in place, and suspends the identity so the request takes effect immediately. The
+///     anonymisation pass (NFR-20) completes it on the deadline. All failures are returned as
+///     errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -41,6 +42,17 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         GDPR Art. 12(3)'s clock starts at the request whether or not anything blocks it. So the
 ///         request is always recorded and always starts the deadline; the block is recorded
 ///         alongside it, and the anonymisation pass carries the erasure out as soon as it clears.
+///     </para>
+///     <para>
+///         <b>Why the request lifts a restriction.</b> A restricted record is kept out of the
+///         anonymisation pass (NFR-24), so an erasure requested under a restriction would wait,
+///         unerased, for as long as the restriction stood — and the statutory deadline would pass
+///         meanwhile. Only the subject can impose a restriction (UC-44), and only the subject can
+///         get here, credential in hand: asking to be erased is their later and more specific
+///         instruction, and it supersedes their wish that the record be preserved. The lift is the
+///         one UC-45 performs for a subject lifting their own — no Art. 18(3) notice, since they
+///         are the person it would inform — and it is saved with the request, so neither can
+///         happen without the other. The response and the audit trail both say it happened.
 ///     </para>
 ///     <para>
 ///         <b>Why the deadline is stored rather than derived.</b> The obligation attaches when the
@@ -124,6 +136,8 @@ public class RequestErasureCommandHandler(
         person.ErasureDueAt = dueAt;
         person.UpdatedAt = requestedAt;
 
+        var restrictionLifted = LiftRestriction(person);
+
         // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
         // ownerless, so the suspension waits — but the request and its deadline do not.
         var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader);
@@ -141,7 +155,9 @@ public class RequestErasureCommandHandler(
 
         return !update.Success
             ? output.WithErrors(update.Errors)
-            : Recorded(output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason);
+            : Recorded(
+                output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason,
+                restrictionLifted);
     }
 
     private async Task<DataOutput<RequestErasureCommandOutput?>> RequestForGoogleUserAsync(
@@ -176,6 +192,8 @@ public class RequestErasureCommandHandler(
         googleUser.ErasureDueAt = dueAt;
         googleUser.UpdatedAt = requestedAt;
 
+        var restrictionLifted = LiftRestriction(googleUser);
+
         // Nothing can block a Google User's erasure: FR-GO-04 makes them permanently User-equivalent,
         // so they own no scope and NFR-12 has nothing to protect.
         Suspend(googleUser, requestedAt);
@@ -184,7 +202,49 @@ public class RequestErasureCommandHandler(
 
         return !update.Success
             ? output.WithErrors(update.Errors)
-            : Recorded(output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null);
+            : Recorded(
+                output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null,
+                restrictionLifted);
+    }
+
+    /// <summary>
+    ///     Lifts the subject's restriction on processing, if they have one, exactly as UC-45 does
+    ///     when a subject lifts their own: the restriction and its ground are cleared, and no
+    ///     notification is recorded because none is owed.
+    /// </summary>
+    /// <returns>Whether there was a restriction to lift.</returns>
+    /// <remarks>
+    ///     Done whether or not NFR-12 blocks the suspension (AF-42d). A blocked subject is then
+    ///     neither restricted nor suspended, which is what lets them take part in the ownership
+    ///     transfer (UC-21) that unblocks their own request.
+    /// </remarks>
+    private static bool LiftRestriction(Person person)
+    {
+        if (person.ProcessingRestrictedAt is null)
+        {
+            return false;
+        }
+
+        person.ProcessingRestrictedAt = null;
+        person.RestrictionGround = null;
+        person.RestrictionLiftNotifiedAt = null;
+
+        return true;
+    }
+
+    /// <inheritdoc cref="LiftRestriction(Person)" />
+    private static bool LiftRestriction(GoogleUser googleUser)
+    {
+        if (googleUser.ProcessingRestrictedAt is null)
+        {
+            return false;
+        }
+
+        googleUser.ProcessingRestrictedAt = null;
+        googleUser.RestrictionGround = null;
+        googleUser.RestrictionLiftNotifiedAt = null;
+
+        return true;
     }
 
     /// <summary>
@@ -218,7 +278,8 @@ public class RequestErasureCommandHandler(
         DateTime requestedAt,
         DateTime dueAt,
         bool blocked,
-        string? blockedReason) =>
+        string? blockedReason,
+        bool restrictionLifted) =>
         output
             .WithData(new RequestErasureCommandOutput
             {
@@ -226,7 +287,8 @@ public class RequestErasureCommandHandler(
                 RequestedAt = requestedAt,
                 DueAt = dueAt,
                 Blocked = blocked,
-                BlockedReason = blockedReason
+                BlockedReason = blockedReason,
+                RestrictionLifted = restrictionLifted
             })
             .WithMessage(blocked ? ErasureMessages.ErasureRequestedButBlocked : ErasureMessages.ErasureRequested);
 }
