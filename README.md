@@ -1,7 +1,7 @@
 # Heimdall API
 
 [![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/heimdall-api/)
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](./LICENSE)
+[![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](./LICENSE)
 
 📖 **[Read the documentation website](https://artur-rios.github.io/heimdall-api/)** — overview,
 run and test instructions, architecture and class diagrams, sequence diagrams for the main flows,
@@ -587,5 +587,6 @@ branching model and the release process are described in [CONTRIBUTING.md](./CON
 
 ## Legal
 
-This project is **proprietary**. All rights reserved. Use is governed by the terms in the
-[LICENSE](LICENSE) file. Copyright &copy; 2026 Artur Rios.
+This project is licensed under the [Artur Rios Attribution License](LICENSE). It is free and open source: you may view, use, fork, modify, and extend it, provided you credit the author, Artur Rios, with a link to [artur-rios.tech](https://artur-rios.tech) or [github.com/artur-rios](https://github.com/artur-rios).
+
+Copyright &copy; 2026 Artur Rios.
