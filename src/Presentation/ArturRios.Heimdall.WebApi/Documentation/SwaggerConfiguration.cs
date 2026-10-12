@@ -44,11 +44,11 @@ public static class SwaggerConfiguration
                 Name = "Artur Rios",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api")
             },
-            // The repository's own LICENSE, by the name its first line gives it: the software is
-            // proprietary, all rights reserved, so no SPDX identifier applies.
+            // The repository's own LICENSE, by the name its first line gives it: the Artur Rios
+            // Attribution License has no SPDX identifier, so the name and URL stand for it.
             License = new OpenApiLicense
             {
-                Name = "ArturRios.Heimdall — Proprietary License",
+                Name = "Artur Rios Attribution License",
                 Url = new Uri("https://github.com/artur-rios/heimdall-api/blob/main/LICENSE")
             }
         });
