@@ -15,7 +15,8 @@ public static class PersonFieldRules
 
     public static IRuleBuilderOptions<T, string> PersonEmail<T>(this IRuleBuilder<T, string> rule) =>
         rule.NotEmpty().WithMessage(PersonMessages.EmailRequired)
-            .EmailAddress().WithMessage(PersonMessages.EmailInvalid);
+            .EmailAddress().WithMessage(PersonMessages.EmailInvalid)
+            .MaximumLength(256).WithMessage(PersonMessages.EmailTooLong);
 
     public static IRuleBuilderOptions<T, string> PersonPassword<T>(this IRuleBuilder<T, string> rule) =>
         rule.NotEmpty().WithMessage(PersonMessages.PasswordRequired)

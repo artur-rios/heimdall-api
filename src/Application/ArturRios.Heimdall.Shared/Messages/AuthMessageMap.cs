@@ -72,6 +72,7 @@ public static class AuthMessageMap
             [PersonMessages.NameTooLong] = HttpStatusCodes.BadRequest,
             [PersonMessages.EmailRequired] = HttpStatusCodes.BadRequest,
             [PersonMessages.EmailInvalid] = HttpStatusCodes.BadRequest,
+            [PersonMessages.EmailTooLong] = HttpStatusCodes.BadRequest,
             [PersonMessages.PasswordRequired] = HttpStatusCodes.BadRequest,
             [PersonMessages.PasswordTooShort] = HttpStatusCodes.BadRequest
         });

@@ -24,6 +24,7 @@ public static class PersonMessageMap
             [PersonMessages.NameTooLong] = HttpStatusCodes.BadRequest,
             [PersonMessages.EmailRequired] = HttpStatusCodes.BadRequest,
             [PersonMessages.EmailInvalid] = HttpStatusCodes.BadRequest,
+            [PersonMessages.EmailTooLong] = HttpStatusCodes.BadRequest,
             [PersonMessages.PasswordRequired] = HttpStatusCodes.BadRequest,
             [PersonMessages.PasswordTooShort] = HttpStatusCodes.BadRequest,
             [PersonMessages.InvalidRole] = HttpStatusCodes.BadRequest,

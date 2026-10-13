@@ -17,6 +17,13 @@ public class RegisterCommandValidatorTests
     private static IEnumerable<string> ErrorsFor(RegisterCommand command) =>
         new RegisterCommandValidator().Validate(command).Errors.Select(error => error.ErrorMessage);
 
+    private static string EmailOfLength(int length)
+    {
+        const string domain = "@test.local";
+
+        return new string('a', length - domain.Length) + domain;
+    }
+
     [UnitFact]
     public void GivenAValidCommand_WhenValidating_ThenThereAreNoErrors() =>
         Assert.Empty(ErrorsFor(Valid()));
@@ -55,6 +62,24 @@ public class RegisterCommandValidatorTests
         command.Email = "not-an-address";
 
         Assert.Contains(PersonMessages.EmailInvalid, ErrorsFor(command));
+    }
+
+    [UnitFact]
+    public void GivenAnEmailOf256Characters_WhenValidating_ThenItIsAccepted()
+    {
+        var command = Valid();
+        command.Email = EmailOfLength(256);
+
+        Assert.Empty(ErrorsFor(command));
+    }
+
+    [UnitFact]
+    public void GivenAnEmailOf257Characters_WhenValidating_ThenEmailTooLong()
+    {
+        var command = Valid();
+        command.Email = EmailOfLength(257);
+
+        Assert.Contains(PersonMessages.EmailTooLong, ErrorsFor(command));
     }
 
     [UnitFact]
