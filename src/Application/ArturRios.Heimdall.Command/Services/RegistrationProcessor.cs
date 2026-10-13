@@ -1,15 +1,16 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
-///     UC-47 steps 4 to 6, run in the background for a <see cref="RegistrationRequest" />: creates the
-///     <c>User</c> and mails a verification link when the address is free in the scope, or tells the
-///     address's holder of the attempt when it is not (AF-47b).
+///     UC-47 steps 4 to 6, run in the background for a <see cref="RegistrationRequest" />: stores a
+///     <see cref="PendingRegistration" /> and mails its confirmation link when the address is free in the
+///     scope, or tells the address's holder of the attempt when it is not (AF-47b). No <c>Person</c> is
+///     created here: the verified <c>User</c> exists only once the link is followed (UC-14).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -21,19 +22,23 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         The scope is re-read and re-checked because it may have been closed or deleted while the
 ///         request waited. The uniqueness rule is <see cref="Handlers.CreateUserCommandHandler" />'s:
 ///         live persons of the scope and every Google User of the scope, compared case-insensitively.
+///         Pending registrations are not part of it: any number may wait for one address, and the first
+///         link followed wins (the confirmer re-checks the rule when it creates the <c>User</c>).
 ///     </para>
 ///     <para>
-///         The dispatcher takes one request at a time, so two registrations of one address in one
-///         process never race; the unique-violation branch covers two Heimdall instances doing so.
+///         Every failure here is logged with a fixed message and no address (NFR-22), and none is thrown:
+///         the caller already has the uniform answer.
 ///     </para>
 /// </remarks>
 public class RegistrationProcessor(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<Person, long> personWriter,
-    IEmailVerificationService emailVerification,
-    IRegistrationAttemptSender attemptSender)
+    IAsyncRepository<PendingRegistration, long> pendingWriter,
+    IEmailVerificationSender linkSender,
+    IRegistrationAttemptSender attemptSender,
+    EmailVerificationOptions options,
+    ILogger<RegistrationProcessor> logger)
 {
     public async Task ProcessAsync(RegistrationRequest request)
     {
@@ -67,7 +72,9 @@ public class RegistrationProcessor(
 
         if (googleHolder is not null)
         {
-            if (googleHolder.ProcessingRestrictedAt is null)
+            // The address stays blocked either way (FR-GO-07); a deleted or restricted Google holder
+            // is not told, since it could not act on it — or, if restricted, must not be processed.
+            if (!googleHolder.IsDeleted && googleHolder.ProcessingRestrictedAt is null)
             {
                 await attemptSender.SendAsync(request.Email, googleAccount: true);
             }
@@ -75,33 +82,31 @@ public class RegistrationProcessor(
             return;
         }
 
-        var person = new Person
+        var token = SingleUseToken.New();
+        var now = DateTime.UtcNow;
+
+        var creation = await pendingWriter.CreateAsync(new PendingRegistration
         {
+            ScopeId = scope.Id,
             Name = request.Name,
             Email = request.Email,
             PasswordHash = request.PasswordHash,
             Salt = request.Salt,
-            RoleId = (long)Roles.User,
-            ScopeMembership = new ScopeUser { ScopeId = scope.Id },
-            ScopeId = scope.Id
-        };
-
-        // NFR-23, as at every other creation of a User.
-        LegalBasisRecorder.Record(person, scope, DateTime.UtcNow);
-
-        var creation = await personWriter.CreateAsync(person);
+            TokenHash = SingleUseTokenHash.Of(token),
+            ExpiresAt = now.Add(options.TokenLifetime),
+            CreatedAt = now
+        });
 
         if (!creation.Success)
         {
-            // Another instance took the address between the check above and this write.
-            if (creation.Errors.Contains(RelationalErrors.UniqueViolationMessage))
-            {
-                await attemptSender.SendAsync(request.Email, googleAccount: false);
-            }
+            // No address in the log (NFR-22). The caller has their 202; this line is the only trace.
+            logger.LogError(
+                "A pending registration could not be stored: {Errors}", string.Join(" | ", creation.Errors));
 
             return;
         }
 
-        await emailVerification.IssueAndSendAsync(person);
+        // The same link a verification email carries; UC-14 recognises the token as a pending one.
+        await linkSender.SendAsync(request.Email, token);
     }
 }

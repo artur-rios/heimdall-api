@@ -16,8 +16,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/register (UC-47). The response is the same for a free and a taken
-// address by design, so each test also opens the database: a new person row and a verification token are
-// the main flow; their absence is AF-47b. The rows are written after the response, by
+// address by design, so each test also opens the database: a pending registration (never a person) is
+// the main flow; its absence is AF-47b. The rows are written after the response, by
 // RegistrationDispatcher, so every database assertion first waits for the queue to settle.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -73,6 +73,15 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
             .ToListAsync();
     }
 
+    private async Task<List<PendingRegistration>> PendingForAsync(Scope scope, string email)
+    {
+        await using var context = db.CreateContext();
+
+        return await context.PendingRegistrations
+            .Where(pending => pending.ScopeId == scope.Id && pending.Email.ToLower() == email.ToLower())
+            .ToListAsync();
+    }
+
     private async Task<int> VerificationTokensForAsync(Person person)
     {
         await using var context = db.CreateContext();
@@ -94,7 +103,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
 
         var deadline = DateTime.UtcNow.AddSeconds(30);
 
-        while ((await PersonsWithEmailAsync(scope, email)).Count == 0)
+        while ((await PendingForAsync(scope, email)).Count == 0)
         {
             Assert.True(DateTime.UtcNow < deadline, "The registration queue did not settle in time.");
             await Task.Delay(50);
@@ -110,7 +119,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     }
 
     [FunctionalFact]
-    public async Task GivenAFreeAddressInAnOpenScope_WhenRegistering_ThenAcceptedAndAnUnverifiedUserExists()
+    public async Task GivenAFreeAddressInAnOpenScope_WhenRegistering_ThenAcceptedAndOnlyAPendingRegistrationExists()
     {
         var scope = await SeedScopeAsync();
         var email = UniqueEmail("new");
@@ -119,14 +128,14 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
         await SettleAsync();
 
         AssertGenericAcceptance(response);
-        var person = Assert.Single(await PersonsWithEmailAsync(scope, email));
-        Assert.Equal((long)Roles.User, person.RoleId);
-        Assert.False(person.EmailVerified);
-        Assert.Equal(1, await VerificationTokensForAsync(person));
+        var pending = Assert.Single(await PendingForAsync(scope, email));
+        Assert.Equal("New Person", pending.Name);
+        Assert.Equal(scope.Id, pending.ScopeId);
+        Assert.Empty(await PersonsWithEmailAsync(scope, email));
     }
 
     [FunctionalFact]
-    public async Task GivenATakenAddress_WhenRegistering_ThenTheSameAnswerAndNoSecondPerson()
+    public async Task GivenATakenAddress_WhenRegistering_ThenTheSameAnswerAndNoPendingRegistration()
     {
         var scope = await SeedScopeAsync();
         var email = UniqueEmail("taken");
@@ -136,12 +145,13 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
         await SettleAsync();
 
         AssertGenericAcceptance(response);
+        Assert.Empty(await PendingForAsync(scope, email));
         Assert.Single(await PersonsWithEmailAsync(scope, email));
         Assert.Equal(0, await VerificationTokensForAsync(existing));
     }
 
     [FunctionalFact]
-    public async Task GivenTheSameNewAddressTwice_WhenRegistering_ThenOnePersonIsCreated()
+    public async Task GivenTheSameNewAddressTwice_WhenRegistering_ThenTwoPendingRegistrationsAndNoPerson()
     {
         var scope = await SeedScopeAsync();
         var email = UniqueEmail("twice");
@@ -152,7 +162,8 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
 
         AssertGenericAcceptance(first);
         AssertGenericAcceptance(second);
-        Assert.Single(await PersonsWithEmailAsync(scope, email));
+        Assert.Equal(2, (await PendingForAsync(scope, email)).Count);
+        Assert.Empty(await PersonsWithEmailAsync(scope, email));
     }
 
     [FunctionalFact]
@@ -186,6 +197,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains(PersonMessages.PasswordTooShort, response.Body!.Errors);
+        Assert.Empty(await PendingForAsync(scope, email));
         Assert.Empty(await PersonsWithEmailAsync(scope, email));
     }
 
