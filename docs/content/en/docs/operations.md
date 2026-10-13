@@ -238,9 +238,16 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
   (`HEIMDALL_TRUSTED_CALLER_KEYS=<old>,<new>`), restart Heimdall, move the client system to the new
   key, then remove the old one and restart again.
 - Send the headers only from the client system's server, over TLS, never from a browser or a mobile
-  app, and keep the key in that system's secret store. A leaked key lets its holder pick their own
-  bucket, which only spreads guesses over invented addresses; the per-account lockouts still count
-  them (Threat Model Document, TB-1, TH-32).
+  app, and keep the key in that system's secret store.
+- A named address is counted in its own `caller:` namespace, apart from direct connections, so a key
+  holder cannot spend the budget of a real caller by naming their address.
+- A leaked key lets its holder pick their own bucket, which only spreads credential guesses over
+  invented addresses; the per-account lockouts still count them. The same limiter also guards four
+  authenticated endpoints that have no per-account budget — `2fa/confirm`, `2fa/disable`,
+  `2fa/recovery-codes/regenerate` and `erasure-request` — so someone holding **both** a leaked key
+  and a stolen bearer token could spread guesses against those over invented addresses, bounded then
+  only by the password-hash gate. That is accepted residual risk, since it needs two independent
+  secrets (Threat Model Document, TB-1, TH-32).
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25
