@@ -742,7 +742,7 @@ public class Startup : WebApiStartup
         // How many, never which: the keys are secrets and the headers carrying them are not logged.
         Log.Information(
             "{Count} trusted caller key(s) configured ({Variable})",
-            callers.Keys.Count, TrustedCallerOptions.KeysVariable);
+            callers.Count, TrustedCallerOptions.KeysVariable);
 
         Builder.Services.AddRateLimiter(options =>
         {

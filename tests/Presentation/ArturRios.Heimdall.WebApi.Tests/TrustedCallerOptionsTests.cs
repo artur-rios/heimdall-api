@@ -21,7 +21,7 @@ public class TrustedCallerOptionsTests
         var options = TrustedCallerOptions.Parse(value);
 
         Assert.False(options.Configured);
-        Assert.Empty(options.Keys);
+        Assert.Equal(0, options.Count);
         Assert.False(options.Matches(KeyA));
     }
 
@@ -31,7 +31,8 @@ public class TrustedCallerOptionsTests
         var options = TrustedCallerOptions.Parse(KeyA);
 
         Assert.True(options.Configured);
-        Assert.Equal([KeyA], options.Keys);
+        Assert.Equal(1, options.Count);
+        Assert.True(options.Matches(KeyA));
     }
 
     [UnitFact]
@@ -39,7 +40,11 @@ public class TrustedCallerOptionsTests
     {
         var options = TrustedCallerOptions.Parse($"  {KeyA} ,, {KeyB}  ,");
 
-        Assert.Equal([KeyA, KeyB], options.Keys);
+        // Trimmed: the bare keys match, and the padding was not kept as part of them.
+        Assert.Equal(2, options.Count);
+        Assert.True(options.Matches(KeyA));
+        Assert.True(options.Matches(KeyB));
+        Assert.False(options.Matches($" {KeyA} "));
     }
 
     [UnitFact]
@@ -49,7 +54,8 @@ public class TrustedCallerOptionsTests
 
         var options = TrustedCallerOptions.Parse(key);
 
-        Assert.Equal([key], options.Keys);
+        Assert.Equal(1, options.Count);
+        Assert.True(options.Matches(key));
     }
 
     [UnitFact]
@@ -89,6 +95,15 @@ public class TrustedCallerOptionsTests
         Assert.False(options.Matches(KeyA.ToUpperInvariant()));
         Assert.False(options.Matches(string.Empty));
         Assert.False(options.Matches(null));
+    }
+
+    [UnitFact]
+    public void GivenAVeryLongPresentedValue_WhenMatching_ThenItIsSimplyNotAKey()
+    {
+        var options = TrustedCallerOptions.Parse(KeyA);
+
+        Assert.False(options.Matches(new string('a', 100_000)));
+        Assert.True(options.Matches(KeyA));
     }
 
     [UnitFact]

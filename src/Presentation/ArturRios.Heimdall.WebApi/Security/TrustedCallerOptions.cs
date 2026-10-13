@@ -39,13 +39,15 @@ public sealed class TrustedCallerOptions
     /// <summary>The shortest key accepted, in characters.</summary>
     public const int MinimumKeyLength = 32;
 
-    private byte[][] KeyBytes { get; init; } = [];
+    // SHA-256 of each configured key, computed once. Only digests are kept: the keys themselves are
+    // not exposed and cannot be logged by accident.
+    private byte[][] KeyDigests { get; init; } = [];
 
-    /// <summary>The configured keys, trimmed. Never log these.</summary>
-    public IReadOnlyList<string> Keys { get; private init; } = [];
+    /// <summary>How many keys are configured. The only thing about them that may be logged.</summary>
+    public int Count => KeyDigests.Length;
 
     /// <summary>Whether any caller is trusted.</summary>
-    public bool Configured => Keys.Count > 0;
+    public bool Configured => Count > 0;
 
     public static TrustedCallerOptions FromEnvironment() => Parse(Environment.GetEnvironmentVariable(KeysVariable));
 
@@ -72,15 +74,17 @@ public sealed class TrustedCallerOptions
 
         return new TrustedCallerOptions
         {
-            Keys = entries,
-            KeyBytes = entries.Select(Encoding.UTF8.GetBytes).ToArray()
+            KeyDigests = entries.Select(Digest).ToArray()
         };
     }
 
     /// <summary>
-    ///     Whether <paramref name="presented" /> is one of the configured keys. Every configured key is
-    ///     compared, with a constant-time comparison, whatever the earlier ones gave, so how long the
-    ///     answer takes says nothing about which key — or how much of one — was right.
+    ///     Whether <paramref name="presented" /> is one of the configured keys. The presented value and
+    ///     each key are reduced to a SHA-256 digest of their UTF-8 bytes, and the 32-byte digests are
+    ///     compared with <see cref="CryptographicOperations.FixedTimeEquals" /> against every configured
+    ///     key whatever the earlier ones gave. The work is the same whatever the length of what was
+    ///     presented, and how long the answer takes says nothing about which key, or how much of one,
+    ///     was right.
     /// </summary>
     public bool Matches(string? presented)
     {
@@ -89,15 +93,17 @@ public sealed class TrustedCallerOptions
             return false;
         }
 
-        var presentedBytes = Encoding.UTF8.GetBytes(presented);
+        var presentedDigest = Digest(presented);
         var matched = false;
 
-        foreach (var key in KeyBytes)
+        foreach (var key in KeyDigests)
         {
             // Bitwise, not short-circuiting: the loop must visit every key.
-            matched |= CryptographicOperations.FixedTimeEquals(key, presentedBytes);
+            matched |= CryptographicOperations.FixedTimeEquals(key, presentedDigest);
         }
 
         return matched;
     }
+
+    private static byte[] Digest(string value) => SHA256.HashData(Encoding.UTF8.GetBytes(value));
 }
