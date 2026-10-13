@@ -32,5 +32,12 @@ public class PendingRegistration : Entity<long>
 
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    ///     Wrong confirmation passwords presented with this registration's token. The row is discarded when
+    ///     the count reaches the login lockout threshold, so a leaked link cannot be used to guess the
+    ///     sign-up password without limit.
+    /// </summary>
+    public int FailedAttempts { get; set; }
+
     public Scope Scope { get; set; } = null!;
 }

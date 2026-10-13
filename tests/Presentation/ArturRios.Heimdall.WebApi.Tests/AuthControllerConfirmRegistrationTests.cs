@@ -60,7 +60,8 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     }
 
     /// <summary>Writes a pending registration directly, so the test holds the plaintext token.</summary>
-    private async Task<string> SeedPendingAsync(Scope scope, string email, TimeSpan? lifetime = null)
+    private async Task<string> SeedPendingAsync(
+        Scope scope, string email, TimeSpan? lifetime = null, int failedAttempts = 0)
     {
         var token = SingleUseToken.New();
 
@@ -74,7 +75,8 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
             Salt = salt,
             TokenHash = SingleUseTokenHash.Of(token),
             ExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            FailedAttempts = failedAttempts
         });
         await context.SaveChangesAsync();
 
@@ -85,6 +87,21 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         string token, string? password = Password) =>
         Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
             "/api/auth/verify-email", new VerifyEmailCommand { Token = token, Password = password });
+
+    // A body with no password field at all, as a client that never sends one would post.
+    private Task<HttpOutput<DataOutput<VerifyEmailCommandOutput?>?>> VerifyWithoutPasswordFieldAsync(
+        string token) =>
+        Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>("/api/auth/verify-email", new { token });
+
+    private async Task<int?> FailedAttemptsAsync(Scope scope, string email)
+    {
+        await using var context = db.CreateContext();
+
+        return await context.PendingRegistrations
+            .Where(pending => pending.ScopeId == scope.Id && pending.Email == email)
+            .Select(pending => (int?)pending.FailedAttempts)
+            .SingleOrDefaultAsync();
+    }
 
     private Task<HttpOutput<DataOutput<LoginCommandOutput?>?>> LoginAsync(
         string email, Guid scopeId, string password = Password) =>
@@ -113,7 +130,10 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
             .CountAsync(pending => pending.ScopeId == scope.Id && pending.Email.ToLower() == email.ToLower());
     }
 
-    /// <summary>Waits until a registration made first has been worked through, by registering a sentinel.</summary>
+    /// <summary>
+    ///     Waits until a registration made first has been worked through, by polling for its pending row
+    ///     until it appears or 30 seconds pass.
+    /// </summary>
     private async Task WaitForPendingAsync(Scope scope, string email)
     {
         var deadline = DateTime.UtcNow.AddSeconds(30);
@@ -157,7 +177,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         var email = UniqueEmail("nopassword");
         var token = await SeedPendingAsync(scope, email);
 
-        var response = await VerifyAsync(token, null);
+        var response = await VerifyWithoutPasswordFieldAsync(token);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Contains(AuthMessages.ConfirmationPasswordRequired, response.Body!.Errors);
@@ -177,6 +197,38 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, response.Body!.Errors);
         Assert.Equal(1, await PendingCountAsync(scope, email));
+        Assert.Empty(await PersonsAsync(scope, email));
+    }
+
+    [FunctionalFact]
+    public async Task GivenWrongPasswords_WhenPostedForAPendingRegistration_ThenEachIsCountedOnTheRow()
+    {
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("counted");
+        var token = await SeedPendingAsync(scope, email);
+
+        await VerifyAsync(token, "wrong-one");
+        await VerifyAsync(token, "wrong-two");
+
+        Assert.Equal(2, await FailedAttemptsAsync(scope, email));
+    }
+
+    [FunctionalFact]
+    public async Task GivenNineWrongPasswords_WhenTheTenthIsPosted_ThenTheTokenStopsWorking()
+    {
+        // Nine are seeded rather than posted: the auth endpoints allow ten requests a minute per address.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("capped");
+        var token = await SeedPendingAsync(scope, email, failedAttempts: 9);
+
+        var tenth = await VerifyAsync(token, "wrong");
+        var right = await VerifyAsync(token);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, tenth.StatusCode);
+        Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, tenth.Body!.Errors);
+        Assert.Equal(HttpStatusCode.BadRequest, right.StatusCode);
+        Assert.Contains(AuthMessages.TokenInvalid, right.Body!.Errors);
+        Assert.Equal(0, await PendingCountAsync(scope, email));
         Assert.Empty(await PersonsAsync(scope, email));
     }
 

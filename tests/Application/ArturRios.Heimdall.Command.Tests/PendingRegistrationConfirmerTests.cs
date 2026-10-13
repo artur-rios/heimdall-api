@@ -45,6 +45,16 @@ public class PendingRegistrationConfirmerTests
             Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError(RelationalErrors.ConcurrencyMessage));
     }
 
+    // A pending-registration store whose update fails, as it does when the database is unavailable or the
+    // row changed under the writer; reading, creating and deleting are the fake's.
+    private sealed class FailingUpdatePendingRepository
+        : AsyncFakeRepository<PendingRegistration, long>, IAsyncRepository<PendingRegistration, long>
+    {
+        Task<DataOutput<PendingRegistration>> IAsyncRepository<PendingRegistration, long>.UpdateAsync(
+            PendingRegistration entity, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<PendingRegistration>.New.WithError("The update was refused."));
+    }
+
     private sealed class Fixture
     {
         public AsyncFakeRepository<Scope, long> Scopes { get; } = new();
@@ -73,9 +83,9 @@ public class PendingRegistrationConfirmerTests
 
         public async Task<string> PendingAsync(
             Scope scope, TimeSpan? lifetime = null, string email = Email,
-            AsyncFakeRepository<PendingRegistration, long>? into = null)
+            AsyncFakeRepository<PendingRegistration, long>? into = null, string? token = null)
         {
-            var token = SingleUseToken.New();
+            token ??= SingleUseToken.New();
             var (hash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(Password);
             await (into ?? Pending).CreateAsync(new PendingRegistration
             {
@@ -298,19 +308,23 @@ public class PendingRegistrationConfirmerTests
     }
 
     [UnitFact]
-    public async Task GivenTheSameTokenTwice_WhenConfirming_ThenTheSecondIsAlreadyClaimed()
+    public async Task GivenARowClaimedByAConcurrentRequestAfterItWasRead_WhenConfirming_ThenAlreadyClaimed()
     {
-        // A second request that read the row before the first deleted it: its reader still holds the
-        // row, the table it deletes from no longer does.
+        // A second request read the row before the first deleted it: its reader still holds a copy, the
+        // table it deletes from no longer holds the row. The copy is seeded with the same id and token
+        // hash as the real row, so the delete is aimed at the id the first request removed.
         var fixture = new Fixture();
         var scope = await fixture.ScopeAsync();
         var stale = new AsyncFakeRepository<PendingRegistration, long>();
         var token = await fixture.PendingAsync(scope);
-        await fixture.PendingAsync(scope, into: stale);
-        var staleToken = Assert.Single(stale.Query().ToList()).TokenHash;
+        await fixture.PendingAsync(scope, into: stale, token: token);
+        var original = Assert.Single(fixture.Waiting());
+        var copy = Assert.Single(stale.Query().ToList());
+        Assert.Equal(original.Id, copy.Id);
+        Assert.Equal(original.TokenHash, copy.TokenHash);
 
         var first = await ConfirmAsync(fixture.Confirmer(), token);
-        var second = await fixture.Confirmer(pendingReader: stale).ConfirmAsync(staleToken, Password, DateTime.UtcNow);
+        var second = await ConfirmAsync(fixture.Confirmer(pendingReader: stale), token);
 
         Assert.Equal(PendingRegistrationOutcome.Confirmed, first.Outcome);
         Assert.Equal(PendingRegistrationOutcome.AlreadyClaimed, second.Outcome);
@@ -335,5 +349,87 @@ public class PendingRegistrationConfirmerTests
         Assert.Empty(result.Errors);
         Assert.Empty(fixture.People());
         Assert.DoesNotContain(LogLevel.Error, logger.Entries.Select(entry => entry.Level));
+    }
+
+    [UnitFact]
+    public async Task GivenWrongPasswords_WhenConfirming_ThenEachOneIsCountedAgainstTheRow()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        Assert.Equal(0, Assert.Single(fixture.Waiting()).FailedAttempts);
+
+        await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+        Assert.Equal(1, Assert.Single(fixture.Waiting()).FailedAttempts);
+
+        await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+        Assert.Equal(2, Assert.Single(fixture.Waiting()).FailedAttempts);
+    }
+
+    [UnitFact]
+    public async Task GivenNineWrongPasswords_WhenTheRightOneFollows_ThenTheRegistrationIsConfirmed()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        for (var attempt = 0; attempt < 9; attempt++)
+        {
+            var wrong = await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+            Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, wrong.Outcome);
+        }
+
+        Assert.Equal(9, Assert.Single(fixture.Waiting()).FailedAttempts);
+
+        var right = await ConfirmAsync(fixture.Confirmer(), token);
+
+        Assert.Equal(PendingRegistrationOutcome.Confirmed, right.Outcome);
+        Assert.Single(fixture.People());
+        Assert.Empty(fixture.Waiting());
+    }
+
+    [UnitFact]
+    public async Task GivenTenWrongPasswords_WhenConfirming_ThenTheRowIsDiscardedAndTheTokenIsGone()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var wrong = await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+
+            // The tenth is still answered as a wrong password; the discard shows on the next attempt.
+            Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, wrong.Outcome);
+        }
+
+        Assert.Empty(fixture.Waiting());
+
+        var right = await ConfirmAsync(fixture.Confirmer(), token);
+
+        Assert.Equal(PendingRegistrationOutcome.NotFound, right.Outcome);
+        Assert.Empty(fixture.People());
+    }
+
+    [UnitFact]
+    public async Task GivenTheCounterCannotBeSaved_WhenAWrongPasswordIsGiven_ThenTheAnswerIsUnchangedAndOneErrorIsLogged()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new FailingUpdatePendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token,
+            "Wr0ng-Confirm-Pass!");
+
+        Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, result.Outcome);
+        Assert.Empty(result.Errors);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.DoesNotContain(Email, entry.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(fixture.People());
     }
 }

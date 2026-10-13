@@ -40,11 +40,14 @@ public interface IPendingRegistrationConfirmer
 ///         squatter who registered someone else's address cannot be handed a working login by a scanner, a
 ///         mistaken click or the wrong one of two identical emails. A missing or wrong password is refused
 ///         after the expiry check and before the claim, so it consumes nothing and the registrant may try
-///         again.
+///         again. Each wrong password is counted against the row, and the tenth discards it: the answer
+///         for that attempt is still "incorrect", and the next attempt finds no row.
 ///     </para>
 ///     <para>
-///         Every failure is logged with a fixed message and no address (NFR-22), and none is thrown: the
-///         outcome is the caller's to turn into an answer.
+///         Every failure is logged with a fixed message and no address (NFR-22), and this class
+///         throws none itself: the outcome is the caller's to turn into an answer. What can still surface
+///         is the <c>PasswordHashGateSaturatedException</c> of a saturated <c>PasswordHashGate</c> during
+///         the password check, which <c>PasswordHashSaturationFilter</c> answers with 503.
 ///     </para>
 /// </remarks>
 public class PendingRegistrationConfirmer(
@@ -56,6 +59,9 @@ public class PendingRegistrationConfirmer(
     ILogger<PendingRegistrationConfirmer> logger)
     : IPendingRegistrationConfirmer
 {
+    /// <summary>The login lockout threshold (<c>LoginCommandHandler</c>): the same guess budget.</summary>
+    private const int MaxFailedPasswordAttempts = 10;
+
     public async Task<PendingRegistrationConfirmation> ConfirmAsync(
         string tokenHash, string? password, DateTime now)
     {
@@ -82,6 +88,8 @@ public class PendingRegistrationConfirmer(
 
         if (!await PasswordHashGate.Shared.TextMatchesAsync(password, pending.PasswordHash, pending.Salt))
         {
+            await CountWrongPasswordAsync(pending);
+
             return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordIncorrect);
         }
 
@@ -143,6 +151,26 @@ public class PendingRegistrationConfirmer(
         await RemoveOtherPendingAsync(pending);
 
         return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Confirmed);
+    }
+
+    /// <summary>
+    ///     Counts a wrong password against the row and discards the row when the count reaches
+    ///     <see cref="MaxFailedPasswordAttempts" />, so a leaked link cannot be used to guess the sign-up
+    ///     password without limit. The answer for the attempt does not depend on whether this succeeds.
+    /// </summary>
+    private async Task CountWrongPasswordAsync(PendingRegistration pending)
+    {
+        pending.FailedAttempts++;
+
+        var saved = pending.FailedAttempts >= MaxFailedPasswordAttempts
+            ? (await pendingWriter.DeleteRangeAsync([pending.Id])).Success
+            : (await pendingWriter.UpdateAsync(pending)).Success;
+
+        if (!saved)
+        {
+            // Fixed message, no address (NFR-22). The row stays as it was, so the registrant may still try.
+            logger.LogError("A wrong confirmation password could not be counted against a pending registration");
+        }
     }
 
     private async Task<bool> AddressTakenAsync(PendingRegistration pending)
