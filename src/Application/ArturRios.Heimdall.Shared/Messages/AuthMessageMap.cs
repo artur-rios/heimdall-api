@@ -56,6 +56,19 @@ public static class AuthMessageMap
             // use case refuses the operation without saying which of the three is the reason.
             [AuthMessages.GoogleSignInUnavailable] = HttpStatusCodes.Forbidden,
             // AF-25c — the verified address is already taken within the scope.
-            [AuthMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict
+            [AuthMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict,
+            // UC-47 main flow and AF-47b — queued, answered alike for every address.
+            [AuthMessages.RegistrationRequested] = HttpStatusCodes.Accepted,
+            // AF-47a — closed, missing and deleted scopes alike; says nothing about any address.
+            [AuthMessages.RegistrationUnavailable] = HttpStatusCodes.Forbidden,
+            // AF-47c — malformed request. Email and password messages share their text with the
+            // AF-11f entries above; the name messages are UC-47's own.
+            [AuthMessages.ScopeRequired] = HttpStatusCodes.BadRequest,
+            [PersonMessages.NameRequired] = HttpStatusCodes.BadRequest,
+            [PersonMessages.NameTooLong] = HttpStatusCodes.BadRequest,
+            [PersonMessages.EmailRequired] = HttpStatusCodes.BadRequest,
+            [PersonMessages.EmailInvalid] = HttpStatusCodes.BadRequest,
+            [PersonMessages.PasswordRequired] = HttpStatusCodes.BadRequest,
+            [PersonMessages.PasswordTooShort] = HttpStatusCodes.BadRequest
         });
 }

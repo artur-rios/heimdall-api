@@ -62,6 +62,16 @@ public static class AuthMessages
     /// </summary>
     public const string PasswordRecoveryRequested = "If the email exists, a reset link has been sent.";
 
+    /// <summary>UC-47 main flow and AF-47b — the same answer whether or not the address was free.</summary>
+    public const string RegistrationRequested =
+        "If this address can be registered, we've sent it an email. Follow it, then sign in.";
+
+    /// <summary>UC-47 AF-47a — the scope is missing, deleted, or closed to self-registration.</summary>
+    public const string RegistrationUnavailable = "This instance is not accepting new accounts.";
+
+    /// <summary>UC-47 — a register request must name the scope it registers into.</summary>
+    public const string ScopeRequired = "Scope is required.";
+
     /// <summary>UC-13 success: the password was changed and the token consumed.</summary>
     public const string PasswordResetSuccessful = "Password reset successfully.";
 
