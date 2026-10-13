@@ -20,6 +20,9 @@ public class ScopeOutput : QueryOutput
     /// <summary>Whether Google sign-in is enabled for the scope.</summary>
     public bool GoogleSignInEnabled { get; set; }
 
+    /// <summary>Whether anonymous self-registration is open for the scope (UC-47).</summary>
+    public bool SelfRegistrationEnabled { get; set; }
+
     /// <summary>
     ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
     ///     <c>null</c> where it takes the deployment default (NFR-23).

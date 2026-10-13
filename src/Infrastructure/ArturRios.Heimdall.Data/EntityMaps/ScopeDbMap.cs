@@ -22,6 +22,7 @@ internal static class ScopeDbMap
 
         scope.Property(x => x.IsDeleted).HasDefaultValue(false);
         scope.Property(x => x.GoogleSignInEnabled).HasDefaultValue(false);
+        scope.Property(x => x.SelfRegistrationEnabled).HasDefaultValue(false);
 
         scope.Property(x => x.DefaultLegalBasis);
         scope.Property(x => x.PrivacyNoticeUri);

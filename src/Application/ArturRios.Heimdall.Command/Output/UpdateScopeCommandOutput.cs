@@ -20,6 +20,9 @@ public class UpdateScopeCommandOutput : CommandOutput
     /// <summary>Whether Google sign-in is enabled for the scope.</summary>
     public bool GoogleSignInEnabled { get; set; }
 
+    /// <summary>Whether anonymous self-registration is open for the scope (UC-47).</summary>
+    public bool SelfRegistrationEnabled { get; set; }
+
     /// <summary>Public identifiers of the scope's owners.</summary>
     public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
 

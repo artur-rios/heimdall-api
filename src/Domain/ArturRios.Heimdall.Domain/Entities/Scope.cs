@@ -33,6 +33,12 @@ public class Scope : Entity<long>
     /// </summary>
     public bool GoogleSignInEnabled { get; set; }
 
+    /// <summary>
+    ///     Whether anonymous callers may register a password <c>User</c> in this scope (UC-47,
+    ///     FR-SR-01). Defaults to <c>false</c>; only the scope's owners or a System Admin may toggle it.
+    /// </summary>
+    public bool SelfRegistrationEnabled { get; set; }
+
 
     /// <summary>
     ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
