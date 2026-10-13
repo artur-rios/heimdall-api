@@ -6,6 +6,7 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -23,9 +24,36 @@ public class PendingRegistrationConfirmerTests
     private sealed class UniqueViolationPersonRepository
         : AsyncFakeRepository<Person, long>, IAsyncRepository<Person, long>
     {
+        public List<Person> Attempted { get; } = [];
+
         Task<DataOutput<long>> IAsyncRepository<Person, long>.CreateAsync(
-            Person entity, CancellationToken cancellationToken) =>
-            Task.FromResult(DataOutput<long>.New.WithError(RelationalErrors.UniqueViolationMessage));
+            Person entity, CancellationToken cancellationToken)
+        {
+            Attempted.Add(entity);
+            return Task.FromResult(DataOutput<long>.New.WithError(RelationalErrors.UniqueViolationMessage));
+        }
+    }
+
+    // A pending-registration store whose delete fails as EF does when the row it re-read was deleted by a
+    // concurrent request first: the repository reports that as the concurrency message.
+    private sealed class ConcurrentlyClaimedPendingRepository
+        : AsyncFakeRepository<PendingRegistration, long>, IAsyncRepository<PendingRegistration, long>
+    {
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<PendingRegistration, long>.DeleteRangeAsync(
+            IEnumerable<long> ids, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError(RelationalErrors.ConcurrencyMessage));
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<LogLevel> Levels { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Levels.Add(logLevel);
     }
 
     private sealed class Fixture
@@ -37,9 +65,11 @@ public class PendingRegistrationConfirmerTests
 
         public PendingRegistrationConfirmer Confirmer(
             IAsyncRepository<Person, long>? personWriter = null,
-            IAsyncReadOnlyRepository<PendingRegistration, long>? pendingReader = null) =>
-            new(pendingReader ?? Pending, Pending, Persons, GoogleUsers, personWriter ?? Persons,
-                NullLogger<PendingRegistrationConfirmer>.Instance);
+            IAsyncReadOnlyRepository<PendingRegistration, long>? pendingReader = null,
+            IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
+            ILogger<PendingRegistrationConfirmer>? logger = null) =>
+            new(pendingReader ?? Pending, pendingWriter ?? Pending, Persons, GoogleUsers,
+                personWriter ?? Persons, logger ?? NullLogger<PendingRegistrationConfirmer>.Instance);
 
         public async Task<Scope> ScopeAsync(bool open = true, bool isDeleted = false)
         {
@@ -189,6 +219,7 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Equal("Holder", Assert.Single(fixture.People()).Name);
+        Assert.Empty(fixture.Waiting());
     }
 
     [UnitFact]
@@ -206,6 +237,7 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Empty(fixture.People());
+        Assert.Empty(fixture.Waiting());
     }
 
     [UnitFact]
@@ -215,10 +247,16 @@ public class PendingRegistrationConfirmerTests
         var scope = await fixture.ScopeAsync();
         var token = await fixture.PendingAsync(scope);
 
-        var result = await ConfirmAsync(fixture.Confirmer(new UniqueViolationPersonRepository()), token);
+        var persons = new UniqueViolationPersonRepository();
 
+        var result = await ConfirmAsync(fixture.Confirmer(persons), token);
+
+        // The create was attempted (the index, not an earlier check, refused it), nothing was kept, and
+        // the claimed row is consumed.
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
-        Assert.Empty(fixture.People());
+        Assert.Single(persons.Attempted);
+        Assert.Empty(persons.Query().ToList());
+        Assert.Empty(fixture.Waiting());
     }
 
     [UnitFact]
@@ -239,5 +277,25 @@ public class PendingRegistrationConfirmerTests
         Assert.Equal(PendingRegistrationOutcome.Confirmed, first.Outcome);
         Assert.Equal(PendingRegistrationOutcome.AlreadyClaimed, second.Outcome);
         Assert.Single(fixture.People());
+    }
+
+    [UnitFact]
+    public async Task GivenAConcurrentClaimOfTheSameToken_WhenConfirming_ThenAlreadyClaimedAndNothingLoggedAsAnError()
+    {
+        // Two requests read the row before either deleted it: the loser's delete reports the concurrency
+        // message. That is a lost claim, not a failure, so a double submit does not see a conflict.
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new ConcurrentlyClaimedPendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token);
+
+        Assert.Equal(PendingRegistrationOutcome.AlreadyClaimed, result.Outcome);
+        Assert.Empty(result.Errors);
+        Assert.Empty(fixture.People());
+        Assert.DoesNotContain(LogLevel.Error, logger.Levels);
     }
 }

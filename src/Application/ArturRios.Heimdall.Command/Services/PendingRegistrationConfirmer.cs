@@ -65,6 +65,14 @@ public class PendingRegistrationConfirmer(
 
         if (!claim.Success)
         {
+            // Another request deleted the row between this delete's re-read and its commit: EF reports the
+            // lost race as a concurrency failure. It is the same outcome as finding the row already gone,
+            // not a fault, so a double submit answers "already used" rather than a conflict.
+            if (claim.Errors.Contains(RelationalErrors.ConcurrencyMessage))
+            {
+                return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.AlreadyClaimed);
+            }
+
             logger.LogError("A pending registration could not be claimed: {Errors}", string.Join(" | ", claim.Errors));
             return new(PendingRegistrationOutcome.Failed, claim.Errors.ToList());
         }
