@@ -661,6 +661,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<string>("EmailVerificationUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("email_verification_url");
+
                     b.Property<bool>("GoogleSignInEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -678,6 +683,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
+
+                    b.Property<string>("PasswordResetUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("password_reset_url");
 
                     b.Property<string>("PrivacyNoticeUri")
                         .HasMaxLength(2048)

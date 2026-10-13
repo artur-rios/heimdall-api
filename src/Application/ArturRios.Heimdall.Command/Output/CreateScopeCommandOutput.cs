@@ -23,6 +23,12 @@ public class CreateScopeCommandOutput : CommandOutput
     /// <summary>Whether anonymous self-registration is open for the scope (UC-47).</summary>
     public bool SelfRegistrationEnabled { get; set; }
 
+    /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
+    public string? EmailVerificationUrl { get; set; }
+
+    /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
+    public string? PasswordResetUrl { get; set; }
+
     /// <summary>Public identifiers of the persons designated as the scope's initial owners.</summary>
     public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
 

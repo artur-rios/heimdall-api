@@ -75,6 +75,8 @@ public class ListScopesQueryHandler(
             SelfRegistrationEnabled = x.SelfRegistrationEnabled,
             DefaultLegalBasis = x.DefaultLegalBasis,
             PrivacyNoticeUri = x.PrivacyNoticeUri,
+            EmailVerificationUrl = x.EmailVerificationUrl,
+            PasswordResetUrl = x.PasswordResetUrl,
             IsDeleted = x.IsDeleted,
             OwnerIds = x.Owners.Select(owner => owner.Person.PublicId).ToList(),
             CreatedAt = x.CreatedAt,

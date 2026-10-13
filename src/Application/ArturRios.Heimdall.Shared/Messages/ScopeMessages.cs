@@ -62,6 +62,9 @@ public static class ScopeMessages
     /// <summary>UC-47 success: the scope's self-registration setting was changed.</summary>
     public const string SelfRegistrationUpdatedSuccessfully = "Self-registration setting updated successfully.";
 
+    /// <summary>Success: the scope's verification and password-reset link bases were changed.</summary>
+    public const string EmailLinksUpdatedSuccessfully = "Email links updated successfully.";
+
     /// <summary>
     ///     AF-24b: a Scope Admin acted on a scope they do not own. Same wording as the
     ///     <c>NotScopeOwner</c> of <see cref="PersonMessages" /> and <see cref="ApplicationMessages" />
@@ -82,6 +85,14 @@ public static class ScopeMessages
 
     /// <summary>AF-03f: the privacy notice URI is not a well-formed absolute URI.</summary>
     public const string PrivacyNoticeUriInvalid = "The privacy notice URI must be an absolute URL.";
+
+    /// <summary>
+    ///     A scope email link is not an absolute http or https URL of at most 2048 characters. The
+    ///     scheme is named because a leading-slash path parses as an absolute <c>file://</c> URI on
+    ///     Unix, and an emailed link to the host's disk is no link at all.
+    /// </summary>
+    public const string EmailLinkInvalid =
+        "Email links must be absolute http or https URLs of at most 2048 characters.";
 
     /// <summary>AF-03g: the lawful basis value names no member of the enum.</summary>
     public const string LegalBasisUnknown = "The lawful basis is not one this system recognises.";

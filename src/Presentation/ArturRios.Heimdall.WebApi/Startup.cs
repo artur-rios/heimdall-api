@@ -232,6 +232,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<SetGoogleSignInCommand, SetGoogleSignInCommandOutput, SetGoogleSignInCommandHandler>();
         Builder.Services.AddScoped<IValidator<SetSelfRegistrationCommand>, SetSelfRegistrationCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<SetSelfRegistrationCommand, SetSelfRegistrationCommandOutput, SetSelfRegistrationCommandHandler>();
+        Builder.Services.AddScoped<IValidator<SetScopeEmailLinksCommand>, SetScopeEmailLinksCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<SetScopeEmailLinksCommand, SetScopeEmailLinksCommandOutput, SetScopeEmailLinksCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateAdminCommand, CreatePersonCommandOutput, CreateAdminCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();

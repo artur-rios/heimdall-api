@@ -18,9 +18,12 @@ public class RegistrationProcessorTests
     {
         public List<(string Email, string Token)> Sent { get; } = [];
 
-        public Task SendAsync(string email, string token)
+        public List<string?> LinkBases { get; } = [];
+
+        public Task SendAsync(string email, string token, string? linkBase)
         {
             Sent.Add((email, token));
+            LinkBases.Add(linkBase);
             return Task.CompletedTask;
         }
     }
@@ -66,12 +69,14 @@ public class RegistrationProcessorTests
             new(Scopes, Persons, GoogleUsers, pendingWriter ?? Pending, Links, Attempts, Options,
                 logger ?? NullLogger<RegistrationProcessor>.Instance);
 
-        public async Task<Scope> ScopeAsync(bool open = true, bool isDeleted = false)
+        public async Task<Scope> ScopeAsync(
+            bool open = true, bool isDeleted = false, string? emailVerificationUrl = null)
         {
             var scope = new Scope
             {
                 PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}",
-                SelfRegistrationEnabled = open, IsDeleted = isDeleted
+                SelfRegistrationEnabled = open, IsDeleted = isDeleted,
+                EmailVerificationUrl = emailVerificationUrl
             };
             await Scopes.CreateAsync(scope);
             return scope;
@@ -263,5 +268,27 @@ public class RegistrationProcessorTests
         Assert.DoesNotContain("new@test.local", entry.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(fixture.Links.Sent);
         Assert.Empty(fixture.Attempts.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeWithAVerificationLink_WhenProcessing_ThenTheLinkIsMailedWithThatBase()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync(emailVerificationUrl: "https://fortuna.test/verify-email");
+
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        Assert.Equal("https://fortuna.test/verify-email", Assert.Single(fixture.Links.LinkBases));
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeWithNoVerificationLink_WhenProcessing_ThenTheLinkIsMailedWithNoBase()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        Assert.Null(Assert.Single(fixture.Links.LinkBases));
     }
 }
