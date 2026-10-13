@@ -27,11 +27,15 @@ public class MailgunEmailVerificationSender(
                Welcome! Confirm this address to finish setting up your account.
 
                Use this token to verify it: {token}
+
+               If you did not ask for this, ignore this email — nothing is created until the link is followed.
                """
             : $"""
                Welcome! Confirm this address to finish setting up your account.
 
                Verify it here: {link}
+
+               If you did not ask for this, ignore this email — nothing is created until the link is followed.
                """;
 
         return DeliverAsync(email, Subject, body);

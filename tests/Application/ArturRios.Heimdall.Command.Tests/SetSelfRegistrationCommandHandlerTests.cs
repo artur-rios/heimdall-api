@@ -60,6 +60,19 @@ public class SetSelfRegistrationCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAnOwningScopeAdmin_WhenEnabling_ThenFlagIsOn()
+    {
+        var (scopes, scope) = await ScopeStoreAsync();
+        var command = Command(scope.PublicId, enabled: true);
+        command.ActingRole = (int)Roles.ScopeAdmin;
+
+        var output = await Handler(scopes, ownershipAllowed: true).HandleAsync(command);
+
+        Assert.True(output.Success);
+        Assert.True(scopes.Query().Single().SelfRegistrationEnabled);
+    }
+
+    [UnitFact]
     public async Task GivenAnOpenScope_WhenDisabling_ThenFlagIsOff()
     {
         var (scopes, scope) = await ScopeStoreAsync(selfRegistrationEnabled: true);

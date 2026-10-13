@@ -178,6 +178,17 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     }
 
     [FunctionalFact]
+    public async Task GivenADeletedScope_WhenRegistering_ThenForbiddenWithTheUnavailableMessage()
+    {
+        var scope = await SeedScopeAsync(isDeleted: true);
+
+        var response = await RegisterAsync(UniqueEmail("deleted"), scope.PublicId);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains(AuthMessages.RegistrationUnavailable, response.Body!.Errors);
+    }
+
+    [FunctionalFact]
     public async Task GivenAnUnknownScope_WhenRegistering_ThenForbiddenWithTheUnavailableMessage()
     {
         var response = await RegisterAsync(UniqueEmail("nowhere"), Guid.NewGuid());
@@ -208,6 +219,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
 
         var response = await RegisterAsync(UniqueEmail("echo"), scope.PublicId);
 
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.DoesNotContain(Password, System.Text.Json.JsonSerializer.Serialize(response.Body));
     }
 }

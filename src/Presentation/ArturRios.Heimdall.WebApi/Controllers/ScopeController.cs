@@ -98,7 +98,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
 
     /// <summary>
     ///     Opens or closes anonymous self-registration for a scope (UC-47 toggle, FR-SR-02). Same
-    ///     actors and refusals as <see cref="SetGoogleSignIn" />.
+    ///     actors and refusals as the Google Sign-In toggle (UC-24).
     /// </summary>
     [HttpPut("{id:guid}/self-registration")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]

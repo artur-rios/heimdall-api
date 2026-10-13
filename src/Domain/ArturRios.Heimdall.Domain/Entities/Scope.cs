@@ -39,7 +39,6 @@ public class Scope : Entity<long>
     /// </summary>
     public bool SelfRegistrationEnabled { get; set; }
 
-
     /// <summary>
     ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
     ///     <c>null</c> to take the deployment default of contract performance.

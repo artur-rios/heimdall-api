@@ -63,14 +63,15 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
 
     /// <summary>
     ///     Registers a password <c>User</c> in a scope that has opened self-registration (UC-47,
-    ///     FR-SR-03…FR-SR-06). Open to anonymous callers — someone without an account cannot hold a
+    ///     FR-SR-03…FR-SR-08). Open to anonymous callers — someone without an account cannot hold a
     ///     token.
     /// </summary>
     /// <remarks>
     ///     Answers 202 with the same message whether the address was free or taken (AF-47b), and in the
-    ///     same time: the person is created, or the holder told of the attempt, after the response, by
-    ///     <c>RegistrationDispatcher</c>. A missing, deleted or closed scope answers 403 (AF-47a); a
-    ///     malformed request 400 (AF-47c). Neither says anything about an address.
+    ///     same time: a pending registration is written and its link mailed, or the holder told of the
+    ///     attempt, after the response, by <c>RegistrationDispatcher</c>. No <c>User</c> exists until
+    ///     that link is followed (UC-14, FR-SR-07). A missing, deleted or closed scope answers 403
+    ///     (AF-47a); a malformed request 400 (AF-47c). Neither says anything about an address.
     /// </remarks>
     [HttpPost("register")]
     [AllowAnonymous]
