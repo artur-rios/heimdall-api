@@ -43,7 +43,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, "203.0.113.7"), Callers());
 
-        Assert.Equal("203.0.113.7", key);
+        Assert.Equal("caller:203.0.113.7", key);
     }
 
     [UnitFact]
@@ -51,7 +51,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2:aaaa::1"), Callers());
 
-        Assert.Equal("2001:db8:1:2::/64", key);
+        Assert.Equal("caller:2001:db8:1:2::/64", key);
         Assert.Equal(key, AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2:ffff:1:2:3"), Callers()));
     }
 
@@ -60,7 +60,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, "::ffff:203.0.113.7"), Callers());
 
-        Assert.Equal("203.0.113.7", key);
+        Assert.Equal("caller:203.0.113.7", key);
     }
 
     [UnitFact]
@@ -68,7 +68,36 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyB, "203.0.113.8"), Callers());
 
-        Assert.Equal("203.0.113.8", key);
+        Assert.Equal("caller:203.0.113.8", key);
+    }
+
+    [UnitFact]
+    public void GivenANamedAddress_WhenPartitioning_ThenItNeverSharesABucketWithADirectConnectionFromThatAddress()
+    {
+        // A key holder naming a real caller's address must not be able to spend that caller's own
+        // budget: a direct connection from the address keeps the unprefixed key.
+        var direct = new DefaultHttpContext();
+        direct.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.7");
+
+        var named = AuthRateLimitPartition.KeyFor(Context(KeyA, "203.0.113.7"), Callers());
+        var directKey = AuthRateLimitPartition.KeyFor(direct, Callers());
+
+        Assert.Equal("203.0.113.7", directKey);
+        Assert.NotEqual(directKey, named);
+        Assert.StartsWith(AuthRateLimitPartition.NamedAddressPrefix, named);
+    }
+
+    [UnitFact]
+    public void GivenANamedIPv6Address_WhenPartitioning_ThenItNeverSharesABucketWithADirectSlash64()
+    {
+        var direct = new DefaultHttpContext();
+        direct.Connection.RemoteIpAddress = IPAddress.Parse("2001:db8:1:2::5");
+
+        var named = AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2::5"), Callers());
+        var directKey = AuthRateLimitPartition.KeyFor(direct, Callers());
+
+        Assert.Equal("2001:db8:1:2::/64", directKey);
+        Assert.NotEqual(directKey, named);
     }
 
     [UnitFact]

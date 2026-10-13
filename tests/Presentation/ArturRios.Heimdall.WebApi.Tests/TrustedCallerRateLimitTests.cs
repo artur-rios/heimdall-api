@@ -64,6 +64,17 @@ public class TrustedCallerRateLimitTests() : WebApiTest<Program>(EnvironmentType
     }
 
     [FunctionalFact]
+    public async Task GivenANamedAddressIsExhausted_WhenTheConnectionIsNotThatAddress_ThenTheDirectBucketIsUntouched()
+    {
+        // The functional host has no remote address, so a request with no headers is the direct
+        // connection (partition "unknown"); the same-address direct case is pinned by the unit tests
+        // in AuthRateLimitPartitionTests, where the connection address can be set.
+        await ExhaustAsync(PostgresFixture.TrustedCallerKey, "203.0.113.7");
+
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, await PostAsync(key: null, clientAddress: null));
+    }
+
+    [FunctionalFact]
     public async Task GivenNoKey_WhenDifferentClientAddressesAreNamed_ThenTheyShareOneBudget()
     {
         await ExhaustAsync(key: null, "203.0.113.7");
