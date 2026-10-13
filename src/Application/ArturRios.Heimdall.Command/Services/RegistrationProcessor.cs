@@ -1,5 +1,4 @@
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
