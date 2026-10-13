@@ -62,6 +62,29 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     }
 
     /// <summary>
+    ///     Registers a password <c>User</c> in a scope that has opened self-registration (UC-47,
+    ///     FR-SR-03…FR-SR-06). Open to anonymous callers — someone without an account cannot hold a
+    ///     token.
+    /// </summary>
+    /// <remarks>
+    ///     Answers 202 with the same message whether the address was free or taken (AF-47b), and in the
+    ///     same time: the person is created, or the holder told of the attempt, after the response, by
+    ///     <c>RegistrationDispatcher</c>. A missing, deleted or closed scope answers 403 (AF-47a); a
+    ///     malformed request 400 (AF-47c). Neither says anything about an address.
+    /// </remarks>
+    [HttpPost("register")]
+    [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    public async Task<ActionResult<DataOutput<RegisterCommandOutput?>>> Register(
+        [FromBody] RegisterCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<RegisterCommand, RegisterCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Sets a new password from the reset token mailed by UC-12 (UC-13, FR-PR-03/04). Open to
     ///     anonymous callers for the same reason: the token is the only credential someone who has
     ///     lost their password can present.

@@ -253,6 +253,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<LoginCommand, LoginCommandOutput, LoginCommandHandler>();
         Builder.Services.AddScoped<IValidator<PasswordRecoveryCommand>, PasswordRecoveryCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<PasswordRecoveryCommand, PasswordRecoveryCommandOutput, PasswordRecoveryCommandHandler>();
+        Builder.Services.AddScoped<IValidator<RegisterCommand>, RegisterCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<RegisterCommand, RegisterCommandOutput, RegisterCommandHandler>();
         Builder.Services.AddScoped<IValidator<ResetPasswordCommand>, ResetPasswordCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<ResetPasswordCommand, ResetPasswordCommandOutput, ResetPasswordCommandHandler>();
         Builder.Services.AddScoped<IValidator<VerifyEmailCommand>, VerifyEmailCommandValidator>();
@@ -376,6 +378,13 @@ public class Startup : WebApiStartup
             provider => provider.GetRequiredService<PasswordRecoveryQueue>());
         Builder.Services.AddScoped<PasswordRecoveryProcessor>();
         Builder.Services.AddHostedService<PasswordRecoveryDispatcher>();
+        // UC-47 runs in the same two halves as UC-12 (AF-47b): the handler queues, the dispatcher
+        // creates the person or tells the holder of the attempt after the caller has been answered.
+        Builder.Services.AddSingleton<RegistrationQueue>();
+        Builder.Services.AddSingleton<IRegistrationQueue>(
+            provider => provider.GetRequiredService<RegistrationQueue>());
+        Builder.Services.AddScoped<RegistrationProcessor>();
+        Builder.Services.AddHostedService<RegistrationDispatcher>();
         AddEmailSenders();
         AddGoogleSignIn();
 
@@ -775,6 +784,7 @@ public class Startup : WebApiStartup
             Builder.Services.AddScoped<IPasswordResetSender, LoggingPasswordResetSender>();
             Builder.Services.AddScoped<ITwoFactorEmailSender, LoggingTwoFactorEmailSender>();
             Builder.Services.AddScoped<IRestrictionLiftNotifier, LoggingRestrictionLiftNotifier>();
+            Builder.Services.AddScoped<IRegistrationAttemptSender, LoggingRegistrationAttemptSender>();
 
             return;
         }
@@ -786,6 +796,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
         Builder.Services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();
         Builder.Services.AddScoped<IRestrictionLiftNotifier, MailgunRestrictionLiftNotifier>();
+        Builder.Services.AddScoped<IRegistrationAttemptSender, MailgunRegistrationAttemptSender>();
     }
 
     /// <summary>
