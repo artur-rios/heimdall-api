@@ -20,6 +20,9 @@ public class ScopeOutput : QueryOutput
     /// <summary>Whether Google sign-in is enabled for the scope.</summary>
     public bool GoogleSignInEnabled { get; set; }
 
+    /// <summary>Whether anonymous self-registration is open for the scope (UC-47).</summary>
+    public bool SelfRegistrationEnabled { get; set; }
+
     /// <summary>
     ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
     ///     <c>null</c> where it takes the deployment default (NFR-23).
@@ -28,6 +31,12 @@ public class ScopeOutput : QueryOutput
 
     /// <summary>Where this tenant publishes its own privacy notice, if it has one.</summary>
     public string? PrivacyNoticeUri { get; set; }
+
+    /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
+    public string? EmailVerificationUrl { get; set; }
+
+    /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
+    public string? PasswordResetUrl { get; set; }
 
     /// <summary>Whether the scope is logically deleted.</summary>
     public bool IsDeleted { get; set; }

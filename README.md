@@ -1,7 +1,7 @@
 # Heimdall API
 
 [![Docs](https://img.shields.io/badge/docs-website-blue)](https://artur-rios.github.io/heimdall-api/)
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](./LICENSE)
+[![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](./LICENSE)
 
 📖 **[Read the documentation website](https://artur-rios.github.io/heimdall-api/)** — overview,
 run and test instructions, architecture and class diagrams, sequence diagrams for the main flows,
@@ -153,6 +153,7 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-39: Disable Two-Factor Authentication | ✅ | [#71](https://github.com/artur-rios/heimdall-api/issues/71) |
 | UC-40: Regenerate Recovery Codes | ✅ | [#72](https://github.com/artur-rios/heimdall-api/issues/72) |
 | UC-46: Resend Second-Factor Email Code | ✅ | [#133](https://github.com/artur-rios/heimdall-api/issues/133) |
+| UC-47: Register a Password User | ✅ | [#169](https://github.com/artur-rios/heimdall-api/issues/169) |
 
 ### Application Management
 
@@ -327,6 +328,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |
 | `HEIMDALL_TRUSTED_PROXIES` | Empty — `X-Forwarded-For` and `X-Forwarded-Proto` are ignored, and start-up warns. Behind a reverse proxy, set it to the proxy's addresses or CIDR networks (comma separated) so the rate limiter and the request log see the real caller |
+| `HEIMDALL_TRUSTED_CALLER_KEYS` | Empty — no client system may name its users' addresses to the anonymous-auth rate limiter. Comma-separated secrets of at least 32 characters (shorter ones stop start-up); a request with one in `X-Heimdall-Caller-Key` is counted under the address in `X-Heimdall-Client-Address` (see [Operations](docs/content/en/docs/operations.md)) |
 
 The data retention, security monitoring and database TLS settings are listed with their defaults under
 [Environment variables at a glance](https://artur-rios.github.io/heimdall-api/docs/operations/#environment-variables-at-a-glance)
@@ -587,5 +589,6 @@ branching model and the release process are described in [CONTRIBUTING.md](./CON
 
 ## Legal
 
-This project is **proprietary**. All rights reserved. Use is governed by the terms in the
-[LICENSE](LICENSE) file. Copyright &copy; 2026 Artur Rios.
+This project is licensed under the [Artur Rios Attribution License](LICENSE). It is free and open source: you may view, use, fork, modify, and extend it, provided you credit the author, Artur Rios, with a link to [artur-rios.tech](https://artur-rios.tech) or [github.com/artur-rios](https://github.com/artur-rios).
+
+Copyright &copy; 2026 Artur Rios.

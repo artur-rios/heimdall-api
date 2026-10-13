@@ -31,8 +31,8 @@ public class PasswordResetServiceTests
     {
         var sender = new Mock<IPasswordResetSender>();
 
-        sender.Setup(s => s.SendAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .Callback<string, string>((_, token) => delivered.Add(token))
+        sender.Setup(s => s.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>()))
+            .Callback<string, string, string?>((_, token, _) => delivered.Add(token))
             .Returns(Task.CompletedTask);
 
         return sender;
@@ -46,7 +46,7 @@ public class PasswordResetServiceTests
         var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var sender = RecordingSender(delivered);
         var options = new PasswordResetOptions { TokenLifetime = TimeSpan.FromHours(1) };
-        var service = new PasswordResetService(tokens, sender.Object, options);
+        var service = new PasswordResetService(tokens, new AsyncFakeRepository<Scope, long>(), sender.Object, options);
         var person = await PersonAsync();
 
         // When
@@ -61,7 +61,7 @@ public class PasswordResetServiceTests
 
         // Then — the sender received the person's email and the token whose digest was stored
         var sent = Assert.Single(delivered);
-        sender.Verify(s => s.SendAsync(person.Email, sent), Times.Once);
+        sender.Verify(s => s.SendAsync(person.Email, sent, null), Times.Once);
         Assert.Equal(SingleUseTokenHash.Of(sent), stored.TokenHash);
     }
 
@@ -74,7 +74,8 @@ public class PasswordResetServiceTests
         var delivered = new List<string>();
         var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
-            tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
+            tokens, new AsyncFakeRepository<Scope, long>(), RecordingSender(delivered).Object,
+            new PasswordResetOptions());
 
         await service.IssueAndSendAsync(await PersonAsync());
 
@@ -91,7 +92,8 @@ public class PasswordResetServiceTests
         // Given a lifetime far from the one-hour default, so the assertion cannot pass by accident
         var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var options = new PasswordResetOptions { TokenLifetime = TimeSpan.FromMinutes(15) };
-        var service = new PasswordResetService(tokens, new Mock<IPasswordResetSender>().Object, options);
+        var service = new PasswordResetService(
+            tokens, new AsyncFakeRepository<Scope, long>(), new Mock<IPasswordResetSender>().Object, options);
         var issuedAt = DateTime.UtcNow;
 
         // When
@@ -113,7 +115,8 @@ public class PasswordResetServiceTests
         var delivered = new List<string>();
         var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
-            tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
+            tokens, new AsyncFakeRepository<Scope, long>(), RecordingSender(delivered).Object,
+            new PasswordResetOptions());
         var person = await PersonAsync();
 
         // When
@@ -138,7 +141,8 @@ public class PasswordResetServiceTests
         var delivered = new List<string>();
         var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var service = new PasswordResetService(
-            tokens, RecordingSender(delivered).Object, new PasswordResetOptions());
+            tokens, new AsyncFakeRepository<Scope, long>(), RecordingSender(delivered).Object,
+            new PasswordResetOptions());
 
         await service.IssueAndSendAsync(await PersonAsync());
 
@@ -154,5 +158,65 @@ public class PasswordResetServiceTests
         Assert.All(token, character => Assert.True(
             char.IsAsciiLetterOrDigit(character),
             $"token contains the non-alphanumeric character '{character}'"));
+    }
+
+    private static async Task<(PasswordResetService service, Mock<IPasswordResetSender> sender)> ServiceAsync(
+        params Scope[] seeded)
+    {
+        var scopes = new AsyncFakeRepository<Scope, long>();
+
+        foreach (var scope in seeded)
+        {
+            await scopes.CreateAsync(scope);
+        }
+
+        var sender = new Mock<IPasswordResetSender>();
+        var service = new PasswordResetService(
+            new AsyncFakeRepository<PasswordResetToken, long>(), scopes, sender.Object, new PasswordResetOptions());
+
+        return (service, sender);
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonInAScopeWithALink_WhenIssuingAndSending_ThenTheSenderGetsThatScopesLinkBase()
+    {
+        // Another scope's link sits beside it: the person's own scope is the one that must be read
+        var other = new Scope { Name = "Other", PasswordResetUrl = "https://other.test/reset" };
+        var scope = new Scope
+        {
+            Name = "Fortuna", PasswordResetUrl = "https://fortuna.test/password-reset",
+            EmailVerificationUrl = "https://fortuna.test/verify-email"
+        };
+        var (service, sender) = await ServiceAsync(other, scope);
+
+        await service.IssueAndSendAsync(new Person { Email = "user@test.local", ScopeId = scope.Id });
+
+        // The reset link, not the verification one, is what a reset email takes
+        sender.Verify(
+            s => s.SendAsync("user@test.local", It.IsAny<string>(), "https://fortuna.test/password-reset"),
+            Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonInAScopeWithNoLink_WhenIssuingAndSending_ThenTheLinkBaseIsNull()
+    {
+        var scope = new Scope { Name = "Fortuna", EmailVerificationUrl = "https://fortuna.test/verify-email" };
+        var (service, sender) = await ServiceAsync(scope);
+
+        await service.IssueAndSendAsync(new Person { Email = "user@test.local", ScopeId = scope.Id });
+
+        sender.Verify(s => s.SendAsync("user@test.local", It.IsAny<string>(), null), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenAnAdminWithNoScope_WhenIssuingAndSending_ThenTheLinkBaseIsNullSoTheGlobalLinkApplies()
+    {
+        // A scope with a link exists, and the admin must not pick it up: admins have no scope
+        var (service, sender) = await ServiceAsync(
+            new Scope { Name = "Fortuna", PasswordResetUrl = "https://fortuna.test/password-reset" });
+
+        await service.IssueAndSendAsync(new Person { Email = "admin@test.local", ScopeId = null });
+
+        sender.Verify(s => s.SendAsync("admin@test.local", It.IsAny<string>(), null), Times.Once);
     }
 }

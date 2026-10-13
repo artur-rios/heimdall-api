@@ -30,6 +30,9 @@ public static class PersonMessages
     /// <summary>AF-06d: email is not a valid address.</summary>
     public const string EmailInvalid = "Email is not valid.";
 
+    /// <summary>AF-06d, AF-47c: email is longer than the stored column allows.</summary>
+    public const string EmailTooLong = "Email must be at most 256 characters.";
+
     /// <summary>AF-06d: password was not supplied.</summary>
     public const string PasswordRequired = "Password is required.";
 

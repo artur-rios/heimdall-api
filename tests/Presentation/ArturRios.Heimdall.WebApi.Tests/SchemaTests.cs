@@ -22,6 +22,7 @@ public class SchemaTests(PostgresFixture fixture)
             "email_verification_token",
             "google_user",
             "password_reset_token",
+            "pending_registration",
             "person",
             "role",
             "scope",

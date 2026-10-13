@@ -43,6 +43,20 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return reserved;
     }
 
+    public async Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses)
+    {
+        var charged = await context.PendingRegistrations
+            .Where(x => x.Id == pending.Id && x.FailedAttempts < maxGuesses)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedAttempts, x => x.FailedAttempts + 1)) == 1;
+
+        if (charged)
+        {
+            Accept(pending, x => x.FailedAttempts, pending.FailedAttempts + 1);
+        }
+
+        return charged;
+    }
+
     public async Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil)
     {
         var locked = await context.Persons

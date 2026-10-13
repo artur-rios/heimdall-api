@@ -19,8 +19,9 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///     </para>
 ///     <para>
 ///         <b>Charge first, then check.</b> Every budget here — login attempts (FR-AU-09), guesses at
-///         an email code (FR-2F-13) or at a challenge, reissues of a challenge's code (FR-2F-16) — is
-///         reserved before the expensive or secret comparison runs, not counted after it fails.
+///         an email code (FR-2F-13) or at a challenge, guesses at the password of a pending
+///         registration (FR-SR-09), reissues of a challenge's code (FR-2F-16) — is reserved before the
+///         expensive or secret comparison runs, not counted after it fails.
 ///         Counting afterwards let a burst of parallel guesses all pass the "under the cap" check
 ///         before any of them was counted; reserving first means no more comparisons can ever run
 ///         than the cap allows.
@@ -39,6 +40,17 @@ public interface IAtomicWrites
     ///     <paramref name="maxAttempts" />. <c>false</c> means no attempt may be made.
     /// </summary>
     Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now);
+
+    /// <summary>
+    ///     FR-SR-09: reserves one guess at the sign-up password of a pending registration, while it has
+    ///     had fewer than <paramref name="maxGuesses" />. <c>false</c> means no comparison may be made.
+    /// </summary>
+    /// <remarks>
+    ///     On success the instance's <c>FailedAttempts</c> is set to the value this request read plus one,
+    ///     which under concurrent guesses can trail the stored count. A caller that needs the stored count
+    ///     (to tell whether this was the last guess) must ask the database for it.
+    /// </remarks>
+    Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses);
 
     /// <summary>
     ///     FR-AU-09: after a wrong password, locks the account until <paramref name="lockedOutUntil" />

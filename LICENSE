@@ -1,24 +1,34 @@
-ArturRios.Heimdall — Proprietary License
+Artur Rios Attribution License
 
-Copyright (c) 2026 Artur Rios. All rights reserved.
+Copyright (c) 2026 Artur Rios (https://artur-rios.tech)
 
-This software and its associated source code, documentation, and related
-materials (the "Software") are the proprietary and confidential property of
-Artur Rios (the "Copyright Holder").
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to view,
+use, copy, fork, modify, extend, merge, publish, distribute, sublicense, and/or
+sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-No license, express or implied, is granted to any person or entity. Without the
-prior written permission of the Copyright Holder, no part of the Software may be
-used, copied, reproduced, modified, merged, published, distributed, sublicensed,
-sold, or otherwise exploited, in whole or in part, by any means, and no
-derivative works may be created from it.
+1. Attribution. Any copy, fork, derivative work, or product that uses the
+   Software, in whole or in substantial part, must give clear and visible
+   credit to the original author, Artur Rios, including a link to at least one
+   of the following:
 
-Unauthorized use, reproduction, or distribution of the Software, or any portion
-of it, may result in civil and criminal penalties, and will be prosecuted to the
-maximum extent possible under the law.
+     - https://artur-rios.tech
+     - https://github.com/artur-rios
+
+   The credit must appear in a reasonable place for the medium, such as the
+   project's README, documentation, "About" or credits section, or the header
+   of the distributed source files.
+
+2. Notice. This license notice shall be included in all copies or substantial
+   portions of the Software.
+
+No other restrictions apply. The Software is free and open source.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
-HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

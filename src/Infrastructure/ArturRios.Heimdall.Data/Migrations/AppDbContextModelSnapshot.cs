@@ -377,6 +377,77 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("password_reset_token", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.PendingRegistration", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("email");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<byte[]>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("password_hash");
+
+                    b.Property<byte[]>("Salt")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("salt");
+
+                    b.Property<long>("ScopeId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pending_registration");
+
+                    b.HasIndex("ScopeId")
+                        .HasDatabaseName("ix_pending_registration_scope_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pending_registration_token_hash");
+
+                    b.ToTable("pending_registration", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Person", b =>
                 {
                     b.Property<long>("Id")
@@ -590,6 +661,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<string>("EmailVerificationUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("email_verification_url");
+
                     b.Property<bool>("GoogleSignInEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -608,6 +684,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
+                    b.Property<string>("PasswordResetUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("password_reset_url");
+
                     b.Property<string>("PrivacyNoticeUri")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
@@ -616,6 +697,12 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.Property<Guid>("PublicId")
                         .HasColumnType("uuid")
                         .HasColumnName("public_id");
+
+                    b.Property<bool>("SelfRegistrationEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("self_registration_enabled");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -995,6 +1082,18 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasConstraintName("fk_password_reset_token_person_person_id");
 
                     b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.PendingRegistration", b =>
+                {
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Scope", "Scope")
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_pending_registration_scope_scope_id");
+
+                    b.Navigation("Scope");
                 });
 
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Person", b =>

@@ -13,6 +13,22 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 {
     public static readonly InMemoryAtomicWrites Instance = new();
 
+    /// <summary>How many pending-registration guesses have been charged through this instance.</summary>
+    public int PendingGuessCharges { get; private set; }
+
+    public Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses)
+    {
+        if (pending.FailedAttempts >= maxGuesses)
+        {
+            return Task.FromResult(false);
+        }
+
+        pending.FailedAttempts++;
+        PendingGuessCharges++;
+
+        return Task.FromResult(true);
+    }
+
     public Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now)
     {
         if (person.FailedLoginAttempts >= maxAttempts || person.LockedOutUntil > now)

@@ -79,7 +79,7 @@ title = 'Heimdall API'
 description = 'A centralized identity management API with scope-based multi-tenancy, built on ASP.NET Core.'
 
 [params]
-copyright = 'Artur Rios'
+copyright.authors = 'Artur Rios | [Artur Rios Attribution License](https://github.com/artur-rios/heimdall-api/blob/main/LICENSE)'
 github_repo = 'https://github.com/artur-rios/heimdall-api'
 github_branch = 'main'
 # points "Edit this page" at the right folder, since the site lives in docs/

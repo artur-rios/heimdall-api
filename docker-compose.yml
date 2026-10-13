@@ -95,6 +95,10 @@ services:
       # else, so the rate limiter and the request log see the real caller. Empty by default, which
       # trusts nobody: every caller is then the proxy.
       HEIMDALL_TRUSTED_PROXIES: ${HEIMDALL_TRUSTED_PROXIES:-}
+      # Comma-separated secrets (each at least 32 characters) a client system presents in
+      # X-Heimdall-Caller-Key to have its end users' own addresses, sent in X-Heimdall-Client-Address,
+      # counted by the anonymous-auth rate limiter. Empty by default, which trusts no caller.
+      HEIMDALL_TRUSTED_CALLER_KEYS: ${HEIMDALL_TRUSTED_CALLER_KEYS:-}
 
       # The entrypoint applies pending EF Core migrations before starting the API. false when they
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.

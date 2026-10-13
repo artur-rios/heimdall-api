@@ -65,6 +65,12 @@ public class MailgunSenderTests
             new EmailDeliveryOptions { VerificationUrl = verificationUrl },
             NullLogger<MailgunEmailVerificationSender>.Instance);
 
+    private static MailgunRegistrationLinkSender RegistrationSender(
+        IEmailService emailService, string verificationUrl = "https://app.test/verify") =>
+        new(emailService,
+            new EmailDeliveryOptions { VerificationUrl = verificationUrl },
+            NullLogger<MailgunRegistrationLinkSender>.Instance);
+
     [UnitFact]
     public async Task GivenConfiguredResetUrl_WhenSendingPasswordReset_ThenEmailCarriesTheLink()
     {
@@ -72,7 +78,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await ResetSender(emailService).SendAsync(Recipient, Token);
+        await ResetSender(emailService).SendAsync(Recipient, Token, linkBase: null);
 
         // Then
         Assert.Equal(Recipient, emailService.To);
@@ -87,7 +93,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await VerificationSender(emailService).SendAsync(Recipient, Token);
+        await VerificationSender(emailService).SendAsync(Recipient, Token, linkBase: null);
 
         // Then
         Assert.Equal(Recipient, emailService.To);
@@ -103,7 +109,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await ResetSender(emailService, resetUrl: "").SendAsync(Recipient, Token);
+        await ResetSender(emailService, resetUrl: "").SendAsync(Recipient, Token, linkBase: null);
 
         // Then
         Assert.Contains(Token, emailService.Body);
@@ -117,7 +123,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await ResetSender(emailService, "https://app.test/reset?lang=en").SendAsync(Recipient, Token);
+        await ResetSender(emailService, "https://app.test/reset?lang=en").SendAsync(Recipient, Token, linkBase: null);
 
         // Then
         Assert.Contains($"https://app.test/reset?lang=en&token={Token}", emailService.Body);
@@ -150,7 +156,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService { ErrorToReport = "401 Unauthorized" };
 
         // When / Then — the caller's response must not vary with this
-        await ResetSender(emailService).SendAsync(Recipient, Token);
+        await ResetSender(emailService).SendAsync(Recipient, Token, linkBase: null);
 
         Assert.True(emailService.Called);
     }
@@ -162,7 +168,7 @@ public class MailgunSenderTests
         var emailService = new StubEmailService { ExceptionToThrow = new HttpRequestException("down") };
 
         // When / Then
-        await ResetSender(emailService).SendAsync(Recipient, Token);
+        await ResetSender(emailService).SendAsync(Recipient, Token, linkBase: null);
 
         Assert.True(emailService.Called);
     }
@@ -175,8 +181,136 @@ public class MailgunSenderTests
         var emailService = new StubEmailService { ExceptionToThrow = new HttpRequestException("down") };
 
         // When / Then
-        await VerificationSender(emailService).SendAsync(Recipient, Token);
+        await VerificationSender(emailService).SendAsync(Recipient, Token, linkBase: null);
 
         Assert.True(emailService.Called);
+    }
+
+    // A scope's link base replaces the global one for that scope's users, and only when it is given:
+    // null (or empty) means the scope has none and the deployment-wide setting still applies.
+
+    [UnitFact]
+    public async Task GivenAScopeLinkBase_WhenSendingPasswordReset_ThenTheLinkUsesItInsteadOfTheGlobalOne()
+    {
+        var emailService = new StubEmailService();
+
+        await ResetSender(emailService).SendAsync(Recipient, Token, "https://fortuna.test/password-reset");
+
+        Assert.Contains($"https://fortuna.test/password-reset?token={Token}", emailService.Body);
+        Assert.DoesNotContain("app.test", emailService.Body);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task GivenNoScopeLinkBase_WhenSendingPasswordReset_ThenTheGlobalLinkIsUsed(string? linkBase)
+    {
+        var emailService = new StubEmailService();
+
+        await ResetSender(emailService).SendAsync(Recipient, Token, linkBase);
+
+        Assert.Contains($"https://app.test/reset?token={Token}", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeLinkBaseAndNoGlobalUrl_WhenSendingPasswordReset_ThenTheLinkUsesTheScopeOne()
+    {
+        var emailService = new StubEmailService();
+
+        await ResetSender(emailService, resetUrl: "")
+            .SendAsync(Recipient, Token, "https://fortuna.test/password-reset");
+
+        Assert.Contains($"https://fortuna.test/password-reset?token={Token}", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenNeitherScopeNorGlobalLink_WhenSendingPasswordReset_ThenEmailCarriesTheBareToken()
+    {
+        var emailService = new StubEmailService();
+
+        await ResetSender(emailService, resetUrl: "").SendAsync(Recipient, Token, linkBase: null);
+
+        Assert.Contains(Token, emailService.Body);
+        Assert.DoesNotContain("http", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeLinkBaseWithAQuery_WhenSendingPasswordReset_ThenTheTokenIsAppendedWithAmpersand()
+    {
+        var emailService = new StubEmailService();
+
+        await ResetSender(emailService).SendAsync(Recipient, Token, "https://fortuna.test/reset?lang=pt");
+
+        Assert.Contains($"https://fortuna.test/reset?lang=pt&token={Token}", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeLinkBase_WhenSendingVerification_ThenTheLinkUsesItInsteadOfTheGlobalOne()
+    {
+        var emailService = new StubEmailService();
+
+        await VerificationSender(emailService).SendAsync(Recipient, Token, "https://fortuna.test/verify-email");
+
+        Assert.Contains($"https://fortuna.test/verify-email?token={Token}", emailService.Body);
+        Assert.DoesNotContain("app.test", emailService.Body);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GivenNoScopeLinkBase_WhenSendingVerification_ThenTheGlobalLinkIsUsed(string? linkBase)
+    {
+        var emailService = new StubEmailService();
+
+        await VerificationSender(emailService).SendAsync(Recipient, Token, linkBase);
+
+        Assert.Contains($"https://app.test/verify?token={Token}", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenNeitherScopeNorGlobalLink_WhenSendingVerification_ThenEmailCarriesTheBareToken()
+    {
+        var emailService = new StubEmailService();
+
+        await VerificationSender(emailService, verificationUrl: "").SendAsync(Recipient, Token, linkBase: null);
+
+        Assert.Contains(Token, emailService.Body);
+        Assert.DoesNotContain("http", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeLinkBase_WhenSendingRegistrationLink_ThenTheLinkUsesItInsteadOfTheGlobalOne()
+    {
+        var emailService = new StubEmailService();
+
+        await RegistrationSender(emailService).SendAsync(Recipient, Token, "https://fortuna.test/verify-email");
+
+        Assert.Contains($"https://fortuna.test/verify-email?token={Token}", emailService.Body);
+        Assert.DoesNotContain("app.test", emailService.Body);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GivenNoScopeLinkBase_WhenSendingRegistrationLink_ThenTheGlobalVerificationLinkIsUsed(
+        string? linkBase)
+    {
+        var emailService = new StubEmailService();
+
+        await RegistrationSender(emailService).SendAsync(Recipient, Token, linkBase);
+
+        Assert.Contains($"https://app.test/verify?token={Token}", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenNeitherScopeNorGlobalLink_WhenSendingRegistrationLink_ThenEmailCarriesTheBareToken()
+    {
+        var emailService = new StubEmailService();
+
+        await RegistrationSender(emailService, verificationUrl: "").SendAsync(Recipient, Token, linkBase: null);
+
+        Assert.Contains(Token, emailService.Body);
+        Assert.DoesNotContain("http", emailService.Body);
     }
 }

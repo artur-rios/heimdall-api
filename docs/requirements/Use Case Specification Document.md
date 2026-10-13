@@ -886,6 +886,8 @@ sequenceDiagram
 | AF-14b | Token already used — including by a request carrying the same token at the same time (NFR-27) | Return `400 Bad Request` — "Token already used" |
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
 
+> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
+
 ---
 
 ### UC-15: Resend Verification Email
@@ -1897,6 +1899,71 @@ sequenceDiagram
 
 ---
 
+### UC-47: Register a Password User
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-47 |
+| **Name** | Register a Password User |
+| **Actors** | Anonymous |
+| **Description** | Create a password `User` in a scope without an administrator, where the scope's owners have opened self-registration |
+| **Preconditions** | The scope exists, is not logically deleted, and has `SelfRegistrationEnabled = true` (FR-SR-01, FR-SR-02) |
+| **Postconditions** | Either a pending registration exists and its link was sent, or the holder of the address was told of the attempt. The caller cannot tell which. No `User` exists until the link is followed with the password chosen at sign-up (FR-SR-07, FR-SR-09) |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor U as Anonymous
+    participant API as Heimdall API
+    participant Q as Registration queue
+    participant DB as Database
+    participant M as Mail
+
+    U->>API: POST /api/auth/register { name, email, password, scopeId }
+    API->>API: Validate the request
+    API->>DB: Confirm the scope is open
+    API->>API: Hash the password
+    API->>Q: Queue { scopeId, name, email, hash, salt }
+    API-->>U: 202 Accepted
+    Q->>DB: Re-check the scope, look the address up in the scope
+    Q->>DB: Write a pending registration (address free)
+    Q->>M: Send the confirmation email (UC-14 link)
+    U->>API: POST /api/auth/verify-email { token, password } (UC-14)
+    API->>API: Check the password against the stored hash
+    API->>DB: Re-check the scope and the address
+    API->>DB: Create the User, verified; remove the address's pending registrations
+    API-->>U: 200 OK
+```
+
+1. Caller sends a name, an email address, a password and the scope's `PublicId`.
+2. The system validates the request with the rules UC-06 path a applies (FR-SR-03).
+3. The system confirms the scope exists, is live and is open to self-registration.
+4. The system hashes the password, queues the request and answers `202 Accepted` with a fixed message.
+5. Afterwards, the system re-checks the scope and confirms the address is held by no live person and no Google User of the scope (FR-SR-04).
+6. The system writes a pending registration — name, address, password hash and salt, and the hash of a single-use token, expiring with the email-verification token lifetime (FR-SR-08) — and mails the token's link (FR-EV-01/02), in a message that tells the registrant to enter the password chosen at sign-up. It creates no `User`.
+7. The person follows the link (UC-14) and enters the password chosen at sign-up (FR-SR-09).
+8. The system checks the password against the stored hash, re-checks that the scope is still open and the address still free, creates the `User`, verified, records its legal basis (NFR-23), and removes the address's pending registrations (FR-SR-07).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-47a | The scope is missing, logically deleted, or has self-registration off | `403 Forbidden` with one message for all three. Nothing is queued |
+| AF-47b | The address is already held in the scope by a live person or a Google User | `202 Accepted`, identical to the main flow. Nothing is created; the holder is emailed, at the address on their record, that someone tried to register their address, unless their processing is restricted (NFR-24) or they are a Google User who has been logically deleted, who could not act on it (FR-SR-05) |
+| AF-47c | The request is malformed | `400 Bad Request` with the field's message. Nothing is queued |
+| AF-47d | The scope is closed or deleted while the request waits | Nothing is created or sent |
+| AF-47e | The link is followed after it expired | UC-14 AF-14a: `400 Bad Request` — "Token expired". No `User` is created |
+| AF-47f | The scope is closed or deleted, or the address is taken, before the link is followed | UC-14 AF-14c: `400 Bad Request` — "Invalid token". No `User` is created |
+| AF-47g | The registrant signs in before following the link | UC-11 AF-11a: `401 Unauthorized`, identical to a wrong password — no `Person` exists to find |
+| AF-47h | The link is followed without the password chosen at sign-up | `422 Unprocessable Entity` — "Enter the password you chose when you signed up to finish creating your account." The registration is not consumed (FR-SR-09) |
+| AF-47i | The link is followed with a wrong password | `401 Unauthorized` — "That password does not match the one chosen when signing up." The registration is not consumed, but the guess is charged before it is compared (NFR-27): on the 10th wrong password the registration is discarded, that attempt is still answered `401`, and the link then answers UC-14 AF-14c (FR-SR-09) |
+| AF-47j | The link is followed again after the account exists | UC-14 AF-14c: `400 Bad Request` — "Invalid token". The registration was removed when the account was created, so there is nothing to claim and nothing is created |
+
+> **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
+
+---
+
 ## UC-41: Export Own Personal Data
 
 | | |
@@ -2113,6 +2180,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 
 ---
 
