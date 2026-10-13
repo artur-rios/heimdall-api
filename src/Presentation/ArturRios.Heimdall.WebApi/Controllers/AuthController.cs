@@ -63,7 +63,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
 
     /// <summary>
     ///     Registers a password <c>User</c> in a scope that has opened self-registration (UC-47,
-    ///     FR-SR-03…FR-SR-08). Open to anonymous callers — someone without an account cannot hold a
+    ///     FR-SR-03…FR-SR-09). Open to anonymous callers — someone without an account cannot hold a
     ///     token.
     /// </summary>
     /// <remarks>
@@ -122,8 +122,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <para>
     ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
     ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
-    ///         registration in place. <c>password</c> is read only for pending registrations and ignored
-    ///         for an ordinary verification token.
+    ///         registration in place — except that the 10th wrong password discards it, after which the
+    ///         token answers 400 "Invalid token" (FR-SR-09). <c>password</c> is read only for pending
+    ///         registrations and ignored for an ordinary verification token.
     ///     </para>
     /// </remarks>
     [HttpPost("verify-email")]

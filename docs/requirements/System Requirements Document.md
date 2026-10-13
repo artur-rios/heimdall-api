@@ -223,10 +223,11 @@ graph LR
 | FR-SR-02 | Only System Admins and existing owners of a scope shall be able to enable or disable `SelfRegistrationEnabled` for that scope | High |
 | FR-SR-03 | The system shall let an anonymous caller register a password `User` in an open scope, applying the same name, email and password rules as administrator-created Users | High |
 | FR-SR-04 | A self-registered address shall be unique in the scope among live persons and Google Users, compared case-insensitively | High |
-| FR-SR-05 | When the address is already held, the system shall create nothing and shall email the holder that a registration was attempted, unless their processing is restricted | High |
+| FR-SR-05 | When the address is already held, the system shall create nothing and shall email the holder that a registration was attempted, unless their processing is restricted or, for a Google User, the holder is logically deleted | High |
 | FR-SR-06 | The system shall answer a registration for a free and a taken address identically, in content and in time | High |
 | FR-SR-07 | No account shall exist for a self-registered address until the link mailed to it is followed; the account is then created with its address verified | High |
 | FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
+| FR-SR-09 | Confirming a self-registration shall require the password chosen at sign-up; a missing or wrong password shall not consume the pending registration, and after 10 wrong passwords the pending registration is discarded | High |
 
 ### 3.9 Scope Permission Management
 
@@ -375,8 +376,11 @@ erDiagram
         string Name "Name the registrant gave"
         string Email "Address awaiting confirmation"
         bytes PasswordHash "Password hash computed on the request path"
+        bytes Salt "Salt of the password hash, carried to the User on confirmation"
         string TokenHash "SHA-256 of the mailed token — the caller-facing reference is the token itself"
         datetime ExpiresAt "Expiration timestamp"
+        datetime CreatedAt "When the registration was stored"
+        int FailedAttempts "Wrong confirmation passwords so far; the row is discarded at 10"
     }
 
     APPLICATION {
@@ -608,8 +612,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/login` | Authenticate by email + password | No |
 | POST | `/api/auth/password-recovery` | Request password reset email | No |
 | POST | `/api/auth/password-reset` | Reset password with token | No |
-| POST | `/api/auth/verify-email` | Verify email with token | No |
-| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-08) | No (anonymous) |
+| POST | `/api/auth/verify-email` | Verify email with token; a token that names a pending self-registration confirms it and also takes the optional `password` chosen at sign-up (FR-SR-09) | No |
+| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-09) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
 | POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
@@ -1064,7 +1068,7 @@ Notes on cascading behavior:
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
-| Self-Registration | FR-SR-01 through FR-SR-08 |
+| Self-Registration | FR-SR-01 through FR-SR-09 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
