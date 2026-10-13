@@ -4,7 +4,8 @@ namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
 ///     Intent to remove the single-use tokens whose retention period has run out (NFR-19): password
-///     reset tokens, email verification tokens, and two-factor email codes.
+///     reset tokens, email verification tokens, two-factor email codes, and unconfirmed pending
+///     registrations.
 /// </summary>
 /// <remarks>
 ///     <para>

@@ -26,9 +26,26 @@ public class VerifyEmailCommandHandlerTests
         AsyncFakeRepository<EmailVerificationToken, long> Tokens,
         Person Person)
     {
-        public VerifyEmailCommandHandler Handler(IValidator<VerifyEmailCommand>? validator = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance);
+        public VerifyEmailCommandHandler Handler(
+            IValidator<VerifyEmailCommand>? validator = null,
+            IPendingRegistrationConfirmer? pendingRegistrations = null) =>
+            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance,
+                pendingRegistrations ?? Confirming(PendingRegistrationOutcome.NotFound));
     }
+
+    private sealed class StubConfirmer(PendingRegistrationConfirmation answer) : IPendingRegistrationConfirmer
+    {
+        public List<string> Presented { get; } = [];
+
+        public Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, DateTime now)
+        {
+            Presented.Add(tokenHash);
+            return Task.FromResult(answer);
+        }
+    }
+
+    private static StubConfirmer Confirming(
+        PendingRegistrationOutcome outcome, params string[] errors) => new(new(outcome, errors));
 
     private static IValidator<VerifyEmailCommand> PassingValidator()
     {
@@ -327,5 +344,88 @@ public class VerifyEmailCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.True(fixture.Person.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenATokenUnknownToBothKinds_WhenHandlingVerifyEmail_ThenReturnsInvalidTokenError()
+    {
+        // Given — neither a verification token nor a pending registration matches
+        var fixture = await FixtureAsync();
+        var confirmer = Confirming(PendingRegistrationOutcome.NotFound);
+
+        // When
+        var output = await fixture.Handler(pendingRegistrations: confirmer).HandleAsync(Command("nobody-token"));
+
+        // Then — the confirmer was asked by hash, and the answer is AF-14c
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.TokenInvalid, output.Errors);
+        Assert.Equal(SingleUseTokenHash.Of("nobody-token"), Assert.Single(confirmer.Presented));
+    }
+
+    [UnitFact]
+    public async Task GivenAPendingRegistrationToken_WhenHandlingVerifyEmail_ThenReportsEmailVerified()
+    {
+        // Given a token that names no verification token but a pending registration the confirmer accepts
+        var fixture = await FixtureAsync();
+
+        // When
+        var output = await fixture
+            .Handler(pendingRegistrations: Confirming(PendingRegistrationOutcome.Confirmed))
+            .HandleAsync(Command("pending-token"));
+
+        // Then — the same wire answer a verification token gives
+        Assert.True(output.Success);
+        Assert.Contains(AuthMessages.EmailVerifiedSuccessfully, output.Messages);
+        Assert.False(fixture.Person.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenAVerificationToken_WhenHandlingVerifyEmail_ThenThePendingRegistrationsAreNotConsulted()
+    {
+        // Given a live verification token
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
+        var confirmer = Confirming(PendingRegistrationOutcome.Confirmed);
+
+        // When
+        await fixture.Handler(pendingRegistrations: confirmer).HandleAsync(Command("live-token"));
+
+        // Then
+        Assert.Empty(confirmer.Presented);
+    }
+
+    [UnitTheory]
+    [InlineData(PendingRegistrationOutcome.Expired, "TokenExpired")]
+    [InlineData(PendingRegistrationOutcome.AlreadyClaimed, "TokenAlreadyUsed")]
+    [InlineData(PendingRegistrationOutcome.Refused, "TokenInvalid")]
+    public async Task GivenAPendingOutcome_WhenHandlingVerifyEmail_ThenItMapsToTheMatchingTokenError(
+        PendingRegistrationOutcome outcome, string message)
+    {
+        var fixture = await FixtureAsync();
+        var expected = message switch
+        {
+            "TokenExpired" => AuthMessages.TokenExpired,
+            "TokenAlreadyUsed" => AuthMessages.TokenAlreadyUsed,
+            _ => AuthMessages.TokenInvalid
+        };
+
+        var output = await fixture.Handler(pendingRegistrations: Confirming(outcome))
+            .HandleAsync(Command("pending-token"));
+
+        Assert.False(output.Success);
+        Assert.Contains(expected, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAPendingRegistrationThatFailsToStore_WhenHandlingVerifyEmail_ThenItsErrorsAreReturned()
+    {
+        var fixture = await FixtureAsync();
+
+        var output = await fixture
+            .Handler(pendingRegistrations: Confirming(PendingRegistrationOutcome.Failed, "store failed"))
+            .HandleAsync(Command("pending-token"));
+
+        Assert.False(output.Success);
+        Assert.Contains("store failed", output.Errors);
     }
 }

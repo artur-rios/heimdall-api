@@ -379,11 +379,13 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<PasswordRecoveryProcessor>();
         Builder.Services.AddHostedService<PasswordRecoveryDispatcher>();
         // UC-47 runs in the same two halves as UC-12 (AF-47b): the handler queues, the dispatcher
-        // creates the person or tells the holder of the attempt after the caller has been answered.
+        // stores the pending registration or tells the holder of the attempt after the caller has been
+        // answered. Following the mailed link (UC-14) then reaches the confirmer, which creates the User.
         Builder.Services.AddSingleton<RegistrationQueue>();
         Builder.Services.AddSingleton<IRegistrationQueue>(
             provider => provider.GetRequiredService<RegistrationQueue>());
         Builder.Services.AddScoped<RegistrationProcessor>();
+        Builder.Services.AddScoped<IPendingRegistrationConfirmer, PendingRegistrationConfirmer>();
         Builder.Services.AddHostedService<RegistrationDispatcher>();
         AddEmailSenders();
         AddGoogleSignIn();

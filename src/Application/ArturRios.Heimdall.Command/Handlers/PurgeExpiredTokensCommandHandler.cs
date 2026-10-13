@@ -13,18 +13,22 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
-///     email verification tokens, and two-factor email codes whose retention period has run out.
-///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
+///     email verification tokens, two-factor email codes, and unconfirmed pending registrations
+///     (UC-47) whose retention period has run out. All failures are returned as errors on the
+///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>What makes a row purgeable.</b> One condition, <c>ExpiresAt &lt;= now - grace</c>,
-///         applied to all three tables. It covers a used row and an expired-unused row alike, and it
-///         is the only condition that can be applied to all three: neither
+///         applied to all four tables. It covers a used row and an expired-unused row alike, and it
+///         is the only condition that can be applied to all four: neither
 ///         <see cref="PasswordResetToken" /> nor <see cref="EmailVerificationToken" /> records when
 ///         it was consumed, and only <see cref="TwoFactorEmailCode" /> carries a
 ///         <c>CreatedAt</c>. Expiry is a sound proxy in any case — each of these is issued with a
-///         lifetime measured in minutes or hours, so a row's expiry is never far from its issue.
+///         lifetime measured in minutes or hours, so a row's expiry is never far from its issue. A
+///         <see cref="PendingRegistration" /> is held for the same grace period, so that following a
+///         stale confirmation link answers "expired" rather than "invalid" for as long as it does for
+///         the tokens.
 ///     </para>
 ///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token
@@ -48,6 +52,8 @@ public class PurgeExpiredTokensCommandHandler(
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncReadOnlyRepository<TwoFactorEmailCode, long> twoFactorEmailCodeReader,
     IAsyncRepository<TwoFactorEmailCode, long> twoFactorEmailCodeWriter,
+    IAsyncReadOnlyRepository<PendingRegistration, long> pendingRegistrationReader,
+    IAsyncRepository<PendingRegistration, long> pendingRegistrationWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -76,11 +82,18 @@ public class PurgeExpiredTokensCommandHandler(
                 .OrderBy(code => code.ExpiresAt),
             twoFactorEmailCodeWriter);
 
+        var pendingRegistrations = await PurgeAsync(
+            pendingRegistrationReader.Query()
+                .Where(registration => registration.ExpiresAt <= cutoff)
+                .OrderBy(registration => registration.ExpiresAt),
+            pendingRegistrationWriter);
+
         // Every table is attempted before the run reports, so one failing table does not hide
         // whether the others were cleared — and the next run retries whatever was missed.
         var errors = passwordResetTokens.Errors
             .Concat(emailVerificationTokens.Errors)
             .Concat(twoFactorEmailCodes.Errors)
+            .Concat(pendingRegistrations.Errors)
             .ToList();
 
         if (errors.Count > 0)
@@ -95,7 +108,8 @@ public class PurgeExpiredTokensCommandHandler(
             {
                 PasswordResetTokensPurged = passwordResetTokens.Count,
                 EmailVerificationTokensPurged = emailVerificationTokens.Count,
-                TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count
+                TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
+                PendingRegistrationsPurged = pendingRegistrations.Count
             })
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }

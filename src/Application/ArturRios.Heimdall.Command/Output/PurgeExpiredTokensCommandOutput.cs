@@ -23,7 +23,11 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Two-factor email codes removed (UC-36/UC-38).</summary>
     public int TwoFactorEmailCodesPurged { get; set; }
 
-    /// <summary>Rows removed across all three tables.</summary>
+    /// <summary>Unconfirmed pending registrations removed (UC-47).</summary>
+    public int PendingRegistrationsPurged { get; set; }
+
+    /// <summary>Rows removed across all four tables.</summary>
     public int TotalPurged =>
-        PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged;
+        PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +
+        PendingRegistrationsPurged;
 }

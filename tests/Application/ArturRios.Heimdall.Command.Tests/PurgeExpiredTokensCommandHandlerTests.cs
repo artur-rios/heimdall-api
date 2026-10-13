@@ -81,11 +81,37 @@ public class PurgeExpiredTokensCommandHandlerTests
         AsyncFakeRepository<PasswordResetToken, long> passwordResetTokens,
         AsyncFakeRepository<EmailVerificationToken, long> emailVerificationTokens,
         AsyncFakeRepository<TwoFactorEmailCode, long> twoFactorEmailCodes,
-        DataRetentionOptions? retention = null) =>
-        new(passwordResetTokens, passwordResetTokens,
+        DataRetentionOptions? retention = null,
+        AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null)
+    {
+        pendingRegistrations ??= new AsyncFakeRepository<PendingRegistration, long>();
+
+        return new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
+            pendingRegistrations, pendingRegistrations,
             retention ?? Retention());
+    }
+
+    private static async Task<PendingRegistration> SeedPendingRegistrationAsync(
+        AsyncFakeRepository<PendingRegistration, long> pending, DateTime expiresAt)
+    {
+        var registration = new PendingRegistration
+        {
+            ScopeId = 1,
+            Name = "Pending",
+            Email = $"{Guid.NewGuid():N}@test.local",
+            PasswordHash = [1],
+            Salt = [2],
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = expiresAt,
+            CreatedAt = expiresAt.AddHours(-24)
+        };
+
+        await pending.CreateAsync(registration);
+
+        return registration;
+    }
 
     private static async Task<int> CountAsync<T>(AsyncFakeRepository<T, long> repository)
         where T : ArturRios.Data.Relational.Core.Entities.Entity<long> =>
@@ -235,5 +261,33 @@ public class PurgeExpiredTokensCommandHandlerTests
         Assert.True(output.Success);
         Assert.Empty(output.Errors);
         Assert.Equal(0, output.Data!.TotalPurged);
+    }
+
+    [UnitFact]
+    public async Task GivenPendingRegistrationsPastTheGracePeriod_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given one pending registration long expired, one expired inside the grace period (the
+        // confirmer still answers Expired for it), and one a person may yet confirm
+        var pending = new AsyncFakeRepository<PendingRegistration, long>();
+        var longExpired = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow - Grace - TimeSpan.FromDays(1));
+        var recentlyExpired = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow.AddHours(-1));
+        var live = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow.AddHours(1));
+
+        // When
+        var output = await Handler(
+                new AsyncFakeRepository<PasswordResetToken, long>(),
+                new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+                pendingRegistrations: pending)
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — the same cutoff as the tokens, counted on its own and in the total
+        Assert.True(output.Success);
+        Assert.Equal(1, output.Data!.PendingRegistrationsPurged);
+        Assert.Equal(1, output.Data.TotalPurged);
+        var remaining = pending.Query().Select(x => x.Id).ToList();
+        Assert.DoesNotContain(longExpired.Id, remaining);
+        Assert.Contains(recentlyExpired.Id, remaining);
+        Assert.Contains(live.Id, remaining);
     }
 }
