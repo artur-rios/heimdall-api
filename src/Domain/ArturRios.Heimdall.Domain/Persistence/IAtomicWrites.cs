@@ -45,6 +45,11 @@ public interface IAtomicWrites
     ///     FR-SR-09: reserves one guess at the sign-up password of a pending registration, while it has
     ///     had fewer than <paramref name="maxGuesses" />. <c>false</c> means no comparison may be made.
     /// </summary>
+    /// <remarks>
+    ///     On success the instance's <c>FailedAttempts</c> is set to the value this request read plus one,
+    ///     which under concurrent guesses can trail the stored count. A caller that needs the stored count
+    ///     (to tell whether this was the last guess) must ask the database for it.
+    /// </remarks>
     Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses);
 
     /// <summary>

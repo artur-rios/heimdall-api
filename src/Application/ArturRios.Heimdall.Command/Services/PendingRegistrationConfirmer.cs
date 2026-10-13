@@ -48,6 +48,14 @@ public interface IPendingRegistrationConfirmer
 ///         without a comparison.
 ///     </para>
 ///     <para>
+///         With parallel requests the discard can come early: a wrong guess charged before the tenth may
+///         finish after it and, finding the stored count at ten, delete the row while the tenth guess,
+///         the correct one, is still being compared. That guess then finds the row gone at the claim
+///         and answers "already used" (<see cref="PendingRegistrationOutcome.AlreadyClaimed" />). It is
+///         the safe side of the race, since nothing is created and no more than ten guesses were ever
+///         compared, so the cap holds.
+///     </para>
+///     <para>
 ///         Every failure is logged with a fixed message and no address (NFR-22), and this class
 ///         throws none itself: the outcome is the caller's to turn into an answer. What can still surface
 ///         is the <c>PasswordHashGateSaturatedException</c> of a saturated <c>PasswordHashGate</c> during

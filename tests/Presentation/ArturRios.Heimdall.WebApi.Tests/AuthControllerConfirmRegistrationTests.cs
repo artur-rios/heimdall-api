@@ -265,41 +265,29 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     }
 
     [FunctionalFact]
-    public async Task GivenTwelveWrongPasswordsAtOnce_WhenPostedForAPendingRegistration_ThenAtMostTenAreComparedAndTheRowIsGone()
+    public async Task GivenFourGuessesLeft_WhenTenWrongPasswordsArriveAtOnce_ThenExactlyFourAreComparedAndTheRowIsGone()
     {
-        // Given a fresh registration and a burst larger than its budget of ten (FR-SR-09). Counted after
-        // the comparison, the requests all read zero and all wrote one, and the row survived the burst.
+        // Given a registration with four of its ten guesses left (FR-SR-09), and a burst of ten: as many
+        // as the per-address limit admits, so every request reaches the confirmer and the cap is the only
+        // thing that can refuse. Counted after the comparison, the ten all read six and all wrote seven,
+        // and every one of them was compared and answered 401.
         var scope = await SeedScopeAsync();
         var email = UniqueEmail("burst");
-        var token = await SeedPendingAsync(scope, email);
+        var token = await SeedPendingAsync(scope, email, failedAttempts: 6);
 
-        // When twelve wrong passwords arrive together. The shared per-address limit (ten a minute) may
-        // refuse some with 429, so the guarantees asserted are the ones that hold either way.
-        var responses = await InParallelAsync(12, _ => VerifyAsync(token, "Wr0ng-Confirm-Pass!"));
+        // When ten wrong passwords arrive together
+        var responses = await InParallelAsync(10, _ => VerifyAsync(token, "Wr0ng-Confirm-Pass!"));
 
-        // Then every answer is one of the three the contract allows, and no more than ten were compared
-        Assert.All(responses, response => Assert.Contains(
-            response.StatusCode,
-            new[] { HttpStatusCode.Unauthorized, HttpStatusCode.BadRequest, HttpStatusCode.TooManyRequests }));
-        Assert.All(responses.Where(response => response.StatusCode == HttpStatusCode.Unauthorized),
-            response => Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, response.Body!.Errors));
-        Assert.All(responses.Where(response => response.StatusCode == HttpStatusCode.BadRequest),
-            response => Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors));
-        Assert.InRange(responses.Count(response => response.StatusCode == HttpStatusCode.Unauthorized), 1, 10);
+        // Then exactly four were compared and refused as wrong, the other six were refused as an invalid
+        // token without being compared, and the registration is gone
+        var compared = responses.Where(response => response.StatusCode == HttpStatusCode.Unauthorized).ToList();
+        var refused = responses.Where(response => response.StatusCode == HttpStatusCode.BadRequest).ToList();
 
-        // And the row is gone once ten were charged; had fewer been admitted it holds exactly that many
-        var remaining = await FailedAttemptsAsync(scope, email);
-        var admitted = responses.Count(response => response.StatusCode != HttpStatusCode.TooManyRequests);
-
-        if (admitted >= 10)
-        {
-            Assert.Null(remaining);
-        }
-        else
-        {
-            Assert.True(remaining is null || remaining == admitted);
-        }
-
+        Assert.Equal(4, compared.Count);
+        Assert.All(compared, response => Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, response.Body!.Errors));
+        Assert.Equal(6, refused.Count);
+        Assert.All(refused, response => Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors));
+        Assert.Equal(0, await PendingCountAsync(scope, email));
         Assert.Empty(await PersonsAsync(scope, email));
     }
 
