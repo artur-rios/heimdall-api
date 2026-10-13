@@ -226,4 +226,20 @@ public class ListScopesQueryHandlerTests
         Assert.Contains(ScopeMessages.NotAuthorizedToListScopes, output.Errors);
         Assert.Null(output.Data);
     }
+
+    [UnitFact]
+    public async Task GivenAScopeWithEmailLinks_WhenHandlingList_ThenBothLinksAreReturned()
+    {
+        var scope = NamedScope("Acme");
+        scope.EmailVerificationUrl = "https://acme.test/verify-email";
+        scope.PasswordResetUrl = "https://acme.test/password-reset";
+        var handler = new ListScopesQueryHandler(await RepositoryWith(scope), new ListScopesQueryValidator());
+
+        var output = await handler.HandleAsync(
+            new ListScopesQuery { ActingRole = (int)Roles.SystemAdmin, PageNumber = 1, PageSize = 10 });
+
+        var listed = Assert.Single(output.Data!);
+        Assert.Equal("https://acme.test/verify-email", listed.EmailVerificationUrl);
+        Assert.Equal("https://acme.test/password-reset", listed.PasswordResetUrl);
+    }
 }

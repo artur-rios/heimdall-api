@@ -108,6 +108,6 @@ public class RegistrationProcessor(
 
         // The link follows UC-14's route, which recognises the token as a pending one; the mail asks for
         // the sign-up password too.
-        await linkSender.SendAsync(request.Email, token);
+        await linkSender.SendAsync(request.Email, token, scope.EmailVerificationUrl);
     }
 }

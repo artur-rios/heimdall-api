@@ -6,5 +6,10 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </summary>
 public interface IPasswordResetSender
 {
-    Task SendAsync(string email, string token);
+    /// <param name="email">The address to deliver to.</param>
+    /// <param name="token">The single-use token the link carries.</param>
+    /// <param name="linkBase">
+    ///     The recipient scope's own password-reset link base, or <c>null</c> to use the global setting.
+    /// </param>
+    Task SendAsync(string email, string token, string? linkBase);
 }

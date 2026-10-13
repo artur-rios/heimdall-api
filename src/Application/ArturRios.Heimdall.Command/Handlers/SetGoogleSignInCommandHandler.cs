@@ -86,6 +86,8 @@ public class SetGoogleSignInCommandHandler(
                 Name = scope.Name,
                 Description = scope.Description,
                 GoogleSignInEnabled = scope.GoogleSignInEnabled,
+                EmailVerificationUrl = scope.EmailVerificationUrl,
+                PasswordResetUrl = scope.PasswordResetUrl,
                 OwnerIds = ownerIds,
                 CreatedAt = scope.CreatedAt,
                 UpdatedAt = scope.UpdatedAt

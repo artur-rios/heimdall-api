@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Util.Random;
+using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
 
@@ -24,6 +25,7 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </remarks>
 public class PasswordResetService(
     IAsyncRepository<PasswordResetToken, long> tokenWriter,
+    IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IPasswordResetSender sender,
     PasswordResetOptions options)
     : IPasswordResetService
@@ -47,6 +49,18 @@ public class PasswordResetService(
             Used = false
         });
 
-        await sender.SendAsync(person.Email, token);
+        // The person's scope may point the link at its own client application. An administrator has
+        // no scope, and a scope with no link set leaves this null: both take the global setting.
+        string? linkBase = null;
+
+        if (person.ScopeId is { } scopeId)
+        {
+            linkBase = await scopeReader.Query()
+                .Where(scope => scope.Id == scopeId)
+                .Select(scope => scope.PasswordResetUrl)
+                .FirstOrDefaultAsync();
+        }
+
+        await sender.SendAsync(person.Email, token, linkBase);
     }
 }

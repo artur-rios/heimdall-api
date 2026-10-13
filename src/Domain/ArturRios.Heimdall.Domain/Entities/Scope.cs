@@ -63,6 +63,27 @@ public class Scope : Entity<long>
     [MaxLength(2048)]
     public string? PrivacyNoticeUri { get; set; }
 
+    /// <summary>
+    ///     Base link the verification token is appended to in the emails sent to this scope's
+    ///     <c>User</c>s (sign-up confirmation and address verification), or <c>null</c> to use the
+    ///     deployment-wide <c>HEIMDALL_EMAIL_VERIFICATION_URL</c>.
+    /// </summary>
+    /// <remarks>
+    ///     A client system has its own screens for these steps, and its users' links must lead
+    ///     there rather than to Heimdall's. Administrators have no scope and always take the global
+    ///     link.
+    /// </remarks>
+    [MaxLength(2048)]
+    public string? EmailVerificationUrl { get; set; }
+
+    /// <summary>
+    ///     Base link the reset token is appended to in the password-reset emails sent to this scope's
+    ///     <c>User</c>s, or <c>null</c> to use the deployment-wide <c>HEIMDALL_PASSWORD_RESET_URL</c>.
+    ///     Administrators have no scope and always take the global link.
+    /// </summary>
+    [MaxLength(2048)]
+    public string? PasswordResetUrl { get; set; }
+
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }
 

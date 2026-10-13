@@ -18,9 +18,11 @@ public class MailgunEmailVerificationSender(
 
     protected override string Purpose => "email verification";
 
-    public Task SendAsync(string email, string token)
+    public Task SendAsync(string email, string token, string? linkBase)
     {
-        var link = EmailDeliveryOptions.BuildLink(options.VerificationUrl, token);
+        // The scope's own link wins; without one the deployment-wide setting applies.
+        var link = EmailDeliveryOptions.BuildLink(
+            string.IsNullOrWhiteSpace(linkBase) ? options.VerificationUrl : linkBase, token);
 
         var body = string.IsNullOrEmpty(link)
             ? $"""

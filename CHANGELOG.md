@@ -12,6 +12,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - UC-47: anonymous self-registration (`POST /api/auth/register`) into scopes that open it with `PUT /api/scopes/{id}/self-registration`. Answers new and taken addresses identically; a taken address's holder is emailed about the attempt. The account is created when the emailed link is followed (`POST /api/auth/verify-email`) with the password chosen at sign-up, with its address verified; until then nothing can sign in. Confirmation needs that password: without it the answer is `422`, with a wrong one `401`, neither consumes the registration, and the 10th wrong password discards it. A link followed again once the account exists answers "Invalid token".
+- Per-scope email links (FR-SR-10). `PUT /api/scopes/{id}/email-links` sets the base links a scope's
+  verification (and sign-up confirmation) and password-reset emails point at, so a client system such as
+  Fortuna can send its users to its own `/verify-email` and `/password-reset` screens. They replace
+  `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` for that scope's `User`s only;
+  administrators and a scope with none set keep the global links. Each must be an absolute `http` or
+  `https` URL of at most 2048 characters. `emailVerificationUrl` and `passwordResetUrl` are returned on every
+  scope response. A new migration, `AddScopeEmailLinks`, adds the two nullable columns.
+- Trusted caller keys for the anonymous-auth rate limit. A client system such as Fortuna's API reaches Heimdall
+  from one address for every end user, so they shared one bucket of 10 requests a minute. A request carrying a
+  key from the new `HEIMDALL_TRUSTED_CALLER_KEYS` in `X-Heimdall-Caller-Key` is now counted under the address in
+  `X-Heimdall-Client-Address` (an IPv6 address by its /64), in a bucket of its own that a direct connection from that address does not share. A wrong or missing key, or an unusable address, falls
+  back to the connection address, as before. **Operators:** the variable is optional; each key must be at least 32
+  characters or start-up is refused, and two may be listed to rotate. `docker-compose.yml` passes it through.
 
 ## [1.3.0] - 2026-10-11
 

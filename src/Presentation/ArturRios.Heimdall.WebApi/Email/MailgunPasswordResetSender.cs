@@ -17,9 +17,11 @@ public class MailgunPasswordResetSender(
 
     protected override string Purpose => "password reset";
 
-    public Task SendAsync(string email, string token)
+    public Task SendAsync(string email, string token, string? linkBase)
     {
-        var link = EmailDeliveryOptions.BuildLink(options.PasswordResetUrl, token);
+        // The scope's own link wins; without one the deployment-wide setting applies.
+        var link = EmailDeliveryOptions.BuildLink(
+            string.IsNullOrWhiteSpace(linkBase) ? options.PasswordResetUrl : linkBase, token);
 
         // Without a configured front end there is nowhere to link to, so the token goes in plain.
         // It is still usable — UC-13 takes the token, and the link is only a convenience wrapper

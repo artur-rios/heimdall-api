@@ -3336,6 +3336,79 @@
         ]
       }
     },
+    "/api/scopes/{id}/email-links": {
+      "put": {
+        "tags": [
+          "Scope"
+        ],
+        "summary": "Sets the base links the scope's verification and password-reset emails point at. A client\nsystem with its own screens for those steps points its users there; a link left out, or\nsent as null or empty, is cleared and the global one applies again. Same actors and\nrefusals as the self-registration toggle.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Scope_SetEmailLinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetScopeEmailLinksCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetScopeEmailLinksCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetScopeEmailLinksCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes/{scopeId}/permissions": {
       "post": {
         "tags": [
@@ -4194,6 +4267,14 @@
           },
           "selfRegistrationEnabled": {
             "type": "boolean"
+          },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
           },
           "ownerIds": {
             "type": "array",
@@ -6649,6 +6730,14 @@
             "type": "string",
             "nullable": true
           },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "isDeleted": {
             "type": "boolean"
           },
@@ -6915,6 +7004,14 @@
           "googleSignInEnabled": {
             "type": "boolean"
           },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "ownerIds": {
             "type": "array",
             "items": {
@@ -6965,6 +7062,99 @@
         },
         "additionalProperties": false
       },
+      "SetScopeEmailLinksCommand": {
+        "type": "object",
+        "properties": {
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetScopeEmailLinksCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "googleSignInEnabled": {
+            "type": "boolean"
+          },
+          "selfRegistrationEnabled": {
+            "type": "boolean"
+          },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "ownerIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetScopeEmailLinksCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "SetSelfRegistrationCommand": {
         "type": "object",
         "properties": {
@@ -6995,6 +7185,14 @@
           },
           "selfRegistrationEnabled": {
             "type": "boolean"
+          },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
           },
           "ownerIds": {
             "type": "array",
@@ -7342,6 +7540,14 @@
           },
           "selfRegistrationEnabled": {
             "type": "boolean"
+          },
+          "emailVerificationUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "passwordResetUrl": {
+            "type": "string",
+            "nullable": true
           },
           "ownerIds": {
             "type": "array",

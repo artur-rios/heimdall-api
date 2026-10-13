@@ -197,4 +197,26 @@ public class UpdateScopeCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(ScopeMessages.NameRequired, output.Errors);
     }
+
+    [UnitFact]
+    public async Task GivenAScopeWithEmailLinks_WhenHandlingUpdateScope_ThenBothLinksSurvive()
+    {
+        // The links have their own endpoint precisely because this update replaces every field it
+        // knows: a client that never heard of them must not erase them by renaming the scope.
+        var id = Guid.NewGuid();
+        var scope = ExistingScope(id, "Old Name", Guid.NewGuid());
+        scope.EmailVerificationUrl = "https://app.test/verify-email";
+        scope.PasswordResetUrl = "https://app.test/password-reset";
+        var repository = await RepositoryWith(scope);
+        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+
+        var output = await handler.HandleAsync(new UpdateScopeCommand { Id = id, Name = "New Name" });
+
+        Assert.True(output.Success);
+        var stored = repository.Query().Single();
+        Assert.Equal("https://app.test/verify-email", stored.EmailVerificationUrl);
+        Assert.Equal("https://app.test/password-reset", stored.PasswordResetUrl);
+        Assert.Equal("https://app.test/verify-email", output.Data!.EmailVerificationUrl);
+        Assert.Equal("https://app.test/password-reset", output.Data.PasswordResetUrl);
+    }
 }

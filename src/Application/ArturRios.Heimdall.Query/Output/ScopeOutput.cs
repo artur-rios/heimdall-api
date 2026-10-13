@@ -32,6 +32,12 @@ public class ScopeOutput : QueryOutput
     /// <summary>Where this tenant publishes its own privacy notice, if it has one.</summary>
     public string? PrivacyNoticeUri { get; set; }
 
+    /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
+    public string? EmailVerificationUrl { get; set; }
+
+    /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
+    public string? PasswordResetUrl { get; set; }
+
     /// <summary>Whether the scope is logically deleted.</summary>
     public bool IsDeleted { get; set; }
 

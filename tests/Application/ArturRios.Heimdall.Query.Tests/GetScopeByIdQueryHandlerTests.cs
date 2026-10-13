@@ -240,4 +240,22 @@ public class GetScopeByIdQueryHandlerTests
         Assert.NotNull(output.Data);
         Assert.True(output.Data!.IsDeleted);
     }
+
+    [UnitFact]
+    public async Task GivenAScopeWithEmailLinks_WhenHandlingGetById_ThenBothLinksAreReturned()
+    {
+        var id = Guid.NewGuid();
+        var scope = ScopeWithOwner(id, "Acme", Guid.NewGuid());
+        scope.EmailVerificationUrl = "https://acme.test/verify-email";
+        scope.PasswordResetUrl = "https://acme.test/password-reset";
+        var handler = new GetScopeByIdQueryHandler(await RepositoryWith(scope));
+
+        var output = await handler.HandleAsync(new GetScopeByIdQuery
+        {
+            Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+        });
+
+        Assert.Equal("https://acme.test/verify-email", output.Data!.EmailVerificationUrl);
+        Assert.Equal("https://acme.test/password-reset", output.Data.PasswordResetUrl);
+    }
 }
