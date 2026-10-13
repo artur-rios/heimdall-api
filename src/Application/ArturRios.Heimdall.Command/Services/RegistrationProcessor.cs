@@ -8,8 +8,9 @@ namespace ArturRios.Heimdall.Command.Services;
 /// <summary>
 ///     UC-47 steps 4 to 6, run in the background for a <see cref="RegistrationRequest" />: stores a
 ///     <see cref="PendingRegistration" /> and mails its confirmation link when the address is free in the
-///     scope, or tells the address's holder of the attempt when it is not (AF-47b). No <c>Person</c> is
-///     created here: the verified <c>User</c> exists only once the link is followed (UC-14).
+///     scope, or tells the address's holder of the attempt, at the address the holder registered with,
+///     when it is not (AF-47b). No <c>Person</c> is created here: the verified <c>User</c> exists only
+///     once the link is followed (UC-14).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -34,7 +35,7 @@ public class RegistrationProcessor(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<PendingRegistration, long> pendingWriter,
-    IEmailVerificationSender linkSender,
+    IRegistrationLinkSender linkSender,
     IRegistrationAttemptSender attemptSender,
     EmailVerificationOptions options,
     ILogger<RegistrationProcessor> logger)
@@ -60,7 +61,7 @@ public class RegistrationProcessor(
             // NFR-24: a restricted identity is not mailed, not even to say someone tried.
             if (holder.ProcessingRestrictedAt is null)
             {
-                await attemptSender.SendAsync(request.Email, googleAccount: false);
+                await attemptSender.SendAsync(holder.Email, googleAccount: false);
             }
 
             return;
@@ -75,7 +76,7 @@ public class RegistrationProcessor(
             // is not told, since it could not act on it — or, if restricted, must not be processed.
             if (!googleHolder.IsDeleted && googleHolder.ProcessingRestrictedAt is null)
             {
-                await attemptSender.SendAsync(request.Email, googleAccount: true);
+                await attemptSender.SendAsync(googleHolder.Email, googleAccount: true);
             }
 
             return;
@@ -105,7 +106,8 @@ public class RegistrationProcessor(
             return;
         }
 
-        // The same link a verification email carries; UC-14 recognises the token as a pending one.
+        // The link follows UC-14's route, which recognises the token as a pending one; the mail asks for
+        // the sign-up password too.
         await linkSender.SendAsync(request.Email, token);
     }
 }

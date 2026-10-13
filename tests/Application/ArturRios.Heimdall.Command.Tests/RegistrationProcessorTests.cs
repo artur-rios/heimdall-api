@@ -1,8 +1,11 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -11,7 +14,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // What separates the flows is what was created and what was mailed, so each test asserts both.
 public class RegistrationProcessorTests
 {
-    private sealed class RecordingVerificationSender : IEmailVerificationSender
+    private sealed class RecordingLinkSender : IRegistrationLinkSender
     {
         public List<(string Email, string Token)> Sent { get; } = [];
 
@@ -33,19 +36,35 @@ public class RegistrationProcessorTests
         }
     }
 
+    // A pending store whose create fails, as it does when the database refuses the insert.
+    private sealed class FailingPendingRepository
+        : AsyncFakeRepository<PendingRegistration, long>, IAsyncRepository<PendingRegistration, long>
+    {
+        public int Attempts { get; private set; }
+
+        Task<DataOutput<long>> IAsyncRepository<PendingRegistration, long>.CreateAsync(
+            PendingRegistration entity, CancellationToken cancellationToken)
+        {
+            Attempts++;
+            return Task.FromResult(DataOutput<long>.New.WithError("The insert was refused."));
+        }
+    }
+
     private sealed class Fixture
     {
         public AsyncFakeRepository<Scope, long> Scopes { get; } = new();
         public AsyncFakeRepository<Person, long> Persons { get; } = new();
         public AsyncFakeRepository<GoogleUser, long> GoogleUsers { get; } = new();
         public AsyncFakeRepository<PendingRegistration, long> Pending { get; } = new();
-        public RecordingVerificationSender Links { get; } = new();
+        public RecordingLinkSender Links { get; } = new();
         public RecordingAttemptSender Attempts { get; } = new();
         public EmailVerificationOptions Options { get; } = new() { TokenLifetime = TimeSpan.FromHours(24) };
 
-        public RegistrationProcessor Processor() =>
-            new(Scopes, Persons, GoogleUsers, Pending, Links, Attempts, Options,
-                NullLogger<RegistrationProcessor>.Instance);
+        public RegistrationProcessor Processor(
+            IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
+            ILogger<RegistrationProcessor>? logger = null) =>
+            new(Scopes, Persons, GoogleUsers, pendingWriter ?? Pending, Links, Attempts, Options,
+                logger ?? NullLogger<RegistrationProcessor>.Instance);
 
         public async Task<Scope> ScopeAsync(bool open = true, bool isDeleted = false)
         {
@@ -143,7 +162,8 @@ public class RegistrationProcessorTests
         Assert.Single(fixture.Persons.Query().ToList());
         Assert.Empty(fixture.Pending.Query().ToList());
         Assert.Empty(fixture.Links.Sent);
-        Assert.Equal(("new@test.local", false), Assert.Single(fixture.Attempts.Sent));
+        // The notice goes to the address the holder registered with, not the one the stranger typed.
+        Assert.Equal(("New@Test.Local", false), Assert.Single(fixture.Attempts.Sent));
     }
 
     [UnitFact]
@@ -153,7 +173,7 @@ public class RegistrationProcessorTests
         var scope = await fixture.ScopeAsync();
         await fixture.GoogleUsers.CreateAsync(new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "sub", Email = "new@test.local", ScopeId = scope.Id
+            PublicId = Guid.NewGuid(), GoogleId = "sub", Email = "New@Test.Local", ScopeId = scope.Id
         });
 
         await fixture.Processor().ProcessAsync(Request(scope));
@@ -161,7 +181,7 @@ public class RegistrationProcessorTests
         Assert.Empty(fixture.Persons.Query().ToList());
         Assert.Empty(fixture.Pending.Query().ToList());
         Assert.Empty(fixture.Links.Sent);
-        Assert.Equal(("new@test.local", true), Assert.Single(fixture.Attempts.Sent));
+        Assert.Equal(("New@Test.Local", true), Assert.Single(fixture.Attempts.Sent));
     }
 
     [UnitFact]
@@ -219,6 +239,28 @@ public class RegistrationProcessorTests
 
         Assert.Empty(fixture.Persons.Query().ToList());
         Assert.Empty(fixture.Pending.Query().ToList());
+        Assert.Empty(fixture.Links.Sent);
+        Assert.Empty(fixture.Attempts.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenThePendingRegistrationCannotBeStored_WhenProcessing_ThenOneErrorIsLoggedWithoutTheAddressAndNoLinkIsSent()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new FailingPendingRepository();
+        var logger = new RecordingLogger<RegistrationProcessor>();
+
+        var exception = await Record.ExceptionAsync(() =>
+            fixture.Processor(pending, logger).ProcessAsync(Request(scope)));
+
+        // The caller already has the uniform 202, so nothing is thrown; the log line is the only trace,
+        // and it must not carry the address (NFR-22).
+        Assert.Null(exception);
+        Assert.Equal(1, pending.Attempts);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.DoesNotContain("new@test.local", entry.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(fixture.Links.Sent);
         Assert.Empty(fixture.Attempts.Sent);
     }

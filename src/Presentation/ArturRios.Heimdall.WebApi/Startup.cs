@@ -787,6 +787,7 @@ public class Startup : WebApiStartup
             Builder.Services.AddScoped<ITwoFactorEmailSender, LoggingTwoFactorEmailSender>();
             Builder.Services.AddScoped<IRestrictionLiftNotifier, LoggingRestrictionLiftNotifier>();
             Builder.Services.AddScoped<IRegistrationAttemptSender, LoggingRegistrationAttemptSender>();
+            Builder.Services.AddScoped<IRegistrationLinkSender, LoggingRegistrationLinkSender>();
 
             return;
         }
@@ -799,6 +800,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();
         Builder.Services.AddScoped<IRestrictionLiftNotifier, MailgunRestrictionLiftNotifier>();
         Builder.Services.AddScoped<IRegistrationAttemptSender, MailgunRegistrationAttemptSender>();
+        Builder.Services.AddScoped<IRegistrationLinkSender, MailgunRegistrationLinkSender>();
     }
 
     /// <summary>

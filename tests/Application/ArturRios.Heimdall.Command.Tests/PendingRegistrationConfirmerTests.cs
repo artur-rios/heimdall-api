@@ -45,18 +45,6 @@ public class PendingRegistrationConfirmerTests
             Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError(RelationalErrors.ConcurrencyMessage));
     }
 
-    private sealed class RecordingLogger<T> : ILogger<T>
-    {
-        public List<LogLevel> Levels { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Levels.Add(logLevel);
-    }
-
     private sealed class Fixture
     {
         public AsyncFakeRepository<Scope, long> Scopes { get; } = new();
@@ -346,6 +334,6 @@ public class PendingRegistrationConfirmerTests
         Assert.Equal(PendingRegistrationOutcome.AlreadyClaimed, result.Outcome);
         Assert.Empty(result.Errors);
         Assert.Empty(fixture.People());
-        Assert.DoesNotContain(LogLevel.Error, logger.Levels);
+        Assert.DoesNotContain(LogLevel.Error, logger.Entries.Select(entry => entry.Level));
     }
 }
