@@ -886,6 +886,8 @@ sequenceDiagram
 | AF-14b | Token already used — including by a request carrying the same token at the same time (NFR-27) | Return `400 Bad Request` — "Token already used" |
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
 
+> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, following it is the confirmation that creates the account: the system claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a, one already claimed AF-14b, and one the system refuses to act on AF-14c.
+
 ---
 
 ### UC-15: Resend Verification Email
@@ -1906,7 +1908,7 @@ sequenceDiagram
 | **Actors** | Anonymous |
 | **Description** | Create a password `User` in a scope without an administrator, where the scope's owners have opened self-registration |
 | **Preconditions** | The scope exists, is not logically deleted, and has `SelfRegistrationEnabled = true` (FR-SR-01, FR-SR-02) |
-| **Postconditions** | Either a new unverified `User` exists in the scope and a verification email was sent, or the holder of the address was told of the attempt. The caller cannot tell which |
+| **Postconditions** | Either a pending registration exists and its link was sent, or the holder of the address was told of the attempt. The caller cannot tell which. No `User` exists until the link is followed (FR-SR-07) |
 
 **Main Flow:**
 
@@ -1925,8 +1927,12 @@ sequenceDiagram
     API->>Q: Queue { scopeId, name, email, hash, salt }
     API-->>U: 202 Accepted
     Q->>DB: Re-check the scope, look the address up in the scope
-    Q->>DB: Create the User (address free)
-    Q->>M: Send the verification email (UC-14 link)
+    Q->>DB: Write a pending registration (address free)
+    Q->>M: Send the confirmation email (UC-14 link)
+    U->>API: POST /api/auth/verify-email { token } (UC-14)
+    API->>DB: Re-check the scope and the address
+    API->>DB: Create the User, verified; remove the address's pending registrations
+    API-->>U: 200 OK
 ```
 
 1. Caller sends a name, an email address, a password and the scope's `PublicId`.
@@ -1934,7 +1940,9 @@ sequenceDiagram
 3. The system confirms the scope exists, is live and is open to self-registration.
 4. The system hashes the password, queues the request and answers `202 Accepted` with a fixed message.
 5. Afterwards, the system re-checks the scope and confirms the address is held by no live person and no Google User of the scope (FR-SR-04).
-6. The system creates the `User`, unverified, records its legal basis (NFR-23) and sends the verification email (FR-EV-01/02).
+6. The system writes a pending registration — name, address, password hash and the hash of a single-use token, expiring with the email-verification token lifetime (FR-SR-08) — and mails the token's link (FR-EV-01/02). It creates no `User`.
+7. The person follows the link (UC-14).
+8. The system re-checks that the scope is still open and the address still free, creates the `User`, verified, records its legal basis (NFR-23), and removes the address's pending registrations (FR-SR-07).
 
 **Alternative Flows:**
 
@@ -1944,6 +1952,9 @@ sequenceDiagram
 | AF-47b | The address is already held in the scope by a live person or a Google User | `202 Accepted`, identical to the main flow. Nothing is created; the holder is emailed that someone tried to register their address, unless their processing is restricted (NFR-24) (FR-SR-05) |
 | AF-47c | The request is malformed | `400 Bad Request` with the field's message. Nothing is queued |
 | AF-47d | The scope is closed or deleted while the request waits | Nothing is created or sent |
+| AF-47e | The link is followed after it expired | UC-14 AF-14a: `400 Bad Request` — "Token expired". No `User` is created |
+| AF-47f | The scope is closed or deleted, or the address is taken, before the link is followed | UC-14 AF-14c: `400 Bad Request` — "Invalid token". No `User` is created |
+| AF-47g | The registrant signs in before following the link | UC-11 AF-11a: `401 Unauthorized`, identical to a wrong password — no `Person` exists to find |
 
 > **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
 
@@ -2165,7 +2176,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
-| UC-47: Register a Password User | FR-SR-01 through FR-SR-06, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-08, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 
 ---
 

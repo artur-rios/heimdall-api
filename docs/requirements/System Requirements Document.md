@@ -225,6 +225,8 @@ graph LR
 | FR-SR-04 | A self-registered address shall be unique in the scope among live persons and Google Users, compared case-insensitively | High |
 | FR-SR-05 | When the address is already held, the system shall create nothing and shall email the holder that a registration was attempted, unless their processing is restricted | High |
 | FR-SR-06 | The system shall answer a registration for a free and a taken address identically, in content and in time | High |
+| FR-SR-07 | No account shall exist for a self-registered address until the link mailed to it is followed; the account is then created with its address verified | High |
+| FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
 
 ### 3.9 Scope Permission Management
 
@@ -273,7 +275,7 @@ Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`,
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
 - **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
 
-`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN` and `PENDING_REGISTRATION` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02 (for `PENDING_REGISTRATION`, the mailed token, of which only the hash is stored). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -290,6 +292,7 @@ erDiagram
     PERSON ||--o| SCOPE_USER : "belongs to"
     SCOPE ||--o{ GOOGLE_USER : "contains"
     SCOPE ||--o{ SCOPE_PERMISSION : "defines"
+    SCOPE ||--o{ PENDING_REGISTRATION : "awaits confirmation of"
     PERSON ||--o| TWO_FACTOR_AUTH : "configures"
     TWO_FACTOR_AUTH ||--o{ TWO_FACTOR_RECOVERY_CODE : "issues"
 
@@ -364,6 +367,16 @@ erDiagram
         string Token "Verification token value — the caller-facing reference"
         datetime ExpiresAt "Expiration timestamp"
         bool Used "Whether the token has been consumed"
+    }
+
+    PENDING_REGISTRATION {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        bigint ScopeId FK "Scope registered into (internal Id)"
+        string Name "Name the registrant gave"
+        string Email "Address awaiting confirmation"
+        bytes PasswordHash "Password hash computed on the request path"
+        string TokenHash "SHA-256 of the mailed token — the caller-facing reference is the token itself"
+        datetime ExpiresAt "Expiration timestamp"
     }
 
     APPLICATION {
@@ -596,7 +609,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/password-recovery` | Request password reset email | No |
 | POST | `/api/auth/password-reset` | Reset password with token | No |
 | POST | `/api/auth/verify-email` | Verify email with token | No |
-| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-06) | No (anonymous) |
+| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-08) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
 | POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
@@ -1051,7 +1064,7 @@ Notes on cascading behavior:
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
-| Self-Registration | FR-SR-01 through FR-SR-06 |
+| Self-Registration | FR-SR-01 through FR-SR-08 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |

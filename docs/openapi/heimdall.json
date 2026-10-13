@@ -561,8 +561,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Registers a password `User` in a scope that has opened self-registration (UC-47,\nFR-SR-03…FR-SR-06). Open to anonymous callers — someone without an account cannot hold a\ntoken.",
-        "description": "Answers 202 with the same message whether the address was free or taken (AF-47b), and in the\nsame time: the person is created, or the holder told of the attempt, after the response, by\n`RegistrationDispatcher`. A missing, deleted or closed scope answers 403 (AF-47a); a\nmalformed request 400 (AF-47c). Neither says anything about an address.\n\n**Anonymous** — no bearer token required.",
+        "summary": "Registers a password `User` in a scope that has opened self-registration (UC-47,\nFR-SR-03…FR-SR-08). Open to anonymous callers — someone without an account cannot hold a\ntoken.",
+        "description": "Answers 202 with the same message whether the address was free or taken (AF-47b), and in the\nsame time: a pending registration is written and its link mailed, or the holder told of the\nattempt, after the response, by `RegistrationDispatcher`. No `User` exists until\nthat link is followed (UC-14, FR-SR-07). A missing, deleted or closed scope answers 403\n(AF-47a); a malformed request 400 (AF-47c). Neither says anything about an address.\n\n**Anonymous** — no bearer token required.",
         "operationId": "Auth_Register",
         "requestBody": {
           "content": {
@@ -3268,7 +3268,7 @@
         "tags": [
           "Scope"
         ],
-        "summary": "Opens or closes anonymous self-registration for a scope (UC-47 toggle, FR-SR-02). Same\nactors and refusals as M:ArturRios.Heimdall.WebApi.Controllers.ScopeController.SetGoogleSignIn(System.Guid,ArturRios.Heimdall.Command.Input.SetGoogleSignInCommand).",
+        "summary": "Opens or closes anonymous self-registration for a scope (UC-47 toggle, FR-SR-02). Same\nactors and refusals as the Google Sign-In toggle (UC-24).",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Scope_SetSelfRegistration",
         "parameters": [
