@@ -47,6 +47,7 @@ public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope, long> scop
                     Name = x.Name,
                     Description = x.Description,
                     GoogleSignInEnabled = x.GoogleSignInEnabled,
+                    SelfRegistrationEnabled = x.SelfRegistrationEnabled,
                     DefaultLegalBasis = x.DefaultLegalBasis,
                     PrivacyNoticeUri = x.PrivacyNoticeUri,
                     IsDeleted = x.IsDeleted,

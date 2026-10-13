@@ -215,6 +215,20 @@ graph LR
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out, invalidating/discarding their authentication token | High |
 | FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
 
+### 3.8a Self-Registration
+
+| ID | Requirement | Priority |
+| ---- | ------------- | ---------- |
+| FR-SR-01 | A scope shall have a boolean `SelfRegistrationEnabled` flag, default `false`, controlling whether anonymous callers may register password `User`s in it | High |
+| FR-SR-02 | Only System Admins and existing owners of a scope shall be able to enable or disable `SelfRegistrationEnabled` for that scope | High |
+| FR-SR-03 | The system shall let an anonymous caller register a password `User` in an open scope, applying the same name, email and password rules as administrator-created Users | High |
+| FR-SR-04 | A self-registered address shall be unique in the scope among live persons and Google Users, compared case-insensitively | High |
+| FR-SR-05 | When the address is already held, the system shall create nothing and shall email the holder that a registration was attempted, unless their processing is restricted or, for a Google User, the holder is logically deleted | High |
+| FR-SR-06 | The system shall answer a registration for a free and a taken address identically, in content and in time | High |
+| FR-SR-07 | No account shall exist for a self-registered address until the link mailed to it is followed; the account is then created with its address verified | High |
+| FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
+| FR-SR-09 | Confirming a self-registration shall require the password chosen at sign-up; a missing or wrong password shall not consume the pending registration, and after 10 wrong passwords the pending registration is discarded; each guess is charged before it is compared (NFR-27), so parallel guesses cannot exceed the 10 | High |
+
 ### 3.9 Scope Permission Management
 
 | ID | Requirement | Priority |
@@ -262,7 +276,7 @@ Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`,
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
 - **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
 
-`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN` and `PENDING_REGISTRATION` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02 (for `PENDING_REGISTRATION`, the mailed token, of which only the hash is stored). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -279,6 +293,7 @@ erDiagram
     PERSON ||--o| SCOPE_USER : "belongs to"
     SCOPE ||--o{ GOOGLE_USER : "contains"
     SCOPE ||--o{ SCOPE_PERMISSION : "defines"
+    SCOPE ||--o{ PENDING_REGISTRATION : "awaits confirmation of"
     PERSON ||--o| TWO_FACTOR_AUTH : "configures"
     TWO_FACTOR_AUTH ||--o{ TWO_FACTOR_RECOVERY_CODE : "issues"
 
@@ -289,6 +304,7 @@ erDiagram
         string Description "Optional description"
         bool IsDeleted "Logical deletion flag"
         bool GoogleSignInEnabled "Whether Google sign-up/sign-in is enabled for this scope"
+        bool SelfRegistrationEnabled "Whether anonymous callers may register password Users in this scope"
         datetime CreatedAt "Creation timestamp"
         datetime UpdatedAt "Last update timestamp"
     }
@@ -352,6 +368,19 @@ erDiagram
         string Token "Verification token value — the caller-facing reference"
         datetime ExpiresAt "Expiration timestamp"
         bool Used "Whether the token has been consumed"
+    }
+
+    PENDING_REGISTRATION {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        bigint ScopeId FK "Scope registered into (internal Id)"
+        string Name "Name the registrant gave"
+        string Email "Address awaiting confirmation"
+        bytes PasswordHash "Password hash computed on the request path"
+        bytes Salt "Salt of the password hash, carried to the User on confirmation"
+        string TokenHash "SHA-256 of the mailed token — the caller-facing reference is the token itself"
+        datetime ExpiresAt "Expiration timestamp"
+        datetime CreatedAt "When the registration was stored"
+        int FailedAttempts "Wrong confirmation passwords so far; the row is discarded at 10"
     }
 
     APPLICATION {
@@ -551,6 +580,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | GET | `/api/scopes/{id}/owners` | List the owners of a scope | SystemAdmin, existing Owner |
 | DELETE | `/api/scopes/{id}/owners/{personId}` | Remove an owner from the scope (at least one must remain) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
+| PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
 
 ### 5.2 Person Endpoints
 
@@ -582,7 +612,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/login` | Authenticate by email + password | No |
 | POST | `/api/auth/password-recovery` | Request password reset email | No |
 | POST | `/api/auth/password-reset` | Reset password with token | No |
-| POST | `/api/auth/verify-email` | Verify email with token | No |
+| POST | `/api/auth/verify-email` | Verify email with token; a token that names a pending self-registration confirms it and also takes the optional `password` chosen at sign-up (FR-SR-09) | No |
+| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-09) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
 | POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
@@ -626,7 +657,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
-| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
+| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification, UC-47 self-registration) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
 | NFR-05 | Performance | Every endpoint except those that verify a password shall complete within **100 ms at the median and 250 ms at the tail** — the slowest of a single caller's samples (§6.1), the 99th percentile under load (§6.3) — and shall hold that while **128 callers are in flight at once**, answering all of them without a failed or 5xx response. Both conditions are measured on the reference configuration. The write path meets the load condition with the least margin and is sensitive to how many rows the table already holds (§6.3.2). Password-verifying endpoints are governed by NFR-18 |
 | NFR-06 | Availability | The API shall hold no state in a process or on a local filesystem that a second instance would need: authentication is validated from token claims with no server-side session, and the Data Protection key ring that TOTP secrets are encrypted with (NFR-16) is kept in the database. The per-IP rate limiter's window is the one deliberate exception, and is per instance by design (§6.2) |
 | NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
@@ -649,7 +680,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate for anything but its subject's own rights, shall receive no email but a second-factor code its subject asks for when signing in, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. Signing in (UC-11, UC-25, UC-38) shall issue it a subject-rights-only token instead of a full one, so the subject can always reach their rights, however long ago their last token expired. That token, and any token the identity already holds, shall be refused everywhere except where the subject exercises their own rights — export (UC-41), erasure (UC-42), restriction (UC-44) and lifting their own restriction (UC-45); a subject-rights-only token shall stay so confined after the restriction is lifted, and a restricted System Admin, or one holding such a token, shall not lift anybody else's. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)). The subject's own erasure request (UC-42) shall lift their restriction as their own lift would; a restriction imposed after the request shall hold it |
 | NFR-25 | Security | The database and its backups shall be encrypted at rest, and the API's connection to the database shall require TLS (GDPR Art. 32, LGPD Art. 46). Backups shall have a stated schedule, retention period, location and restore-testing cadence, published in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md). Because a backup is a full copy that is never edited, a restore shall be followed by re-applying every erasure completed since it was taken, from a ledger kept outside the database |
 | NFR-26 | Security | The signals the system already records — refused writes, account lockouts, credential-verification shedding — shall be read on a schedule and the ones exceeding their thresholds written to the log at warning level, with a stable marker and kind an alerting rule can match. Each threshold shall be measured over a window rather than as a total, because the same count means different things at different rates. Detection shall not declare a breach: a signal is a reason to look, and the [Incident Response Document](Incident%20Response%20Document.md) is what turns looking into a declaration. The signals shall additionally be **collected and delivered to a person on a schedule**, reporting each signal once and failing loudly when delivery does not succeed — writing a signal nobody receives satisfies the letter of detection and none of its purpose, since both notification clocks run from awareness rather than from recording |
-| NFR-27 | Security | Single-use credentials — recovery codes, email codes, password reset and email verification tokens, the two-factor challenge, and an authenticator-app time step — shall be spent at most once, and the bounded budgets of FR-AU-09, FR-2F-13, FR-2F-16 and FR-2F-17 shall never admit more attempts than they state, **including when requests arrive concurrently**. Each check shall be made by the same database write that spends or charges, and every budget shall be charged before the comparison it guards rather than after it fails |
+| NFR-27 | Security | Single-use credentials — recovery codes, email codes, password reset and email verification tokens, the two-factor challenge, and an authenticator-app time step — shall be spent at most once, and the bounded budgets of FR-AU-09, FR-SR-09, FR-2F-13, FR-2F-16 and FR-2F-17 shall never admit more attempts than they state, **including when requests arrive concurrently**. Each check shall be made by the same database write that spends or charges, and every budget shall be charged before the comparison it guards rather than after it fails |
 
 ### 6.1 The reference configuration
 
@@ -896,6 +927,12 @@ block-beta
     block:row19:5
         S1["Verify 2FA Challenge"] S2["N/A"] S3["N/A"] S4["N/A"] S5["✅ (holds challenge token)"]
     end
+    block:row20:5
+        T1["Enable/Disable Self-Registration"] T2["✅"] T3["✅ (owned scope)"] T4["❌"] T5["❌"]
+    end
+    block:row21:5
+        U1["Register a Password User"] U2["✅"] U3["✅"] U4["✅"] U5["✅"]
+    end
 ```
 
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
@@ -924,6 +961,8 @@ block-beta
 | Delete Application (logical) | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Register a Password User | ✅ | ✅ | ✅ | ✅ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
 | Google Sign-Out | N/A | N/A | ✅ (self, as a Google User) | ❌ |
 | Read Google User | ✅ | ✅ (owned scope) | ✅ (self) | ❌ |
@@ -1029,6 +1068,7 @@ Notes on cascading behavior:
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
+| Self-Registration | FR-SR-01 through FR-SR-09 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |

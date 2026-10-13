@@ -37,6 +37,9 @@ public static class ScopeMessageMap
             [ScopeMessages.OwnerNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
             // UC-24 main flow — Google Sign-In enabled or disabled. AF-24a reuses ScopeNotFound (404).
             [ScopeMessages.GoogleSignInUpdatedSuccessfully] = HttpStatusCodes.Ok,
+            // UC-47 toggle main flow — self-registration opened or closed. Shares ScopeNotFound (404),
+            // NotScopeOwner and EnabledRequired (400) with UC-24.
+            [ScopeMessages.SelfRegistrationUpdatedSuccessfully] = HttpStatusCodes.Ok,
             // AF-24b — actor is not an owner of the target scope.
             [ScopeMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
             // UC-24 (NFR-10) — the request omitted the value to set.

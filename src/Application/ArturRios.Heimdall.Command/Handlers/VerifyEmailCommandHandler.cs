@@ -15,7 +15,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="VerifyEmailCommand" /> (UC-14): finds the token UC-06 issued at person
 ///     creation, refuses it if it is unknown, expired, or spent (AF-14c/AF-14a/AF-14b), then marks the
-///     person's address as verified and consumes the token (FR-EV-03).
+///     person's address as verified and consumes the token (FR-EV-03). A token that matches none of
+///     those may instead belong to a UC-47 pending registration, which
+///     <see cref="IPendingRegistrationConfirmer" /> turns into the verified <c>User</c> it described
+///     when the command also carries the password chosen at sign-up (a missing or wrong one is refused
+///     without consuming the registration); only when it matches neither is it AF-14c. The password is
+///     read for pending registrations only and ignored for an ordinary verification token.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -40,7 +45,8 @@ public class VerifyEmailCommandHandler(
     IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
     IAsyncRepository<Person, long> personWriter,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IPendingRegistrationConfirmer pendingRegistrations)
     : ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>
 {
     public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command, CancellationToken cancellationToken = default)
@@ -66,10 +72,24 @@ public class VerifyEmailCommandHandler(
             .Include(x => x.Person)
             .FirstOrDefaultAsync(x => x.TokenHash == presented);
 
-        // AF-14c.
+        // AF-14c — unless the token is a UC-47 pending registration's, in which case following the link
+        // is what creates the account, already verified.
         if (token is null)
         {
-            return output.WithError(AuthMessages.TokenInvalid);
+            var confirmation = await pendingRegistrations.ConfirmAsync(presented, command.Password, now);
+
+            return confirmation.Outcome switch
+            {
+                PendingRegistrationOutcome.Confirmed => output
+                    .WithData(new VerifyEmailCommandOutput())
+                    .WithMessage(AuthMessages.EmailVerifiedSuccessfully),
+                PendingRegistrationOutcome.Expired => output.WithError(AuthMessages.TokenExpired),
+                PendingRegistrationOutcome.AlreadyClaimed => output.WithError(AuthMessages.TokenAlreadyUsed),
+                PendingRegistrationOutcome.PasswordRequired => output.WithError(AuthMessages.ConfirmationPasswordRequired),
+                PendingRegistrationOutcome.PasswordIncorrect => output.WithError(AuthMessages.ConfirmationPasswordIncorrect),
+                PendingRegistrationOutcome.Failed => output.WithErrors(confirmation.Errors),
+                _ => output.WithError(AuthMessages.TokenInvalid)
+            };
         }
 
         // AF-14a.

@@ -62,6 +62,30 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     }
 
     /// <summary>
+    ///     Registers a password <c>User</c> in a scope that has opened self-registration (UC-47,
+    ///     FR-SR-03…FR-SR-09). Open to anonymous callers — someone without an account cannot hold a
+    ///     token.
+    /// </summary>
+    /// <remarks>
+    ///     Answers 202 with the same message whether the address was free or taken (AF-47b), and in the
+    ///     same time: a pending registration is written and its link mailed, or the holder told of the
+    ///     attempt, after the response, by <c>RegistrationDispatcher</c>. No <c>User</c> exists until
+    ///     that link is followed (UC-14, FR-SR-07). A missing, deleted or closed scope answers 403
+    ///     (AF-47a); a malformed request 400 (AF-47c). Neither says anything about an address.
+    /// </remarks>
+    [HttpPost("register")]
+    [AllowAnonymous]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    public async Task<ActionResult<DataOutput<RegisterCommandOutput?>>> Register(
+        [FromBody] RegisterCommand command)
+    {
+        var result = await commandMediator
+            .ExecuteCommandAsync<RegisterCommand, RegisterCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: AuthMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Sets a new password from the reset token mailed by UC-12 (UC-13, FR-PR-03/04). Open to
     ///     anonymous callers for the same reason: the token is the only credential someone who has
     ///     lost their password can present.
@@ -95,6 +119,13 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     (AF-14b) tokens all answer 400 with their own message, as does a request carrying no token
     ///     at all. An address that was already verified answers 200: UC-14 defines no alternative flow
     ///     for it, and the link did what it promised.
+    ///     <para>
+    ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
+    ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
+    ///         registration in place — except that the 10th wrong password discards it, after which the
+    ///         token answers 400 "Invalid token" (FR-SR-09). <c>password</c> is read only for pending
+    ///         registrations and ignored for an ordinary verification token.
+    ///     </para>
     /// </remarks>
     [HttpPost("verify-email")]
     [AllowAnonymous]

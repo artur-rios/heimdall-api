@@ -39,6 +39,7 @@ public class TokenRetentionService(
             : $"Token retention purge removed {purged.TotalPurged} rows: " +
               $"{purged.PasswordResetTokensPurged} password reset, " +
               $"{purged.EmailVerificationTokensPurged} email verification, " +
-              $"{purged.TwoFactorEmailCodesPurged} two-factor email";
+              $"{purged.TwoFactorEmailCodesPurged} two-factor email, " +
+              $"{purged.PendingRegistrationsPurged} pending registration";
     }
 }

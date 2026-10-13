@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- UC-47: anonymous self-registration (`POST /api/auth/register`) into scopes that open it with `PUT /api/scopes/{id}/self-registration`. Answers new and taken addresses identically; a taken address's holder is emailed about the attempt. The account is created when the emailed link is followed (`POST /api/auth/verify-email`) with the password chosen at sign-up, with its address verified; until then nothing can sign in. Confirmation needs that password: without it the answer is `422`, with a wrong one `401`, neither consumes the registration, and the 10th wrong password discards it. A link followed again once the account exists answers "Invalid token".
+
 ## [1.3.0] - 2026-10-11
 
 ### Changed

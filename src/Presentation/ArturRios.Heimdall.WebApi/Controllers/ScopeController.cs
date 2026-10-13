@@ -97,6 +97,24 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Opens or closes anonymous self-registration for a scope (UC-47 toggle, FR-SR-02). Same
+    ///     actors and refusals as the Google Sign-In toggle (UC-24).
+    /// </summary>
+    [HttpPut("{id:guid}/self-registration")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SetSelfRegistrationCommandOutput?>>> SetSelfRegistration(
+        Guid id, [FromBody] SetSelfRegistrationCommand command)
+    {
+        command.Id = id;
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SetSelfRegistrationCommand, SetSelfRegistrationCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists
     ///     every scope; a Scope Admin only the scopes they own, with the total counting those alone.
     /// </summary>

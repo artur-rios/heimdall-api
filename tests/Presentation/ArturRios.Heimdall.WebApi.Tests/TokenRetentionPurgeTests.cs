@@ -38,11 +38,13 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var passwordResetTokens = new EfRepository<PasswordResetToken, long>(context);
         var emailVerificationTokens = new EfRepository<EmailVerificationToken, long>(context);
         var twoFactorEmailCodes = new EfRepository<TwoFactorEmailCode, long>(context);
+        var pendingRegistrations = new EfRepository<PendingRegistration, long>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
+            pendingRegistrations, pendingRegistrations,
             Retention);
     }
 
@@ -105,16 +107,32 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         };
 
         context.TwoFactorEmailCodes.Add(expiredCode);
+
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        await context.SaveChangesAsync();
+
+        PendingRegistration Pending(DateTime expiresAt) => new()
+        {
+            ScopeId = scope.Id, Name = "Pending", Email = $"pending-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1], Salt = [2], TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = expiresAt, CreatedAt = expiresAt.AddHours(-24)
+        };
+
+        var expiredPending = Pending(longExpired);
+        var livePending = Pending(live);
+        context.PendingRegistrations.AddRange(expiredPending, livePending);
         await context.SaveChangesAsync();
 
         // When — the handler runs over EF repositories, so the whole expression is translated to SQL
         var output = await Handler(context).HandleAsync(new PurgeExpiredTokensCommand());
 
-        // Then — the run succeeded and reached all three tables
+        // Then — the run succeeded and reached all four tables
         Assert.True(output.Success);
         Assert.True(output.Data!.PasswordResetTokensPurged >= 1);
         Assert.True(output.Data.EmailVerificationTokensPurged >= 1);
         Assert.True(output.Data.TwoFactorEmailCodesPurged >= 1);
+        Assert.True(output.Data.PendingRegistrationsPurged >= 1);
 
         // And each row past its retention period is gone from the database
         await using var verification = fixture.CreateContext();
@@ -122,9 +140,11 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         Assert.False(await verification.PasswordResetTokens.AnyAsync(x => x.Id == expiredReset.Id));
         Assert.False(await verification.EmailVerificationTokens.AnyAsync(x => x.Id == expiredVerification.Id));
         Assert.False(await verification.TwoFactorEmailCodes.AnyAsync(x => x.Id == expiredCode.Id));
+        Assert.False(await verification.PendingRegistrations.AnyAsync(x => x.Id == expiredPending.Id));
 
         // While the live token is untouched — a purge never takes a token from a caller still holding it
         Assert.True(await verification.PasswordResetTokens.AnyAsync(x => x.Id == liveReset.Id));
+        Assert.True(await verification.PendingRegistrations.AnyAsync(x => x.Id == livePending.Id));
 
         // And the person the tokens belonged to is not itself a purge target
         Assert.True(await verification.Persons.AnyAsync(x => x.Id == person.Id));

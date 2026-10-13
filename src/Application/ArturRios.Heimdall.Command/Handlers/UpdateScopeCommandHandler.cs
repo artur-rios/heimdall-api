@@ -85,6 +85,7 @@ public class UpdateScopeCommandHandler(
                 Name = scope.Name,
                 Description = scope.Description,
                 GoogleSignInEnabled = scope.GoogleSignInEnabled,
+                SelfRegistrationEnabled = scope.SelfRegistrationEnabled,
                 OwnerIds = ownerIds,
                 CreatedAt = scope.CreatedAt,
                 UpdatedAt = scope.UpdatedAt

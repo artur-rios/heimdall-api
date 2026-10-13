@@ -59,6 +59,9 @@ public static class ScopeMessages
     /// <summary>UC-24 success: the scope's Google Sign-In setting was changed.</summary>
     public const string GoogleSignInUpdatedSuccessfully = "Google Sign-In setting updated successfully.";
 
+    /// <summary>UC-47 success: the scope's self-registration setting was changed.</summary>
+    public const string SelfRegistrationUpdatedSuccessfully = "Self-registration setting updated successfully.";
+
     /// <summary>
     ///     AF-24b: a Scope Admin acted on a scope they do not own. Same wording as the
     ///     <c>NotScopeOwner</c> of <see cref="PersonMessages" /> and <see cref="ApplicationMessages" />
