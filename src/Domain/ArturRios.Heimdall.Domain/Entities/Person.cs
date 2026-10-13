@@ -116,8 +116,10 @@ public class Person : Entity<long>
     /// <summary>
     ///     The scope a <c>User</c> belongs to (internal Id), or <c>null</c> for a <c>ScopeAdmin</c>
     ///     or <c>SystemAdmin</c>. A copy of <see cref="ScopeMembership" />'s <c>ScopeId</c>, not a
-    ///     second source of truth: <c>SCOPE_USER</c> remains the relationship (§4.6) and every read
-    ///     goes through it.
+    ///     second source of truth: <c>SCOPE_USER</c> remains the relationship (§4.6). A read that only
+    ///     needs to know which scope a person is in may take this column directly — the email
+    ///     verification and password-reset services do, to find the scope's link bases — because it
+    ///     mirrors the membership at every place that writes either.
     /// </summary>
     /// <remarks>
     ///     This exists for one reason — FR-PE-09's per-scope rule cannot otherwise be enforced. The
