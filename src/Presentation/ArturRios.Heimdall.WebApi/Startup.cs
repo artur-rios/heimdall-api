@@ -693,9 +693,11 @@ public class Startup : WebApiStartup
     ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /64 —
     ///     see <see cref="RateLimitPartitionKey" />), which is the caller's own
     ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
-    ///     every caller shares the proxy's partition. Either way this is a per-instance,
-    ///     defense-in-depth throttle, not a substitute for a WAF or an API gateway's own rate limiting
-    ///     in front of a real deployment.
+    ///     every caller shares the proxy's partition. A client system that is itself one caller to
+    ///     Heimdall for many end users may instead name each user's address, with a key from
+    ///     <see cref="TrustedCallerOptions" /> (see <see cref="AuthRateLimitPartition" />). Either way
+    ///     this is a per-instance, defense-in-depth throttle, not a substitute for a WAF or an API
+    ///     gateway's own rate limiting in front of a real deployment.
     /// </remarks>
     /// <summary>
     ///     The partition a caller's requests are counted in: the whole address for IPv4, and the
@@ -732,13 +734,23 @@ public class Startup : WebApiStartup
 
     private void AddAuthEndpointRateLimiting()
     {
+        // Throws on a key too short to be a secret, so a misconfigured deployment stops here.
+        var callers = TrustedCallerOptions.FromEnvironment();
+
+        Builder.Services.AddSingleton(callers);
+
+        // How many, never which: the keys are secrets and the headers carrying them are not logged.
+        Log.Information(
+            "{Count} trusted caller key(s) configured ({Variable})",
+            callers.Keys.Count, TrustedCallerOptions.KeysVariable);
+
         Builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
             options.AddPolicy(AuthEndpointRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: RateLimitPartitionKey(httpContext.Connection.RemoteIpAddress),
+                    partitionKey: AuthRateLimitPartition.KeyFor(httpContext, callers),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,

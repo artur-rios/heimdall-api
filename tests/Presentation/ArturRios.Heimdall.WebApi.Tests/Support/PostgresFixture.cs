@@ -33,6 +33,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public const string MasterUserPassword = "Str0ng-Master-Pass!";
 
     /// <summary>
+    ///     The caller key the host under test trusts, so the suite can prove a client system holding
+    ///     it is rate limited per end user. Published here for the reason
+    ///     <see cref="PreviousTokenSecret" /> is: the API reads it once, at start-up.
+    /// </summary>
+    public const string TrustedCallerKey = "functional-tests-trusted-caller-key-0123456789";
+
+    /// <summary>
     ///     The retired signing secret the host under test still accepts, so the suite can prove a
     ///     token signed before a rotation keeps working (Threat Model TH-22).
     /// </summary>
@@ -102,6 +109,10 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(PreviousTokenSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
+
+        // A client system's key for naming its end users' addresses to the anonymous-auth rate
+        // limiter. Without it configured, the header path would never run in a functional test.
+        Environment.SetEnvironmentVariable(TrustedCallerOptions.KeysVariable, TrustedCallerKey);
 
         // UC-25 verifies Google ID tokens. Publishing this secret makes the host under test resolve
         // LocalGoogleIdTokenVerifier instead of the real one, so the suite exercises sign-up,
