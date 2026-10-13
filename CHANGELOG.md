@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-13
+
 ### Added
 
 - UC-47: anonymous self-registration (`POST /api/auth/register`) into scopes that open it with `PUT /api/scopes/{id}/self-registration`. Answers new and taken addresses identically; a taken address's holder is emailed about the attempt. The account is created when the emailed link is followed (`POST /api/auth/verify-email`) with the password chosen at sign-up, with its address verified; until then nothing can sign in. Confirmation needs that password: without it the answer is `422`, with a wrong one `401`, neither consumes the registration, and the 10th wrong password discards it. A link followed again once the account exists answers "Invalid token".
@@ -213,7 +215,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/artur-rios/heimdall-api/compare/v1.1.0...v1.1.1
