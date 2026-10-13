@@ -214,6 +214,35 @@ throttle — not a replacement for a WAF or an API gateway's own rate limiting i
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
 
+### A client system calling for its users — `HEIMDALL_TRUSTED_CALLER_KEYS`
+
+A client system such as Fortuna's API signs its users in on their behalf, so Heimdall sees **one**
+address for all of them — and the 10-a-minute limit on the anonymous endpoints is then shared by
+every user it serves. It can instead tell Heimdall whose request this is. Heimdall counts the request
+under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KEYS`:
+
+| Header | Value |
+| --- | --- |
+| `X-Heimdall-Caller-Key` | One of the configured keys |
+| `X-Heimdall-Client-Address` | The end user's own IP address, IPv4 or IPv6 (an IPv6 user is counted by its /64, as everywhere else) |
+
+- `HEIMDALL_TRUSTED_CALLER_KEYS` is a comma-separated list. Entries are trimmed and empty ones
+  ignored. **Each key must be at least 32 characters** — they are secrets, so a shorter one stops
+  start-up with an error naming its position, not its value. Generate them randomly, for example
+  `openssl rand -base64 48`. Unset, no caller is trusted and the headers are ignored.
+- The key is compared in constant time against every configured key. A wrong or missing key, or an
+  address that does not parse, is **not an error**: the request is counted under the connection
+  address as before. The headers can only choose the bucket; they authenticate nobody and open no
+  endpoint.
+- **Rotating** a key needs no downtime: list the new key beside the old
+  (`HEIMDALL_TRUSTED_CALLER_KEYS=<old>,<new>`), restart Heimdall, move the client system to the new
+  key, then remove the old one and restart again.
+- Send the headers only from the client system's server, over TLS, never from a browser or a mobile
+  app, and keep the key in that system's secret store. A leaked key lets its holder pick their own
+  bucket, which only spreads guesses over invented addresses; the per-account lockouts still count
+  them (Threat Model Document, TB-1, TH-32).
+- Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
+
 ## Database connection encryption — NFR-25
 
 The API warns at start-up when `HEIMDALL_DATA_CONNECTIONSTRING` does not require TLS. Npgsql's
@@ -642,6 +671,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_METRICS_PORT` | | `9464`; `0` → metrics off |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | | unset → every cross-origin request is refused |
 | `HEIMDALL_TRUSTED_PROXIES` | | unset → forwarded headers ignored; every caller is the proxy |
+| `HEIMDALL_TRUSTED_CALLER_KEYS` | | unset → no client system may name its users' addresses; keys under 32 characters stop start-up |
 | `HEIMDALL_GOOGLE_CLIENT_IDS` | | unset → Google sign-in refuses every token |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
