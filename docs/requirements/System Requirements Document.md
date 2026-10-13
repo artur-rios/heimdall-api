@@ -228,6 +228,7 @@ graph LR
 | FR-SR-07 | No account shall exist for a self-registered address until the link mailed to it is followed; the account is then created with its address verified | High |
 | FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
 | FR-SR-09 | Confirming a self-registration shall require the password chosen at sign-up; a missing or wrong password shall not consume the pending registration, and after 10 wrong passwords the pending registration is discarded; each guess is charged before it is compared (NFR-27), so parallel guesses cannot exceed the 10 | High |
+| FR-SR-10 | A scope may override the verification and password-reset link bases for its Users: when `EmailVerificationUrl` or `PasswordResetUrl` is set, the sign-up confirmation, verification and password-reset emails sent to that scope's Users link there instead of to `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL`; an unset one, and every email to an administrator (who has no scope), uses the global setting. Only System Admins and existing owners of the scope may set them, through their own endpoint rather than the scope update, which would otherwise erase them; each must be an absolute `http` or `https` URL of at most 2048 characters | Medium |
 
 ### 3.9 Scope Permission Management
 
@@ -305,6 +306,8 @@ erDiagram
         bool IsDeleted "Logical deletion flag"
         bool GoogleSignInEnabled "Whether Google sign-up/sign-in is enabled for this scope"
         bool SelfRegistrationEnabled "Whether anonymous callers may register password Users in this scope"
+        string EmailVerificationUrl "Optional base link of this scope's verification emails, max 2048 characters; null uses the global one (FR-SR-10)"
+        string PasswordResetUrl "Optional base link of this scope's password-reset emails, max 2048 characters; null uses the global one (FR-SR-10)"
         datetime CreatedAt "Creation timestamp"
         datetime UpdatedAt "Last update timestamp"
     }
@@ -581,6 +584,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | DELETE | `/api/scopes/{id}/owners/{personId}` | Remove an owner from the scope (at least one must remain) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
+| PUT | `/api/scopes/{id}/email-links` | Set, or with null or empty clear, the scope's verification and password-reset link bases (FR-SR-10) | SystemAdmin, existing Owner |
 
 ### 5.2 Person Endpoints
 
@@ -933,6 +937,9 @@ block-beta
     block:row21:5
         U1["Register a Password User"] U2["✅"] U3["✅"] U4["✅"] U5["✅"]
     end
+    block:row22:5
+        V1["Set Scope Email Links"] V2["✅"] V3["✅ (owned scope)"] V4["❌"] V5["❌"]
+    end
 ```
 
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
@@ -962,6 +969,7 @@ block-beta
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Set Scope Email Links | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Register a Password User | ✅ | ✅ | ✅ | ✅ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
 | Google Sign-Out | N/A | N/A | ✅ (self, as a Google User) | ❌ |
@@ -1068,7 +1076,7 @@ Notes on cascading behavior:
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
-| Self-Registration | FR-SR-01 through FR-SR-09 |
+| Self-Registration | FR-SR-01 through FR-SR-10 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |

@@ -12,9 +12,11 @@ namespace ArturRios.Heimdall.WebApi.Email;
 public class LoggingPasswordResetSender(ILogger<LoggingPasswordResetSender> logger)
     : IPasswordResetSender
 {
-    public Task SendAsync(string email, string token)
+    public Task SendAsync(string email, string token, string? linkBase)
     {
-        logger.LogInformation("Password reset token issued for {EmailRef}: {Token}", LogSafeEmail.Reference(email), token);
+        logger.LogInformation(
+            "Password reset token issued for {EmailRef}: {Token} (link base: {LinkBase})",
+            LogSafeEmail.Reference(email), token, string.IsNullOrWhiteSpace(linkBase) ? "global" : "scope");
 
         return Task.CompletedTask;
     }

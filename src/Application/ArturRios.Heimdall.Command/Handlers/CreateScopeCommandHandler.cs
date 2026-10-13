@@ -92,6 +92,8 @@ public class CreateScopeCommandHandler(
                 Description = scope.Description,
                 GoogleSignInEnabled = scope.GoogleSignInEnabled,
                 SelfRegistrationEnabled = scope.SelfRegistrationEnabled,
+                EmailVerificationUrl = scope.EmailVerificationUrl,
+                PasswordResetUrl = scope.PasswordResetUrl,
                 OwnerIds = [.. owners.Select(owner => owner.PublicId)],
                 CreatedAt = scope.CreatedAt
             })

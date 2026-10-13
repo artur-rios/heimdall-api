@@ -40,6 +40,10 @@ public static class ScopeMessageMap
             // UC-47 toggle main flow — self-registration opened or closed. Shares ScopeNotFound (404),
             // NotScopeOwner and EnabledRequired (400) with UC-24.
             [ScopeMessages.SelfRegistrationUpdatedSuccessfully] = HttpStatusCodes.Ok,
+            // Per-scope email links set. Shares ScopeNotFound (404) and NotScopeOwner (403) with UC-24.
+            [ScopeMessages.EmailLinksUpdatedSuccessfully] = HttpStatusCodes.Ok,
+            // A scope email link is not an absolute http(s) URL within the column length.
+            [ScopeMessages.EmailLinkInvalid] = HttpStatusCodes.BadRequest,
             // AF-24b — actor is not an owner of the target scope.
             [ScopeMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
             // UC-24 (NFR-10) — the request omitted the value to set.

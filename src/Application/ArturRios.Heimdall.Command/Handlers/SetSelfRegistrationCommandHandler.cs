@@ -71,6 +71,8 @@ public class SetSelfRegistrationCommandHandler(
                 Description = scope.Description,
                 GoogleSignInEnabled = scope.GoogleSignInEnabled,
                 SelfRegistrationEnabled = scope.SelfRegistrationEnabled,
+                EmailVerificationUrl = scope.EmailVerificationUrl,
+                PasswordResetUrl = scope.PasswordResetUrl,
                 OwnerIds = ownerIds,
                 CreatedAt = scope.CreatedAt,
                 UpdatedAt = scope.UpdatedAt

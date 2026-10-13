@@ -13,9 +13,11 @@ namespace ArturRios.Heimdall.WebApi.Email;
 public class LoggingEmailVerificationSender(ILogger<LoggingEmailVerificationSender> logger)
     : IEmailVerificationSender
 {
-    public Task SendAsync(string email, string token)
+    public Task SendAsync(string email, string token, string? linkBase)
     {
-        logger.LogInformation("Email verification token issued for {EmailRef}: {Token}", LogSafeEmail.Reference(email), token);
+        logger.LogInformation(
+            "Email verification token issued for {EmailRef}: {Token} (link base: {LinkBase})",
+            LogSafeEmail.Reference(email), token, string.IsNullOrWhiteSpace(linkBase) ? "global" : "scope");
 
         return Task.CompletedTask;
     }

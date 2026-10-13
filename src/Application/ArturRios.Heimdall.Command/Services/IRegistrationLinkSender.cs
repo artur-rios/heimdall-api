@@ -10,5 +10,8 @@ public interface IRegistrationLinkSender
 {
     /// <param name="email">The address that was submitted.</param>
     /// <param name="token">The single-use token the link carries; only its hash is stored.</param>
-    Task SendAsync(string email, string token);
+    /// <param name="linkBase">
+    ///     The scope's own verification link base, or <c>null</c> to use the global setting.
+    /// </param>
+    Task SendAsync(string email, string token, string? linkBase);
 }

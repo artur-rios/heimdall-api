@@ -2180,7 +2180,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
-| UC-47: Register a Password User | FR-SR-01 through FR-SR-09, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 
 ---
 

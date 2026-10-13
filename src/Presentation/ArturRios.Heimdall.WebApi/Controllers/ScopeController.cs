@@ -115,6 +115,26 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Sets the base links the scope's verification and password-reset emails point at. A client
+    ///     system with its own screens for those steps points its users there; a link left out, or
+    ///     sent as null or empty, is cleared and the global one applies again. Same actors and
+    ///     refusals as the self-registration toggle.
+    /// </summary>
+    [HttpPut("{id:guid}/email-links")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SetScopeEmailLinksCommandOutput?>>> SetEmailLinks(
+        Guid id, [FromBody] SetScopeEmailLinksCommand command)
+    {
+        command.Id = id;
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SetScopeEmailLinksCommand, SetScopeEmailLinksCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists
     ///     every scope; a Scope Admin only the scopes they own, with the total counting those alone.
     /// </summary>
