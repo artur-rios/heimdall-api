@@ -81,9 +81,10 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         return token;
     }
 
-    private Task<HttpOutput<DataOutput<VerifyEmailCommandOutput?>?>> VerifyAsync(string token) =>
+    private Task<HttpOutput<DataOutput<VerifyEmailCommandOutput?>?>> VerifyAsync(
+        string token, string? password = Password) =>
         Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>(
-            "/api/auth/verify-email", new VerifyEmailCommand { Token = token });
+            "/api/auth/verify-email", new VerifyEmailCommand { Token = token, Password = password });
 
     private Task<HttpOutput<DataOutput<LoginCommandOutput?>?>> LoginAsync(
         string email, Guid scopeId, string password = Password) =>
@@ -147,6 +148,36 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
 
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         Assert.False(string.IsNullOrEmpty(login.Body!.Data!.Token));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPendingRegistrationToken_WhenPostedWithoutAPassword_ThenUnprocessableAndNothingIsCreated()
+    {
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("nopassword");
+        var token = await SeedPendingAsync(scope, email);
+
+        var response = await VerifyAsync(token, null);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains(AuthMessages.ConfirmationPasswordRequired, response.Body!.Errors);
+        Assert.Equal(1, await PendingCountAsync(scope, email));
+        Assert.Empty(await PersonsAsync(scope, email));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPendingRegistrationToken_WhenPostedWithAWrongPassword_ThenUnauthorizedAndTheRowIsKept()
+    {
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("wrongpassword");
+        var token = await SeedPendingAsync(scope, email);
+
+        var response = await VerifyAsync(token, "wrong");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, response.Body!.Errors);
+        Assert.Equal(1, await PendingCountAsync(scope, email));
+        Assert.Empty(await PersonsAsync(scope, email));
     }
 
     [FunctionalFact]

@@ -119,6 +119,12 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     (AF-14b) tokens all answer 400 with their own message, as does a request carrying no token
     ///     at all. An address that was already verified answers 200: UC-14 defines no alternative flow
     ///     for it, and the link did what it promised.
+    ///     <para>
+    ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
+    ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
+    ///         registration in place. <c>password</c> is read only for pending registrations and ignored
+    ///         for an ordinary verification token.
+    ///     </para>
     /// </remarks>
     [HttpPost("verify-email")]
     [AllowAnonymous]

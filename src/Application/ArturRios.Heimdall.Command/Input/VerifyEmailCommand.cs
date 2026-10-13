@@ -11,4 +11,10 @@ public class VerifyEmailCommand : BaseCommand
 {
     /// <summary>The verification token, exactly as it was issued.</summary>
     public string Token { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The password chosen at sign-up, required only when <see cref="Token" /> belongs to a UC-47
+    ///     pending registration (spec §4.3a) and ignored for an ordinary verification token.
+    /// </summary>
+    public string? Password { get; set; }
 }

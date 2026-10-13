@@ -36,10 +36,12 @@ public class VerifyEmailCommandHandlerTests
     private sealed class StubConfirmer(PendingRegistrationConfirmation answer) : IPendingRegistrationConfirmer
     {
         public List<string> Presented { get; } = [];
+        public List<string?> Passwords { get; } = [];
 
-        public Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, DateTime now)
+        public Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, string? password, DateTime now)
         {
             Presented.Add(tokenHash);
+            Passwords.Add(password);
             return Task.FromResult(answer);
         }
     }
@@ -380,6 +382,33 @@ public class VerifyEmailCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAPendingRegistrationToken_WhenHandlingVerifyEmail_ThenThePasswordIsPassedToTheConfirmer()
+    {
+        var fixture = await FixtureAsync();
+        var confirmer = Confirming(PendingRegistrationOutcome.Confirmed);
+
+        await fixture.Handler(pendingRegistrations: confirmer)
+            .HandleAsync(new VerifyEmailCommand { Token = "pending-token", Password = "sign-up-password" });
+
+        Assert.Equal("sign-up-password", Assert.Single(confirmer.Passwords));
+    }
+
+    [UnitFact]
+    public async Task GivenAVerificationTokenWithAPassword_WhenHandlingVerifyEmail_ThenItVerifiesAsBeforeAndTheConfirmerIsNotCalled()
+    {
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
+        var confirmer = Confirming(PendingRegistrationOutcome.Confirmed);
+
+        var output = await fixture.Handler(pendingRegistrations: confirmer)
+            .HandleAsync(new VerifyEmailCommand { Token = "live-token", Password = "ignored" });
+
+        Assert.True(output.Success);
+        Assert.True(fixture.Person.EmailVerified);
+        Assert.Empty(confirmer.Presented);
+    }
+
+    [UnitFact]
     public async Task GivenAVerificationToken_WhenHandlingVerifyEmail_ThenThePendingRegistrationsAreNotConsulted()
     {
         // Given a live verification token
@@ -398,6 +427,8 @@ public class VerifyEmailCommandHandlerTests
     [InlineData(PendingRegistrationOutcome.Expired, "TokenExpired")]
     [InlineData(PendingRegistrationOutcome.AlreadyClaimed, "TokenAlreadyUsed")]
     [InlineData(PendingRegistrationOutcome.Refused, "TokenInvalid")]
+    [InlineData(PendingRegistrationOutcome.PasswordRequired, "ConfirmationPasswordRequired")]
+    [InlineData(PendingRegistrationOutcome.PasswordIncorrect, "ConfirmationPasswordIncorrect")]
     public async Task GivenAPendingOutcome_WhenHandlingVerifyEmail_ThenItMapsToTheMatchingTokenError(
         PendingRegistrationOutcome outcome, string message)
     {
@@ -406,6 +437,8 @@ public class VerifyEmailCommandHandlerTests
         {
             "TokenExpired" => AuthMessages.TokenExpired,
             "TokenAlreadyUsed" => AuthMessages.TokenAlreadyUsed,
+            "ConfirmationPasswordRequired" => AuthMessages.ConfirmationPasswordRequired,
+            "ConfirmationPasswordIncorrect" => AuthMessages.ConfirmationPasswordIncorrect,
             _ => AuthMessages.TokenInvalid
         };
 

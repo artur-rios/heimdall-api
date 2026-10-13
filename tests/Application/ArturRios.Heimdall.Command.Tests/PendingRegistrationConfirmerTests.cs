@@ -17,6 +17,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class PendingRegistrationConfirmerTests
 {
     private const string Email = "new@test.local";
+    private const string Password = "Str0ng-Confirm-Pass!";
 
     // A person store whose create fails as the database does when the per-scope unique index refuses the
     // insert; everything else is the fake. The explicit implementation is what the confirmer's
@@ -87,10 +88,11 @@ public class PendingRegistrationConfirmerTests
             AsyncFakeRepository<PendingRegistration, long>? into = null)
         {
             var token = SingleUseToken.New();
+            var (hash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(Password);
             await (into ?? Pending).CreateAsync(new PendingRegistration
             {
                 ScopeId = scope.Id, Scope = scope, Name = "New Person", Email = email,
-                PasswordHash = [1, 2, 3], Salt = [4, 5, 6], TokenHash = SingleUseTokenHash.Of(token),
+                PasswordHash = hash, Salt = salt, TokenHash = SingleUseTokenHash.Of(token),
                 ExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
                 CreatedAt = DateTime.UtcNow
             });
@@ -102,8 +104,8 @@ public class PendingRegistrationConfirmerTests
     }
 
     private static Task<PendingRegistrationConfirmation> ConfirmAsync(
-        PendingRegistrationConfirmer confirmer, string token) =>
-        confirmer.ConfirmAsync(SingleUseTokenHash.Of(token), DateTime.UtcNow);
+        PendingRegistrationConfirmer confirmer, string token, string? password = Password) =>
+        confirmer.ConfirmAsync(SingleUseTokenHash.Of(token), password, DateTime.UtcNow);
 
     [UnitFact]
     public async Task GivenAValidPendingToken_WhenConfirming_ThenAVerifiedUserIsCreatedAndThePendingRowRemoved()
@@ -120,8 +122,7 @@ public class PendingRegistrationConfirmerTests
         Assert.True(person.EmailVerified);
         Assert.Equal("New Person", person.Name);
         Assert.Equal(Email, person.Email);
-        Assert.Equal(new byte[] { 1, 2, 3 }, person.PasswordHash);
-        Assert.Equal(new byte[] { 4, 5, 6 }, person.Salt);
+        Assert.True(await PasswordHashGate.Shared.TextMatchesAsync(Password, person.PasswordHash, person.Salt));
         Assert.Equal(scope.Id, person.ScopeId);
         Assert.Equal(scope.Id, person.ScopeMembership!.ScopeId);
         Assert.NotNull(person.BasisRecordedAt);
@@ -171,6 +172,55 @@ public class PendingRegistrationConfirmerTests
         Assert.Equal(PendingRegistrationOutcome.Expired, result.Outcome);
         Assert.Empty(fixture.People());
         Assert.Single(fixture.Waiting());
+    }
+
+    [UnitFact]
+    public async Task GivenNoPassword_WhenConfirming_ThenPasswordRequiredAndTheRowIsKept()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        var missing = await ConfirmAsync(fixture.Confirmer(), token, null);
+        var empty = await ConfirmAsync(fixture.Confirmer(), token, string.Empty);
+
+        Assert.Equal(PendingRegistrationOutcome.PasswordRequired, missing.Outcome);
+        Assert.Equal(PendingRegistrationOutcome.PasswordRequired, empty.Outcome);
+        Assert.Empty(fixture.People());
+        Assert.Single(fixture.Waiting());
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenConfirming_ThenPasswordIncorrectAndTheRowIsKept()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        var wrong = await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+
+        Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, wrong.Outcome);
+        Assert.Empty(fixture.People());
+        Assert.Single(fixture.Waiting());
+
+        // The refusal consumed nothing, so the registrant can still finish with the right password.
+        var right = await ConfirmAsync(fixture.Confirmer(), token);
+
+        Assert.Equal(PendingRegistrationOutcome.Confirmed, right.Outcome);
+        Assert.Single(fixture.People());
+        Assert.Empty(fixture.Waiting());
+    }
+
+    [UnitFact]
+    public async Task GivenAnExpiredTokenAndNoPassword_WhenConfirming_ThenExpired()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope, TimeSpan.FromMinutes(-1));
+
+        var result = await ConfirmAsync(fixture.Confirmer(), token, null);
+
+        Assert.Equal(PendingRegistrationOutcome.Expired, result.Outcome);
     }
 
     [UnitFact]
@@ -272,7 +322,7 @@ public class PendingRegistrationConfirmerTests
         var staleToken = Assert.Single(stale.Query().ToList()).TokenHash;
 
         var first = await ConfirmAsync(fixture.Confirmer(), token);
-        var second = await fixture.Confirmer(pendingReader: stale).ConfirmAsync(staleToken, DateTime.UtcNow);
+        var second = await fixture.Confirmer(pendingReader: stale).ConfirmAsync(staleToken, Password, DateTime.UtcNow);
 
         Assert.Equal(PendingRegistrationOutcome.Confirmed, first.Outcome);
         Assert.Equal(PendingRegistrationOutcome.AlreadyClaimed, second.Outcome);

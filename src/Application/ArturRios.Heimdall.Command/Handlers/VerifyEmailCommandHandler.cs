@@ -17,8 +17,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     creation, refuses it if it is unknown, expired, or spent (AF-14c/AF-14a/AF-14b), then marks the
 ///     person's address as verified and consumes the token (FR-EV-03). A token that matches none of
 ///     those may instead belong to a UC-47 pending registration, which
-///     <see cref="IPendingRegistrationConfirmer" /> turns into the verified <c>User</c> it described;
-///     only when it matches neither is it AF-14c.
+///     <see cref="IPendingRegistrationConfirmer" /> turns into the verified <c>User</c> it described
+///     when the command also carries the password chosen at sign-up (a missing or wrong one is refused
+///     without consuming the registration); only when it matches neither is it AF-14c. The password is
+///     read for pending registrations only and ignored for an ordinary verification token.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -74,7 +76,7 @@ public class VerifyEmailCommandHandler(
         // is what creates the account, already verified.
         if (token is null)
         {
-            var confirmation = await pendingRegistrations.ConfirmAsync(presented, now);
+            var confirmation = await pendingRegistrations.ConfirmAsync(presented, command.Password, now);
 
             return confirmation.Outcome switch
             {
@@ -83,6 +85,8 @@ public class VerifyEmailCommandHandler(
                     .WithMessage(AuthMessages.EmailVerifiedSuccessfully),
                 PendingRegistrationOutcome.Expired => output.WithError(AuthMessages.TokenExpired),
                 PendingRegistrationOutcome.AlreadyClaimed => output.WithError(AuthMessages.TokenAlreadyUsed),
+                PendingRegistrationOutcome.PasswordRequired => output.WithError(AuthMessages.ConfirmationPasswordRequired),
+                PendingRegistrationOutcome.PasswordIncorrect => output.WithError(AuthMessages.ConfirmationPasswordIncorrect),
                 PendingRegistrationOutcome.Failed => output.WithErrors(confirmation.Errors),
                 _ => output.WithError(AuthMessages.TokenInvalid)
             };

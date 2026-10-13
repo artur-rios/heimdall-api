@@ -7,7 +7,10 @@ using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Services;
 
-public enum PendingRegistrationOutcome { NotFound, Expired, AlreadyClaimed, Refused, Failed, Confirmed }
+public enum PendingRegistrationOutcome
+{
+    NotFound, Expired, AlreadyClaimed, Refused, Failed, Confirmed, PasswordRequired, PasswordIncorrect
+}
 
 public sealed record PendingRegistrationConfirmation(
     PendingRegistrationOutcome Outcome, IReadOnlyList<string> Errors)
@@ -17,11 +20,12 @@ public sealed record PendingRegistrationConfirmation(
 
 /// <summary>
 ///     UC-47 confirmation, reached through UC-14 when a presented token names a pending registration
-///     rather than a verification token: creates the verified <c>User</c> the registration described.
+///     rather than a verification token: creates the verified <c>User</c> the registration described,
+///     once the caller also presents the password chosen at sign-up (spec §4.3a).
 /// </summary>
 public interface IPendingRegistrationConfirmer
 {
-    Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, DateTime now);
+    Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, string? password, DateTime now);
 }
 
 /// <remarks>
@@ -30,6 +34,13 @@ public interface IPendingRegistrationConfirmer
 ///         token only one can create the person. The scope and the address are re-checked because either
 ///         may have changed since the registration was queued; the per-scope unique index is the last
 ///         guard against two instances confirming one address at once.
+///     </para>
+///     <para>
+///         The link alone does not confirm: the password chosen at sign-up must accompany it, so a
+///         squatter who registered someone else's address cannot be handed a working login by a scanner, a
+///         mistaken click or the wrong one of two identical emails. A missing or wrong password is refused
+///         after the expiry check and before the claim, so it consumes nothing and the registrant may try
+///         again.
 ///     </para>
 ///     <para>
 ///         Every failure is logged with a fixed message and no address (NFR-22), and none is thrown: the
@@ -45,7 +56,8 @@ public class PendingRegistrationConfirmer(
     ILogger<PendingRegistrationConfirmer> logger)
     : IPendingRegistrationConfirmer
 {
-    public async Task<PendingRegistrationConfirmation> ConfirmAsync(string tokenHash, DateTime now)
+    public async Task<PendingRegistrationConfirmation> ConfirmAsync(
+        string tokenHash, string? password, DateTime now)
     {
         var pending = await pendingReader.Query()
             .Include(x => x.Scope)
@@ -59,6 +71,18 @@ public class PendingRegistrationConfirmer(
         if (pending.ExpiresAt <= now)
         {
             return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Expired);
+        }
+
+        // Following the link is not enough: a scanner, a mistaken click or the wrong one of two identical
+        // emails would otherwise create an account whose password the registrant chose (spec §4.3a, 2).
+        if (string.IsNullOrEmpty(password))
+        {
+            return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordRequired);
+        }
+
+        if (!await PasswordHashGate.Shared.TextMatchesAsync(password, pending.PasswordHash, pending.Salt))
+        {
+            return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordIncorrect);
         }
 
         var claim = await pendingWriter.DeleteRangeAsync([pending.Id]);

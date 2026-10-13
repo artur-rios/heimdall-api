@@ -61,6 +61,10 @@ public static class AuthMessageMap
             [AuthMessages.RegistrationRequested] = HttpStatusCodes.Accepted,
             // AF-47a — closed, missing and deleted scopes alike; says nothing about any address.
             [AuthMessages.RegistrationUnavailable] = HttpStatusCodes.Forbidden,
+            // UC-47 confirmation — the link is followed without the sign-up password; nothing was consumed.
+            [AuthMessages.ConfirmationPasswordRequired] = HttpStatusCodes.UnprocessableEntity,
+            // UC-47 confirmation — the password is not the one chosen at sign-up; nothing was consumed.
+            [AuthMessages.ConfirmationPasswordIncorrect] = HttpStatusCodes.Unauthorized,
             // AF-47c — malformed request. Email and password messages share their text with the
             // AF-11f entries above; the name messages are UC-47's own.
             [AuthMessages.ScopeRequired] = HttpStatusCodes.BadRequest,

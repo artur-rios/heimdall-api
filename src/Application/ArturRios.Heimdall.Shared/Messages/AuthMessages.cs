@@ -69,6 +69,14 @@ public static class AuthMessages
     /// <summary>UC-47 AF-47a — the scope is missing, deleted, or closed to self-registration.</summary>
     public const string RegistrationUnavailable = "This instance is not accepting new accounts.";
 
+    /// <summary>UC-47 confirmation — a pending registration's link needs the password chosen at sign-up.</summary>
+    public const string ConfirmationPasswordRequired =
+        "Enter the password you chose when you signed up to finish creating your account.";
+
+    /// <summary>UC-47 confirmation — the password does not match the pending registration's.</summary>
+    public const string ConfirmationPasswordIncorrect =
+        "That password does not match the one chosen when signing up.";
+
     /// <summary>UC-47 — a register request must name the scope it registers into.</summary>
     public const string ScopeRequired = "Scope is required.";
 
