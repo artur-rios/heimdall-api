@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -40,8 +41,11 @@ public interface IPendingRegistrationConfirmer
 ///         squatter who registered someone else's address cannot be handed a working login by a scanner, a
 ///         mistaken click or the wrong one of two identical emails. A missing or wrong password is refused
 ///         after the expiry check and before the claim, so it consumes nothing and the registrant may try
-///         again. Each wrong password is counted against the row, and the tenth discards it: the answer
-///         for that attempt is still "incorrect", and the next attempt finds no row.
+///         again. Each guess is charged against the row before it is compared, by one conditional write
+///         (<see cref="IAtomicWrites" />, NFR-27), so parallel guesses cannot outrun the budget of ten:
+///         the tenth wrong password discards the row, the answer for that attempt is still "incorrect",
+///         and the next attempt finds no row. A row found with the budget already spent is discarded
+///         without a comparison.
 ///     </para>
 ///     <para>
 ///         Every failure is logged with a fixed message and no address (NFR-22), and this class
@@ -56,11 +60,12 @@ public class PendingRegistrationConfirmer(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<Person, long> personWriter,
+    IAtomicWrites atomicWrites,
     ILogger<PendingRegistrationConfirmer> logger)
     : IPendingRegistrationConfirmer
 {
     /// <summary>The login lockout threshold (<c>LoginCommandHandler</c>): the same guess budget.</summary>
-    private const int MaxFailedPasswordAttempts = 10;
+    private const int MaxConfirmationGuesses = 10;
 
     public async Task<PendingRegistrationConfirmation> ConfirmAsync(
         string tokenHash, string? password, DateTime now)
@@ -86,9 +91,27 @@ public class PendingRegistrationConfirmer(
             return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordRequired);
         }
 
+        // The guess is paid for before it is compared, by the write that checks the budget (NFR-27): of
+        // any number of simultaneous requests only as many reach the comparison as the budget allows. A
+        // spent budget discards the row without comparing, so a right password is no better than a wrong
+        // one once the guesses are gone.
+        if (!await atomicWrites.TryChargePendingRegistrationGuessAsync(pending, MaxConfirmationGuesses))
+        {
+            await DiscardAsync(pending);
+
+            return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Refused);
+        }
+
         if (!await PasswordHashGate.Shared.TextMatchesAsync(password, pending.PasswordHash, pending.Salt))
         {
-            await CountWrongPasswordAsync(pending);
+            // Asked of the database, not read off the instance: the instance holds the count as this
+            // request first read it plus its own charge, which under parallel guesses is behind the
+            // stored one. The count only rises, so whichever wrong guess finishes last sees ten and
+            // discards the row, however the ten interleaved.
+            if (await pendingReader.Query().AnyAsync(x => x.Id == pending.Id && x.FailedAttempts >= MaxConfirmationGuesses))
+            {
+                await DiscardAsync(pending);
+            }
 
             return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordIncorrect);
         }
@@ -154,22 +177,19 @@ public class PendingRegistrationConfirmer(
     }
 
     /// <summary>
-    ///     Counts a wrong password against the row and discards the row when the count reaches
-    ///     <see cref="MaxFailedPasswordAttempts" />, so a leaked link cannot be used to guess the sign-up
-    ///     password without limit. The answer for the attempt does not depend on whether this succeeds.
+    ///     Deletes a row whose guess budget is spent, so a leaked link cannot be used to guess the sign-up
+    ///     password without limit. The answer for the attempt does not depend on whether this succeeds:
+    ///     the budget is spent either way, so no further comparison is admitted. A delete that loses a
+    ///     race to another request's is the row already gone, not a fault.
     /// </summary>
-    private async Task CountWrongPasswordAsync(PendingRegistration pending)
+    private async Task DiscardAsync(PendingRegistration pending)
     {
-        pending.FailedAttempts++;
+        var removal = await pendingWriter.DeleteRangeAsync([pending.Id]);
 
-        var saved = pending.FailedAttempts >= MaxFailedPasswordAttempts
-            ? (await pendingWriter.DeleteRangeAsync([pending.Id])).Success
-            : (await pendingWriter.UpdateAsync(pending)).Success;
-
-        if (!saved)
+        if (!removal.Success && !removal.Errors.Contains(RelationalErrors.ConcurrencyMessage))
         {
-            // Fixed message, no address (NFR-22). The row stays as it was, so the registrant may still try.
-            logger.LogError("A wrong confirmation password could not be counted against a pending registration");
+            // Fixed message, no address (NFR-22). The row stays, but it admits no further comparison.
+            logger.LogError("A pending registration with no guesses left could not be discarded");
         }
     }
 

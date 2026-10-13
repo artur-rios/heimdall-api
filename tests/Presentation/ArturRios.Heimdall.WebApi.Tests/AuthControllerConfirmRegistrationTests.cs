@@ -93,6 +93,38 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         string token) =>
         Gateway.PostAsync<DataOutput<VerifyEmailCommandOutput?>>("/api/auth/verify-email", new { token });
 
+    /// <summary>
+    ///     Starts <paramref name="count" /> copies of a request at the same moment and waits for all of
+    ///     them. The burst runs under a hash gate with a patient wait, so a slow runner's queue of
+    ///     derivations is not refused with 503: that is the gate's policy, not what is tested here.
+    /// </summary>
+    private static async Task<T[]> InParallelAsync<T>(int count, Func<int, Task<T>> request)
+    {
+        var original = PasswordHashGate.Shared;
+        PasswordHashGate.Shared = new PasswordHashGate(original.MaxConcurrent, TimeSpan.FromMinutes(2));
+
+        try
+        {
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var requests = Enumerable.Range(0, count)
+                .Select(index => Task.Run(async () =>
+                {
+                    await start.Task;
+                    return await request(index);
+                }))
+                .ToArray();
+
+            start.SetResult();
+
+            return await Task.WhenAll(requests);
+        }
+        finally
+        {
+            PasswordHashGate.Shared = original;
+        }
+    }
+
     private async Task<int?> FailedAttemptsAsync(Scope scope, string email)
     {
         await using var context = db.CreateContext();
@@ -228,6 +260,63 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, tenth.Body!.Errors);
         Assert.Equal(HttpStatusCode.BadRequest, right.StatusCode);
         Assert.Contains(AuthMessages.TokenInvalid, right.Body!.Errors);
+        Assert.Equal(0, await PendingCountAsync(scope, email));
+        Assert.Empty(await PersonsAsync(scope, email));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTwelveWrongPasswordsAtOnce_WhenPostedForAPendingRegistration_ThenAtMostTenAreComparedAndTheRowIsGone()
+    {
+        // Given a fresh registration and a burst larger than its budget of ten (FR-SR-09). Counted after
+        // the comparison, the requests all read zero and all wrote one, and the row survived the burst.
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("burst");
+        var token = await SeedPendingAsync(scope, email);
+
+        // When twelve wrong passwords arrive together. The shared per-address limit (ten a minute) may
+        // refuse some with 429, so the guarantees asserted are the ones that hold either way.
+        var responses = await InParallelAsync(12, _ => VerifyAsync(token, "Wr0ng-Confirm-Pass!"));
+
+        // Then every answer is one of the three the contract allows, and no more than ten were compared
+        Assert.All(responses, response => Assert.Contains(
+            response.StatusCode,
+            new[] { HttpStatusCode.Unauthorized, HttpStatusCode.BadRequest, HttpStatusCode.TooManyRequests }));
+        Assert.All(responses.Where(response => response.StatusCode == HttpStatusCode.Unauthorized),
+            response => Assert.Contains(AuthMessages.ConfirmationPasswordIncorrect, response.Body!.Errors));
+        Assert.All(responses.Where(response => response.StatusCode == HttpStatusCode.BadRequest),
+            response => Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors));
+        Assert.InRange(responses.Count(response => response.StatusCode == HttpStatusCode.Unauthorized), 1, 10);
+
+        // And the row is gone once ten were charged; had fewer been admitted it holds exactly that many
+        var remaining = await FailedAttemptsAsync(scope, email);
+        var admitted = responses.Count(response => response.StatusCode != HttpStatusCode.TooManyRequests);
+
+        if (admitted >= 10)
+        {
+            Assert.Null(remaining);
+        }
+        else
+        {
+            Assert.True(remaining is null || remaining == admitted);
+        }
+
+        Assert.Empty(await PersonsAsync(scope, email));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheGuessBudgetIsSpent_WhenTheRightPasswordIsPosted_ThenItIsRefusedWithoutBeingCompared()
+    {
+        // Given a row whose ten guesses were all charged but which a lost delete left behind
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("spent");
+        var token = await SeedPendingAsync(scope, email, failedAttempts: 10);
+
+        // When the right password arrives
+        var response = await VerifyAsync(token);
+
+        // Then it is answered as an invalid token, the row is discarded and nobody is created
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(AuthMessages.TokenInvalid, response.Body!.Errors);
         Assert.Equal(0, await PendingCountAsync(scope, email));
         Assert.Empty(await PersonsAsync(scope, email));
     }

@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Output;
@@ -45,14 +46,14 @@ public class PendingRegistrationConfirmerTests
             Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError(RelationalErrors.ConcurrencyMessage));
     }
 
-    // A pending-registration store whose update fails, as it does when the database is unavailable or the
-    // row changed under the writer; reading, creating and deleting are the fake's.
-    private sealed class FailingUpdatePendingRepository
+    // A pending-registration store whose delete fails as it does when the database is unavailable;
+    // reading, creating and updating are the fake's.
+    private sealed class FailingDeletePendingRepository
         : AsyncFakeRepository<PendingRegistration, long>, IAsyncRepository<PendingRegistration, long>
     {
-        Task<DataOutput<PendingRegistration>> IAsyncRepository<PendingRegistration, long>.UpdateAsync(
-            PendingRegistration entity, CancellationToken cancellationToken) =>
-            Task.FromResult(DataOutput<PendingRegistration>.New.WithError("The update was refused."));
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<PendingRegistration, long>.DeleteRangeAsync(
+            IEnumerable<long> ids, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError("The delete was refused."));
     }
 
     private sealed class Fixture
@@ -62,13 +63,17 @@ public class PendingRegistrationConfirmerTests
         public AsyncFakeRepository<GoogleUser, long> GoogleUsers { get; } = new();
         public AsyncFakeRepository<PendingRegistration, long> Pending { get; } = new();
 
+        // One per fixture, so the charges a test counts are its own.
+        public InMemoryAtomicWrites AtomicWrites { get; } = new();
+
         public PendingRegistrationConfirmer Confirmer(
             IAsyncRepository<Person, long>? personWriter = null,
             IAsyncReadOnlyRepository<PendingRegistration, long>? pendingReader = null,
             IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
             ILogger<PendingRegistrationConfirmer>? logger = null) =>
             new(pendingReader ?? Pending, pendingWriter ?? Pending, Persons, GoogleUsers,
-                personWriter ?? Persons, logger ?? NullLogger<PendingRegistrationConfirmer>.Instance);
+                personWriter ?? Persons, AtomicWrites,
+                logger ?? NullLogger<PendingRegistrationConfirmer>.Instance);
 
         public async Task<Scope> ScopeAsync(bool open = true, bool isDeleted = false)
         {
@@ -83,7 +88,8 @@ public class PendingRegistrationConfirmerTests
 
         public async Task<string> PendingAsync(
             Scope scope, TimeSpan? lifetime = null, string email = Email,
-            AsyncFakeRepository<PendingRegistration, long>? into = null, string? token = null)
+            AsyncFakeRepository<PendingRegistration, long>? into = null, string? token = null,
+            int failedAttempts = 0)
         {
             token ??= SingleUseToken.New();
             var (hash, salt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(Password);
@@ -92,7 +98,7 @@ public class PendingRegistrationConfirmerTests
                 ScopeId = scope.Id, Scope = scope, Name = "New Person", Email = email,
                 PasswordHash = hash, Salt = salt, TokenHash = SingleUseTokenHash.Of(token),
                 ExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow, FailedAttempts = failedAttempts
             });
             return token;
         }
@@ -413,12 +419,83 @@ public class PendingRegistrationConfirmerTests
     }
 
     [UnitFact]
-    public async Task GivenTheCounterCannotBeSaved_WhenAWrongPasswordIsGiven_ThenTheAnswerIsUnchangedAndOneErrorIsLogged()
+    public async Task GivenACorrectPassword_WhenConfirming_ThenOneGuessIsChargedBeforeItIsCompared()
+    {
+        // The budget is spent by the same write that admits the comparison (NFR-27), so even the right
+        // password costs one guess; the charge cannot wait for the outcome of the comparison.
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope);
+
+        var result = await ConfirmAsync(fixture.Confirmer(), token);
+
+        Assert.Equal(PendingRegistrationOutcome.Confirmed, result.Outcome);
+        Assert.Equal(1, fixture.AtomicWrites.PendingGuessCharges);
+    }
+
+    [UnitFact]
+    public async Task GivenNoPasswordOrAnExpiredToken_WhenConfirming_ThenNoGuessIsCharged()
     {
         var fixture = new Fixture();
         var scope = await fixture.ScopeAsync();
-        var pending = new FailingUpdatePendingRepository();
-        var token = await fixture.PendingAsync(scope, into: pending);
+        var token = await fixture.PendingAsync(scope);
+        var expired = await fixture.PendingAsync(scope, TimeSpan.FromMinutes(-1), email: "late@test.local");
+
+        await ConfirmAsync(fixture.Confirmer(), token, null);
+        await ConfirmAsync(fixture.Confirmer(), expired);
+
+        Assert.Equal(0, fixture.AtomicWrites.PendingGuessCharges);
+        Assert.All(fixture.Waiting(), pending => Assert.Equal(0, pending.FailedAttempts));
+    }
+
+    [UnitFact]
+    public async Task GivenTheGuessBudgetIsSpent_WhenConfirming_ThenRefusedTheRowIsDeletedAndNoPasswordIsCompared()
+    {
+        // Ten guesses are already charged. A wrong and a right password are answered alike, and neither
+        // creates a person: the comparison never ran, so the right one cannot be told from the wrong one.
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var token = await fixture.PendingAsync(scope, failedAttempts: 10);
+
+        var wrong = await ConfirmAsync(fixture.Confirmer(), token, "Wr0ng-Confirm-Pass!");
+
+        Assert.Equal(PendingRegistrationOutcome.Refused, wrong.Outcome);
+        Assert.Empty(fixture.Waiting());
+
+        var secondToken = await fixture.PendingAsync(scope, failedAttempts: 10);
+
+        var right = await ConfirmAsync(fixture.Confirmer(), secondToken);
+
+        Assert.Equal(PendingRegistrationOutcome.Refused, right.Outcome);
+        Assert.Empty(fixture.Waiting());
+        Assert.Empty(fixture.People());
+        Assert.Equal(0, fixture.AtomicWrites.PendingGuessCharges);
+    }
+
+    [UnitFact]
+    public async Task GivenTheBudgetIsSpentAndTheDeleteLosesARace_WhenConfirming_ThenRefusedAndNothingLoggedAsAnError()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new ConcurrentlyClaimedPendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending, failedAttempts: 10);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token);
+
+        Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
+        Assert.DoesNotContain(LogLevel.Error, logger.Entries.Select(entry => entry.Level));
+        Assert.Empty(fixture.People());
+    }
+
+    [UnitFact]
+    public async Task GivenTheTenthWrongPasswordAndTheDeleteLosesARace_WhenConfirming_ThenIncorrectAndNothingLoggedAsAnError()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new ConcurrentlyClaimedPendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending, failedAttempts: 9);
         var logger = new RecordingLogger<PendingRegistrationConfirmer>();
 
         var result = await ConfirmAsync(
@@ -426,10 +503,25 @@ public class PendingRegistrationConfirmerTests
             "Wr0ng-Confirm-Pass!");
 
         Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, result.Outcome);
-        Assert.Empty(result.Errors);
+        Assert.DoesNotContain(LogLevel.Error, logger.Entries.Select(entry => entry.Level));
+    }
+
+    [UnitFact]
+    public async Task GivenTheRowCannotBeDeletedAfterTheTenthWrongPassword_WhenConfirming_ThenIncorrectAndOneErrorIsLogged()
+    {
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new FailingDeletePendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending, failedAttempts: 9);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token,
+            "Wr0ng-Confirm-Pass!");
+
+        Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, result.Outcome);
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Error, entry.Level);
         Assert.DoesNotContain(Email, entry.Text, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(fixture.People());
     }
 }
