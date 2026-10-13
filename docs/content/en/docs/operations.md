@@ -524,6 +524,38 @@ Each page finishes the job by posting its token back — the verification page t
 `POST /api/auth/verify-email`, the reset page to `POST /api/auth/password-reset` with the new
 password. If no link is configured the email carries the bare token instead, which still works.
 
+#### Pointing a scope at a client application's screens
+
+The two variables above are one link for the whole deployment. A client system such as Fortuna has
+its own `/verify-email` and `/password-reset` screens, and its users' emails must lead there. A scope
+can carry its own link bases, which replace the global ones for **that scope's `User`s** only:
+
+```http
+PUT /api/scopes/{id}/email-links
+Authorization: Bearer <System Admin or owning Scope Admin token>
+
+{
+  "emailVerificationUrl": "https://app.example.com/verify-email",
+  "passwordResetUrl": "https://app.example.com/password-reset"
+}
+```
+
+- Each must be an absolute `http` or `https` URL of at most 2048 characters; anything else is a `400`.
+  The token is appended as a `token` query parameter, as for the global links.
+- The body is the whole state of the two links: one left out, `null` or empty is **cleared**, and the
+  global link applies to that email again. They have their own endpoint, not fields of
+  `PUT /api/scopes/{id}`, because that update replaces every field and would erase them whenever a
+  client that does not know them sent it.
+- The verification link is used for the sign-up confirmation (UC-47) and for address verification
+  (UC-06, UC-15); the password-reset link for password recovery (UC-12). A Google User receives
+  neither.
+- Administrators have no scope, so their emails always use the global links.
+- The client's screens finish the job as the global ones do: the verification screen posts the token
+  to `POST /api/auth/verify-email` (with the chosen `password` for a sign-up confirmation), the reset
+  screen to `POST /api/auth/password-reset`.
+- Both are returned on every scope response (`GET /api/scopes`, `GET /api/scopes/{id}` and the write
+  endpoints).
+
 **Password recovery is answered before it is worked.** `POST /api/auth/password-recovery` only
 validates the request and puts it on an in-process queue; a background worker then looks the address
 up, issues the token and sends the email. So the response takes the same time whether or not the

@@ -119,3 +119,7 @@ Both emails carry a link built from `HEIMDALL_EMAIL_VERIFICATION_URL` /
 `HEIMDALL_PASSWORD_RESET_URL`, with the token appended as a `token` query parameter. If no link is
 configured the email carries the bare token instead, which still works — the link is only a
 convenience wrapper around it.
+
+A scope may override both links for its own `User`s (`PUT /api/scopes/{id}/email-links`), so a
+client system's users are sent to that system's screens; administrators, and a scope with no link
+set, use the global ones.
