@@ -79,7 +79,7 @@ public class RegisterCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAnOpenScope_WhenRegistering_ThenThePlaintextPasswordIsNotQueued()
+    public async Task GivenAnOpenScope_WhenRegistering_ThenOnlyAHashThatVerifiesAgainstThePasswordIsQueued()
     {
         var (scopes, scope) = await ScopeStoreAsync();
         var queue = new RecordingQueue();
@@ -87,8 +87,8 @@ public class RegisterCommandHandlerTests
         await Handler(scopes, queue).HandleAsync(Command(scope.PublicId));
 
         var queued = Assert.Single(queue.Queued);
-        Assert.DoesNotContain(Password, queued.ToString());
         Assert.NotEqual(Encoding.UTF8.GetBytes(Password), queued.PasswordHash);
+        Assert.True(await PasswordHashGate.Shared.TextMatchesAsync(Password, queued.PasswordHash, queued.Salt));
     }
 
     [UnitFact]
