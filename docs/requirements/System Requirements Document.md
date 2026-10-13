@@ -215,6 +215,17 @@ graph LR
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out, invalidating/discarding their authentication token | High |
 | FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
 
+### 3.8a Self-Registration
+
+| ID | Requirement | Priority |
+| ---- | ------------- | ---------- |
+| FR-SR-01 | A scope shall have a boolean `SelfRegistrationEnabled` flag, default `false`, controlling whether anonymous callers may register password `User`s in it | High |
+| FR-SR-02 | Only System Admins and existing owners of a scope shall be able to enable or disable `SelfRegistrationEnabled` for that scope | High |
+| FR-SR-03 | The system shall let an anonymous caller register a password `User` in an open scope, applying the same name, email and password rules as administrator-created Users | High |
+| FR-SR-04 | A self-registered address shall be unique in the scope among live persons and Google Users, compared case-insensitively | High |
+| FR-SR-05 | When the address is already held, the system shall create nothing and shall email the holder that a registration was attempted, unless their processing is restricted | High |
+| FR-SR-06 | The system shall answer a registration for a free and a taken address identically, in content and in time | High |
+
 ### 3.9 Scope Permission Management
 
 | ID | Requirement | Priority |
@@ -289,6 +300,7 @@ erDiagram
         string Description "Optional description"
         bool IsDeleted "Logical deletion flag"
         bool GoogleSignInEnabled "Whether Google sign-up/sign-in is enabled for this scope"
+        bool SelfRegistrationEnabled "Whether anonymous callers may register password Users in this scope"
         datetime CreatedAt "Creation timestamp"
         datetime UpdatedAt "Last update timestamp"
     }
@@ -551,6 +563,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | GET | `/api/scopes/{id}/owners` | List the owners of a scope | SystemAdmin, existing Owner |
 | DELETE | `/api/scopes/{id}/owners/{personId}` | Remove an owner from the scope (at least one must remain) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
+| PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
 
 ### 5.2 Person Endpoints
 
@@ -583,6 +596,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/password-recovery` | Request password reset email | No |
 | POST | `/api/auth/password-reset` | Reset password with token | No |
 | POST | `/api/auth/verify-email` | Verify email with token | No |
+| POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-06) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
 | POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
@@ -626,7 +640,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
-| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
+| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification, UC-47 self-registration) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
 | NFR-05 | Performance | Every endpoint except those that verify a password shall complete within **100 ms at the median and 250 ms at the tail** — the slowest of a single caller's samples (§6.1), the 99th percentile under load (§6.3) — and shall hold that while **128 callers are in flight at once**, answering all of them without a failed or 5xx response. Both conditions are measured on the reference configuration. The write path meets the load condition with the least margin and is sensitive to how many rows the table already holds (§6.3.2). Password-verifying endpoints are governed by NFR-18 |
 | NFR-06 | Availability | The API shall hold no state in a process or on a local filesystem that a second instance would need: authentication is validated from token claims with no server-side session, and the Data Protection key ring that TOTP secrets are encrypted with (NFR-16) is kept in the database. The per-IP rate limiter's window is the one deliberate exception, and is per instance by design (§6.2) |
 | NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
@@ -896,6 +910,12 @@ block-beta
     block:row19:5
         S1["Verify 2FA Challenge"] S2["N/A"] S3["N/A"] S4["N/A"] S5["✅ (holds challenge token)"]
     end
+    block:row20:5
+        T1["Enable/Disable Self-Registration"] T2["✅"] T3["✅ (owned scope)"] T4["❌"] T5["❌"]
+    end
+    block:row21:5
+        U1["Register a Password User"] U2["✅"] U3["✅"] U4["✅"] U5["✅"]
+    end
 ```
 
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
@@ -924,6 +944,8 @@ block-beta
 | Delete Application (logical) | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Register a Password User | ✅ | ✅ | ✅ | ✅ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
 | Google Sign-Out | N/A | N/A | ✅ (self, as a Google User) | ❌ |
 | Read Google User | ✅ | ✅ (owned scope) | ✅ (self) | ❌ |
@@ -1029,6 +1051,7 @@ Notes on cascading behavior:
 | Password Recovery | FR-PR-01 through FR-PR-04 |
 | Email Verification | FR-EV-01 through FR-EV-05 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
+| Self-Registration | FR-SR-01 through FR-SR-06 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |

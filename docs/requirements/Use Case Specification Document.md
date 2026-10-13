@@ -1897,6 +1897,58 @@ sequenceDiagram
 
 ---
 
+### UC-47: Register a Password User
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-47 |
+| **Name** | Register a Password User |
+| **Actors** | Anonymous |
+| **Description** | Create a password `User` in a scope without an administrator, where the scope's owners have opened self-registration |
+| **Preconditions** | The scope exists, is not logically deleted, and has `SelfRegistrationEnabled = true` (FR-SR-01, FR-SR-02) |
+| **Postconditions** | Either a new unverified `User` exists in the scope and a verification email was sent, or the holder of the address was told of the attempt. The caller cannot tell which |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor U as Anonymous
+    participant API as Heimdall API
+    participant Q as Registration queue
+    participant DB as Database
+    participant M as Mail
+
+    U->>API: POST /api/auth/register { name, email, password, scopeId }
+    API->>API: Validate the request
+    API->>DB: Confirm the scope is open
+    API->>API: Hash the password
+    API->>Q: Queue { scopeId, name, email, hash, salt }
+    API-->>U: 202 Accepted
+    Q->>DB: Re-check the scope, look the address up in the scope
+    Q->>DB: Create the User (address free)
+    Q->>M: Send the verification email (UC-14 link)
+```
+
+1. Caller sends a name, an email address, a password and the scope's `PublicId`.
+2. The system validates the request with the rules UC-06 path a applies (FR-SR-03).
+3. The system confirms the scope exists, is live and is open to self-registration.
+4. The system hashes the password, queues the request and answers `202 Accepted` with a fixed message.
+5. Afterwards, the system re-checks the scope and confirms the address is held by no live person and no Google User of the scope (FR-SR-04).
+6. The system creates the `User`, unverified, records its legal basis (NFR-23) and sends the verification email (FR-EV-01/02).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-47a | The scope is missing, logically deleted, or has self-registration off | `403 Forbidden` with one message for all three. Nothing is queued |
+| AF-47b | The address is already held in the scope by a live person or a Google User | `202 Accepted`, identical to the main flow. Nothing is created; the holder is emailed that someone tried to register their address, unless their processing is restricted (NFR-24) (FR-SR-05) |
+| AF-47c | The request is malformed | `400 Bad Request` with the field's message. Nothing is queued |
+| AF-47d | The scope is closed or deleted while the request waits | Nothing is created or sent |
+
+> **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
+
+---
+
 ## UC-41: Export Own Personal Data
 
 | | |
@@ -2113,6 +2165,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-06, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 
 ---
 
