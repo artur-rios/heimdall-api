@@ -28,7 +28,7 @@ public static class PersonMessageMap
             [PersonMessages.PasswordRequired] = HttpStatusCodes.BadRequest,
             [PersonMessages.PasswordTooShort] = HttpStatusCodes.BadRequest,
             [PersonMessages.InvalidRole] = HttpStatusCodes.BadRequest,
-            // UC-07 main flow — person(s) retrieved.
+            // UC-07 main flow — person(s) retrieved, by any of reads a to e.
             [PersonMessages.PersonRetrievedSuccessfully] = HttpStatusCodes.Ok,
             [PersonMessages.PersonsRetrievedSuccessfully] = HttpStatusCodes.Ok,
             // AF-07a — person not found.
@@ -71,7 +71,7 @@ public static class PersonMessageMap
             [PersonMessages.PersonNotScopeUser] = HttpStatusCodes.BadRequest,
             // AF-23d — the person is already a ScopeAdmin.
             [PersonMessages.AlreadyScopeAdmin] = HttpStatusCodes.Conflict,
-            // UC-07 reads b/c (NFR-10) — invalid pagination or an over-length name/email filter.
+            // UC-07 reads b to e (NFR-10) — invalid pagination or an over-length name/email filter.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
             [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
