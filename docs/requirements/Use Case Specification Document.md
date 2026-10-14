@@ -2151,6 +2151,95 @@ sequenceDiagram
 
 ---
 
+### UC-49: List Pending Registrations
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-49 |
+| **Name** | List Pending Registrations |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | List the self-registrations (UC-47) of a scope that are awaiting confirmation, via `GET /api/scopes/{id}/pending-registrations` |
+| **Preconditions** | Actor is authenticated; the scope exists and is not logically deleted |
+| **Postconditions** | None; the use case reads |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: GET /api/scopes/{id}/pending-registrations?pageNumber&pageSize
+    API->>DB: Find the live scope
+    API->>DB: Confirm the actor may manage it
+    API->>DB: Read the scope's PENDING_REGISTRATION rows, newest first
+    API-->>A: 200 OK — a page of registrations
+```
+
+1. A System Admin or a Scope Admin requests a scope's pending registrations, paging the result (FR-SR-11).
+2. The system confirms the scope exists and is not logically deleted.
+3. The system confirms the actor may manage the scope: a System Admin always may; a Scope Admin must own it.
+4. The system returns the scope's pending registrations, newest first, each with its identifier, name, address, when it was stored and expires, how many wrong confirmation passwords it may still take (never below zero), and whether it has already expired. Whether the scope is still open to self-registration does not matter. The password hash, salt and token hash are never returned.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-49a | The scope is not found or is logically deleted | `404 Not Found` — "Scope not found." |
+| AF-49b | The actor is neither a System Admin nor an owner of the scope | `403 Forbidden` — "You are not an owner of the target scope."; a `User` is refused `403` by the role gate, an anonymous caller `401` |
+| AF-49c | Nothing is pending | `200 OK` with an empty page |
+
+> **On anti-enumeration.** FR-SR-06's guarantee is about the anonymous `POST /api/auth/register`,
+> which still answers free and taken addresses alike. This listing is authenticated and limited to
+> the scope's owners, who would see the same name and address in their user list once the
+> registration is confirmed, and a taken address never produces a pending row — so it reveals
+> nothing about existing accounts.
+
+---
+
+### UC-50: Discard a Pending Registration
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-50 |
+| **Name** | Discard a Pending Registration |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Remove one of a scope's pending self-registrations, so its link stops working, via `DELETE /api/scopes/{id}/pending-registrations/{registrationId}` |
+| **Preconditions** | Actor is authenticated; the scope exists and is not logically deleted; the registration belongs to it |
+| **Postconditions** | The registration no longer exists; following its link answers as for any unknown token; the discard is audited with the registration as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: DELETE /api/scopes/{id}/pending-registrations/{registrationId}
+    API->>DB: Find the live scope, confirm the actor may manage it
+    API->>DB: Find the registration within that scope
+    API->>DB: Delete it
+    API->>DB: Write the audit entry (target: the registration)
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks to discard a scope's pending registration, by the identifier UC-49 returned (FR-SR-12).
+2. The system confirms the scope exists, is not logically deleted, and that the actor may manage it.
+3. The system finds the registration among that scope's.
+4. The system deletes it, records the discard in the audit trail with the registration as target (NFR-09), and answers with its identifier. Following its link now behaves as for any unknown token (UC-14 AF-14c); the registrant may sign up again.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-50a | The scope is not found or is logically deleted | `404 Not Found` — "Scope not found." |
+| AF-50b | The actor is neither a System Admin nor an owner of the scope | `403 Forbidden` — "You are not an owner of the target scope."; a `User` `403`, an anonymous caller `401` |
+| AF-50c | No registration with that identifier belongs to the scope — it never existed, belongs to another scope, or was confirmed or purged a moment earlier | `404 Not Found` — "Pending registration not found." Nothing is removed |
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2196,6 +2285,8 @@ sequenceDiagram
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-49: List Pending Registrations | FR-SR-11 |
+| UC-50: Discard a Pending Registration | FR-SR-12, NFR-09 |
 
 ---
 

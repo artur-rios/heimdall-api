@@ -1,0 +1,17 @@
+meta {
+  name: Discard a pending registration
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{host}}/api/scopes/{{scopeId}}/pending-registrations/{{pendingRegistrationId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-50. System Admin, or the Scope Admin who owns the scope.
+
+  Removes the registration, so its link answers "Invalid token"; the registrant may sign up again. A registration of another scope answers 404, exactly like a missing one.
+}

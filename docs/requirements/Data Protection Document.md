@@ -153,6 +153,11 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
 | `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
 
+> **This table is why NFR-23's columns are here.** They were added after the table existed, and
+> `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
+> working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
+> deliberately: a scope is an organisation, not a person, so neither is personal data.
+
 ### `PENDING_REGISTRATION`
 
 | Column | Purpose |
@@ -165,14 +170,9 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `ExpiresAt`, `CreatedAt` | Bounding how long the link works, and when the row is purged (Data Retention Schedule) |
 | `FailedAttempts` | Bounding guesses at the sign-up password through a leaked link (FR-SR-09, NFR-27) |
 
-A scope's owners and System Admins can read the name, address, timestamps and remaining guesses
-through the API (UC-49) — the same name and address they would see in the scope's user list once the
-registration is confirmed. The hash, salt and token hash are never returned.
-
-> **This table is why NFR-23's columns are here.** They were added after the table existed, and
-> `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
-> working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
-> deliberately: a scope is an organisation, not a person, so neither is personal data.
+A scope's owners and System Admins can read the id, name, address, creation and expiry times, the
+remaining guesses and whether it has expired through the API (UC-49) — the same name and address they
+would see in the scope's user list once the registration is confirmed. The hash, salt and token hash are never returned.
 
 ### Two decisions this review settled
 
@@ -202,7 +202,7 @@ weighed against the same test.
 | Recipient | What reaches them | Why |
 | --- | --- | --- |
 | **Mailgun** (Sinch) | Recipient email address, message body | Delivering verification, password reset and second-factor emails |
-| **Tenant scope organisations** | The identities within their own scope | They are the controller for those; see §3 |
+| **Tenant scope organisations** | The identities within their own scope, and the self-registrations awaiting confirmation in it (UC-49: name, address, timestamps, guesses left) | They are the controller for those; see §3 |
 | **Hosting provider** | Everything, at rest | Running the database and the API |
 
 The current sub-processor list is maintained in the
