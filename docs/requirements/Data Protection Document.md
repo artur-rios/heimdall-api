@@ -153,7 +153,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | Column | Purpose |
 | --- | --- |
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
-| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept |
+| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept. A person target whose row was hard-deleted (UC-10) no longer resolves to anyone, so it is not personal data; the trail keeps it and the trigger will not clear it |
 | `Action`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution and any person target are cleared |
 
 **Readable through the API by System Admins (UC-48).** `GET /api/audit-log` shows each entry as
