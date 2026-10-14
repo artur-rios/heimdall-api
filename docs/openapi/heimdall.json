@@ -2926,6 +2926,81 @@
         ]
       }
     },
+    "/api/persons/system-admins": {
+      "get": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Lists the system's `SystemAdmin` persons (UC-07 read e, FR-PE-13), projected to\nidentifier, name, and email: who else holds full access to the deployment. System Admin\nonly.",
+        "description": "A Scope Admin is deliberately excluded: a System Admin's address is not tenant-facing,\nwhich is also why `GET /api/persons/scope-admins` offers System Admins only to a\nSystem Admin caller.\n\n**Requires role:** System Admin.",
+        "operationId": "Person_ListSystemAdmins",
+        "parameters": [
+          {
+            "name": "Name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Email",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes": {
       "post": {
         "tags": [

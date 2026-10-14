@@ -96,6 +96,7 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
 | `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list who may own a scope (Scope Admins, plus System Admins for a System Admin caller) for an owner picker; optionally excludes a scope's current owners |
+| `GET /persons/system-admins` | System Admin | UC-07 read e — list the System Admins: who else holds full access |
 | `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
