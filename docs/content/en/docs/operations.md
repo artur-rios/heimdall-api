@@ -692,6 +692,11 @@ validates them offline must be given both keys for the same period.
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
 
+A present but unusable value of `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` is
+logged as a warning at start-up, naming the variable, the rejected value and the default applied; an
+absent one is just the default and logs nothing.
+
 Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew,
 so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep
 instance clocks synchronised (NTP).

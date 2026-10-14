@@ -47,6 +47,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+  `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
+  at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
+  falls back to its default (`3600`) when zero, negative or not finite, where it was used as written.
 - A request turned away by the `AuthAnonymous` rate limit (`429`) now carries a `Retry-After` header, in whole
   seconds, and the usual error envelope with the message "Too many requests. Try again later.", instead of an
   empty body.

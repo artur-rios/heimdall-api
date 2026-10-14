@@ -414,7 +414,10 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
         // UC-51/UC-52 (FR-EV-07, FR-PR-06): the per-person cooldown on administrator-initiated email,
         // read once at start-up like the token lifetimes it is compared against.
-        Builder.Services.AddSingleton(AdminEmailOptions.FromEnvironment());
+        var adminEmail = AdminEmailOptions.FromEnvironment();
+        WarnOnFallback(AdminEmailOptions.CooldownVariable, adminEmail.RejectedCooldown,
+            AdminEmailOptions.DefaultCooldownSeconds);
+        Builder.Services.AddSingleton(adminEmail);
         // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
         Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
         // UC-52: no validator either — the route's person id is the whole of the input.
@@ -675,6 +678,8 @@ public class Startup : WebApiStartup
         // before anything is served (TH-35).
         var applicationTokens = ApplicationTokenOptions.FromEnvironment();
         Builder.Services.AddSingleton(applicationTokens);
+        WarnOnFallback(ApplicationTokenOptions.ExpirationVariable, applicationTokens.RejectedExpiration,
+            ApplicationTokenOptions.DefaultLifetime.TotalSeconds);
         Builder.Services.AddScoped<JwtApplicationTokenService>();
         Builder.Services.AddScoped<IApplicationTokenIssuer>(provider =>
             provider.GetRequiredService<JwtApplicationTokenService>());
@@ -794,6 +799,23 @@ public class Startup : WebApiStartup
         Array.Clear(bytes, 8, 8);
 
         return $"{new IPAddress(bytes)}/64";
+    }
+
+    /// <summary>
+    ///     Warns that a numeric setting was present but unusable and its default applied instead. Absent
+    ///     is not a fallback, so <paramref name="rejectedValue" /> is <c>null</c> for it and nothing is
+    ///     logged. None of these values is a secret, so the rejected text is logged as written.
+    /// </summary>
+    private static void WarnOnFallback(string variable, string? rejectedValue, double defaultSeconds)
+    {
+        if (rejectedValue is null)
+        {
+            return;
+        }
+
+        Log.Warning(
+            "Ignoring unusable {Variable}={Value}; using the default of {Default} seconds",
+            variable, rejectedValue, defaultSeconds);
     }
 
     private void AddAuthEndpointRateLimiting()
@@ -981,11 +1003,13 @@ public class Startup : WebApiStartup
                 "validate tokens without a signing secret.");
         }
 
-        var expiration = double.TryParse(
+        var lifetime = TokenLifetimeSetting.Parse(
             Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
-            out var configuredExpiration)
-            ? configuredExpiration
-            : DefaultTokenExpirationInSeconds;
+            DefaultTokenExpirationInSeconds);
+
+        WarnOnFallback(TokenExpirationEnvironmentVariable, lifetime.RejectedValue, DefaultTokenExpirationInSeconds);
+
+        var expiration = lifetime.Seconds;
 
         var previousSecret = Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable);
 
