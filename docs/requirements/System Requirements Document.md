@@ -131,6 +131,7 @@ graph LR
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
+| FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
 
 ### 3.3 Role Assignment
 
@@ -265,6 +266,13 @@ graph LR
 | FR-2F-15 | The system shall allow an authenticated person to read their own two-factor authentication state: whether it is active, which methods are configured, and how many issued recovery codes remain unused. A person with no configuration shall be answered successfully with every flag false and a zero count, since never having enabled it is an ordinary state rather than a fault. A Google User shall be refused, as under FR-2F-01. No secret is returned — never the TOTP secret, never a recovery code | High |
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
+
+### 3.11 Audit Trail
+
+| ID | Requirement | Priority |
+| ---- | ------------ | ---------- |
+| FR-AT-01 | The system shall allow a `SystemAdmin` to list the audit trail, paginated and newest first (ties broken by write order), optionally filtered by an inclusive range of when entries were recorded (UTC), by the actor's identifier, by the exact action name, by the affected entity's identifier, and by whether the operation succeeded. Filters combine with AND. No other role may read the trail, and reading it is not itself audited | High |
+| FR-AT-02 | The audit-trail listing shall show each entry as stored — its identifier, when it was recorded, actor and role, action, target, outcome and canonical failure reason. An actor that is absent or has been cleared (NFR-21) shall be reported as null and never reconstructed from other data | High |
 
 ---
 
@@ -594,6 +602,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/scopes/{scopeId}/persons` | Create a `User` person within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/scopes/{scopeId}/persons` | List Users within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/persons/{id}` | Get person by ID | Authenticated |
+| GET | `/api/persons/scope-admins` | List the persons who may own a scope (FR-PE-12) | SystemAdmin, ScopeAdmin |
+| GET | `/api/persons/system-admins` | List the `SystemAdmin` persons (FR-PE-13) | SystemAdmin |
 | PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
@@ -647,6 +657,12 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{scopeId}/permissions/{id}` | Update a scope permission | SystemAdmin / ScopeAdmin (owner of the scope) |
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}` | Logically delete a scope permission | SystemAdmin / ScopeAdmin (owner of the scope) |
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}/hard` | Hard delete a scope permission | SystemAdmin |
+
+### 5.7 Audit Trail Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+| -------- | ---------- | ------------- | --------------- |
+| GET | `/api/audit-log` | List the audit trail, newest first, filtered by `from`/`to`, `actorId`, `action`, `targetId`, `succeeded` (FR-AT-01, FR-AT-02) | SystemAdmin |
 
 ---
 
@@ -988,6 +1004,7 @@ block-beta
 | Restrict Processing of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | Lift a Restriction | ✅ (self, or anyone) | ✅ (self only) | ✅ (self only) | ❌ |
 | List Outstanding Erasure Requests | ✅ | ❌ | ❌ | ❌ |
+| List the Audit Trail | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -1068,7 +1085,7 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-12 |
+| Person CRUD | FR-PE-01 through FR-PE-13 |
 | Application CRUD | FR-AP-01 through FR-AP-09 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
@@ -1079,5 +1096,6 @@ Notes on cascading behavior:
 | Self-Registration | FR-SR-01 through FR-SR-10 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
+| Audit Trail | FR-AT-01 through FR-AT-02 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
 | Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

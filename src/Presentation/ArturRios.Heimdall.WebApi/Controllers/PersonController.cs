@@ -264,4 +264,27 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Lists the system's <c>SystemAdmin</c> persons (UC-07 read e, FR-PE-13), projected to
+    ///     identifier, name, and email: who else holds full access to the deployment. System Admin
+    ///     only.
+    /// </summary>
+    /// <remarks>
+    ///     A Scope Admin is deliberately excluded: a System Admin's address is not tenant-facing,
+    ///     which is also why <c>GET /api/persons/scope-admins</c> offers System Admins only to a
+    ///     System Admin caller.
+    /// </remarks>
+    [HttpGet("persons/system-admins")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PersonSummaryOutput>>> ListSystemAdmins(
+        [FromQuery] ListSystemAdminsQuery query)
+    {
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
 }

@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("heimdall")
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -144,6 +144,9 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_audit_log_public_id");
+
+                    b.HasIndex("TargetId")
+                        .HasDatabaseName("ix_audit_log_target_id");
 
                     b.ToTable("audit_log", "heimdall");
                 });

@@ -91,6 +91,12 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/persons/scope-admins?pageNumber=1&pageSize=10&excludeOwnersOfScopeId={{scopeId}}
 Authorization: Bearer {{token}}
 
+### List System Admins (UC-07 read e, FR-PE-13) — System Admin only.
+# Live, unrestricted System Admins only, projected to id, name, and email. name and email filter
+# by a case-insensitive substring.
+GET {{host}}/api/persons/system-admins?pageNumber=1&pageSize=10
+Authorization: Bearer {{token}}
+
 ### Update a person (UC-08) — any authenticated caller, subject to the handler's rules.
 # roleId may only be changed by a System Admin; omit it entirely for a self-service name/email edit.
 PUT {{host}}/api/persons/{{personId}}

@@ -321,6 +321,9 @@ public class Startup : WebApiStartup
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListSystemAdminsQuery, PersonSummaryOutput>,
+                ListSystemAdminsQueryHandler>();
+        Builder.Services
             .AddScoped<IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>,
                 GetApplicationByIdQueryHandler>();
         Builder.Services
@@ -346,6 +349,12 @@ public class Startup : WebApiStartup
                 DetectSecuritySignalsQueryHandler>();
         Builder.Services
             .AddScoped<IValidator<ListErasureRequestsQuery>, ListErasureRequestsQueryValidator>();
+
+        // UC-48 (FR-AT-01/02): the audit trail, System Admins only.
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListAuditLogQuery, AuditLogEntryOutput>,
+                ListAuditLogQueryHandler>();
+        Builder.Services.AddScoped<IValidator<ListAuditLogQuery>, ListAuditLogQueryValidator>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>,
                 GetTwoFactorStatusQueryHandler>();
@@ -355,6 +364,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListSystemAdminsQuery>, ListSystemAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListScopeApplicationsQuery>, ListScopeApplicationsQueryValidator>();
         Builder.Services

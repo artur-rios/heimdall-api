@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/persons/system-admins` lists the deployment's System Admins (UC-07 read e, FR-PE-13), so one can
+  see who else holds full access. System Admin only; a Scope Admin or User is answered `403`. Paginated, with
+  optional case-insensitive `name` and `email` filters, ordered by name, and projected to `id`, `name` and
+  `email`, as `GET /api/persons/scope-admins` is. Logically deleted and restricted (NFR-24) administrators are
+  not listed.
+- UC-48: `GET /api/audit-log` lists the audit trail for System Admins, newest first, filterable by when an entry
+  was recorded (`from`/`to`, UTC, inclusive), `actorId`, `action` (the command's type name, matched exactly),
+  `targetId` and `succeeded`. An actor the retention pass has cleared reads as `null` and is never reconstructed.
+  A new migration, `AddAuditLogTargetIndex`, indexes `audit_log.target_id` so filtering by target does not scan
+  the table.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
