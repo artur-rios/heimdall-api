@@ -16,6 +16,8 @@ public static class ApplicationCredentialMessageMap
             [ApplicationCredentialMessages.NotAuthorizedToManageCredentials] = HttpStatusCodes.Forbidden,
             // AF-53c — the expiry is not in the future.
             [ApplicationCredentialMessages.ExpiryNotInFuture] = HttpStatusCodes.BadRequest,
+            // AF-53c — a body that is not JSON, or an expiry that is not a date-time.
+            [ApplicationCredentialMessages.RequestMalformed] = HttpStatusCodes.BadRequest,
             // AF-53d — two live credentials already.
             [ApplicationCredentialMessages.CredentialLimitReached] = HttpStatusCodes.Conflict,
             // UC-54 main flow and its empty case — credentials listed.

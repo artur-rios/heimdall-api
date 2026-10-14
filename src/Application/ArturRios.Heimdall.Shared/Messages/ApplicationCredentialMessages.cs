@@ -16,6 +16,13 @@ public static class ApplicationCredentialMessages
     /// <summary>AF-53c — the requested expiry is not in the future.</summary>
     public const string ExpiryNotInFuture = "The expiry must be in the future.";
 
+    /// <summary>
+    ///     AF-53c — the body is not JSON, or its <c>expiresAt</c> is not a date-time, so no expiry
+    ///     could be read. Refused rather than issued without one: a credential meant to expire must
+    ///     never silently become one that does not.
+    /// </summary>
+    public const string RequestMalformed = "The request body is malformed.";
+
     /// <summary>AF-53b, AF-54b, AF-55b — the actor may not manage this application.</summary>
     public const string NotAuthorizedToManageCredentials =
         "You are not allowed to manage this application's credentials.";

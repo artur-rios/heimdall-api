@@ -37,6 +37,16 @@ public class ApplicationCredentialController(CommandMediator commandMediator, Qu
         Guid scopeId, Guid id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] IssueApplicationCredentialCommand? command)
     {
+        // AF-53c — a body that is not JSON, or an expiresAt that is not a date-time, binds no command
+        // (the controller is not [ApiController], so nothing answers for it). Only a genuinely empty
+        // body means "no expiry"; an unreadable one is refused, never issued as never-expiring.
+        if (!ModelState.IsValid)
+        {
+            return DataOutput<IssueApplicationCredentialCommandOutput?>.New
+                .WithError(ApplicationCredentialMessages.RequestMalformed)
+                .ToActionResult(statusMap: ApplicationCredentialMessageMap.StatusCodes);
+        }
+
         command ??= new IssueApplicationCredentialCommand();
         command.ScopeId = scopeId;
         command.Id = id;

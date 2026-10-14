@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -18,8 +19,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/scopes/{scopeId}/applications/{id}/credentials (UC-53): the main flow
 // for a System Admin and for the owning Scope Admin, an optional or offset-less expiry, AF-53a (no live
-// application in the scope), AF-53b (a Scope Admin who does not own it), AF-53c (an expiry in the past),
-// AF-53d (two live already, including under concurrency), the audit entry, and the framework flows
+// application in the scope), AF-53b (a Scope Admin who does not own it), AF-53c (an expiry in the past,
+// one that is not a date-time, or a body that is not JSON), AF-53d (two live already, including under concurrency), the audit entry, and the framework flows
 // (403 for a User, 401 unauthenticated).
 [Collection(nameof(FunctionalCollection))]
 public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -112,6 +113,53 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(ApplicationCredentialMessages.ExpiryNotInFuture, response.Body!.Errors.Single());
+        Assert.Empty(await CredentialsOfAsync(db, application));
+    }
+
+    /// <summary>Posts <paramref name="json" /> as it is, and reads the answer's status and errors.</summary>
+    private async Task<(HttpStatusCode Status, string[] Errors)> PostRawAsync(
+        Scope scope, Domain.Entities.Application application, string json)
+    {
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        using var response = await Gateway.Client.PostAsync(Route(scope.PublicId, application.PublicId), content);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var errors = document.RootElement.GetProperty("errors").EnumerateArray()
+            .Select(error => error.GetString()!)
+            .ToArray();
+        return (response.StatusCode, errors);
+    }
+
+    [FunctionalTheory]
+    [InlineData("""{"expiresAt":"garbage"}""")]
+    [InlineData("""{"expiresAt":1893456000}""")]
+    public async Task GivenAnExpiryThatIsNotADateTime_WhenIssuing_ThenBadRequestAndNothingStored(string json)
+    {
+        // Given — an expiry that cannot be read must not become "never expires"
+        var (scope, _, application) = await SeedOwnedApplicationAsync(db);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var (status, errors) = await PostRawAsync(scope, application, json);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Equal([ApplicationCredentialMessages.RequestMalformed], errors);
+        Assert.Empty(await CredentialsOfAsync(db, application));
+    }
+
+    [FunctionalFact]
+    public async Task GivenABodyThatIsNotJson_WhenIssuing_ThenBadRequestAndNothingStored()
+    {
+        // Given
+        var (scope, _, application) = await SeedOwnedApplicationAsync(db);
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var (status, errors) = await PostRawAsync(scope, application, "{\"expiresAt\":");
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Equal([ApplicationCredentialMessages.RequestMalformed], errors);
         Assert.Empty(await CredentialsOfAsync(db, application));
     }
 
