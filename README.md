@@ -156,6 +156,8 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-40: Regenerate Recovery Codes | ✅ | [#72](https://github.com/artur-rios/heimdall-api/issues/72) |
 | UC-46: Resend Second-Factor Email Code | ✅ | [#133](https://github.com/artur-rios/heimdall-api/issues/133) |
 | UC-47: Register a Password User | ✅ | [#169](https://github.com/artur-rios/heimdall-api/issues/169) |
+| UC-49: List Pending Registrations | ✅ | [#175](https://github.com/artur-rios/heimdall-api/issues/175) |
+| UC-50: Discard a Pending Registration | ✅ | [#175](https://github.com/artur-rios/heimdall-api/issues/175) |
 
 ### Application Management
 

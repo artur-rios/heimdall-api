@@ -72,9 +72,6 @@ public class PendingRegistrationConfirmer(
     ILogger<PendingRegistrationConfirmer> logger)
     : IPendingRegistrationConfirmer
 {
-    /// <summary>The login lockout threshold (<c>LoginCommandHandler</c>): the same guess budget.</summary>
-    private const int MaxConfirmationGuesses = 10;
-
     public async Task<PendingRegistrationConfirmation> ConfirmAsync(
         string tokenHash, string? password, DateTime now)
     {
@@ -103,7 +100,7 @@ public class PendingRegistrationConfirmer(
         // any number of simultaneous requests only as many reach the comparison as the budget allows. A
         // spent budget discards the row without comparing, so a right password is no better than a wrong
         // one once the guesses are gone.
-        if (!await atomicWrites.TryChargePendingRegistrationGuessAsync(pending, MaxConfirmationGuesses))
+        if (!await atomicWrites.TryChargePendingRegistrationGuessAsync(pending, PendingRegistration.MaxConfirmationGuesses))
         {
             await DiscardAsync(pending);
 
@@ -116,7 +113,7 @@ public class PendingRegistrationConfirmer(
             // request first read it plus its own charge, which under parallel guesses is behind the
             // stored one. The count only rises, so whichever wrong guess finishes last sees ten and
             // discards the row, however the ten interleaved.
-            if (await pendingReader.Query().AnyAsync(x => x.Id == pending.Id && x.FailedAttempts >= MaxConfirmationGuesses))
+            if (await pendingReader.Query().AnyAsync(x => x.Id == pending.Id && x.FailedAttempts >= PendingRegistration.MaxConfirmationGuesses))
             {
                 await DiscardAsync(pending);
             }

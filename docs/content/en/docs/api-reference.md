@@ -82,6 +82,8 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications) |
 | `DELETE /{id}/hard` | System Admin | UC-05 — hard delete (also purges permissions and join rows) |
 | `PUT /{id}/google-signin` | System Admin + Scope Admin | UC-24 — turn Google Sign-In on or off |
+| `GET /{id}/pending-registrations` | System Admin + Scope Admin | UC-49 — the self-registrations awaiting confirmation, newest first: name, address, expiry, guesses left; never the hash, salt or token |
+| `DELETE /{id}/pending-registrations/{registrationId}` | System Admin + Scope Admin | UC-50 — discard one; its link then answers "Invalid token" and the registrant may sign up again |
 
 ## Persons — `/api`
 

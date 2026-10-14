@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `429`. The cooldown is best-effort. **Operators:** the new optional `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`
   sets it (default `300`, `0` turns it off; unusable values fall back to `300`); `docker-compose.yml` passes it
   through.
+- UC-49 and UC-50: a scope's owners and System Admins can list the self-registrations awaiting confirmation
+  (`GET /api/scopes/{id}/pending-registrations` — name, address, expiry, guesses left, never the password hash
+  or token) and discard one (`DELETE /api/scopes/{id}/pending-registrations/{registrationId}`), after which its
+  link answers "Invalid token". Discards are audited. A new migration, `AddPendingRegistrationPublicId`, gives
+  each pending registration a random public id, backfilling existing rows.
 - `GET /api/persons/system-admins` lists the deployment's System Admins (UC-07 read e, FR-PE-13), so one can
   see who else holds full access. System Admin only; a Scope Admin or User is answered `403`. Paginated, with
   optional case-insensitive `name` and `email` filters, ordered by name, and projected to `id`, `name` and

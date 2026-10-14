@@ -11,6 +11,20 @@ namespace ArturRios.Heimdall.Domain.Entities;
 /// </summary>
 public class PendingRegistration : Entity<long>
 {
+    /// <summary>
+    ///     The confirmation-guess budget (FR-SR-09): the login lockout threshold, so a leaked link admits
+    ///     no more guesses at the sign-up password than the account itself would. Spent by
+    ///     <c>PendingRegistrationConfirmer</c>; what is left is reported by the UC-49 listing.
+    /// </summary>
+    public const int MaxConfirmationGuesses = 10;
+
+    /// <summary>
+    ///     The administrative reference (UC-49, UC-50): how a scope's owners name this registration to
+    ///     discard it. Random, so it discloses nothing about the registrant or how many registrations
+    ///     exist. The registrant never sees it; their reference is still the mailed token.
+    /// </summary>
+    public Guid PublicId { get; set; } = Guid.NewGuid();
+
     /// <summary>Foreign key to the scope registered into (internal Id).</summary>
     public long ScopeId { get; set; }
 
