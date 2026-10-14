@@ -4,7 +4,7 @@ using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.Shared.Tests;
 
-// Unit tests for ApplicationTokenMessageMap (UC-56): each message the exchange can return resolves to
+// Unit tests for ApplicationTokenMessageMap (UC-56, UC-57): each message the exchange can return resolves to
 // the status its flow names, so none ships answering the resolver's 400 default by accident.
 public class ApplicationTokenMessageMapTests
 {
@@ -21,5 +21,15 @@ public class ApplicationTokenMessageMapTests
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.SecretRequired]);
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.SecretTooLong]);
         Assert.Equal(HttpStatusCodes.Unauthorized, map[ApplicationTokenMessages.CredentialsNotAccepted]);
+    }
+
+    [UnitFact]
+    public void GivenTheRecheckMessages_WhenResolved_ThenTheyCarryTheirFlowsStatuses()
+    {
+        // Given / When / Then — UC-57 main flow 200; AF-57a 401
+        var map = ApplicationTokenMessageMap.StatusCodes;
+
+        Assert.Equal(HttpStatusCodes.Ok, map[ApplicationTokenMessages.TokenAccepted]);
+        Assert.Equal(HttpStatusCodes.Unauthorized, map[ApplicationTokenMessages.TokenNotAccepted]);
     }
 }

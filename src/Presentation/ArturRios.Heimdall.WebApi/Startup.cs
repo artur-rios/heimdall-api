@@ -340,6 +340,9 @@ public class Startup : WebApiStartup
             .AddScoped<IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>,
                 GetApplicationByIdQueryHandler>();
         Builder.Services
+            .AddScoped<IQueryHandlerAsync<CheckApplicationTokenQuery, ApplicationTokenCheckOutput>,
+                CheckApplicationTokenQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>,
                 ListScopeApplicationsQueryHandler>();
         Builder.Services

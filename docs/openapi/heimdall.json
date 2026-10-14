@@ -719,6 +719,39 @@
         "security": [ ]
       }
     },
+    "/api/applications/self": {
+      "get": {
+        "tags": [
+          "ApplicationToken"
+        ],
+        "summary": "Checks an application token live (UC-57), presented as `Authorization: Bearer …`.\nAnswers the application, its scope and the credential when the token is valid and all\nthree are still live; otherwise one 401. Anonymous to the middleware, which accepts only\nperson tokens: the handler validates the token itself.",
+        "description": "**Anonymous** — no bearer token required.",
+        "operationId": "ApplicationToken_Self",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
     "/api/audit-log": {
       "get": {
         "tags": [
@@ -4768,6 +4801,63 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTokenCheckOutput": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "credentialId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTokenCheckOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationTokenCheckOutput"
           }
         },
         "additionalProperties": false

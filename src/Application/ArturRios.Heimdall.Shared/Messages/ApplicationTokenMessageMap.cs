@@ -18,6 +18,11 @@ public static class ApplicationTokenMessageMap
             [ApplicationTokenMessages.SecretTooLong] = HttpStatusCodes.BadRequest,
             // AF-56b — any refusal: unknown, revoked or expired secret, another application's, a
             // deleted application or scope, or the wrong scope. One status, one message.
-            [ApplicationTokenMessages.CredentialsNotAccepted] = HttpStatusCodes.Unauthorized
+            [ApplicationTokenMessages.CredentialsNotAccepted] = HttpStatusCodes.Unauthorized,
+            // UC-57 main flow — the token stands.
+            [ApplicationTokenMessages.TokenAccepted] = HttpStatusCodes.Ok,
+            // AF-57a — any refusal: no or malformed token, wrong signature, issuer, audience or kind,
+            // expired, or an application, scope or credential no longer live. One status, one message.
+            [ApplicationTokenMessages.TokenNotAccepted] = HttpStatusCodes.Unauthorized
         });
 }
