@@ -96,4 +96,10 @@ public static class ScopeMessages
 
     /// <summary>AF-03g: the lawful basis value names no member of the enum.</summary>
     public const string LegalBasisUnknown = "The lawful basis is not one this system recognises.";
+
+    /// <summary>
+    ///     UC-49 main flow and AF-49c: the scope's pending self-registrations were listed — possibly
+    ///     none, which is an empty page rather than a refusal.
+    /// </summary>
+    public const string PendingRegistrationsRetrieved = "Pending registrations retrieved.";
 }

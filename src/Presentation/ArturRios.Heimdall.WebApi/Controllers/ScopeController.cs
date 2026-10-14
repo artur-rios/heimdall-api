@@ -135,6 +135,27 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Lists the scope's self-registrations awaiting confirmation (UC-49, FR-SR-11), newest first:
+    ///     each one's id, name, address, when it was stored and expires, how many wrong passwords it
+    ///     may still take, and whether it has already expired. Never the password hash, salt or token.
+    ///     The attribute keeps a <c>User</c> out; whether the acting Scope Admin owns the scope
+    ///     (AF-49b) and whether the scope is live (AF-49a) are the handler's.
+    /// </summary>
+    [HttpGet("{id:guid}/pending-registrations")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PendingRegistrationOutput>>> ListPendingRegistrations(
+        Guid id, [FromQuery] ListPendingRegistrationsQuery query)
+    {
+        query.ScopeId = id;
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>(query);
+
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists
     ///     every scope; a Scope Admin only the scopes they own, with the total counting those alone.
     /// </summary>

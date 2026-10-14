@@ -48,6 +48,10 @@ public static class ScopeMessageMap
             [ScopeMessages.NotScopeOwner] = HttpStatusCodes.Forbidden,
             // UC-24 (NFR-10) — the request omitted the value to set.
             [ScopeMessages.EnabledRequired] = HttpStatusCodes.BadRequest,
+            // UC-49 main flow and AF-49c — pending registrations listed, an empty page included.
+            // AF-49a reuses ScopeNotFound (404), AF-49b NotScopeOwner (403), and the page bounds the
+            // NFR-10 entries below (400).
+            [ScopeMessages.PendingRegistrationsRetrieved] = HttpStatusCodes.Ok,
             // UC-02 read b (NFR-10) — invalid pagination or an over-length name filter.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,

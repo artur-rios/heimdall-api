@@ -321,6 +321,9 @@ public class Startup : WebApiStartup
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>,
+                ListPendingRegistrationsQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListSystemAdminsQuery, PersonSummaryOutput>,
                 ListSystemAdminsQueryHandler>();
         Builder.Services
@@ -358,6 +361,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
+        Builder.Services
+            .AddScoped<IValidator<ListPendingRegistrationsQuery>, ListPendingRegistrationsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListSystemAdminsQuery>, ListSystemAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListScopeApplicationsQuery>, ListScopeApplicationsQueryValidator>();
