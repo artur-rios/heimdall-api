@@ -61,6 +61,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps
   starting. The Web API's `Environments/.env` holds only a placeholder; any other deployment must set it.
   Application tokens are validated with zero clock skew, so keep instance clocks synchronised (NTP).
+- The audit retention pass (NFR-21) now also clears an entry's `TargetId` when it names a person or Google User,
+  on the same two grounds as the actor: the entry is past the attribution period, or that identity has been
+  anonymised (#184). A self-service entry, or an administrator's action on a person, therefore stops naming that
+  person once its attribution is cleared. Targets naming a scope, an application, a credential or a permission are
+  kept. A new migration, `AllowClearingAuditTarget`, replaces the append-only `UPDATE` trigger with
+  `audit_log_attribution_clear_only()`, which permits exactly this one more change — a person target set to
+  `NULL` once due, never to another value — and also makes the row `id` immutable. `GET /api/audit-log` reads a
+  cleared target as `targetId: null`, and filtering by `targetId` no longer finds it. **Operators:** no setting
+  changes. Existing entries already past the period are cleaned over the next scheduled runs, a batch
+  (`HEIMDALL_RETENTION_PURGE_BATCH_SIZE`) at a time, and the run's log line now reports both counts.
 
 ### Fixed
 

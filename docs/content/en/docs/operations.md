@@ -317,14 +317,18 @@ record. Hard deletion (UC-10) remains available for callers that want the row go
 
 **The audit trail stops naming people on its own schedule.** A third pass clears the actor
 attribution from entries past their attribution period, and immediately from entries naming an
-identity that has been anonymised. The entry itself is never removed and never altered — what
-happened, when and how often all survive.
+identity that has been anonymised. On the same two grounds it clears an entry's target when that
+target is a person or Google User — a self-service command's own account, or the person an
+administrator acted on. Targets naming anything else are kept. The entry itself is never removed and
+what it says happened is never altered — what happened, when and how often all survive.
 
 The rule is enforced by a database trigger rather than by the pass, because this is the one table
-whose immutability is a security control. It permits the attribution to be set to null and nothing
-else: no deletion, no truncation, no change to any other column, and no reassignment to a different
-identity. A thirty-day floor stops somebody clearing their own attribution for something they did
-this week; it is an anti-tamper backstop, not the retention period, which is eighteen months.
+whose immutability is a security control. It permits the attribution, and a target naming a person,
+to be set to null and nothing else: no deletion, no truncation, no change to any other column, and no
+reassignment to a different value. A thirty-day floor stops somebody clearing their own attribution,
+or the person they acted on, for something they did this week; it is an anti-tamper backstop, not
+the retention period, which is eighteen months. A deployment upgrading to `AllowClearingAuditTarget`
+has its older person targets cleared over the next runs, one batch at a time.
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |

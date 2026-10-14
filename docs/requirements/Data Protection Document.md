@@ -153,11 +153,12 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | Column | Purpose |
 | --- | --- |
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
-| `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
+| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept. A person target whose row was hard-deleted (UC-10) no longer resolves to anyone, so it is not personal data; the trail keeps it and the trigger will not clear it |
+| `Action`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution and any person target are cleared |
 
 **Readable through the API by System Admins (UC-48).** `GET /api/audit-log` shows each entry as
-stored: an attribution already cleared reads as `null` and is never reconstructed, whether by a join
-to `PERSON` or from neighbouring entries. The endpoint widens who can read the trail — from whoever
+stored: an attribution or person target already cleared reads as `null` and is never reconstructed,
+whether by a join to `PERSON` or from neighbouring entries. The endpoint widens who can read the trail — from whoever
 can query the database to System Admins — without widening what it says about anyone. No column was
 added, so this table is unchanged.
 

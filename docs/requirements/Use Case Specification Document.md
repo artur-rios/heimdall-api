@@ -2191,7 +2191,10 @@ sequenceDiagram
 > **On cleared actors.** The listing shows each entry as stored and never reconstructs a cleared
 > actor — no join to `PERSON`, no inference from other entries (NFR-09, NFR-21, Data Retention
 > Schedule §7.1). An entry whose attribution period is over, or whose actor has been anonymised,
-> reads `actorId: null`, and filtering by `actorId` cannot find it.
+> reads `actorId: null`, and filtering by `actorId` cannot find it. The same holds for targets: an
+> entry whose target was a person or Google User has that target cleared on the same two grounds and
+> reads `targetId: null`, so filtering by `targetId` cannot find it either. Targets naming anything
+> else — a scope, an application, a credential, a permission — are kept and stay filterable.
 >
 > **On Scope Admins.** `AUDIT_LOG` has no scope column, and an old entry's target may since have been
 > deleted or anonymised, so the trail cannot be divided by scope reliably. The listing is therefore

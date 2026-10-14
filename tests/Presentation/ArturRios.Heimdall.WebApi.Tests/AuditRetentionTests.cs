@@ -1,12 +1,18 @@
+using System.Net;
+using ArturRios.Configuration.Enums;
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.WebApi.Tests.Support;
+using ArturRios.Output;
+using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
+using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -26,9 +32,14 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         The pass is also the mechanism by which an erasure reaches the trail at all, so a test
 ///         seeds an erased identity and asserts the trail stops naming them.
 ///     </para>
+///     <para>
+///         The same holds for person targets (#184): each part of an entry is cleared only when it
+///         is due, so EF writes the other part back unchanged, and the trigger must accept that.
+///         The last test reads the result where a System Admin would, through UC-48's listing.
+///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]
-public class AuditRetentionTests(PostgresFixture fixture)
+public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(EnvironmentType.Local)
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
 
@@ -42,6 +53,9 @@ public class AuditRetentionTests(PostgresFixture fixture)
             new EfRepository<GoogleUser, long>(context),
             new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = 500 });
     }
+
+    private Task<HttpOutput<PaginatedOutput<AuditLogEntryOutput>?>> ListAsync(string filters) =>
+        Gateway.GetAsync<PaginatedOutput<AuditLogEntryOutput>>($"/api/audit-log?pageNumber=1&pageSize=20&{filters}");
 
     private async Task<Person> SeedPersonAsync(AppDbContext context, DateTime? anonymisedAt)
     {
@@ -63,14 +77,17 @@ public class AuditRetentionTests(PostgresFixture fixture)
         return person;
     }
 
-    private static async Task<AuditLog> SeedEntryAsync(AppDbContext context, Guid actorId, DateTime createdAt)
+    private static async Task<AuditLog> SeedEntryAsync(
+        AppDbContext context, Guid? actorId, DateTime createdAt, Guid? targetId = null,
+        string action = "AuditRetentionTestCommand")
     {
         var entry = new AuditLog
         {
             PublicId = Guid.NewGuid(),
             ActorPersonId = actorId,
-            ActorRole = (int)Roles.User,
-            Action = "AuditRetentionTestCommand",
+            ActorRole = actorId is null ? null : (int)Roles.User,
+            Action = action,
+            TargetId = targetId,
             Succeeded = true,
             CreatedAt = createdAt
         };
@@ -158,5 +175,85 @@ public class AuditRetentionTests(PostgresFixture fixture)
         await using var verification = fixture.CreateContext();
 
         Assert.Null((await verification.AuditLogs.SingleAsync(x => x.Id == entry.Id)).ActorPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenEntriesDueInOnePartOnly_WhenThePassRuns_ThenTheDatabaseAcceptsEachWrite()
+    {
+        // Given an old entry about a scope, whose actor is due and whose target names no person,
+        // and a recent entry by a live actor about an erased person, whose target is due and whose
+        // actor is not
+        await using var context = fixture.CreateContext();
+
+        var actor = await SeedPersonAsync(context, anonymisedAt: null);
+        var erased = await SeedPersonAsync(context, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var scopeId = Guid.NewGuid();
+        var aboutScope = await SeedEntryAsync(
+            context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)), scopeId);
+        var aboutErased = await SeedEntryAsync(
+            context, actor.PublicId, DateTime.UtcNow.AddDays(-1), erased.PublicId);
+
+        // When
+        var output = await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then each UPDATE, with its other part written back unchanged, is one the trigger permits
+        Assert.True(output.Success);
+        Assert.True(output.Data!.EntriesPseudonymised >= 1);
+        Assert.True(output.Data.TargetsCleared >= 1);
+
+        await using var verification = fixture.CreateContext();
+
+        var scopeEntry = await verification.AuditLogs.SingleAsync(x => x.Id == aboutScope.Id);
+        Assert.Null(scopeEntry.ActorPersonId);
+        Assert.Equal(scopeId, scopeEntry.TargetId);
+
+        var erasedEntry = await verification.AuditLogs.SingleAsync(x => x.Id == aboutErased.Id);
+        Assert.Equal(actor.PublicId, erasedEntry.ActorPersonId);
+        Assert.Null(erasedEntry.TargetId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnOldEntryAboutAPerson_WhenThePassRuns_ThenTheListingShowsNoTarget()
+    {
+        // Given an old self-service entry, whose actor was cleared earlier and whose target is the
+        // same, still identifiable, person — found by its target before the pass
+        var action = $"AuditRetentionTarget{Guid.NewGuid():N}";
+        Guid entryId;
+        Guid targetId;
+
+        await using (var context = fixture.CreateContext())
+        {
+            var person = await SeedPersonAsync(context, anonymisedAt: null);
+            var entry = await SeedEntryAsync(
+                context, actorId: null, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)),
+                person.PublicId, action);
+
+            entryId = entry.PublicId;
+            targetId = person.PublicId;
+        }
+
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        var before = await ListAsync($"targetId={targetId}");
+        Assert.Equal(entryId, Assert.Single(before.Body!.Data!).Id);
+
+        // When
+        await using (var context = fixture.CreateContext())
+        {
+            var output = await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
+            Assert.True(output.Success);
+        }
+
+        var response = await ListAsync($"action={action}");
+
+        // Then the entry is still listed, with what happened, and names nobody
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var listed = Assert.Single(response.Body!.Data!);
+        Assert.Equal(entryId, listed.Id);
+        Assert.Equal(action, listed.Action);
+        Assert.Null(listed.TargetId);
+        Assert.Null(listed.ActorId);
+
+        // And the target filter that found it a moment ago no longer can
+        Assert.Empty((await ListAsync($"targetId={targetId}")).Body!.Data!);
     }
 }

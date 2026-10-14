@@ -235,60 +235,83 @@ comfortable answer. Eighteen covers a full compliance cycle plus that lag. Beyon
 accountability value of *who acted* falls away sharply while the value of *what happened, when, and
 how often* does not — and that half survives pseudonymisation intact.
 
-**Then pseudonymised, and kept indefinitely.** Once `ActorPersonId` no longer resolves to a natural
-person the entry is not personal data (Recital 26, LGPD Art. 12), so storage limitation stops
-applying to it and the trail keeps its shape, ordering and correlation for as long as it is useful.
+**Then pseudonymised, and kept indefinitely.** Once neither `ActorPersonId` nor a person `TargetId`
+resolves to a natural person the entry is not personal data (Recital 26, LGPD Art. 12), so storage
+limitation stops applying to it and the trail keeps its shape, ordering and correlation for as long
+as it is useful.
 
-**No row is updated or deleted to achieve that.** The pseudonym derives from a per-subject key, and
-it is the *key* that is destroyed — crypto-shredding. The append-only triggers installed by
-`20260817113453_MakeAuditLogAppendOnly` stay exactly as they are, and Threat Model TH-18's tests
-keep passing unchanged. A design that dropped or worked around those triggers would trade a closed
-threat for a compliance fix, which is not a trade this document is asking for.
+**Pseudonymised in place, and never deleted.** The pass sets the attribution, and any person target,
+to `NULL` on the entry itself; nothing else in the row changes. It can do only that because the
+trigger described in §7.1 permits only that, and only once due. `DELETE` and `TRUNCATE` stay refused
+outright, so no entry can be removed however old it is, and Threat Model TH-18 stays closed: the
+append-only guarantee was narrowed by exactly these two clearings, not dropped or worked around.
 
-**Erasure does not wait for the clock.** When a data subject is erased under §4, their entries are
-pseudonymised immediately — the same mechanism, triggered by the erasure rather than by eighteen
-months elapsing.
+**A person target goes with the attribution.** An entry names a person through its `TargetId` as
+well as through its actor: for a command somebody runs on their own account the target is their own
+`PublicId`, and for an administrator's action on a person it is that person. Such an entry stays
+personal data about the target for as long as their `PERSON` or `GOOGLE_USER` row is identifiable,
+whoever acted. So a target naming a person or Google User is cleared on the same two grounds as the
+actor — the attribution period has elapsed, or that identity has been anonymised (#184). A target
+naming anything else (a scope, an application, a credential, a permission) is not personal data and
+is kept as recorded.
 
-One consequence worth stating plainly rather than discovering later: an **active** person's entries
-are pseudonymised at eighteen months while they are still an active person. That caps how far back a
-current account can be investigated. It is the intended trade-off of storage limitation, and it is
+**Erasure does not wait for the clock.** When a data subject is erased under §4, the entries they
+produced lose their attribution, and the entries about them lose their target, on the pass's next
+run — the same mechanism, triggered by the erasure rather than by eighteen months elapsing.
+
+One consequence worth stating plainly rather than discovering later: an **active** person's entries,
+and the entries about them, are pseudonymised at eighteen months while they are still an active
+person. That caps how far back a current account can be investigated. It is the intended trade-off of storage limitation, and it is
 recorded here so it is a decision rather than a surprise.
 
 ### 7.1 How the pseudonymisation runs, and why the database enforces it
 
 `AuditRetentionService` dispatches `PseudonymiseAuditActorsCommand` on the same interval as the
 other passes, selecting entries whose attribution period has elapsed **or** whose actor has been
-anonymised. It shares the other passes' properties: bounded per run, needing no coordination between
+anonymised, and on the same two grounds, entries whose target names a person or Google User — past
+the period, or that identity anonymised. Each entry has only what is due cleared: a recent entry by
+a live administrator about an erased person loses its target and keeps its actor. The run reports
+both counts. It shares the other passes' properties: bounded per run, needing no coordination between
 instances, audited, and treating an empty run as a success.
 
 What is different is where the rule lives. The pass does not decide what it is allowed to write —
-**the database does**, through the trigger installed by `AllowClearingAuditActor`:
+**the database does**, through the trigger installed by `AllowClearingAuditActor` and widened by
+`AllowClearingAuditTarget`:
 
 | Operation | Permitted |
 | --- | --- |
 | `DELETE`, `TRUNCATE` | Never |
-| `UPDATE` changing any column other than the attribution | Never |
+| `UPDATE` changing any column other than the attribution and the target | Never |
 | `UPDATE` setting the attribution to a *different* identity | Never |
 | `UPDATE` clearing the attribution, entry older than 30 days | Yes |
 | `UPDATE` clearing the attribution, actor anonymised | Yes, at any age |
 | `UPDATE` clearing the attribution, recent entry, live actor | Never |
+| `UPDATE` setting the target to a *different* value, or setting one where there was none | Never |
+| `UPDATE` clearing a target that names no `PERSON` or `GOOGLE_USER` row | Never |
+| `UPDATE` clearing a person target, entry older than 30 days | Yes |
+| `UPDATE` clearing a person target, that person anonymised | Yes, at any age |
+| `UPDATE` clearing a person target, recent entry, live person | Never |
 
-The application cannot clear an attribution early, reassign one, or alter anything else, because the
-database refuses all three whatever the code asks. That matters more here than elsewhere: this is
+Each part is judged on its own, and an unchanged part is accepted, so the pass can clear one without
+the other; a statement clearing both succeeds only if both are due. The application cannot clear an
+attribution or a target early, reassign either, or alter anything else, because the database refuses
+all three whatever the code asks. That matters more here than elsewhere: this is
 the one table whose immutability was a security control (Threat Model TH-18), and a control the
 application could talk its way around would not be one.
 
 The thirty-day floor is an **anti-tamper backstop, not a retention period**. The retention period is
 eighteen months and lives in configuration; the floor exists so that somebody who has just acted
-cannot immediately clear their own attribution to cover it. The erasure branch carries no age
-condition, because a subject-requested erasure completes thirty days after the request and the
-entries it produced days earlier have to go with it.
+cannot immediately clear their own attribution, or the person they acted on, to cover it. The
+erasure branch carries no age condition, for the actor or the target, because a subject-requested
+erasure completes thirty days after the request and the entries it produced, or that concern the
+person, days earlier have to go with it.
 
-**What this narrows, stated honestly.** Before, nothing could change in this table at all. Now one
-thing can. The guarantee that remains is narrower but still precise: *an action can never be denied,
-and who took it can never be reassigned — only forgotten.* Non-repudiation of the act survives
-intact; attribution is what becomes time-limited, which is exactly what storage limitation requires
-of it.
+**What this narrows, stated honestly.** Before, nothing could change in this table at all. Now two
+things can: the attribution, and a target that names a person. The guarantee that remains is
+narrower but still precise: *an action can never be denied, and who took it, or which person it was
+taken on, can never be reassigned — only forgotten.* Non-repudiation of the act survives
+intact; attribution, and the naming of a person it was taken on, is what becomes time-limited, which
+is exactly what storage limitation requires of it.
 
 ## 8. Application logs: why 12 months, and on what condition
 

@@ -9,11 +9,13 @@ using ArturRios.Util.Test.Mock;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
-// Unit tests for PseudonymiseAuditActorsCommandHandler (NFR-21): which entries a run selects.
+// Unit tests for PseudonymiseAuditActorsCommandHandler (NFR-21): which entries a run selects, and
+// which of each entry's actor and person target it clears.
 //
 // What it is permitted to *write* is not tested here and cannot be — the database trigger is the
-// authority on that, and an in-memory fake enforces none of it. AuditActorClearingTests covers the
-// trigger against real PostgreSQL, and AuditRetentionTests covers the two together.
+// authority on that, and an in-memory fake enforces none of it. AuditActorClearingTests and
+// AuditTargetClearingTests cover the trigger against real PostgreSQL, and AuditRetentionTests covers
+// the two together.
 public class PseudonymiseAuditActorsCommandHandlerTests
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
@@ -30,7 +32,8 @@ public class PseudonymiseAuditActorsCommandHandlerTests
                 new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize });
     }
 
-    private static async Task<AuditLog> SeedEntryAsync(Fakes fakes, Guid? actorId, DateTime createdAt)
+    private static async Task<AuditLog> SeedEntryAsync(
+        Fakes fakes, Guid? actorId, DateTime createdAt, Guid? targetId = null)
     {
         var entry = new AuditLog
         {
@@ -38,6 +41,7 @@ public class PseudonymiseAuditActorsCommandHandlerTests
             ActorPersonId = actorId,
             ActorRole = actorId is null ? null : (int)Roles.User,
             Action = "CreateScopeCommand",
+            TargetId = targetId,
             Succeeded = true,
             CreatedAt = createdAt
         };
@@ -61,6 +65,24 @@ public class PseudonymiseAuditActorsCommandHandlerTests
 
         return person;
     }
+
+    private static async Task<GoogleUser> SeedGoogleUserAsync(Fakes fakes, DateTime? anonymisedAt)
+    {
+        var googleUser = new GoogleUser
+        {
+            PublicId = Guid.NewGuid(),
+            GoogleId = Guid.NewGuid().ToString("N"),
+            Name = "Ada",
+            Email = $"ada-{Guid.NewGuid():N}@test.local",
+            AnonymisedAt = anonymisedAt
+        };
+
+        await fakes.GoogleUsers.CreateAsync(googleUser);
+
+        return googleUser;
+    }
+
+    private static DateTime PastThePeriod => DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(1));
 
     [UnitFact]
     public async Task GivenAnEntryPastItsAttributionPeriod_WhenPseudonymising_ThenTheActorIsCleared()
@@ -145,6 +167,172 @@ public class PseudonymiseAuditActorsCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAnEntryPastItsPeriodAboutAPerson_WhenPseudonymising_ThenTheTargetIsCleared()
+    {
+        // Given an old entry about a live person, whose actor was cleared earlier — it must still be
+        // selected, or existing rows would never be cleaned
+        var fakes = Fakes.New();
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var entry = await SeedEntryAsync(fakes, actorId: null, PastThePeriod, target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(1, output.Data.TargetsCleared);
+        Assert.Null(entry.TargetId);
+        Assert.Equal("CreateScopeCommand", entry.Action);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEntryPastItsPeriodAboutAGoogleUser_WhenPseudonymising_ThenTheTargetIsCleared()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var target = await SeedGoogleUserAsync(fakes, anonymisedAt: null);
+        var entry = await SeedEntryAsync(fakes, actorId: null, PastThePeriod, target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(1, output.Data!.TargetsCleared);
+        Assert.Null(entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenARecentEntryAboutAnErasedPerson_WhenPseudonymising_ThenOnlyTheTargetIsCleared()
+    {
+        // Given a day-old entry by a live administrator about somebody since erased: the target is
+        // due on erasure at any age, the actor is not due at all
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var target = await SeedPersonAsync(fakes, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, DateTime.UtcNow.AddDays(-1), target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(1, output.Data.TargetsCleared);
+        Assert.Null(entry.TargetId);
+        Assert.Equal(actor.PublicId, entry.ActorPersonId);
+        Assert.Equal((int)Roles.User, entry.ActorRole);
+    }
+
+    [UnitFact]
+    public async Task GivenARecentEntryAboutALivePerson_WhenPseudonymising_ThenTheTargetIsKept()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var entry = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-100), target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(0, output.Data!.TargetsCleared);
+        Assert.Equal(target.PublicId, entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEntryPastItsPeriodAboutAScope_WhenPseudonymising_ThenTheTargetIsKept()
+    {
+        // Given — a scope's id names no person, so it is not personal data and stays, however old.
+        // The same holds for an id nobody has any more, as a hard-deleted person's.
+        var fakes = Fakes.New();
+        var scopeId = Guid.NewGuid();
+        var entry = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-4000), scopeId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(0, output.Data.TargetsCleared);
+        Assert.Equal(scopeId, entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEntryPastItsPeriodByAndAboutPeople_WhenPseudonymising_ThenBothAreClearedInOnePass()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, PastThePeriod, target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(1, output.Data!.EntriesPseudonymised);
+        Assert.Equal(1, output.Data.TargetsCleared);
+        Assert.Null(entry.ActorPersonId);
+        Assert.Null(entry.ActorRole);
+        Assert.Null(entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenADueActorAndATargetNamingNoPerson_WhenPseudonymising_ThenOnlyTheActorIsCleared()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var scopeId = Guid.NewGuid();
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, PastThePeriod, scopeId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(1, output.Data!.EntriesPseudonymised);
+        Assert.Equal(0, output.Data.TargetsCleared);
+        Assert.Null(entry.ActorPersonId);
+        Assert.Equal(scopeId, entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAnErasedActorOnARecentEntryAboutALivePerson_WhenPseudonymising_ThenOnlyTheActorIsCleared()
+    {
+        // Given — the actor is due on erasure; the target is a person, but young and live
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, DateTime.UtcNow.AddDays(-2), target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(1, output.Data!.EntriesPseudonymised);
+        Assert.Equal(0, output.Data.TargetsCleared);
+        Assert.Null(entry.ActorPersonId);
+        Assert.Equal(target.PublicId, entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAClearedTargetPastItsPeriod_WhenPseudonymisingAgain_ThenItIsNotSelected()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        await SeedEntryAsync(fakes, actorId: null, PastThePeriod, target.PublicId);
+        await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(0, output.Data.TargetsCleared);
+    }
+
+    [UnitFact]
     public async Task GivenMoreEntriesThanTheBatchSize_WhenPseudonymising_ThenTheRunIsBounded()
     {
         var fakes = Fakes.New();
@@ -175,5 +363,6 @@ public class PseudonymiseAuditActorsCommandHandlerTests
         Assert.True(output.Success);
         Assert.Empty(output.Errors);
         Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(0, output.Data.TargetsCleared);
     }
 }
