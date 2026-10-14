@@ -475,7 +475,7 @@ dotnet run --project src/Presentation/ArturRios.Heimdall.WebApi
 Serves on `http://localhost:5177` (the `http` launch profile); the `https` profile adds
 `https://localhost:7235`.
 
-To call it, [`api-client/`](api-client) holds ready-to-send requests for all 49 endpoints as both
+To call it, [`api-client/`](api-client) holds ready-to-send requests for every operation in [`docs/openapi/heimdall.json`](docs/openapi/heimdall.json) as both
 `.http` files and a Bruno collection, chained so no identifier has to be copied by hand — see
 [`api-client/README.md`](api-client/README.md).
 
