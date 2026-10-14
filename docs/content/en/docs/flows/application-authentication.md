@@ -99,7 +99,8 @@ check, in order:
   file, for one); a truncated or altered secret is not accepted.
 
 A request that is missing a field, carries a secret over 100 characters, or is not readable JSON
-(or carries an id that is not a GUID) is a `400` instead, with the message naming the problem.
+(or carries an id that is not a GUID) is a `400` instead: the field's message, or
+"The request is malformed." for a body that cannot be read.
 
 ## The token
 
@@ -194,6 +195,6 @@ every sensitive release**, and treats the offline check as a fast path for every
 | `POST /api/applications/token` | `200` | Token issued |
 | | `400` | A field missing, the secret over 100 characters, or a body that is not readable (AF-56a) |
 | | `401` | Any other reason, always the same message (AF-56b) |
-| | `429` | Rate limit |
+| | `429` | Rate limit; the `Retry-After` header gives the seconds to wait |
 | `GET /api/applications/self` | `200` | Token valid and still live |
 | | `401` | Any reason, always the same message (AF-57a) |

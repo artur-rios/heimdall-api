@@ -176,7 +176,7 @@ If the person has active 2FA, login answers `requiresTwoFactor: true` with a sho
 
 ## Calling the API
 
-`api-client/` holds ready-to-send requests for all 49 endpoints, in two formats — pick whichever your
+`api-client/` holds ready-to-send requests for every operation in the OpenAPI document, in two formats — pick whichever your
 editor already opens:
 
 | Directory | Format | Opens in |

@@ -29,24 +29,35 @@ public class AdminEmailOptions
 {
     public const string CooldownVariable = "HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS";
 
-    private const double DefaultCooldownSeconds = 300;
+    /// <summary>The cooldown in seconds applied when none, or an unusable one, is configured.</summary>
+    public const double DefaultCooldownSeconds = 300;
+
     private const double MaxCooldownSeconds = 86400;
 
     /// <summary>The window within which a second email of one kind to one person is refused.</summary>
     public TimeSpan Cooldown { get; init; } = TimeSpan.FromSeconds(DefaultCooldownSeconds);
+
+    /// <summary>
+    ///     The configured text when it was present but unusable and the default was applied instead;
+    ///     <c>null</c> when the variable was absent or usable. Start-up warns on it, so a typo does not
+    ///     pass for the value the operator meant.
+    /// </summary>
+    public string? RejectedCooldown { get; init; }
 
     public static AdminEmailOptions FromEnvironment() => From(Environment.GetEnvironmentVariable(CooldownVariable));
 
     /// <summary>Reads a configured number of seconds, falling back to the default when it is unusable.</summary>
     public static AdminEmailOptions From(string? configured)
     {
-        var seconds =
+        var usable =
             double.TryParse(configured, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            && value is >= 0 and <= MaxCooldownSeconds
-                ? value
-                : DefaultCooldownSeconds;
+            && value is >= 0 and <= MaxCooldownSeconds;
 
-        return new AdminEmailOptions { Cooldown = TimeSpan.FromSeconds(seconds) };
+        return new AdminEmailOptions
+        {
+            Cooldown = TimeSpan.FromSeconds(usable ? value : DefaultCooldownSeconds),
+            RejectedCooldown = usable || string.IsNullOrWhiteSpace(configured) ? null : configured
+        };
     }
 
     /// <summary>

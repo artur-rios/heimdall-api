@@ -2437,7 +2437,7 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-53a | No live application with that id in the addressed, live scope (also a logically deleted application, or one in another scope) | `404 Not Found` — "Application not found." |
 | AF-53b | A Scope Admin who does not own the application, or no longer owns its scope | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
-| AF-53c | `expiresAt` is not in the future, or the body cannot be read (not JSON, or an `expiresAt` that is not a date-time) | `400 Bad Request` — "The expiry must be in the future." or, for a body that cannot be read, "The request body is malformed."; never a credential without expiry |
+| AF-53c | `expiresAt` is not in the future, or the body cannot be read (not JSON, or an `expiresAt` that is not a date-time) | `400 Bad Request` — "The expiry must be in the future." or, for a body that cannot be read, "The request is malformed." (answered before the use case runs, NFR-10); never a credential without expiry |
 | AF-53d | The application already holds two live credentials | `409 Conflict` — "This application already has two live credentials. Revoke one before issuing another." |
 
 > **Why two.** A secret is rotated without downtime by issuing the second, deploying it to the
@@ -2579,7 +2579,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-56a | A field is missing, the secret is over 100 characters, or the body cannot be read (not JSON, or an id that is not a GUID) | `400 Bad Request` — the field's message ("Application id is required.", "Scope id is required.", "Secret is required.", "Secret must be at most 100 characters.") or, for a body that cannot be read, "The request body is malformed." |
+| AF-56a | A field is missing, the secret is over 100 characters, or the body cannot be read (not JSON, or an id that is not a GUID) | `400 Bad Request` — the field's message ("Application id is required.", "Scope id is required.", "Secret is required.", "Secret must be at most 100 characters.") or, for a body that cannot be read, "The request is malformed." (answered before the use case runs, NFR-10) |
 | AF-56b | Anything else is wrong: an unknown, revoked or expired secret; another application's secret; the application or scope deleted; the wrong scope | `401 Unauthorized` — "The application credentials were not accepted.", always the same |
 
 > **One refusal.** As for UC-11, every refusal of the exchange is the same `401` with the same

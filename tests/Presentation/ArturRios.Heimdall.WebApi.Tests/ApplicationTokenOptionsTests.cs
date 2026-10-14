@@ -77,4 +77,41 @@ public class ApplicationTokenOptionsTests
         Assert.Contains(ApplicationTokenOptions.AudienceVariable, error.Message);
         Assert.Contains("HEIMDALL_AUTH_TOKEN_AUDIENCE", error.Message);
     }
+
+    [UnitTheory]
+    [InlineData("10m")]
+    [InlineData("0")]
+    [InlineData("86401")]
+    public void GivenAnUnusableLifetime_WhenParsed_ThenTheFallbackIsReported(string raw)
+    {
+        // Given / When
+        var options = ApplicationTokenOptions.Parse("heimdall-applications", raw, "heimdall");
+
+        // Then
+        Assert.Equal(raw, options.RejectedExpiration);
+        Assert.Equal(ApplicationTokenOptions.DefaultLifetime, options.Lifetime);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void GivenNoLifetime_WhenParsed_ThenNoFallbackIsReported(string? raw)
+    {
+        // Given / When
+        var options = ApplicationTokenOptions.Parse("heimdall-applications", raw, "heimdall");
+
+        // Then — absent is the documented default, not a fallback
+        Assert.Null(options.RejectedExpiration);
+    }
+
+    [UnitFact]
+    public void GivenAUsableLifetime_WhenParsed_ThenNoFallbackIsReported()
+    {
+        // Given / When
+        var options = ApplicationTokenOptions.Parse("heimdall-applications", "300", "heimdall");
+
+        // Then
+        Assert.Null(options.RejectedExpiration);
+    }
 }

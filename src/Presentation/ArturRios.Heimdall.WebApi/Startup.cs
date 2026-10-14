@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using ArturRios.Data.PostgreSql;
@@ -17,6 +18,7 @@ using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
@@ -28,6 +30,7 @@ using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
+using ArturRios.Output;
 using ArturRios.Messaging.Email;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
@@ -87,6 +90,13 @@ public class Startup : WebApiStartup
     ///     controller and this configuration stay in sync without duplicating the literal.
     /// </summary>
     public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
+
+    /// <summary>
+    ///     Length, in seconds, of the <c>AuthAnonymous</c> fixed window. One value for the limiter's
+    ///     <c>Window</c> and for the <c>Retry-After</c> a rejection falls back to, so the two cannot
+    ///     drift apart.
+    /// </summary>
+    private const int AuthEndpointRateLimitWindowSeconds = 60;
 
     /// <summary>
     ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
@@ -405,7 +415,10 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
         // UC-51/UC-52 (FR-EV-07, FR-PR-06): the per-person cooldown on administrator-initiated email,
         // read once at start-up like the token lifetimes it is compared against.
-        Builder.Services.AddSingleton(AdminEmailOptions.FromEnvironment());
+        var adminEmail = AdminEmailOptions.FromEnvironment();
+        WarnOnFallback(AdminEmailOptions.CooldownVariable, adminEmail.RejectedCooldown,
+            AdminEmailOptions.DefaultCooldownSeconds);
+        Builder.Services.AddSingleton(adminEmail);
         // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
         Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
         // UC-52: no validator either — the route's person id is the whole of the input.
@@ -666,6 +679,8 @@ public class Startup : WebApiStartup
         // before anything is served (TH-35).
         var applicationTokens = ApplicationTokenOptions.FromEnvironment();
         Builder.Services.AddSingleton(applicationTokens);
+        WarnOnFallback(ApplicationTokenOptions.ExpirationVariable, applicationTokens.RejectedExpiration,
+            ApplicationTokenOptions.DefaultLifetime.TotalSeconds);
         Builder.Services.AddScoped<JwtApplicationTokenService>();
         Builder.Services.AddScoped<IApplicationTokenIssuer>(provider =>
             provider.GetRequiredService<JwtApplicationTokenService>());
@@ -787,6 +802,23 @@ public class Startup : WebApiStartup
         return $"{new IPAddress(bytes)}/64";
     }
 
+    /// <summary>
+    ///     Warns that a numeric setting was present but unusable and its default applied instead. Absent
+    ///     is not a fallback, so <paramref name="rejectedValue" /> is <c>null</c> for it and nothing is
+    ///     logged. None of these values is a secret, so the rejected text is logged as written.
+    /// </summary>
+    private static void WarnOnFallback(string variable, string? rejectedValue, double defaultSeconds)
+    {
+        if (rejectedValue is null)
+        {
+            return;
+        }
+
+        Log.Warning(
+            "Ignoring unusable {Variable}={Value}; using the default of {Default} seconds",
+            variable, rejectedValue, defaultSeconds);
+    }
+
     private void AddAuthEndpointRateLimiting()
     {
         // Throws on a key too short to be a secret, so a misconfigured deployment stops here.
@@ -803,13 +835,31 @@ public class Startup : WebApiStartup
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+            // TH-32: a turned-away caller is told when to come back and gets the API's usual error
+            // envelope, not an empty 429. The lease's own hint is used when the limiter gives one;
+            // a fixed window gives none, so the window's length is the honest upper bound.
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+                    ? (int)Math.Ceiling(retryAfter.TotalSeconds)
+                    : AuthEndpointRateLimitWindowSeconds;
+
+                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                context.HttpContext.Response.Headers.RetryAfter =
+                    Math.Max(1, retryAfterSeconds).ToString(CultureInfo.InvariantCulture);
+
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    DataOutput<object?>.New.WithError(RateLimitMessages.TooManyRequests),
+                    cancellationToken);
+            };
+
             options.AddPolicy(AuthEndpointRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: AuthRateLimitPartition.KeyFor(httpContext, callers),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
                         QueueLimit = 0
                     }));
         });
@@ -954,11 +1004,13 @@ public class Startup : WebApiStartup
                 "validate tokens without a signing secret.");
         }
 
-        var expiration = double.TryParse(
+        var lifetime = TokenLifetimeSetting.Parse(
             Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
-            out var configuredExpiration)
-            ? configuredExpiration
-            : DefaultTokenExpirationInSeconds;
+            DefaultTokenExpirationInSeconds);
+
+        WarnOnFallback(TokenExpirationEnvironmentVariable, lifetime.RejectedValue, DefaultTokenExpirationInSeconds);
+
+        var expiration = lifetime.Seconds;
 
         var previousSecret = Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable);
 
@@ -1026,6 +1078,11 @@ public class Startup : WebApiStartup
             // filter because the condition is cross-cutting: every endpoint that derives a password
             // can meet it, and each has its own message map.
             options.Filters.Add<PasswordHashSaturationFilter>();
+
+            // NFR-10 (#186): a request MVC could not bind answers 400 instead of running the action with
+            // a null or default argument. An action filter, so after the authorization filters above —
+            // an unauthenticated caller still gets 401 — and after model binding has filled ModelState.
+            options.Filters.Add<MalformedRequestFilter>();
 
             // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
             // AddControllers() rather than running this Startup, so that call site cannot catch a

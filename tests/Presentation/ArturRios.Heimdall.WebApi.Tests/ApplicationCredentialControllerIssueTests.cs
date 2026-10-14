@@ -143,7 +143,7 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Equal([ApplicationCredentialMessages.RequestMalformed], errors);
+        Assert.Equal([RequestMessages.Malformed], errors);
         Assert.Empty(await CredentialsOfAsync(db, application));
     }
 
@@ -159,7 +159,7 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Equal([ApplicationCredentialMessages.RequestMalformed], errors);
+        Assert.Equal([RequestMessages.Malformed], errors);
         Assert.Empty(await CredentialsOfAsync(db, application));
     }
 

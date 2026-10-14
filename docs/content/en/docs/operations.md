@@ -173,9 +173,10 @@ Brute force is bounded in two independent places, because each covers what the o
 (an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
 `AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
 reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
-answer **429**. None of these requires a bearer token, so nothing else bounds how fast one caller
-can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
-hashing library's defaults) — so memory exhaustion is realistic without it. The authenticated
+answer **429** with a `Retry-After` header (whole seconds) and the usual error envelope. None of these
+requires a bearer token, so nothing else bounds how fast one caller can hit them, and each login attempt
+costs a full Argon2id verification (600 MB / 16 threads by the hashing library's defaults) — so memory
+exhaustion is realistic without it. The authenticated
 endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
 regeneration, and the erasure request — share the same limit: a bearer token is not the password,
 and without it whoever held one could test passwords or six-digit codes against them unthrottled.
@@ -695,6 +696,11 @@ validates them offline must be given both keys for the same period.
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
+
+A present but unusable value of `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` is
+logged as a warning at start-up, naming the variable, the rejected value and the default applied; an
+absent one is just the default and logs nothing.
 
 Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew,
 so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep

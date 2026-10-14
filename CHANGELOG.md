@@ -47,6 +47,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+  `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
+  at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
+  falls back to its default (`3600`) when zero, negative or not finite, where it was used as written, and the
+  lifetime settings now parse with the invariant culture rather than the host's.
+- A request turned away by the `AuthAnonymous` rate limit (`429`) now carries a `Retry-After` header, in whole
+  seconds, and the usual error envelope with the message "Too many requests.", instead of an empty body.
+- Contributors: the `dotnet-ef` tool in `.config/dotnet-tools.json` is now pinned to the version of
+  `Microsoft.EntityFrameworkCore`, and `scripts/vulnerabilities.py` fails when the two drift apart.
 - **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
   `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to
   `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps
@@ -62,6 +71,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   cleared target as `targetId: null`, and filtering by `targetId` no longer finds it. **Operators:** no setting
   changes. Existing entries already past the period are cleaned over the next scheduled runs, a batch
   (`HEIMDALL_RETENTION_PURGE_BATCH_SIZE`) at a time, and the run's log line now reports both counts.
+
+### Fixed
+
+- A request that cannot be bound now answers `400` with "The request is malformed." on every endpoint (#186),
+  instead of running the action with a missing or default argument: a body that is not JSON was a `500`, and a
+  query filter of the wrong type (`?succeeded=maybe`, `?actorId=not-a-guid`) was dropped and answered `200`
+  unfiltered. A global `MalformedRequestFilter` replaces the two per-action guards added in #178; it runs after
+  authentication and role checks, so an unauthenticated caller still receives `401`. A non-nullable query
+  parameter sent empty or unparseable (`?pageNumber=`, `?pageNumber=abc`, `?includeDeleted=1`) is now a `400`
+  rather than its default; a missing required field keeps its validator message.
 
 ## [1.4.0] - 2026-10-13
 
