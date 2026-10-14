@@ -647,6 +647,22 @@ public class Startup : WebApiStartup
         // and no database read happens per request.
         Builder.Services.AddSingleton(BuildJwtConfiguration());
         Builder.Services.AddSingleton<JwtHandler>();
+
+        // UC-56/UC-57: application tokens share the signing keys but not the audience. Read here,
+        // with the rest of the token configuration, so a missing or equal audience stops start-up
+        // before anything is served (TH-35).
+        var applicationTokens = ApplicationTokenOptions.FromEnvironment();
+        Builder.Services.AddSingleton(applicationTokens);
+        Builder.Services.AddScoped<JwtApplicationTokenService>();
+        Builder.Services.AddScoped<IApplicationTokenIssuer>(provider =>
+            provider.GetRequiredService<JwtApplicationTokenService>());
+        Builder.Services.AddScoped<IApplicationTokenValidator>(provider =>
+            provider.GetRequiredService<JwtApplicationTokenService>());
+
+        // The audience is not a secret; logging it makes a mismatch with a consumer diagnosable.
+        Log.Information(
+            "Application tokens: audience {Audience}, lifetime {Seconds}s",
+            applicationTokens.Audience, applicationTokens.Lifetime.TotalSeconds);
         Builder.Services.AddTokenAuthentication<IdentityUserMapper>(options =>
         {
             options.Source = TokenSource.Header;

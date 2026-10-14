@@ -26,6 +26,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string TokenIssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
+    /// <summary>
+    ///     The audience the host under test gives application tokens (UC-56). Published here for the
+    ///     reason <see cref="PreviousTokenSecret" /> is: the API reads it once, at start-up.
+    /// </summary>
+    public const string ApplicationTokenAudience = "heimdall-tests-applications";
+
     /// <summary>E-mail of the master system administrator the API seeds into the container.</summary>
     public const string MasterUserEmail = "master@heimdall.test";
 
@@ -109,6 +115,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(PreviousTokenSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
+        Environment.SetEnvironmentVariable(ApplicationTokenOptions.AudienceVariable, ApplicationTokenAudience);
 
         // A client system's key for naming its end users' addresses to the anonymous-auth rate
         // limiter. Without it configured, the header path would never run in a functional test.
