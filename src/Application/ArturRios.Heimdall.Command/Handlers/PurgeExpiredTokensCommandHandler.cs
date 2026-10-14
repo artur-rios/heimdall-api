@@ -13,24 +13,27 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
-///     email verification tokens, two-factor email codes, unconfirmed pending registrations
-///     (UC-47), and spent application credentials (UC-55) whose retention period has run out. All failures are returned as errors on the
-///     <see cref="DataOutput{T}" /> rather than thrown.
+///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47)
+///     and spent application credentials (UC-55) whose retention period has run out. All failures
+///     are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>What makes a row purgeable.</b> One condition, <c>ExpiresAt &lt;= now - grace</c>,
-///         applied to the four token and registration tables. It covers a used row and an expired-unused row alike, and it
-///         is the only condition that can be applied to all four: neither
+///         <b>What makes a row purgeable.</b> The four token and registration tables purge on
+///         expiry: <c>ExpiresAt &lt;= now - grace</c>. It covers a used row and an expired-unused
+///         row alike, and it is the only condition that can be applied to all four: neither
 ///         <see cref="PasswordResetToken" /> nor <see cref="EmailVerificationToken" /> records when
-///         it was consumed, and only <see cref="TwoFactorEmailCode" /> carries a
-///         <c>CreatedAt</c>. Expiry is a sound proxy in any case — each of these is issued with a
-///         lifetime measured in minutes or hours, so a row's expiry is never far from its issue. A
-///         <see cref="PendingRegistration" /> is held for the same grace period, so that following a
-///         stale confirmation link answers "expired" rather than "invalid" for as long as it does for
-///         the tokens. An
-///         <see cref="ApplicationCredential" /> is purgeable once it was revoked or has expired,
-///         whichever came first, plus the same grace.
+///         it was consumed, and only <see cref="TwoFactorEmailCode" /> carries a <c>CreatedAt</c>.
+///         Expiry is a sound proxy in any case — each of these is issued with a lifetime measured
+///         in minutes or hours, so a row's expiry is never far from its issue. A
+///         <see cref="PendingRegistration" /> is held for the same grace period, so that following
+///         a stale confirmation link answers "expired" rather than "invalid" for as long as it does
+///         for the tokens.
+///     </para>
+///     <para>
+///         An <see cref="ApplicationCredential" /> purges on a condition of its own: revoked or
+///         expired at or before <c>now - grace</c>, whichever came first. Expiry alone would not
+///         do — a credential may have none, and would then be kept for ever once revoked.
 ///     </para>
 ///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token

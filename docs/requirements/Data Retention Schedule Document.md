@@ -170,18 +170,21 @@ comfortably longer than any link is useful and far shorter than any purpose coul
 them. It is configurable, and it cannot be set to zero or a negative value — the options type
 refuses both and falls back to the default.
 
-The purge selects on `ExpiresAt <= now - grace`. That single condition covers a used row and an
-expired-unused row alike, and it is the only condition applicable to all four tables: neither token
-table records *when* it was consumed, and only `TWO_FACTOR_EMAIL_CODE` and `PENDING_REGISTRATION` carry a `CreatedAt`. Expiry
-is a sound proxy in any case, since each row is issued with a lifetime measured in minutes.
+For the four token and registration tables the purge selects on `ExpiresAt <= now - grace`. That
+single condition covers a used row and an expired-unused row alike, and it is the only condition
+applicable to all four of them: neither token table records *when* it was consumed, and only
+`TWO_FACTOR_EMAIL_CODE` and `PENDING_REGISTRATION` carry a `CreatedAt`. Expiry is a sound proxy in any
+case, since each row is issued with a lifetime measured in minutes. Application credentials purge on
+a condition of their own, below.
 
 **A live token is never at risk.** The cutoff is strictly in the past, so a token that has not yet
 expired cannot match however the grace period is configured.
 
 An application credential (UC-53) is not a single-use token, but once it is revoked or has expired
 it can never be accepted again, so it is kept for the same grace as a spent token and then purged by
-the same pass. The grace runs from whichever came first, revocation or expiry. A live credential is
-kept for as long as it is live, since it is in use.
+the same pass. Its condition is revoked **or** expired at or before `now - grace`, the grace running
+from whichever came first: expiry alone would never purge a revoked credential that has no expiry. A
+live credential is kept for as long as it is live, since it is in use.
 
 ## 6. How the purge runs
 

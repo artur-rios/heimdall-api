@@ -5,8 +5,9 @@ namespace ArturRios.Heimdall.Command.Input;
 /// <summary>
 ///     Intent to permanently (hard) delete an application (UC-20, FR-AP-08). The application is
 ///     addressed by <see cref="Id" /> within <see cref="ScopeId" />, both bound from the route.
-///     Removing it cascades to nothing — no entity carries a foreign key to an application, and the
-///     scope and owner it points at are left intact. The command carries no acting person: UC-20's
+///     Removing it cascades to its credentials (UC-53), the only rows with a foreign key to an
+///     application; the scope and owner it points at are left intact. The command carries no acting
+///     person: UC-20's
 ///     only actor is the System Admin and the endpoint's role requirement settles that entirely, so
 ///     the handler has no data-dependent rule left to apply.
 /// </summary>

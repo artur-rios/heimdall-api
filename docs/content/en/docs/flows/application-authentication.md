@@ -95,8 +95,8 @@ check, in order:
 - the `scopeId` is that application's scope;
 - the credential is live: not revoked, not past its `expiresAt`, and the application and scope are
   not deleted (`GET …/credentials` shows `live`);
-- the secret is exactly as issued. A trailing newline from a file is trimmed for you; any other
-  stray whitespace or a truncated copy is not.
+- the secret is exactly as issued. Surrounding whitespace is trimmed (a trailing newline from a
+  file, for one); a truncated or altered secret is not accepted.
 
 A request that is missing a field, carries a secret over 100 characters, or is not readable JSON
 (or carries an id that is not a GUID) is a `400` instead, with the message naming the problem.
@@ -172,16 +172,17 @@ its application and scope are live and match the token. Anything else is one `40
 ## Revocation policy
 
 Revoking or expiring a credential, or deleting the application or its scope, takes effect **at the
-next live check** for every token already issued. The offline check alone would keep accepting a
-revoked token for up to its remaining lifetime, ten minutes by default. So a consumer **re-checks
-before every sensitive release**, and treats the offline check as a fast path for everything else.
+next live check** for every token already issued. A token's own `exp` is fixed when it is issued, so
+it **stays valid offline for up to its whole lifetime**, ten minutes by default, after its credential
+expires or is revoked. Only the live check reflects that at once. So a consumer **re-checks before
+every sensitive release**, and treats the offline check as a fast path for everything else.
 
 ## Status codes
 
 | Endpoint | Status | When |
 | --- | --- | --- |
 | `POST …/credentials` | `201` | Credential issued; the secret is in the body |
-| | `400` | `expiresAt` is not in the future (AF-53c) |
+| | `400` | `expiresAt` is not in the future, is not a date-time, or the body is not JSON (AF-53c) |
 | | `401` / `403` | Anonymous; a `User`, or a Scope Admin who does not own the application or no longer owns its scope (AF-53b) |
 | | `404` | No live application with that id in the addressed, live scope (AF-53a) |
 | | `409` | Two live credentials already (AF-53d) |

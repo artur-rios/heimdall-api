@@ -648,7 +648,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 Application tokens (UC-56) are signed with the same keys, so the same rotation covers them. Step 2
 waits out the longer of the two lifetimes, `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` and
 `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default), and a consumer that
-validates them offline must be given both keys for the same period. Application tokens are validated with zero clock skew, so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep instance clocks synchronised (NTP).
+validates them offline must be given both keys for the same period.
 
 ## Environment variables at a glance
 
@@ -692,7 +692,9 @@ validates them offline must be given both keys for the same period. Application 
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
 
-Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew, so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep instance clocks synchronised (NTP).
+Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew,
+so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep
+instance clocks synchronised (NTP).
 
 The administrator-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, UC-51/UC-52) is derived from
 the issued token rows (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:

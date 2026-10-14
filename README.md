@@ -332,7 +332,7 @@ Then fill it in. These are **required** — the API fails to start without them:
 | `HEIMDALL_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
 | `HEIMDALL_DATA_DATABASETYPE` | `PostgreSql` |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if it is unset — without it every authenticated request would fail inside the token validator with an opaque `IDX10703` |
-| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | The `aud` of application tokens (UC-56). Startup throws if it is unset, or equal to `HEIMDALL_AUTH_TOKEN_AUDIENCE`: a distinct audience is what stops a consumer taking an application token for a person's. `docker-compose.yml` and the env templates default it to `heimdall-applications` |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | The `aud` of application tokens (UC-56). Startup throws if it is unset, or equal to `HEIMDALL_AUTH_TOKEN_AUDIENCE`: a distinct audience is what stops a consumer taking an application token for a person's. `docker-compose.yml` defaults it to `heimdall-applications` and the `docker/*.env.example` templates preset that value; the Web API's `Environments/.env` holds only a placeholder |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
 
 The rest are optional and fall back to a default:

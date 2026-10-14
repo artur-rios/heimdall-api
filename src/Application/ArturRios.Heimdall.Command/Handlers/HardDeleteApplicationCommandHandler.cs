@@ -12,8 +12,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="HardDeleteApplicationCommand" /> (UC-20, FR-AP-08): locates the application
 ///     inside the addressed scope in any deletion state (AF-20a) and permanently removes the record.
-///     Nothing cascades — an application is a leaf in the data model, and the scope and owner its
-///     foreign keys point at are left intact. Authorization is entirely the endpoint's: UC-20's only
+///     The database cascades the removal to the application's credentials (UC-53), its only
+///     dependent rows; the scope and owner its foreign keys point at are left intact. Authorization is entirely the endpoint's: UC-20's only
 ///     actor is the System Admin, so no rule is left for the handler to apply. All failures are
 ///     returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>

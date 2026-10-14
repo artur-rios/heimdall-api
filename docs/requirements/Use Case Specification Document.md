@@ -1080,7 +1080,7 @@ sequenceDiagram
 | **Actors** | System Admin |
 | **Description** | Permanently remove an application record from the database |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role; application exists |
-| **Postconditions** | Application record is permanently removed |
+| **Postconditions** | Application record is permanently removed, and with it, by cascade, every credential issued to it (UC-53), live, revoked or expired |
 
 **Main Flow:**
 
@@ -2434,7 +2434,7 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-53a | No live application with that id in the addressed, live scope (also a logically deleted application, or one in another scope) | `404 Not Found` — "Application not found." |
 | AF-53b | A Scope Admin who does not own the application, or no longer owns its scope | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
-| AF-53c | `expiresAt` is not in the future | `400 Bad Request` — "The expiry must be in the future." |
+| AF-53c | `expiresAt` is not in the future, or the body cannot be read (not JSON, or an `expiresAt` that is not a date-time) | `400 Bad Request` — "The expiry must be in the future." or, for a body that cannot be read, "The request body is malformed."; never a credential without expiry |
 | AF-53d | The application already holds two live credentials | `409 Conflict` — "This application already has two live credentials. Revoke one before issuing another." |
 
 > **Why two.** A secret is rotated without downtime by issuing the second, deploying it to the
@@ -2625,9 +2625,10 @@ sequenceDiagram
 | AF-57a | No or malformed token; wrong signature, issuer, audience or kind; expired; the application, scope or credential no longer live; or the scope not the token's | `401 Unauthorized` — "The application token was not accepted.", always the same |
 
 > **Revocation policy (FR-AP-16).** Revoking or expiring a credential, or deleting the application
-> or its scope, takes effect at the next check for every token already issued. A consumer validating
-> the token offline alone would accept it until it expires, so consumers re-check here before every
-> sensitive release.
+> or its scope, takes effect at the next check for every token already issued. A token's `exp` is
+> fixed at issue, so a consumer validating it offline alone would accept it for up to its whole
+> lifetime after its credential expires or is revoked. Only this check reflects that at once, which
+> is why consumers re-check here before every sensitive release.
 >
 > **Clock skew.** Tokens are validated with zero skew. Instances whose clocks differ can refuse a
 > freshly issued token for the length of the drift; keep them synchronised (NTP).

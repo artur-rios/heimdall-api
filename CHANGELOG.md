@@ -48,8 +48,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
-  `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` and the env templates
-  default it to `heimdall-applications`, so a Compose deployment keeps starting; any other deployment must set it.
+  `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to
+  `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps
+  starting. The Web API's `Environments/.env` holds only a placeholder; any other deployment must set it.
   Application tokens are validated with zero clock skew, so keep instance clocks synchronised (NTP).
 
 ## [1.4.0] - 2026-10-13

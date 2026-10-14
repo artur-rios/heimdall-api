@@ -6,8 +6,9 @@ namespace ArturRios.Heimdall.Command.Input;
 /// <summary>
 ///     Intent to logically delete an application (UC-19, FR-AP-07). The application is addressed by
 ///     <see cref="Id" /> within <see cref="ScopeId" />, both bound from the route. The deletion sets
-///     the application's <c>IsDeleted</c> flag and cascades to nothing — an application owns no
-///     dependent row. <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the
+///     the application's <c>IsDeleted</c> flag and cascades to nothing: its credentials (UC-53) stay
+///     as they are, and are inert, because UC-56 and UC-57 refuse a deleted application.
+///     <see cref="ActingPersonId" />/<see cref="ActingRole" /> are set by the
 ///     controller from the authenticated caller and are never bound from the request.
 /// </summary>
 public class DeleteApplicationCommand : BaseCommand, IActorScoped
