@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
   falls back to its default (`3600`) when zero, negative or not finite, where it was used as written.
 - A request turned away by the `AuthAnonymous` rate limit (`429`) now carries a `Retry-After` header, in whole
-  seconds, and the usual error envelope with the message "Too many requests. Try again later.", instead of an
+  seconds, and the usual error envelope with the message "Too many requests.", instead of an
   empty body.
 - **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
   `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to

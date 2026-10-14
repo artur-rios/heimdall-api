@@ -11,5 +11,5 @@ public static class RateLimitMessages
     ///     The body of a <c>429</c> from the <c>AuthAnonymous</c> policy. It says only that the caller
     ///     should wait: which bucket was spent, and how, is not something to hand an attacker.
     /// </summary>
-    public const string TooManyRequests = "Too many requests. Try again later.";
+    public const string TooManyRequests = "Too many requests.";
 }
