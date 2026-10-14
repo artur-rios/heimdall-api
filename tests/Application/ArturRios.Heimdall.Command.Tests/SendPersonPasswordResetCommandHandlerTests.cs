@@ -169,6 +169,7 @@ public class SendPersonPasswordResetCommandHandlerTests
     {
         // Given AF-52b
         var target = ScopeAdmin(10, Scope(OwnedScopeId));
+        target.ScopeId = OwnedScopeId; // the role check alone must refuse it, not the missing scope
         var fixture = await FixtureWith(target);
 
         // When
