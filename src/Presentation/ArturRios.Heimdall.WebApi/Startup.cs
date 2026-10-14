@@ -349,6 +349,12 @@ public class Startup : WebApiStartup
                 DetectSecuritySignalsQueryHandler>();
         Builder.Services
             .AddScoped<IValidator<ListErasureRequestsQuery>, ListErasureRequestsQueryValidator>();
+
+        // UC-48 (FR-AT-01/02): the audit trail, System Admins only.
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListAuditLogQuery, AuditLogEntryOutput>,
+                ListAuditLogQueryHandler>();
+        Builder.Services.AddScoped<IValidator<ListAuditLogQuery>, ListAuditLogQueryValidator>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>,
                 GetTwoFactorStatusQueryHandler>();
