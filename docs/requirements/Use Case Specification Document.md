@@ -2136,6 +2136,54 @@ sequenceDiagram
 
 ---
 
+### UC-48: List the Audit Trail
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-48 |
+| **Name** | List the Audit Trail |
+| **Actors** | System Admin |
+| **Description** | Read the audit trail (NFR-09) through the API via `GET /api/audit-log`, newest first, filtered by when an entry was recorded, by actor, action, target and outcome |
+| **Preconditions** | Actor is authenticated as a System Admin |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor SA as System Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    SA->>API: GET /api/audit-log?from&to&actorId&action&targetId&succeeded&pageNumber&pageSize
+    API->>API: Validate the filters and the page
+    API->>DB: Read the matching AUDIT_LOG rows, newest first
+    API-->>SA: 200 OK — a page of entries
+```
+
+1. A System Admin requests the audit trail, optionally filtering by an inclusive range of when entries were recorded (`from`, `to`, UTC; a value without an offset is read as UTC), by the actor's identifier, by the exact action (the command's type name, e.g. `CreateScopeCommand`), by the affected entity's identifier, and by outcome (`succeeded`), and paging the result (FR-AT-01). Filters combine with AND; an empty `action` is no filter.
+2. The system validates the request: the range must not run backwards, the action must fit its column (200 characters), and the page must be within NFR-10's bounds.
+3. The system returns the matching entries newest first, ties broken by the order they were written, each with its identifier, when it was recorded, the actor and their role, the action, the target, whether it succeeded and, for a refusal, the canonical reason (FR-AT-02).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-48a | A filter or the page is invalid — the range ends before it starts, the action is longer than 200 characters, or the page is out of bounds | `400 Bad Request` — "The end of the date range must not be earlier than its start." or the pagination message |
+| AF-48b | The caller is not a System Admin | `403 Forbidden`; an anonymous caller gets `401 Unauthorized` |
+| AF-48c | No entry matches | `200 OK` with an empty page |
+
+> **On cleared actors.** The listing shows each entry as stored and never reconstructs a cleared
+> actor — no join to `PERSON`, no inference from other entries (NFR-09, NFR-21, Data Retention
+> Schedule §7.1). An entry whose attribution period is over, or whose actor has been anonymised,
+> reads `actorId: null`, and filtering by `actorId` cannot find it.
+>
+> **On Scope Admins.** `AUDIT_LOG` has no scope column, and an old entry's target may since have been
+> deleted or anonymised, so the trail cannot be divided by scope reliably. The listing is therefore
+> System Admins' only.
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2181,6 +2229,7 @@ sequenceDiagram
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
 
 ---
 

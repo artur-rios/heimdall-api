@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- UC-48: `GET /api/audit-log` lists the audit trail for System Admins, newest first, filterable by when an entry
+  was recorded (`from`/`to`, UTC, inclusive), `actorId`, `action` (the command's type name, matched exactly),
+  `targetId` and `succeeded`. An actor the retention pass has cleared reads as `null` and is never reconstructed.
+  A new migration, `AddAuditLogTargetIndex`, indexes `audit_log.target_id` so filtering by target does not scan
+  the table.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
