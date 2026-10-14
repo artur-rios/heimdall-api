@@ -153,6 +153,22 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
 | `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
 
+### `PENDING_REGISTRATION`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId` | The administrative reference a scope's owners list and discard a registration by (UC-49, UC-50). Random, so it discloses nothing by itself; the registrant never sees it |
+| `ScopeId` | The scope the registrant asked to join — and so whose owners may see and discard the registration |
+| `Name`, `Email` | What the account will be created with once the address is confirmed; the address is also where the confirmation link goes |
+| `PasswordHash`, `Salt` | The password chosen at sign-up, so the account can be created with it and confirmation can require it (FR-SR-09). Never reversible to the password |
+| `TokenHash` | Recognising the mailed link without storing it (Threat Model TH-14) |
+| `ExpiresAt`, `CreatedAt` | Bounding how long the link works, and when the row is purged (Data Retention Schedule) |
+| `FailedAttempts` | Bounding guesses at the sign-up password through a leaked link (FR-SR-09, NFR-27) |
+
+A scope's owners and System Admins can read the name, address, timestamps and remaining guesses
+through the API (UC-49) — the same name and address they would see in the scope's user list once the
+registration is confirmed. The hash, salt and token hash are never returned.
+
 > **This table is why NFR-23's columns are here.** They were added after the table existed, and
 > `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
 > working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent

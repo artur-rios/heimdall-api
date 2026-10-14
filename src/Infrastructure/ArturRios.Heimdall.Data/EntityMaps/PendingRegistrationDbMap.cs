@@ -10,8 +10,12 @@ internal static class PendingRegistrationDbMap
     {
         pending.ToTable("pending_registration");
 
-        // Internal bigint Id only; the caller-facing reference is the mailed token (§4.0).
+        // Internal bigint Id as the key. The registrant's reference is the mailed token; an
+        // administrator's is PublicId (UC-49, UC-50; §4.0).
         pending.HasKey(x => x.Id);
+
+        pending.Property(x => x.PublicId).IsRequired();
+        pending.HasIndex(x => x.PublicId).IsUnique();
 
         // Name is bounded at 200 by the entity's [MaxLength]. Both are caller-supplied text stored before
         // any person exists, so the column matches the request's bound (PersonFieldRules).
