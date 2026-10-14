@@ -72,7 +72,6 @@ Authorization: Bearer {{token}}
 DELETE {{host}}/api/scopes/{{scopeId}}/pending-registrations/{{pendingRegistrationId}}
 Authorization: Bearer {{token}}
 
-
 ### Logically delete a scope (UC-04) — System Admin.
 # Cascades to the scope's Users, Google Users and applications. They remain readable with
 # includeDeleted=true.

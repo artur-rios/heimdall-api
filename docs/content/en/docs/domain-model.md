@@ -179,9 +179,9 @@ classDiagram
     Entity~long~ <|-- AddressableEntity
 ```
 
-`Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog` and `PendingRegistration` follow the
-addressable pattern. The join rows, token rows and two-factor rows carry only the internal `Id` —
-see the table below for why.
+`Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog` and
+`PendingRegistration` follow the addressable pattern. The join rows, token rows and two-factor
+rows carry only the internal `Id` — see the table below for why.
 
 ## Which entities carry a `PublicId`
 

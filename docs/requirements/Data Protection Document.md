@@ -172,7 +172,8 @@ with the purpose that justifies holding it. A column with no purpose is a column
 
 A scope's owners and System Admins can read the id, name, address, creation and expiry times, the
 remaining guesses and whether it has expired through the API (UC-49) — the same name and address they
-would see in the scope's user list once the registration is confirmed. The hash, salt and token hash are never returned.
+would see in the scope's user list once the registration is confirmed. The hash, salt and token
+hash are never returned.
 
 ### Two decisions this review settled
 
