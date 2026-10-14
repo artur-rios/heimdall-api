@@ -39,12 +39,14 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var emailVerificationTokens = new EfRepository<EmailVerificationToken, long>(context);
         var twoFactorEmailCodes = new EfRepository<TwoFactorEmailCode, long>(context);
         var pendingRegistrations = new EfRepository<PendingRegistration, long>(context);
+        var applicationCredentials = new EfRepository<ApplicationCredential, long>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
             pendingRegistrations, pendingRegistrations,
+            applicationCredentials, applicationCredentials,
             Retention);
     }
 
@@ -188,5 +190,28 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         await using var verification = fixture.CreateContext();
 
         Assert.True(await verification.EmailVerificationTokens.AnyAsync(x => x.Id == liveVerification.Id));
+    }
+
+    [FunctionalFact]
+    public async Task GivenSpentApplicationCredentials_WhenPurging_ThenOnlyTheLiveOneRemains()
+    {
+        // Given an application with one credential revoked well past the grace, one expired well
+        // past it, and one live
+        var (_, _, application) = await ApplicationSeeds.SeedOwnedApplicationAsync(fixture);
+        var longAgo = DateTime.UtcNow.AddDays(-30);
+        var (revoked, _) = await ApplicationSeeds.SeedCredentialAsync(fixture, application, revokedAt: longAgo);
+        var (expired, _) = await ApplicationSeeds.SeedCredentialAsync(fixture, application, expiresAt: longAgo);
+        var (live, _) = await ApplicationSeeds.SeedCredentialAsync(fixture, application);
+
+        // When
+        await using var context = fixture.CreateContext();
+        var output = await Handler(context).HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.ApplicationCredentialsPurged >= 2);
+        var remaining = await ApplicationSeeds.CredentialsOfAsync(fixture, application);
+        Assert.Equal([live.PublicId], remaining.Select(x => x.PublicId));
+        Assert.DoesNotContain(remaining, x => x.PublicId == revoked.PublicId || x.PublicId == expired.PublicId);
     }
 }

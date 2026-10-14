@@ -1,9 +1,12 @@
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Mediator.Command;
+using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
@@ -22,7 +25,7 @@ namespace ArturRios.Heimdall.WebApi.Controllers;
 ///     <c>ApplicationManagementAccess</c> — the same rule as reading or renaming the application.
 /// </remarks>
 [Route("api/scopes/{scopeId:guid}/applications/{id:guid}/credentials")]
-public class ApplicationCredentialController(CommandMediator commandMediator) : Controller
+public class ApplicationCredentialController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
 {
     /// <summary>
     ///     Issues a credential (UC-53). The body is optional and carries only <c>expiresAt</c>. The
@@ -41,6 +44,41 @@ public class ApplicationCredentialController(CommandMediator commandMediator) : 
 
         var result = await commandMediator
             .ExecuteCommandAsync<IssueApplicationCredentialCommand, IssueApplicationCredentialCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ApplicationCredentialMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists the application's credentials, newest first, with whether each is live (UC-54).
+    ///     Never a secret or a hash.
+    /// </summary>
+    [HttpGet]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<ApplicationCredentialListOutput?>>> List(Guid scopeId, Guid id)
+    {
+        var query = new ListApplicationCredentialsQuery { ScopeId = scopeId, Id = id };
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecuteQueryAsync<ListApplicationCredentialsQuery, ApplicationCredentialListOutput>(query);
+
+        return result.ToActionResult(statusMap: ApplicationCredentialMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Revokes one credential (UC-55). Its secret stops being exchanged at once, and every token
+    ///     already issued from it fails the next live re-check (UC-57).
+    /// </summary>
+    [HttpDelete("{credentialId:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<RevokeApplicationCredentialCommandOutput?>>> Revoke(
+        Guid scopeId, Guid id, Guid credentialId)
+    {
+        var command = new RevokeApplicationCredentialCommand { ScopeId = scopeId, Id = id, CredentialId = credentialId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<RevokeApplicationCredentialCommand, RevokeApplicationCredentialCommandOutput>(command);
 
         return result.ToActionResult(statusMap: ApplicationCredentialMessageMap.StatusCodes);
     }
