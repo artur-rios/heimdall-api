@@ -173,9 +173,10 @@ Brute force is bounded in two independent places, because each covers what the o
 (an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
 `AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
 reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
-answer **429** with a `Retry-After` header (whole seconds) and the usual error envelope. None of these requires a bearer token, so nothing else bounds how fast one caller
-can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
-hashing library's defaults) — so memory exhaustion is realistic without it. The authenticated
+answer **429** with a `Retry-After` header (whole seconds) and the usual error envelope. None of these
+requires a bearer token, so nothing else bounds how fast one caller can hit them, and each login attempt
+costs a full Argon2id verification (600 MB / 16 threads by the hashing library's defaults) — so memory
+exhaustion is realistic without it. The authenticated
 endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
 regeneration, and the erasure request — share the same limit: a bearer token is not the password,
 and without it whoever held one could test passwords or six-digit codes against them unthrottled.
