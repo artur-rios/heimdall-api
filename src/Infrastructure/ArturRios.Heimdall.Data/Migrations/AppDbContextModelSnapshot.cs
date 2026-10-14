@@ -85,6 +85,63 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("application", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ApplicationCredential", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ApplicationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("application_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("secret_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_application_credential");
+
+                    b.HasIndex("ApplicationId")
+                        .HasDatabaseName("ix_application_credential_application_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_application_credential_public_id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_application_credential_secret_hash");
+
+                    b.ToTable("application_credential", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -1059,6 +1116,18 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.Navigation("Scope");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ApplicationCredential", b =>
+                {
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Application", "Application")
+                        .WithMany("Credentials")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_application_credential_application_application_id");
+
+                    b.Navigation("Application");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.EmailVerificationToken", b =>
                 {
                     b.HasOne("ArturRios.Heimdall.Domain.Entities.Person", "Person")
@@ -1207,6 +1276,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasConstraintName("fk_two_factor_recovery_code_two_factor_auth_two_factor_auth_id");
 
                     b.Navigation("TwoFactorAuth");
+                });
+
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Application", b =>
+                {
+                    b.Navigation("Credentials");
                 });
 
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Person", b =>

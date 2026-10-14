@@ -18,6 +18,7 @@ public class AppDbContext(
     public DbSet<Scope> Scopes { get; init; }
     public DbSet<Role> Roles { get; init; }
     public DbSet<Application> Applications { get; init; }
+    public DbSet<ApplicationCredential> ApplicationCredentials { get; init; }
     public DbSet<GoogleUser> GoogleUsers { get; init; }
     public DbSet<ScopeOwner> ScopeOwners { get; init; }
     public DbSet<ScopeUser> ScopeUsers { get; init; }
@@ -62,6 +63,7 @@ public class AppDbContext(
         modelBuilder.Entity<Scope>().Configure();
         modelBuilder.Entity<Role>().Configure();
         modelBuilder.Entity<Application>().Configure();
+        modelBuilder.Entity<ApplicationCredential>().Configure();
         modelBuilder.Entity<GoogleUser>().Configure();
         modelBuilder.Entity<ScopePermission>().Configure();
         modelBuilder.Entity<ScopeOwner>().Configure();

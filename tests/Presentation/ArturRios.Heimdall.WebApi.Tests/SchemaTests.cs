@@ -17,6 +17,7 @@ public class SchemaTests(PostgresFixture fixture)
         string[] expected =
         [
             "application",
+            "application_credential",
             "audit_log",
             "data_protection_keys",
             "email_verification_token",
@@ -198,6 +199,37 @@ public class SchemaTests(PostgresFixture fixture)
         // Then
         Assert.NotNull(definition);
         Assert.Contains("(target_id)", definition);
+    }
+
+    [FunctionalFact]
+    public async Task GivenMigrationsApplied_WhenCredentialIndexesInspected_ThenHashAndPublicIdAreUnique()
+    {
+        // Given the migrated schema. UC-56 finds a credential by its hash, and UC-55 by its public id.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select indexdef
+            from pg_indexes
+            where schemaname = 'heimdall' and tablename = 'application_credential'
+            """,
+            connection);
+        var definitions = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                definitions.Add(reader.GetString(0));
+            }
+        }
+
+        // Then
+        Assert.Contains(definitions, definition =>
+            definition.Contains("UNIQUE") && definition.Contains("(secret_hash)"));
+        Assert.Contains(definitions, definition =>
+            definition.Contains("UNIQUE") && definition.Contains("(public_id)"));
     }
 
     private async Task<long> InsertScopeAsync()
