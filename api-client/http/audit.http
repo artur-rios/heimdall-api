@@ -1,0 +1,14 @@
+### Audit trail — /api/audit-log
+#
+# Run auth.http's "Login" first, as a SystemAdmin: the trail is readable by that role alone.
+
+### List the audit trail's refusals (UC-48) — System Admin.
+# Newest first. Every filter is optional and they combine: from/to bound when an entry was recorded
+# (UTC, inclusive), actorId and targetId are PublicIds, action is the exact command type name, and
+# succeeded=false lists only refusals. An actor cleared by the retention pass reads as null.
+GET {{host}}/api/audit-log?pageNumber=1&pageSize=20&succeeded=false
+Authorization: Bearer {{token}}
+
+### What happened to one scope (UC-48) — System Admin.
+GET {{host}}/api/audit-log?pageNumber=1&pageSize=20&targetId={{scopeId}}
+Authorization: Bearer {{token}}

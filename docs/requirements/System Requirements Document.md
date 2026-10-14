@@ -269,6 +269,13 @@ graph LR
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
 
+### 3.11 Audit Trail
+
+| ID | Requirement | Priority |
+| ---- | ------------ | ---------- |
+| FR-AT-01 | The system shall allow a `SystemAdmin` to list the audit trail, paginated and newest first (ties broken by write order), optionally filtered by an inclusive range of when entries were recorded (UTC), by the actor's identifier, by the exact action name, by the affected entity's identifier, and by whether the operation succeeded. Filters combine with AND. No other role may read the trail, and reading it is not itself audited | High |
+| FR-AT-02 | The audit-trail listing shall show each entry as stored — its identifier, when it was recorded, actor and role, action, target, outcome and canonical failure reason. An actor that is absent or has been cleared (NFR-21) shall be reported as null and never reconstructed from other data | High |
+
 ---
 
 ## 4. Data Model
@@ -656,6 +663,12 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}` | Logically delete a scope permission | SystemAdmin / ScopeAdmin (owner of the scope) |
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}/hard` | Hard delete a scope permission | SystemAdmin |
 
+### 5.7 Audit Trail Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+| -------- | ---------- | ------------- | --------------- |
+| GET | `/api/audit-log` | List the audit trail, newest first, filtered by `from`/`to`, `actorId`, `action`, `targetId`, `succeeded` (FR-AT-01, FR-AT-02) | SystemAdmin |
+
 ---
 
 ## 6. Non-Functional Requirements
@@ -998,6 +1011,7 @@ block-beta
 | Restrict Processing of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | Lift a Restriction | ✅ (self, or anyone) | ✅ (self only) | ✅ (self only) | ❌ |
 | List Outstanding Erasure Requests | ✅ | ❌ | ❌ | ❌ |
+| List the Audit Trail | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -1089,5 +1103,6 @@ Notes on cascading behavior:
 | Self-Registration | FR-SR-01 through FR-SR-12 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
+| Audit Trail | FR-AT-01 through FR-AT-02 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
 | Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

@@ -452,6 +452,113 @@
         ]
       }
     },
+    "/api/audit-log": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "Lists the audit trail (UC-48, FR-AT-01/02), newest first. System Admin only. Every filter is\noptional and they combine: `from`/`to` bound when an entry was recorded (UTC,\ninclusive), `actorId` and `targetId` are public ids, `action` is the exact\ncommand type name (e.g. `CreateScopeCommand`), and `succeeded=false` lists only\nrefusals.",
+        "description": "Entries are shown as stored. An actor the retention pass has cleared (NFR-21) is\n`null` and is never reconstructed, so filtering by `actorId` cannot find entries\nwhose attribution has been cleared. A Scope Admin is refused: the trail has no scope\ncolumn, and an old entry's target may be gone, so it cannot be divided by scope reliably.\nReading the trail is not itself audited.\n\n**Requires role:** System Admin.",
+        "operationId": "Audit_List",
+        "parameters": [
+          {
+            "name": "From",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "To",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "ActorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "TargetId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Succeeded",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -4191,6 +4298,98 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApplicationOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditLogEntryOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "actorRole": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditLogEntryOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntryOutput"
             },
             "nullable": true
           },
@@ -8150,6 +8349,9 @@
   "tags": [
     {
       "name": "Application"
+    },
+    {
+      "name": "Audit"
     },
     {
       "name": "Auth"

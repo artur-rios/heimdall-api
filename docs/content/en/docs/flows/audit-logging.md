@@ -103,3 +103,17 @@ warning in the log is the record that a gap exists.
 The anonymous write endpoints — login, password recovery, password reset, email verification, Google
 sign-in, second-factor verification — therefore produce entries with a `null` actor. The `Action`
 still names the command, so the entry records *what* happened even when it cannot record *who*.
+
+## Reading the trail — UC-48
+
+`GET /api/audit-log` lists entries for a System Admin, newest first. Ties are broken by write order,
+so the order is deterministic for a fixed set of rows. Every command writes to the trail, so entries
+written between two page requests shift older ones and the next page can repeat some; to page a
+stable snapshot, pin `to` to the time of your first request. It filters by `from`/`to` (UTC, inclusive; a
+value without an offset is read as UTC), `actorId`, `action`, `targetId` and `succeeded`, combined with
+AND. `targetId` is indexed (`ix_audit_log_target_id`), so "what happened to this entity?" does not scan
+the table.
+
+The listing reads `AUDIT_LOG` and nothing else. A cleared attribution stays cleared: `actorId` and
+`actorRole` read `null`, and no join or neighbouring entry is used to put a name back. Listing is a read
+and writes no entry of its own.

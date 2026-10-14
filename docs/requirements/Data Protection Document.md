@@ -153,6 +153,12 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
 | `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
 
+**Readable through the API by System Admins (UC-48).** `GET /api/audit-log` shows each entry as
+stored: an attribution already cleared reads as `null` and is never reconstructed, whether by a join
+to `PERSON` or from neighbouring entries. The endpoint widens who can read the trail — from whoever
+can query the database to System Admins — without widening what it says about anyone. No column was
+added, so this table is unchanged.
+
 > **This table is why NFR-23's columns are here.** They were added after the table existed, and
 > `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
 > working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent

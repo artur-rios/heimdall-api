@@ -145,6 +145,9 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_audit_log_public_id");
 
+                    b.HasIndex("TargetId")
+                        .HasDatabaseName("ix_audit_log_target_id");
+
                     b.ToTable("audit_log", "heimdall");
                 });
 

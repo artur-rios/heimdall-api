@@ -271,6 +271,12 @@ transfer rests on **LGPD Art. 33 IX with Art. 7 V**, a statutory ground needing 
 agreement. Nothing was signed. See §6.1 and §7.1 of the
 [Data Protection Document](docs/requirements/Data%20Protection%20Document.md).
 
+### Audit Trail
+
+| Use case | Status | Issue |
+| --- | --- | --- |
+| UC-48: List the Audit Trail | ✅ | [#174](https://github.com/artur-rios/heimdall-api/issues/174) |
+
 ### Platform
 
 Not use cases, tracked separately.
