@@ -17,6 +17,7 @@ using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Input.Validation;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
@@ -28,6 +29,7 @@ using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
+using ArturRios.Output;
 using ArturRios.Messaging.Email;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Query;
@@ -87,6 +89,13 @@ public class Startup : WebApiStartup
     ///     controller and this configuration stay in sync without duplicating the literal.
     /// </summary>
     public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
+
+    /// <summary>
+    ///     Length, in seconds, of the <c>AuthAnonymous</c> fixed window. One value for the limiter's
+    ///     <c>Window</c> and for the <c>Retry-After</c> a rejection falls back to, so the two cannot
+    ///     drift apart.
+    /// </summary>
+    private const int AuthEndpointRateLimitWindowSeconds = 60;
 
     /// <summary>
     ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
@@ -803,13 +812,31 @@ public class Startup : WebApiStartup
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+            // TH-32: a turned-away caller is told when to come back and gets the API's usual error
+            // envelope, not an empty 429. The lease's own hint is used when the limiter gives one;
+            // a fixed window gives none, so the window's length is the honest upper bound.
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+                    ? (int)Math.Ceiling(retryAfter.TotalSeconds)
+                    : AuthEndpointRateLimitWindowSeconds;
+
+                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                context.HttpContext.Response.Headers.RetryAfter =
+                    Math.Max(1, retryAfterSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    DataOutput<object?>.New.WithError(RateLimitMessages.TooManyRequests),
+                    cancellationToken);
+            };
+
             options.AddPolicy(AuthEndpointRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: AuthRateLimitPartition.KeyFor(httpContext, callers),
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
-                        Window = TimeSpan.FromMinutes(1),
+                        Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
                         QueueLimit = 0
                     }));
         });
