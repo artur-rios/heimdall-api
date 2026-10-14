@@ -228,6 +228,14 @@ branch. Same message, same status, everywhere it is returned.
 List endpoints accept pagination and filter parameters, all validated before the query runs
 (**NFR-10**), and most accept `includeDeleted=true` to see logically deleted rows.
 
+## Malformed requests
+
+A request that cannot be bound — a body that is not JSON, or a value of the wrong type in the body,
+query string or route (`?succeeded=maybe`, `{"name": 123}`) — answers `400` with the error
+`The request is malformed.` in the usual `DataOutput` envelope, on every endpoint (**NFR-10**). It is
+checked after authorization, so a caller without a valid token still receives `401` or `403`. Only
+`POST …/credentials` accepts an empty body, meaning "no expiry".
+
 ## Errors that are deliberately vague
 
 Some responses tell the caller less than the API knows, on purpose:

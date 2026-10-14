@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A request that cannot be bound now answers `400` with "The request is malformed." on every endpoint (#186),
+  instead of running the action with a missing or default argument: a body that is not JSON was a `500`, and a
+  query filter of the wrong type (`?succeeded=maybe`, `?actorId=not-a-guid`) was dropped and answered `200`
+  unfiltered. A global `MalformedRequestFilter` replaces the two per-action guards added in #178; it runs after
+  authorization, so an unauthenticated caller still receives `401`.
+
 ### Added
 
 - UC-53 to UC-57 (#178): a registered application can authenticate to Heimdall as itself. A System Admin, or the
