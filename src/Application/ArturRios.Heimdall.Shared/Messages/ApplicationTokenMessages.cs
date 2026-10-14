@@ -9,6 +9,9 @@ public static class ApplicationTokenMessages
     /// <summary>UC-57 main flow.</summary>
     public const string TokenAccepted = "Application token accepted.";
 
+    /// <summary>AF-56a — the body is not JSON, or an id in it is not a GUID, so no command could be read.</summary>
+    public const string RequestMalformed = "The request body is malformed.";
+
     /// <summary>AF-56a — the application id is missing.</summary>
     public const string ApplicationIdRequired = "Application id is required.";
 

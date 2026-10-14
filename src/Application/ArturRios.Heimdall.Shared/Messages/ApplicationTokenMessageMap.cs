@@ -11,6 +11,7 @@ public static class ApplicationTokenMessageMap
             // UC-56 main flow — token issued.
             [ApplicationTokenMessages.TokenIssued] = HttpStatusCodes.Ok,
             // AF-56a — a field is missing or the secret is over-long.
+            [ApplicationTokenMessages.RequestMalformed] = HttpStatusCodes.BadRequest,
             [ApplicationTokenMessages.ApplicationIdRequired] = HttpStatusCodes.BadRequest,
             [ApplicationTokenMessages.ScopeIdRequired] = HttpStatusCodes.BadRequest,
             [ApplicationTokenMessages.SecretRequired] = HttpStatusCodes.BadRequest,

@@ -171,4 +171,35 @@ public class ApplicationTokenControllerIssueTests(PostgresFixture db) : WebApiTe
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal([ApplicationTokenMessages.SecretRequired], response.Body!.Errors);
     }
+
+    private async Task<HttpStatusCode> PostRawAsync(string route, string json)
+    {
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        using var response = await Gateway.Client.PostAsync(route, content);
+        return response.StatusCode;
+    }
+
+    [FunctionalFact]
+    public async Task GivenAMalformedApplicationId_WhenExchanging_ThenBadRequest()
+    {
+        // Given
+        var scope = await SeedScopeAsync(db);
+        var json = $$"""{"applicationId":"abc","scopeId":"{{scope.PublicId}}","secret":"hds_x"}""";
+
+        // When
+        var status = await PostRawAsync(Route, json);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+    }
+
+    [FunctionalFact]
+    public async Task GivenABodyThatIsNotJson_WhenExchanging_ThenBadRequest()
+    {
+        // Given / When
+        var status = await PostRawAsync(Route, "{\"applicationId\":");
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+    }
 }

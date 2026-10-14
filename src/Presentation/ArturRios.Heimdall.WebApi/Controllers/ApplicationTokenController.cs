@@ -33,6 +33,15 @@ public class ApplicationTokenController(CommandMediator commandMediator) : Contr
     public async Task<ActionResult<DataOutput<IssueApplicationTokenCommandOutput?>>> IssueToken(
         [FromBody] IssueApplicationTokenCommand command)
     {
+        // AF-56a — a body that is not JSON, or carries an id that is not a GUID, binds no command
+        // (the controller is not [ApiController], so nothing answers for it). Say only that.
+        if (command is null || !ModelState.IsValid)
+        {
+            return DataOutput<IssueApplicationTokenCommandOutput?>.New
+                .WithError(ApplicationTokenMessages.RequestMalformed)
+                .ToActionResult(statusMap: ApplicationTokenMessageMap.StatusCodes);
+        }
+
         var result = await commandMediator
             .ExecuteCommandAsync<IssueApplicationTokenCommand, IssueApplicationTokenCommandOutput>(command);
 
