@@ -148,6 +148,16 @@ grants. The listing admits none of them.
 Both deletions take the scope's `PublicId` in the path and refuse a Google User reached through the
 wrong scope.
 
+## Audit trail — `/api/audit-log`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `GET /api/audit-log` | System Admin | UC-48 — the audit trail, newest first; filter by `from`/`to` (UTC, inclusive), `actorId`, `action`, `targetId`, `succeeded` |
+
+An entry is shown as stored: an actor the retention pass has cleared reads as `null`, so filtering by
+`actorId` cannot find it. `action` is the command's type name, matched exactly (`CreateScopeCommand`).
+A Scope Admin is refused — the trail has no scope column to divide it by.
+
 ## Health check — `/api/healthcheck`
 
 | Method & path | Who | Use case |

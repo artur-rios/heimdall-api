@@ -18,6 +18,7 @@ public class DataAccessMessageMapTests
     public static TheoryData<string, IReadOnlyDictionary<string, int>> EveryUseCaseMap() => new()
     {
         { nameof(ApplicationMessageMap), ApplicationMessageMap.StatusCodes },
+        { nameof(AuditMessageMap), AuditMessageMap.StatusCodes },
         { nameof(AuthMessageMap), AuthMessageMap.StatusCodes },
         { nameof(GoogleUserMessageMap), GoogleUserMessageMap.StatusCodes },
         { nameof(PersonMessageMap), PersonMessageMap.StatusCodes },

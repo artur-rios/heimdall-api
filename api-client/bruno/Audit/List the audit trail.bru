@@ -1,0 +1,19 @@
+meta {
+  name: List the audit trail
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{host}}/api/audit-log?pageNumber=1&pageSize=20&succeeded=false
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-48. System Admin.
+
+  Newest first. Every filter is optional and they combine: from/to bound when an entry was recorded (UTC, inclusive), actorId and targetId are PublicIds, action is the exact command type name (CreateScopeCommand), and succeeded=false lists only refusals.
+
+  An actor cleared by the retention pass reads as null and is never reconstructed, so filtering by actorId cannot find such entries. Add &targetId={{scopeId}} to see what happened to one scope.
+}

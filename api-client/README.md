@@ -9,7 +9,7 @@ Ready-to-send requests for every endpoint the API exposes, in two formats:
 
 Both cover the same 49 operations — the same set the
 [published OpenAPI document](../docs/openapi/heimdall.json) describes — and both are organised by
-subject: authentication, scopes, persons, applications, scope permissions, Google Users, health.
+subject: authentication, scopes, persons, applications, scope permissions, Google Users, health, audit trail.
 
 For what each endpoint means and who may call it, see the
 [API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/). To read the schemas,
