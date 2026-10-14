@@ -3,8 +3,9 @@ using ArturRios.Mediator.Command;
 namespace ArturRios.Heimdall.Command.Input;
 
 /// <summary>
-///     Intent to clear the actor attribution from audit entries whose attribution period has run
-///     out, and from entries naming an identity that has since been erased (NFR-21).
+///     Intent to clear the actor attribution, and any target naming a person or Google User, from
+///     audit entries whose attribution period has run out, and from entries naming an identity that
+///     has since been erased (NFR-21).
 /// </summary>
 /// <remarks>
 ///     Carries no data and is dispatched by the scheduled pass, like the other retention commands.

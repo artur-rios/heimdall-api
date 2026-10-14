@@ -34,7 +34,10 @@ public class ListAuditLogQuery : BaseQuery, IActorScoped
     /// </summary>
     public string? Action { get; set; }
 
-    /// <summary>The affected entity's public id.</summary>
+    /// <summary>
+    ///     The affected entity's public id. An entry whose person target has been cleared (NFR-21)
+    ///     names nobody, so this filter cannot find it.
+    /// </summary>
     public Guid? TargetId { get; set; }
 
     /// <summary><c>true</c> for completed writes, <c>false</c> for refused ones.</summary>
