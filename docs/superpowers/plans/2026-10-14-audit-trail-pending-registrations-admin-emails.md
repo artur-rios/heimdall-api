@@ -59,7 +59,7 @@ The spec leaves these open; the plan fixes them as follows.
   Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01KU2awQWyVHDRk4zc4mKYjv
   ```
-- `python3 scripts/vulnerabilities.py` fails on `develop` today: Microsoft.* packages are at 10.0.12 until the separate `fix/dotnet-10.0.13-security` pull request (10.0.12 → 10.0.13) merges. **Do not bump packages in these branches.** Once that pull request is on `origin/develop`, merge `origin/develop` into the part's branch (see each part's verification) and re-run the gates.
+- `python3 scripts/vulnerabilities.py` must exit 0. The Microsoft.* 10.0.12 → 10.0.13 security bump landed on `develop` as #180 and is already merged into Part A's branch; Parts B and C branch from an `origin/develop` that contains it. **Do not bump packages in these branches.** If a part's verification still finds a vulnerability, merge `origin/develop` into the part's branch and re-run the gates.
 
 ## Review Focus
 
