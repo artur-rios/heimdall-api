@@ -3554,6 +3554,69 @@
         ]
       }
     },
+    "/api/scopes/{id}/pending-registrations/{registrationId}": {
+      "delete": {
+        "tags": [
+          "Scope"
+        ],
+        "summary": "Discards one of the scope's self-registrations awaiting confirmation (UC-50, FR-SR-12). Its\nlink stops working — following it answers as for any unknown token — and the registrant may\nsign up again. Same actors as the listing; a registration of another scope answers 404 exactly\nlike a missing one (AF-50c).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Scope_DiscardPendingRegistration",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "registrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes/{scopeId}/permissions": {
       "post": {
         "tags": [
@@ -5238,6 +5301,47 @@
           },
           "data": {
             "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiscardPendingRegistrationCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiscardPendingRegistrationCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutput"
           }
         },
         "additionalProperties": false

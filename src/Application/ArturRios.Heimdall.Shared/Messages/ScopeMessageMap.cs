@@ -52,6 +52,11 @@ public static class ScopeMessageMap
             // AF-49a reuses ScopeNotFound (404), AF-49b NotScopeOwner (403), and the page bounds the
             // NFR-10 entries below (400).
             [ScopeMessages.PendingRegistrationsRetrieved] = HttpStatusCodes.Ok,
+            // UC-50 main flow — the registration was discarded. AF-50a reuses ScopeNotFound (404) and
+            // AF-50b NotScopeOwner (403).
+            [ScopeMessages.PendingRegistrationDiscarded] = HttpStatusCodes.Ok,
+            // AF-50c — not in this scope, never existed, or already confirmed or purged.
+            [ScopeMessages.PendingRegistrationNotFound] = HttpStatusCodes.NotFound,
             // UC-02 read b (NFR-10) — invalid pagination or an over-length name filter.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,

@@ -234,6 +234,9 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<SetSelfRegistrationCommand, SetSelfRegistrationCommandOutput, SetSelfRegistrationCommandHandler>();
         Builder.Services.AddScoped<IValidator<SetScopeEmailLinksCommand>, SetScopeEmailLinksCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<SetScopeEmailLinksCommand, SetScopeEmailLinksCommandOutput, SetScopeEmailLinksCommandHandler>();
+        // UC-50 (FR-SR-12): no validator — both identifiers are route values already constrained to
+        // GUIDs. Audited like every write, with the registration as target.
+        Builder.Services.AddAuditedCommandHandler<DiscardPendingRegistrationCommand, DiscardPendingRegistrationCommandOutput, DiscardPendingRegistrationCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateAdminCommand, CreatePersonCommandOutput, CreateAdminCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();

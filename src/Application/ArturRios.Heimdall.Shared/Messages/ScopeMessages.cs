@@ -102,4 +102,13 @@ public static class ScopeMessages
     ///     none, which is an empty page rather than a refusal.
     /// </summary>
     public const string PendingRegistrationsRetrieved = "Pending registrations retrieved.";
+
+    /// <summary>UC-50 main flow: the pending registration was removed, so its link no longer works.</summary>
+    public const string PendingRegistrationDiscarded = "Pending registration discarded.";
+
+    /// <summary>
+    ///     AF-50c: no pending registration with that id belongs to the scope. A registration of another
+    ///     scope answers exactly like a missing one, and so does one confirmed or purged a moment before.
+    /// </summary>
+    public const string PendingRegistrationNotFound = "Pending registration not found.";
 }
