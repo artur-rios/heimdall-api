@@ -11,7 +11,9 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         person tokens' key pair. A consumer that validates person tokens offline would take an
 ///         application token for a person if both carried one audience; a distinct audience is what
 ///         makes it refuse (Threat Model TH-35). So start-up refuses a missing audience, and one equal
-///         to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c>, rather than run without the separation.
+///         to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c>, rather than run without the separation. "Equal" is
+///         judged as a validator would: Microsoft.IdentityModel ignores a trailing slash when it
+///         matches <c>aud</c>, so <c>heimdall/</c> and <c>heimdall</c> are the same audience.
 ///     </para>
 ///     <para>
 ///         <b>Lifetime.</b> Ten minutes by default (TH-34): short enough that a leaked token is soon
@@ -45,7 +47,8 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
 
     /// <summary>
     ///     Builds the options from raw values. Throws <see cref="InvalidOperationException" /> when
-    ///     <paramref name="audience" /> is blank or equals <paramref name="personAudience" />.
+    ///     <paramref name="audience" /> is blank or equals <paramref name="personAudience" />, ignoring
+    ///     surrounding whitespace and a trailing slash.
     /// </summary>
     public static ApplicationTokenOptions Parse(string? audience, string? expirationInSeconds, string? personAudience)
     {
@@ -58,7 +61,7 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
 
         var trimmed = audience.Trim();
 
-        if (string.Equals(trimmed, personAudience?.Trim(), StringComparison.Ordinal))
+        if (string.Equals(Comparable(trimmed), Comparable(personAudience), StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Environment variable '{AudienceVariable}' equals '{PersonAudienceVariable}'. An " +
@@ -74,4 +77,7 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
 
         return new ApplicationTokenOptions(trimmed, lifetime);
     }
+
+    /// <summary>An audience as a token validator compares it: trimmed, with no trailing slash.</summary>
+    private static string? Comparable(string? audience) => audience?.Trim().TrimEnd('/');
 }

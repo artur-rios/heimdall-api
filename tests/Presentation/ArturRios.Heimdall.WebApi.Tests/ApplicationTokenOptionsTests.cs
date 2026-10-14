@@ -60,13 +60,18 @@ public class ApplicationTokenOptionsTests
     }
 
     [UnitTheory]
-    [InlineData("heimdall")]
-    [InlineData(" heimdall ")]
-    public void GivenTheSameAudienceAsPersonTokens_WhenParsed_ThenStartUpIsRefused(string audience)
+    [InlineData("heimdall", "heimdall")]
+    [InlineData(" heimdall ", "heimdall")]
+    [InlineData("heimdall/", "heimdall")]
+    [InlineData("heimdall", "heimdall/")]
+    public void GivenTheSameAudienceAsPersonTokens_WhenParsed_ThenStartUpIsRefused(string audience, string personAudience)
     {
-        // Given / When
+        // Given — a trailing slash is the same audience: Microsoft.IdentityModel ignores it when
+        // matching aud by default, so a consumer pinned to one would accept the other
+
+        // When
         var error = Assert.Throws<InvalidOperationException>(
-            () => ApplicationTokenOptions.Parse(audience, null, "heimdall"));
+            () => ApplicationTokenOptions.Parse(audience, null, personAudience));
 
         // Then
         Assert.Contains(ApplicationTokenOptions.AudienceVariable, error.Message);
