@@ -2948,6 +2948,60 @@
         ]
       }
     },
+    "/api/persons/{id}/password-reset": {
+      "post": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Has a password-reset link mailed to a person's own address (UC-52, FR-PR-05). A System Admin\nmay ask for any person; a Scope Admin only for a `User` of a scope they own (AF-52b). No\nbody; neither a token nor a password is accepted or returned.",
+        "description": "Eligibility is UC-12's: refused (409) when the person is deleted or restricted (AF-52c) or\ntheir account could not sign in — a User whose scope is deleted, a Scope Admin with no live\nscope (AF-52d). 429 when a reset went to them within the cooldown (AF-52e). Unlike UC-12 the\nsend is not queued: the caller is authenticated and owed a real answer. 200 means the email\nwas handed to the sender.\n\n**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Person_SendPasswordReset",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes": {
       "post": {
         "tags": [
@@ -7087,6 +7141,47 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonPasswordResetCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonPasswordResetCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutput"
           }
         },
         "additionalProperties": false

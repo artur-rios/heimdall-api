@@ -1,4 +1,8 @@
 using System.Globalization;
+using ArturRios.Data.Relational.Core.Entities;
+using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Heimdall.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
 
@@ -50,4 +54,23 @@ public class AdminEmailOptions
     ///     inside the cooldown window if and only if its <c>ExpiresAt</c> is later than this.
     /// </summary>
     public DateTime CooldownThreshold(DateTime now, TimeSpan tokenLifetime) => now + tokenLifetime - Cooldown;
+
+    /// <summary>
+    ///     Whether any token of this kind (used, superseded or live, self-service or not) was issued for
+    ///     the person with internal id <paramref name="personId" /> inside the cooldown window, so that
+    ///     UC-51 and UC-52 ask the question the same way (AF-51e, AF-52e).
+    /// </summary>
+    public async Task<bool> IsRunningAsync<TToken>(
+        IAsyncReadOnlyRepository<TToken, long> tokenReader,
+        long personId,
+        TimeSpan tokenLifetime,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+        where TToken : Entity<long>, IPersonToken
+    {
+        var threshold = CooldownThreshold(now, tokenLifetime);
+
+        return await tokenReader.Query()
+            .AnyAsync(x => x.PersonId == personId && x.ExpiresAt > threshold, cancellationToken);
+    }
 }

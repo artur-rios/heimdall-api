@@ -81,10 +81,12 @@ public class SendPersonVerificationEmailCommandHandler(
 
         // AF-51e. Any verification token issued for the person inside the window — used, superseded
         // or live, self-service or not — means one was sent recently.
+        // Best-effort: concurrent requests for the same person can both pass this check (no lock).
+        // Accepted, because only an authenticated administrator can trigger it.
         var now = DateTime.UtcNow;
-        var threshold = adminEmailOptions.CooldownThreshold(now, verificationOptions.TokenLifetime);
 
-        if (await tokenReader.Query().AnyAsync(x => x.PersonId == person.Id && x.ExpiresAt > threshold, cancellationToken))
+        if (await adminEmailOptions.IsRunningAsync(
+                tokenReader, person.Id, verificationOptions.TokenLifetime, now, cancellationToken))
         {
             return output.WithError(PersonMessages.AccountEmailSentRecently);
         }

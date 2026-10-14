@@ -152,4 +152,14 @@ public static class PersonMessages
     /// </summary>
     public const string AccountEmailSentRecently =
         "An email of this kind was sent to this person recently. Try again in a few minutes.";
+
+    /// <summary>UC-52 main flow: a password-reset email was handed to the sender for the person's own address.</summary>
+    public const string PasswordResetSentToPerson = "Password reset email sent to the person's address.";
+
+    /// <summary>
+    ///     AF-52d: the account could not sign in whatever its password — a <c>User</c> whose scope is
+    ///     logically deleted, or a <c>ScopeAdmin</c> with no live scope (FR-AU-06/07) — so a reset link
+    ///     would help nobody and none was sent.
+    /// </summary>
+    public const string PersonCannotSignIn = "This person's account cannot sign in, so no password reset was sent.";
 }

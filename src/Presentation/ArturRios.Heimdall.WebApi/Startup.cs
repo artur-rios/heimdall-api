@@ -381,6 +381,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddSingleton(AdminEmailOptions.FromEnvironment());
         // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
         Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
+        // UC-52: no validator either — the route's person id is the whole of the input.
+        Builder.Services.AddAuditedCommandHandler<SendPersonPasswordResetCommand, SendPersonPasswordResetCommandOutput, SendPersonPasswordResetCommandHandler>();
         // UC-12 runs in two halves (AF-12a): the handler queues, the dispatcher does the work after
         // the caller has been answered, so no address takes longer to answer than another. See
         // PasswordRecoveryQueue for why this is an in-memory queue rather than a floor or an outbox.

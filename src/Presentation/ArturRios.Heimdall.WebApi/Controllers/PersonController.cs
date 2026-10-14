@@ -312,4 +312,29 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Has a password-reset link mailed to a person's own address (UC-52, FR-PR-05). A System Admin
+    ///     may ask for any person; a Scope Admin only for a <c>User</c> of a scope they own (AF-52b). No
+    ///     body; neither a token nor a password is accepted or returned.
+    /// </summary>
+    /// <remarks>
+    ///     Eligibility is UC-12's: refused (409) when the person is deleted or restricted (AF-52c) or
+    ///     their account could not sign in — a User whose scope is deleted, a Scope Admin with no live
+    ///     scope (AF-52d). 429 when a reset went to them within the cooldown (AF-52e). Unlike UC-12 the
+    ///     send is not queued: the caller is authenticated and owed a real answer. 200 means the email
+    ///     was handed to the sender.
+    /// </remarks>
+    [HttpPost("persons/{id:guid}/password-reset")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SendPersonPasswordResetCommandOutput?>>> SendPasswordReset(Guid id)
+    {
+        var command = new SendPersonPasswordResetCommand { Id = id };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SendPersonPasswordResetCommand, SendPersonPasswordResetCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
 }

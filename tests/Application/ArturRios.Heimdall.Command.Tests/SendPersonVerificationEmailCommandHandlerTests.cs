@@ -168,6 +168,7 @@ public class SendPersonVerificationEmailCommandHandlerTests
     {
         // Given AF-51b — a Scope Admin may act on Users only, whatever they co-own
         var target = Administrator(10, Roles.ScopeAdmin);
+        target.ScopeId = OwnedScopeId; // the role check alone must refuse it, not the missing scope
         var fixture = await FixtureWith(target);
 
         // When
