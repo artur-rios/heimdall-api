@@ -147,6 +147,8 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-13: Reset Password | ✅ | [#14](https://github.com/artur-rios/heimdall-api/issues/14) |
 | UC-14: Verify Email | ✅ | [#15](https://github.com/artur-rios/heimdall-api/issues/15) |
 | UC-15: Resend Verification Email | ✅ | [#16](https://github.com/artur-rios/heimdall-api/issues/16) |
+| UC-51: Send a Verification Email on a Person's Behalf | ✅ | [#177](https://github.com/artur-rios/heimdall-api/issues/177) |
+| UC-52: Send a Password Reset on a Person's Behalf | ✅ | [#177](https://github.com/artur-rios/heimdall-api/issues/177) |
 | UC-36: Enable Two-Factor Authentication | ✅ | [#68](https://github.com/artur-rios/heimdall-api/issues/68) |
 | UC-37: Confirm Two-Factor Authentication Setup | ✅ | [#69](https://github.com/artur-rios/heimdall-api/issues/69) |
 | UC-38: Verify Second Factor | ✅ | [#70](https://github.com/artur-rios/heimdall-api/issues/70) |
@@ -324,6 +326,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
+| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — at most one administrator-initiated verification or reset email per person per window; `0` turns it off |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |

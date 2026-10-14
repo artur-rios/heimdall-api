@@ -2151,6 +2151,111 @@ sequenceDiagram
 
 ---
 
+### UC-51: Send a Verification Email on a Person's Behalf
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-51 |
+| **Name** | Send a Verification Email on a Person's Behalf |
+| **Actors** | System Admin, Scope Admin, Email Service |
+| **Description** | An administrator has a fresh verification link mailed to a person's own address, via `POST /api/persons/{id}/verification-email` |
+| **Preconditions** | Actor is authenticated; the person exists; a Scope Admin acts only on a `User` of a scope they own |
+| **Postconditions** | The person's live verification links are retired and a new one is mailed to their stored address; the request is audited with the person as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+    participant M as Email Service
+
+    A->>API: POST /api/persons/{id}/verification-email
+    API->>DB: Find the person, confirm the actor may act on them
+    API->>API: Refuse if restricted, deleted or already verified
+    API->>DB: Any verification token issued within the cooldown?
+    API->>DB: Retire live verification tokens, write a new one
+    API->>M: Send the link to the person's stored address
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks for a verification email for a person, by the person's identifier; there is no body (FR-EV-06).
+2. The system finds the person and confirms the actor may act on them: a System Admin on anyone; a Scope Admin only on a `User` of a scope they own.
+3. The system refuses a person whose processing is restricted (NFR-24), who is logically deleted, or whose address is already verified.
+4. The system refuses if a verification email went to this person within the cooldown — any verification token issued for them in that window, by anyone, used or not (FR-EV-07).
+5. As UC-15 does, the system retires the person's live verification tokens, issues a new one and mails its link to the person's stored address, using the scope's verification URL when it has one.
+6. The system answers with a fixed message; the token is never returned, logged or accepted.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-51a | No person has that identifier (including a Google User's identifier) | `404 Not Found` — "Person not found." |
+| AF-51b | The actor may not act on this person — a Scope Admin aiming at anyone but a `User` of a scope they own | `403 Forbidden` — "You are not allowed to send email to this person."; a `User` is refused `403` by the role gate, an anonymous caller `401` |
+| AF-51c | The person's processing is restricted, or they are logically deleted | `409 Conflict` — "Processing of this person's data is restricted, so no email was sent." or "This person is deleted, so no email was sent." |
+| AF-51d | The address is already verified | `400 Bad Request` — "Email already verified." |
+| AF-51e | A verification email went to this person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, 5 minutes by default) | `429 Too Many Requests` — "An email of this kind was sent to this person recently. Try again in a few minutes." Nothing is sent |
+
+> **Best effort.** The cooldown is read from the issued token rows, not held under a lock, so
+> simultaneous requests for the same person can both pass it.
+>
+> **On delivery.** `200` means the email was handed to the sender. A delivery failure is logged and
+> swallowed, as for every email this API sends.
+
+---
+
+### UC-52: Send a Password Reset on a Person's Behalf
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-52 |
+| **Name** | Send a Password Reset on a Person's Behalf |
+| **Actors** | System Admin, Scope Admin, Email Service |
+| **Description** | An administrator has a password-reset link mailed to a person's own address, via `POST /api/persons/{id}/password-reset` |
+| **Preconditions** | Actor is authenticated; the person exists and could sign in (UC-12's eligibility); a Scope Admin acts only on a `User` of a scope they own |
+| **Postconditions** | A new reset token exists for the person and its link was mailed to their stored address; the request is audited with the person as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+    participant M as Email Service
+
+    A->>API: POST /api/persons/{id}/password-reset
+    API->>DB: Find the person, confirm the actor may act on them
+    API->>API: Apply UC-12's eligibility
+    API->>DB: Any reset token issued within the cooldown?
+    API->>DB: Write a reset token
+    API->>M: Send the link to the person's stored address
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks for a password reset for a person, by the person's identifier; there is no body (FR-PR-05).
+2. The system finds the person and confirms the actor may act on them, as UC-51.
+3. The system applies UC-12's eligibility, shared with it: the person's processing must not be restricted, the person must not be logically deleted, and the account must be able to sign in — a `User`'s scope live, a `ScopeAdmin` owning at least one live scope.
+4. The system refuses if a reset email went to this person within the cooldown — any reset token issued for them in that window, by anyone, used or not (FR-PR-06).
+5. The system issues a reset token and mails its link to the person's stored address, using the scope's reset URL when it has one. Unlike UC-12 the work is not queued: the caller is authenticated and is owed a real answer. Earlier live reset links are left as UC-12 leaves them.
+6. The system answers with a fixed message; neither a token nor a password is returned, logged or accepted.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-52a | No person has that identifier | `404 Not Found` — "Person not found." |
+| AF-52b | The actor may not act on this person | `403 Forbidden` — "You are not allowed to send email to this person."; a `User` `403`, an anonymous caller `401` |
+| AF-52c | The person's processing is restricted, or they are logically deleted | `409 Conflict` — the restricted or deleted message of AF-51c |
+| AF-52d | The account cannot sign in — a `User` whose scope is logically deleted, or a `ScopeAdmin` with no live scope | `409 Conflict` — "This person's account cannot sign in, so no password reset was sent." |
+| AF-52e | A reset email went to this person within the cooldown | `429 Too Many Requests` — "An email of this kind was sent to this person recently. Try again in a few minutes." Nothing is sent |
+
+
+> **Best effort.** As for UC-51, simultaneous requests for the same person can both pass the cooldown.
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2196,6 +2301,8 @@ sequenceDiagram
 | UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-51: Send a Verification Email on a Person's Behalf | FR-EV-06, FR-EV-07, NFR-24 |
+| UC-52: Send a Password Reset on a Person's Behalf | FR-PR-05, FR-PR-06, NFR-24 |
 
 ---
 
