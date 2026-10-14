@@ -4,7 +4,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Mediator.Command;
-using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
@@ -23,7 +22,7 @@ namespace ArturRios.Heimdall.WebApi.Controllers;
 ///     <c>ApplicationManagementAccess</c> — the same rule as reading or renaming the application.
 /// </remarks>
 [Route("api/scopes/{scopeId:guid}/applications/{id:guid}/credentials")]
-public class ApplicationCredentialController(CommandMediator commandMediator, QueryMediator queryMediator) : Controller
+public class ApplicationCredentialController(CommandMediator commandMediator) : Controller
 {
     /// <summary>
     ///     Issues a credential (UC-53). The body is optional and carries only <c>expiresAt</c>. The

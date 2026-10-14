@@ -30,8 +30,8 @@ public sealed class ApplicationCredentialSlots(AppDbContext context) : IApplicat
         {
             await using var transaction = await context.Database.BeginTransactionAsync();
 
-            await context.Database.ExecuteSqlRawAsync(
-                $"SELECT 1 FROM {applicationTable} WHERE id = {{0}} FOR UPDATE", credential.ApplicationId);
+            var sql = $"SELECT 1 FROM {applicationTable} WHERE id = {{0}} FOR UPDATE";
+            await context.Database.ExecuteSqlRawAsync(sql, credential.ApplicationId);
 
             var live = await context.ApplicationCredentials
                 .Where(x => x.ApplicationId == credential.ApplicationId)
