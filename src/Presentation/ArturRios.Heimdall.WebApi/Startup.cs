@@ -676,6 +676,7 @@ public class Startup : WebApiStartup
         Log.Information(
             "Application tokens: audience {Audience}, lifetime {Seconds}s",
             applicationTokens.Audience, applicationTokens.Lifetime.TotalSeconds);
+
         Builder.Services.AddTokenAuthentication<IdentityUserMapper>(options =>
         {
             options.Source = TokenSource.Header;
