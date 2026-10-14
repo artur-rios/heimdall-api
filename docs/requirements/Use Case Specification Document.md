@@ -457,7 +457,7 @@ sequenceDiagram
 | **ID** | UC-07 |
 | **Name** | View Person |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve a person's details or list persons. There are four distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the owners of a scope, via `GET /api/scopes/{scopeId}/owners`; or (d) the persons who may own a scope, via `GET /api/persons/scope-admins` |
+| **Description** | Retrieve a person's details or list persons. There are five distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the owners of a scope, via `GET /api/scopes/{scopeId}/owners`; (d) the persons who may own a scope, via `GET /api/persons/scope-admins`; or (e) the system's System Admins, via `GET /api/persons/system-admins` |
 | **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted; for read (d), the scope named for exclusion — if any — exists and is not logically deleted |
 | **Postconditions** | Person information is returned, never including `PasswordHash` or `Salt` |
 
@@ -491,6 +491,11 @@ sequenceDiagram
 2. If a scope was named for exclusion, the system verifies it exists, is not logically deleted, and that the actor may manage it: a System Admin always may; a Scope Admin must own it.
 3. The system returns every `ScopeAdmin` person that is not logically deleted — and, for a System Admin caller, every such `SystemAdmin` person too — less the named scope's current owners if one was named, projected to the person's identifier, name, and email only.
 
+**Main Flow (read e — list the system's System Admins):**
+
+1. A System Admin requests the system's `SystemAdmin` persons, optionally filtering by name or email and paging the result (FR-PE-13).
+2. The system returns every `SystemAdmin` person that is not logically deleted and whose processing is not restricted, ordered by name, projected to the person's identifier, name, and email only.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
@@ -509,6 +514,16 @@ sequenceDiagram
 > exclusion parameter is gated separately, because it is a different question: subtracting a
 > scope's owners from a list reveals them by comparison, so only an actor entitled to manage that
 > scope may ask for it.
+
+> **On read e being System Admin only.** Read d already offers System Admins to a System Admin
+> caller, but mixed with the Scope Admins and with no role to tell them apart, because it answers a
+> different question — who may own a scope. Read e answers who else holds full access to the
+> deployment. Its only actor is the System Admin, and the endpoint's
+> `[RoleRequirement(SystemAdmin)]` settles that: a `ScopeAdmin` or `User` is refused with `403`
+> before the handler runs, and an unauthenticated caller with `401`. No data-dependent rule is left,
+> which is why read e adds no alternative flow — the same reasoning UC-35 and UC-43 follow. A Scope
+> Admin is excluded because a System Admin's address is not tenant-facing, the reason read d
+> withholds System Admins from them too.
 
 ---
 
@@ -2146,7 +2161,7 @@ sequenceDiagram
 | UC-04: Logical Delete Scope | FR-SC-05, FR-SC-07 |
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
-| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12 |
+| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
 | UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |

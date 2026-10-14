@@ -3,7 +3,8 @@ using ArturRios.Mediator.Query;
 namespace ArturRios.Heimdall.Query.Output;
 
 /// <summary>
-///     The minimum a person picker needs: who they are and how to recognise them (FR-PE-12).
+///     The minimum a person picker needs: who they are and how to recognise them (FR-PE-12,
+///     FR-PE-13).
 /// </summary>
 /// <remarks>
 ///     A separate type from <see cref="PersonOutput" />, and deliberately so. UC-07's visibility rule
