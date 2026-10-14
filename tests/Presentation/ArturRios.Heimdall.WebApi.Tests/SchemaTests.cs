@@ -177,6 +177,29 @@ public class SchemaTests(PostgresFixture fixture)
             """));
     }
 
+    [FunctionalFact]
+    public async Task GivenMigrationsApplied_WhenAuditIndexesInspected_ThenTargetIdIsIndexed()
+    {
+        // Given the migrated schema. UC-48's "what happened to this entity?" filter reads this index
+        // instead of the whole trail.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select indexdef
+            from pg_indexes
+            where schemaname = 'heimdall' and tablename = 'audit_log' and indexname = 'ix_audit_log_target_id'
+            """,
+            connection);
+        var definition = (string?)await command.ExecuteScalarAsync();
+
+        // Then
+        Assert.NotNull(definition);
+        Assert.Contains("(target_id)", definition);
+    }
+
     private async Task<long> InsertScopeAsync()
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
