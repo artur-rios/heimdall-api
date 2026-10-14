@@ -68,8 +68,9 @@ public class ResendVerificationEmailCommandHandler(
             return output.WithError(AuthMessages.EmailAlreadyVerified);
         }
 
-        // UC-15 step 3.
-        var retirement = await RetireTokensAsync(person, DateTime.UtcNow);
+        // UC-15 step 3: retire every live link, so the new one is the only one that works.
+        var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
+            tokenReader, tokenWriter, person.Id, DateTime.UtcNow);
 
         if (retirement is not null)
         {
@@ -86,36 +87,5 @@ public class ResendVerificationEmailCommandHandler(
         return output
             .WithData(new ResendVerificationEmailCommandOutput())
             .WithMessage(AuthMessages.VerificationEmailSent);
-    }
-
-    /// <summary>
-    ///     UC-15 step 3: retires every verification token the person still holds, so that once a new
-    ///     link is mailed it is the only one that works.
-    /// </summary>
-    /// <remarks>
-    ///     Same shape and same boundaries as <c>VerifyEmailCommandHandler</c>'s consumption pass:
-    ///     already-expired tokens are left alone — AF-14a refuses them either way, and rewriting them
-    ///     would only make a dead token report a different reason for being dead — and another person's
-    ///     tokens are never touched.
-    /// </remarks>
-    private async Task<IEnumerable<string>?> RetireTokensAsync(Person person, DateTime now)
-    {
-        var live = await tokenReader.Query()
-            .Where(x => x.PersonId == person.Id && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
-        {
-            outstanding.Used = true;
-
-            var update = await tokenWriter.UpdateAsync(outstanding);
-
-            if (!update.Success)
-            {
-                return update.Errors;
-            }
-        }
-
-        return null;
     }
 }
