@@ -1,0 +1,21 @@
+meta {
+  name: Check an application token
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{host}}/api/applications/self
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{applicationToken}}
+}
+
+docs {
+  UC-57. Re-check before every sensitive release.
+
+  Anonymous to the middleware; the endpoint validates the bearer token itself. After 'Revoke a credential' this answers 401.
+}

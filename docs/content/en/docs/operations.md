@@ -645,6 +645,11 @@ a compromised key and the wrong response to a routine replacement.
 Every instance must carry the same pair, so roll the change out to all of them before step 3 — an
 instance that has already dropped the old secret will refuse tokens its neighbours still accept.
 
+Application tokens (UC-56) are signed with the same keys, so the same rotation covers them. Step 2
+waits out the longer of the two lifetimes, `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` and
+`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default), and a consumer that
+validates them offline must be given both keys for the same period. Application tokens are validated with zero clock skew, so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep instance clocks synchronised (NTP).
+
 ## Environment variables at a glance
 
 | Variable | Required | Default |
@@ -652,10 +657,12 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_DATA_CONNECTIONSTRING` | ✅ | — |
 | `HEIMDALL_DATA_DATABASETYPE` | ✅ | — (`PostgreSql`) |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE`) |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty |
+| `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
@@ -684,6 +691,8 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
+
+Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew, so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep instance clocks synchronised (NTP).
 
 The administrator-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, UC-51/UC-52) is derived from
 the issued token rows (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:

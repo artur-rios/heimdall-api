@@ -195,6 +195,13 @@ graph LR
 | FR-AP-07 | The system shall allow **logical deletion** of an application by setting `IsDeleted = true` | High |
 | FR-AP-08 | The system shall allow **hard deletion** of an application, permanently removing the record | High |
 | FR-AP-09 | Logically deleted applications shall not appear in default query results unless explicitly requested | Medium |
+| FR-AP-10 | The system shall let a System Admin, or a Scope Admin who owns an application and its scope, issue the application a credential: a random secret shown once and stored only as its SHA-256, optionally with an expiry | High |
+| FR-AP-11 | An application shall hold at most **two** live credentials (not revoked, not expired), so a new secret can be deployed before the old one is revoked | High |
+| FR-AP-12 | The same actors shall be able to list an application's credentials — never the secret or its hash — and revoke any one of them | High |
+| FR-AP-13 | The system shall exchange a live credential for an application token: HMAC-SHA256 with the person tokens' keys, a distinct audience, a lifetime of 10 minutes by default, and the claims `tokenKind = application`, `id`, `scopeId`, `credentialId` and `name`, with no role | High |
+| FR-AP-14 | Every refused exchange shall answer the same `401` with the same message, revealing nothing about which applications, scopes or credentials exist | High |
+| FR-AP-15 | The system shall let a consumer check an application token live, confirming the application, its scope and the issuing credential are still live | High |
+| FR-AP-16 | Revoking or expiring a credential, or deleting the application or its scope, shall make every token issued from it fail the live check at once | High |
 
 ### 3.8 Google Sign-In
 
@@ -629,6 +636,11 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{scopeId}/applications/{id}` | Update an application | SystemAdmin / ScopeAdmin (owner of the application) |
 | DELETE | `/api/scopes/{scopeId}/applications/{id}` | Logically delete an application | SystemAdmin / ScopeAdmin (owner of the application) |
 | DELETE | `/api/scopes/{scopeId}/applications/{id}/hard` | Hard delete an application | SystemAdmin |
+| POST | `/api/scopes/{scopeId}/applications/{id}/credentials` | Issue a credential; the secret is returned once | SystemAdmin / ScopeAdmin (owner of the application) |
+| GET | `/api/scopes/{scopeId}/applications/{id}/credentials` | List the application's credentials | SystemAdmin / ScopeAdmin (owner of the application) |
+| DELETE | `/api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}` | Revoke a credential | SystemAdmin / ScopeAdmin (owner of the application) |
+| POST | `/api/applications/token` | Exchange a credential for an application token | No (the secret authenticates) |
+| GET | `/api/applications/self` | Check an application token live | Application token (validated by the endpoint) |
 
 ### 5.4 Authentication Endpoints
 
@@ -996,6 +1008,9 @@ block-beta
 | Update Application | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (logical) | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
+| Issue/List/Revoke Application Credentials | ✅ | ✅ (owned application) | ❌ | ❌ |
+| Obtain an Application Token | — | — | — | ✅ (with a live secret) |
+| Check an Application Token | — | — | — | ✅ (with an application token) |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Set Scope Email Links | ✅ | ✅ (owned scope) | ❌ | ❌ |
@@ -1101,7 +1116,7 @@ Notes on cascading behavior:
 | Feature | Requirements |
 | --------- | ------------- |
 | Person CRUD | FR-PE-01 through FR-PE-13 |
-| Application CRUD | FR-AP-01 through FR-AP-09 |
+| Application CRUD and authentication | FR-AP-01 through FR-AP-16 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-10 |

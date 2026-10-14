@@ -18,6 +18,7 @@ down several different paths.
 | [Password recovery](password-recovery/) | An endpoint whose whole design is about what it must *not* reveal. |
 | [Scope permission claims](scope-permission-claims/) | How a permission defined in a scope ends up inside a caller's JWT. |
 | [Audit logging](audit-logging/) | One decorator, every write, no handler changes. |
+| [Application authentication](application-authentication/) | Issue a secret, exchange it for a token, and re-check that token live: what a consumer such as Cerberus has to do. |
 
 Each page cites the use case (`UC-…`) and alternative flows (`AF-…`) it implements. The authoritative
 descriptions live in the

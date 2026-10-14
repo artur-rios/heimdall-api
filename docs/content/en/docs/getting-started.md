@@ -76,6 +76,7 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | `HEIMDALL_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
 | `HEIMDALL_DATA_DATABASETYPE` | `PostgreSql` |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if unset — otherwise every authenticated request would fail inside the token validator with an opaque `IDX10703` |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | The `aud` of application tokens (UC-56). Startup throws if it is unset, or equal to `HEIMDALL_AUTH_TOKEN_AUDIENCE`: a distinct audience is what stops a consumer taking an application token for a person's. `docker-compose.yml` and the env templates default it to `heimdall-applications` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Consulted only when the database holds no system admin yet, but the seeder refuses to start without them in that case |
 
 ### Optional — each falls back to a default
@@ -85,6 +86,7 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (set only while [rotating the signing secret](../operations/#rotating-the-signing-secret)) |
+| `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | `600` (10 minutes) |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
