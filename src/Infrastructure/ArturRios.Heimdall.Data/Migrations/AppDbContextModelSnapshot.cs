@@ -423,6 +423,10 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("password_hash");
 
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id");
+
                     b.Property<byte[]>("Salt")
                         .IsRequired()
                         .HasColumnType("bytea")
@@ -440,6 +444,10 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_pending_registration");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pending_registration_public_id");
 
                     b.HasIndex("ScopeId")
                         .HasDatabaseName("ix_pending_registration_scope_id");

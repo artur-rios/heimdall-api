@@ -135,6 +135,47 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     }
 
     /// <summary>
+    ///     Lists the scope's self-registrations awaiting confirmation (UC-49, FR-SR-11), newest first:
+    ///     each one's id, name, address, when it was stored and expires, how many wrong passwords it
+    ///     may still take, and whether it has already expired. Never the password hash, salt or token.
+    ///     The attribute keeps a <c>User</c> out; whether the acting Scope Admin owns the scope
+    ///     (AF-49b) and whether the scope is live (AF-49a) are the handler's.
+    /// </summary>
+    [HttpGet("{id:guid}/pending-registrations")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PendingRegistrationOutput>>> ListPendingRegistrations(
+        Guid id, [FromQuery] ListPendingRegistrationsQuery query)
+    {
+        query.ScopeId = id;
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>(query);
+
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Discards one of the scope's self-registrations awaiting confirmation (UC-50, FR-SR-12). Its
+    ///     link stops working — following it answers as for any unknown token — and the registrant may
+    ///     sign up again. Same actors as the listing; a registration of another scope answers 404 exactly
+    ///     like a missing one (AF-50c).
+    /// </summary>
+    [HttpDelete("{id:guid}/pending-registrations/{registrationId:guid}")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<DiscardPendingRegistrationCommandOutput?>>> DiscardPendingRegistration(
+        Guid id, Guid registrationId)
+    {
+        var command = new DiscardPendingRegistrationCommand { ScopeId = id, RegistrationId = registrationId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<DiscardPendingRegistrationCommand, DiscardPendingRegistrationCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
+    }
+
+    /// <summary>
     ///     Lists scopes with pagination and optional filtering (UC-02 read b). A System Admin lists
     ///     every scope; a Scope Admin only the scopes they own, with the total counting those alone.
     /// </summary>

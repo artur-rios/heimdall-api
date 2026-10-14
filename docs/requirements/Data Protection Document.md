@@ -164,6 +164,23 @@ added, so this table is unchanged.
 > working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
 > deliberately: a scope is an organisation, not a person, so neither is personal data.
 
+### `PENDING_REGISTRATION`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId` | The administrative reference a scope's owners list and discard a registration by (UC-49, UC-50). Random, so it discloses nothing by itself; the registrant never sees it |
+| `ScopeId` | The scope the registrant asked to join — and so whose owners may see and discard the registration |
+| `Name`, `Email` | What the account will be created with once the address is confirmed; the address is also where the confirmation link goes |
+| `PasswordHash`, `Salt` | The password chosen at sign-up, so the account can be created with it and confirmation can require it (FR-SR-09). Never reversible to the password |
+| `TokenHash` | Recognising the mailed link without storing it (Threat Model TH-14) |
+| `ExpiresAt`, `CreatedAt` | Bounding how long the link works, and when the row is purged (Data Retention Schedule) |
+| `FailedAttempts` | Bounding guesses at the sign-up password through a leaked link (FR-SR-09, NFR-27) |
+
+A scope's owners and System Admins can read the id, name, address, creation and expiry times, the
+remaining guesses and whether it has expired through the API (UC-49) — the same name and address they
+would see in the scope's user list once the registration is confirmed. The hash, salt and token
+hash are never returned.
+
 ### Two decisions this review settled
 
 **`ProfilePictureUrl` stays, and it is the weakest case here.** The issue that prompted this review
@@ -192,7 +209,7 @@ weighed against the same test.
 | Recipient | What reaches them | Why |
 | --- | --- | --- |
 | **Mailgun** (Sinch) | Recipient email address, message body | Delivering verification, password reset and second-factor emails |
-| **Tenant scope organisations** | The identities within their own scope | They are the controller for those; see §3 |
+| **Tenant scope organisations** | The identities within their own scope, and the self-registrations awaiting confirmation in it (UC-49: name, address, timestamps, guesses left) | They are the controller for those; see §3 |
 | **Hosting provider** | Everything, at rest | Running the database and the API |
 
 The current sub-processor list is maintained in the
