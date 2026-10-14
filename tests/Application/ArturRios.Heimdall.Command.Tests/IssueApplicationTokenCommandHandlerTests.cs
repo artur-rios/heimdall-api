@@ -1,7 +1,9 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -14,7 +16,8 @@ namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for IssueApplicationTokenCommandHandler (UC-56): the main flow issues a token for the
 // application, scope and credential, stamps LastUsedAt and returns the application as the audit
-// target; every refusal (AF-56b) is the same single message, whichever check failed.
+// target; every refusal (AF-56b) is the same single message, whichever check failed — including a
+// revocation or expiry that lands between the read and the stamp, which refuses before signing.
 public class IssueApplicationTokenCommandHandlerTests
 {
     private readonly AsyncFakeRepository<ApplicationCredential, long> _credentials = new();
@@ -27,13 +30,14 @@ public class IssueApplicationTokenCommandHandlerTests
             .ReturnsAsync(new AuthToken("signed.application.token", _expiresAt));
     }
 
-    private IssueApplicationTokenCommandHandler Handler()
+    private IssueApplicationTokenCommandHandler Handler(IAtomicWrites? atomicWrites = null)
     {
         var validator = new Mock<IValidator<IssueApplicationTokenCommand>>();
         validator.Setup(v => v.ValidateAsync(It.IsAny<IssueApplicationTokenCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult());
 
-        return new IssueApplicationTokenCommandHandler(validator.Object, _credentials, _credentials, _issuer.Object);
+        return new IssueApplicationTokenCommandHandler(validator.Object, _credentials,
+            atomicWrites ?? InMemoryAtomicWrites.Instance, _issuer.Object);
     }
 
     private async Task<(ApplicationCredential Credential, string Secret)> SeedAsync(
@@ -130,5 +134,23 @@ public class IssueApplicationTokenCommandHandlerTests
         Assert.Null(output.Data);
         _issuer.Verify(i => i.IssueAsync(It.IsAny<ApplicationTokenSubject>()), Times.Never);
         Assert.Null(Assert.Single(_credentials.Query()).LastUsedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenTheCredentialRevokedAfterItWasRead_WhenExchanging_ThenTheSameRefusalAndNoToken()
+    {
+        // Given — the conditional stamp finds the credential no longer live
+        var (credential, secret) = await SeedAsync();
+        var atomicWrites = new Mock<IAtomicWrites>();
+        atomicWrites.Setup(w => w.TryStampCredentialUseAsync(credential, It.IsAny<DateTime>())).ReturnsAsync(false);
+
+        // When
+        var output = await Handler(atomicWrites.Object).HandleAsync(Command(credential, secret));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([ApplicationTokenMessages.CredentialsNotAccepted], output.Errors);
+        Assert.Null(output.Data);
+        _issuer.Verify(i => i.IssueAsync(It.IsAny<ApplicationTokenSubject>()), Times.Never);
     }
 }

@@ -255,6 +255,35 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return consumed;
     }
 
+    public async Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now)
+    {
+        var stamped = await context.ApplicationCredentials
+            .Where(x => x.Id == credential.Id)
+            .Where(ApplicationCredential.LiveAt(now))
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.LastUsedAt, now)) == 1;
+
+        if (stamped)
+        {
+            Accept(credential, x => x.LastUsedAt, now);
+        }
+
+        return stamped;
+    }
+
+    public async Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt)
+    {
+        var revoked = await context.ApplicationCredentials
+            .Where(x => x.Id == credential.Id && x.RevokedAt == null)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.RevokedAt, revokedAt)) == 1;
+
+        if (revoked)
+        {
+            Accept(credential, x => x.RevokedAt, revokedAt);
+        }
+
+        return revoked;
+    }
+
     /// <summary>
     ///     Brings the caller's instance in line with a write the change tracker did not see: the new
     ///     value becomes both current and original, so the property is not saved again later.

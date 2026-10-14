@@ -1,10 +1,13 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Moq;
 using Application = ArturRios.Heimdall.Domain.Entities.Application;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -12,13 +15,15 @@ namespace ArturRios.Heimdall.Command.Tests;
 // Unit tests for RevokeApplicationCredentialCommandHandler (UC-55): the main flow stamps RevokedAt
 // and returns the credential as the audit target; AF-55a (no live application in the scope), AF-55b
 // (a Scope Admin who does not own it), AF-55c (no such credential on this application — including one
-// of another application) and AF-55d (already revoked). An expired credential can still be revoked.
+// of another application) and AF-55d (already revoked, including by a revocation that lands between
+// the read and the write). An expired credential can still be revoked.
 public class RevokeApplicationCredentialCommandHandlerTests
 {
     private readonly AsyncFakeRepository<Application, long> _applications = new();
     private readonly AsyncFakeRepository<ApplicationCredential, long> _credentials = new();
 
-    private RevokeApplicationCredentialCommandHandler Handler() => new(_applications, _credentials, _credentials);
+    private RevokeApplicationCredentialCommandHandler Handler(IAtomicWrites? atomicWrites = null) =>
+        new(_applications, _credentials, atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private async Task<Application> SeedApplicationAsync(long id = 10)
     {
@@ -142,5 +147,23 @@ public class RevokeApplicationCredentialCommandHandlerTests
         // Then
         Assert.Equal(ApplicationCredentialMessages.NotAuthorizedToManageCredentials, output.Errors.Single());
         Assert.Null(Assert.Single(_credentials.Query()).RevokedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenARevocationThatLandedAfterTheRead_WhenRevoking_ThenAlreadyRevoked()
+    {
+        // Given — read live, but the conditional write finds it already revoked
+        var application = await SeedApplicationAsync();
+        var credential = new ApplicationCredential { Id = 1, ApplicationId = application.Id, SecretHash = "a" };
+        await _credentials.CreateAsync(credential);
+        var atomicWrites = new Mock<IAtomicWrites>();
+        atomicWrites.Setup(w => w.TryRevokeCredentialAsync(credential, It.IsAny<DateTime>())).ReturnsAsync(false);
+
+        // When
+        var output = await Handler(atomicWrites.Object).HandleAsync(Command(application, credential.PublicId));
+
+        // Then
+        Assert.Equal(ApplicationCredentialMessages.CredentialAlreadyRevoked, output.Errors.Single());
+        Assert.Null(output.Data);
     }
 }

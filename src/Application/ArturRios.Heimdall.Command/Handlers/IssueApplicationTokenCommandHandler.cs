@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -29,11 +30,18 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         its trailing newline, and refusing it would be a failure nobody could diagnose from one
 ///         uniform 401.
 ///     </para>
+///     <para>
+///         <b>Stamped before signing.</b> <c>LastUsedAt</c> is written as one conditional column
+///         (<see cref="IAtomicWrites.TryStampCredentialUseAsync" />) that only lands while the
+///         credential is still live, and the token is signed only after it has. A revocation (UC-55)
+///         that commits between the read and the stamp therefore refuses this exchange, rather than
+///         being written back over by a whole-row save of the credential as it was read.
+///     </para>
 /// </remarks>
 public class IssueApplicationTokenCommandHandler(
     IValidator<IssueApplicationTokenCommand> validator,
     IAsyncReadOnlyRepository<ApplicationCredential, long> credentialReader,
-    IAsyncRepository<ApplicationCredential, long> credentialWriter,
+    IAtomicWrites atomicWrites,
     IApplicationTokenIssuer issuer)
     : ICommandHandlerAsync<IssueApplicationTokenCommand, IssueApplicationTokenCommandOutput>
 {
@@ -69,18 +77,15 @@ public class IssueApplicationTokenCommandHandler(
             return output.WithError(ApplicationTokenMessages.CredentialsNotAccepted);
         }
 
+        // AF-56b again: revoked or expired since the read above.
+        if (!await atomicWrites.TryStampCredentialUseAsync(credential, now))
+        {
+            return output.WithError(ApplicationTokenMessages.CredentialsNotAccepted);
+        }
+
         var application = credential.Application;
         var token = await issuer.IssueAsync(new ApplicationTokenSubject(
             application.PublicId, application.Scope.PublicId, credential.PublicId, application.Name));
-
-        credential.LastUsedAt = now;
-
-        var update = await credentialWriter.UpdateAsync(credential);
-
-        if (!update.Success)
-        {
-            return output.WithErrors(update.Errors);
-        }
 
         return output
             .WithData(new IssueApplicationTokenCommandOutput

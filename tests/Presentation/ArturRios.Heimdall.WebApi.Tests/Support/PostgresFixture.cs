@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.PostgreSql;
@@ -208,10 +209,14 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     /// <summary>
     ///     Creates a context bound to the container, for tests that assert on database state
-    ///     directly rather than through the API.
+    ///     directly rather than through the API, or that run a handler over EF repositories.
     /// </summary>
-    public AppDbContext CreateContext() => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).Options,
+    /// <param name="interceptors">
+    ///     EF interceptors to add, for a test that needs to act at a precise point of a handler's
+    ///     database conversation (see <c>ApplicationCredentialRaceTests</c>).
+    /// </param>
+    public AppDbContext CreateContext(params IInterceptor[] interceptors) => new(
+        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).AddInterceptors(interceptors).Options,
         NullLoggerFactory.Instance,
         DbContextDiagnosticsOptions.Disabled);
 

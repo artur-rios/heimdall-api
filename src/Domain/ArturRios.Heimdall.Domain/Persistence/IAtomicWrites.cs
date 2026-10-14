@@ -27,6 +27,14 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         than the cap allows.
 ///     </para>
 ///     <para>
+///         <b>Writes beside a revocation.</b> An application credential is revoked by one request
+///         (UC-55) while another may be using it (UC-56). A whole-row save of either request's copy
+///         would write <c>revoked_at</c> back as that request read it, and silently undo or overwrite
+///         the revocation. So both the revocation and the use stamp are targeted, conditional writes
+///         here: the first revocation stands, and a use stamp only lands while the credential is
+///         still live.
+///     </para>
+///     <para>
 ///         Every method takes the entity the caller already holds and, when the write succeeds,
 ///         brings that instance's changed properties in line with what was written, so the caller
 ///         and anything it saves later see the same values the database does.
@@ -114,4 +122,19 @@ public interface IAtomicWrites
 
     /// <summary>UC-14: spends an email verification token that is unexpired at <paramref name="now" />. Once.</summary>
     Task<bool> TryConsumeEmailVerificationTokenAsync(EmailVerificationToken token, DateTime now);
+
+    /// <summary>
+    ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes
+    ///     no other column — while the credential is still live at <paramref name="now" />
+    ///     (<see cref="ApplicationCredential.LiveAt" />). <c>false</c> means it was revoked or expired
+    ///     after the caller read it, and no token may be issued from it.
+    /// </summary>
+    Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now);
+
+    /// <summary>
+    ///     UC-55: revokes a credential at <paramref name="revokedAt" />. Once: <c>false</c> means it was
+    ///     already revoked, possibly after the caller read it, and the first revocation's time stands
+    ///     (AF-55d).
+    /// </summary>
+    Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt);
 }
