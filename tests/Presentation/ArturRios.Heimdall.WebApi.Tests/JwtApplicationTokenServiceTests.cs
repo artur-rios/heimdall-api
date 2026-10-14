@@ -11,14 +11,19 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for JwtApplicationTokenService (UC-56, UC-57, TH-34, TH-35): the token it issues carries
 // the application claims and no role, is accepted by its own validator under the current or the
-// previous key, and is refused for every other audience, kind, signature or lifetime. Negative cases
+// previous key, and is refused for every other audience, kind, signature, algorithm or lifetime,
+// including none at all. Negative cases
 // mint their tokens directly, so each varies exactly one thing.
 public class JwtApplicationTokenServiceTests
 {
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
     private const string ApplicationAudience = "heimdall-unit-applications";
-    private const string CurrentSecret = "unit-tests-current-signing-secret-0123456789";
+    // Longer than 512 bits, so an HS512 token signed with it is valid in every respect but its
+    // algorithm: IdentityModel refuses a shorter key for HS512 outright, which would hide whether
+    // the validator restricts the algorithm at all.
+    private const string CurrentSecret =
+        "unit-tests-current-signing-secret-0123456789-long-enough-to-sign-hs512-too";
     private const string PreviousSecret = "unit-tests-previous-signing-secret-0123456789";
 
     private static readonly ApplicationTokenSubject Subject =
@@ -48,21 +53,25 @@ public class JwtApplicationTokenServiceTests
         string audience = ApplicationAudience,
         string secret = CurrentSecret,
         DateTime? expires = null,
-        string issuer = Issuer)
+        string issuer = Issuer,
+        string algorithm = SecurityAlgorithms.HmacSha256,
+        bool withLifetime = true)
     {
         var expiry = expires ?? DateTime.UtcNow.AddMinutes(10);
 
-        return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
-        {
-            Issuer = issuer,
-            Audience = audience,
-            Claims = claims,
-            NotBefore = expiry.AddMinutes(-20),
-            IssuedAt = expiry.AddMinutes(-20),
-            Expires = expiry,
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret)), SecurityAlgorithms.HmacSha256)
-        });
+        // Without a lifetime the handler must not fill in its default one, so the token carries no exp.
+        return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = withLifetime }.CreateToken(
+            new SecurityTokenDescriptor
+            {
+                Issuer = issuer,
+                Audience = audience,
+                Claims = claims,
+                NotBefore = withLifetime ? expiry.AddMinutes(-20) : null,
+                IssuedAt = withLifetime ? expiry.AddMinutes(-20) : null,
+                Expires = withLifetime ? expiry : null,
+                SigningCredentials = new SigningCredentials(
+                    new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret)), algorithm)
+            });
     }
 
     [UnitFact]
@@ -189,6 +198,33 @@ public class JwtApplicationTokenServiceTests
     {
         // Given — expired five seconds ago, well inside the default five-minute skew
         var token = Mint(ApplicationClaims(), expires: DateTime.UtcNow.AddSeconds(-5));
+
+        // When
+        var principal = await Service().ValidateAsync(token);
+
+        // Then
+        Assert.Null(principal);
+    }
+
+    [UnitFact]
+    public async Task GivenATokenSignedHs512WithTheCurrentKey_WhenValidated_ThenItIsRefused()
+    {
+        // Given — the right key, but only HS256 is ever issued, so only HS256 is accepted
+        var token = Mint(ApplicationClaims(), algorithm: SecurityAlgorithms.HmacSha512);
+
+        // When
+        var principal = await Service().ValidateAsync(token);
+
+        // Then
+        Assert.Null(principal);
+    }
+
+    [UnitFact]
+    public async Task GivenATokenWithoutAnExpiry_WhenValidated_ThenItIsRefused()
+    {
+        // Given — every application claim, but no exp: it would otherwise be valid for ever
+        var token = Mint(ApplicationClaims(), withLifetime: false);
+        Assert.False(new JsonWebToken(token).TryGetClaim(JwtRegisteredClaimNames.Exp, out _));
 
         // When
         var principal = await Service().ValidateAsync(token);
