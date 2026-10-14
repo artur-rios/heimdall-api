@@ -71,6 +71,23 @@ public static class PersonMessageMap
             [PersonMessages.PersonNotScopeUser] = HttpStatusCodes.BadRequest,
             // AF-23d — the person is already a ScopeAdmin.
             [PersonMessages.AlreadyScopeAdmin] = HttpStatusCodes.Conflict,
+            // UC-51 main flow — the verification email was handed to the sender. AF-51a reuses
+            // PersonNotFound (404).
+            [PersonMessages.VerificationEmailSentToPerson] = HttpStatusCodes.Ok,
+            // AF-51b / AF-52b — the caller may not email this person.
+            [PersonMessages.NotAuthorizedToEmailPerson] = HttpStatusCodes.Forbidden,
+            // AF-51c / AF-52c — deleted, or restricted (NFR-24).
+            [PersonMessages.PersonIsDeleted] = HttpStatusCodes.Conflict,
+            [PersonMessages.PersonProcessingRestricted] = HttpStatusCodes.Conflict,
+            // AF-51d — already verified; the refusal UC-15 gives, so the same status here.
+            [AuthMessages.EmailAlreadyVerified] = HttpStatusCodes.BadRequest,
+            // AF-51e / AF-52e — the per-person cooldown is running (FR-EV-07, FR-PR-06).
+            [PersonMessages.AccountEmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            // UC-52 main flow — the reset email was handed to the sender. AF-52a reuses PersonNotFound
+            // (404); AF-52b, AF-52c and AF-52e share UC-51's entries above.
+            [PersonMessages.PasswordResetSentToPerson] = HttpStatusCodes.Ok,
+            // AF-52d — the account cannot sign in (FR-AU-06/07).
+            [PersonMessages.PersonCannotSignIn] = HttpStatusCodes.Conflict,
             // UC-07 reads b to e (NFR-10) — invalid pagination or an over-length name/email filter.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,

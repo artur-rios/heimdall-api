@@ -179,15 +179,15 @@ classDiagram
     Entity~long~ <|-- AddressableEntity
 ```
 
-`Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission` and `AuditLog` follow the
-addressable pattern. The join rows, token rows and two-factor rows carry only the internal `Id` —
-see the table below for why.
+`Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog` and
+`PendingRegistration` follow the addressable pattern. The join rows, token rows and two-factor
+rows carry only the internal `Id` — see the table below for why.
 
 ## Which entities carry a `PublicId`
 
 | Has `PublicId` | Internal `Id` only |
 | --- | --- |
-| `Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog` | `ScopeOwner`, `ScopeUser`, `TwoFactorAuth`, `TwoFactorEmailCode`, `TwoFactorRecoveryCode`, `EmailVerificationToken`, `PasswordResetToken` |
+| `Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog`, `PendingRegistration` | `ScopeOwner`, `ScopeUser`, `TwoFactorAuth`, `TwoFactorEmailCode`, `TwoFactorRecoveryCode`, `EmailVerificationToken`, `PasswordResetToken` |
 
 The right-hand column is never addressed by ID from outside:
 
@@ -197,6 +197,9 @@ The right-hand column is never addressed by ID from outside:
   reference.
 - **Two-factor rows** are reached implicitly through the authenticated person's own identity — a
   person's configuration is never named by ID in a path.
+
+`PendingRegistration` carries a `PublicId` for administrators only: a scope's owners list and discard
+registrations by it (UC-49, UC-50). The registrant never sees it — their reference is the mailed token.
 
 ## Secrets at rest
 

@@ -234,6 +234,9 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<SetSelfRegistrationCommand, SetSelfRegistrationCommandOutput, SetSelfRegistrationCommandHandler>();
         Builder.Services.AddScoped<IValidator<SetScopeEmailLinksCommand>, SetScopeEmailLinksCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<SetScopeEmailLinksCommand, SetScopeEmailLinksCommandOutput, SetScopeEmailLinksCommandHandler>();
+        // UC-50 (FR-SR-12): no validator — both identifiers are route values already constrained to
+        // GUIDs. Audited like every write, with the registration as target.
+        Builder.Services.AddAuditedCommandHandler<DiscardPendingRegistrationCommand, DiscardPendingRegistrationCommandOutput, DiscardPendingRegistrationCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateAdminCommand>, CreateAdminCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateAdminCommand, CreatePersonCommandOutput, CreateAdminCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateUserCommand>, CreateUserCommandValidator>();
@@ -321,6 +324,9 @@ public class Startup : WebApiStartup
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>,
+                ListPendingRegistrationsQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListSystemAdminsQuery, PersonSummaryOutput>,
                 ListSystemAdminsQueryHandler>();
         Builder.Services
@@ -364,6 +370,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
+        Builder.Services
+            .AddScoped<IValidator<ListPendingRegistrationsQuery>, ListPendingRegistrationsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListSystemAdminsQuery>, ListSystemAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListScopeApplicationsQuery>, ListScopeApplicationsQueryValidator>();
@@ -382,6 +390,13 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
         Builder.Services.AddSingleton(PasswordResetOptions.FromEnvironment());
         Builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+        // UC-51/UC-52 (FR-EV-07, FR-PR-06): the per-person cooldown on administrator-initiated email,
+        // read once at start-up like the token lifetimes it is compared against.
+        Builder.Services.AddSingleton(AdminEmailOptions.FromEnvironment());
+        // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
+        Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
+        // UC-52: no validator either — the route's person id is the whole of the input.
+        Builder.Services.AddAuditedCommandHandler<SendPersonPasswordResetCommand, SendPersonPasswordResetCommandOutput, SendPersonPasswordResetCommandHandler>();
         // UC-12 runs in two halves (AF-12a): the handler queues, the dispatcher does the work after
         // the caller has been answered, so no address takes longer to answer than another. See
         // PasswordRecoveryQueue for why this is an in-memory queue rather than a floor or an outbox.

@@ -39,36 +39,10 @@ public class PasswordRecoveryProcessor(
 
         // UC-12 steps 3 and 4. Skipped entirely for AF-12a and for accounts that could not log in
         // anyway — sending a reset link to a deleted person's address would restore nothing.
-        if (person is not null && MayRecover(person))
+        if (person is not null && PasswordRecoveryEligibility.Of(person) == RecoveryEligibility.Eligible)
         {
             await passwordReset.IssueAndSendAsync(person);
         }
-    }
-
-    /// <summary>
-    ///     Mirrors the account checks UC-11 applies at login (FR-AU-05/06/07). A reset link is only
-    ///     worth issuing to someone who could use the resulting password.
-    /// </summary>
-    private static bool MayRecover(Person person)
-    {
-        // NFR-24: sending to a restricted identity would be processing it, and the address may be
-        // the very thing whose accuracy is contested.
-        if (person.ProcessingRestrictedAt is not null)
-        {
-            return false;
-        }
-
-        if (person.IsDeleted)
-        {
-            return false;
-        }
-
-        return person.RoleId switch
-        {
-            (long)Roles.User => !person.ScopeMembership!.Scope.IsDeleted,
-            (long)Roles.ScopeAdmin => person.ScopeOwnerships.Any(ownership => !ownership.Scope.IsDeleted),
-            _ => true
-        };
     }
 
     /// <summary>

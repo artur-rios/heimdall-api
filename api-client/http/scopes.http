@@ -54,6 +54,24 @@ Content-Type: application/json
   "enabled": true
 }
 
+### List the scope's pending self-registrations (UC-49) — System Admin or the owning Scope Admin.
+# Newest first; never the password hash, salt or token. Stores the first one's id as
+# pendingRegistrationId for the discard below.
+GET {{host}}/api/scopes/{{scopeId}}/pending-registrations?pageNumber=1&pageSize=20
+Authorization: Bearer {{token}}
+
+> {%
+    if (response.body.data && response.body.data.length > 0) {
+        client.global.set("pendingRegistrationId", response.body.data[0].id);
+        client.log("Stored pendingRegistrationId " + response.body.data[0].id);
+    }
+%}
+
+### Discard a pending self-registration (UC-50) — System Admin or the owning Scope Admin.
+# Its link stops working; the registrant may sign up again. Another scope's registration answers 404.
+DELETE {{host}}/api/scopes/{{scopeId}}/pending-registrations/{{pendingRegistrationId}}
+Authorization: Bearer {{token}}
+
 ### Logically delete a scope (UC-04) — System Admin.
 # Cascades to the scope's Users, Google Users and applications. They remain readable with
 # includeDeleted=true.

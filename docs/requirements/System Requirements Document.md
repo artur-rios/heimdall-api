@@ -167,6 +167,8 @@ graph LR
 | FR-PR-02 | The system shall generate a time-limited password reset token and send it via email. The request shall be answered before the person is looked up and the token issued and sent, so the response is the same in content and in time whether or not the address is registered (AF-12a) | High |
 | FR-PR-03 | The system shall allow the person to set a new password using a valid reset token | High |
 | FR-PR-04 | Expired or already-used reset tokens shall be rejected | High |
+| FR-PR-05 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a password-reset link sent to the person's own stored address. Eligibility shall be FR-PR-02's: a person whose processing is restricted, who is logically deleted, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused, with the reason. No token or password shall be returned, logged or accepted | Medium |
+| FR-PR-06 | At most one password-reset email per person shall be sent through FR-PR-05 within a configurable cooldown (5 minutes by default, `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`), counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.6 Email Verification
 
@@ -177,6 +179,8 @@ graph LR
 | FR-EV-03 | The system shall mark the person's email as verified upon receiving a valid verification token | High |
 | FR-EV-04 | The system shall allow re-sending the verification email | Medium |
 | FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
+| FR-EV-06 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a fresh verification link sent to the person's own stored address, retiring their live links as FR-EV-04 does. A person whose processing is restricted, who is logically deleted, or whose address is already verified shall be refused. No token shall be returned, logged or accepted | Medium |
+| FR-EV-07 | At most one verification email per person shall be sent through FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.7 Application Management
 
@@ -230,6 +234,8 @@ graph LR
 | FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
 | FR-SR-09 | Confirming a self-registration shall require the password chosen at sign-up; a missing or wrong password shall not consume the pending registration, and after 10 wrong passwords the pending registration is discarded; each guess is charged before it is compared (NFR-27), so parallel guesses cannot exceed the 10 | High |
 | FR-SR-10 | A scope may override the verification and password-reset link bases for its Users: when `EmailVerificationUrl` or `PasswordResetUrl` is set, the sign-up confirmation, verification and password-reset emails sent to that scope's Users link there instead of to `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL`; an unset one, and every email to an administrator (who has no scope), uses the global setting. Only System Admins and existing owners of the scope may set them, through their own endpoint rather than the scope update, which would otherwise erase them; each must be an absolute `http` or `https` URL of at most 2048 characters | Medium |
+| FR-SR-11 | The system shall allow System Admins and the scope's owners to list a scope's pending self-registrations, paginated and newest first, each with its identifier, name, address, creation and expiry times, the wrong confirmation passwords it may still take (never below zero), and whether it has expired — whether or not the scope is still open to self-registration. The password hash, salt and token hash shall never be returned | Medium |
+| FR-SR-12 | The system shall allow System Admins and the scope's owners to discard one of a scope's pending self-registrations, removing it so that its link stops working. A registration of another scope shall be answered exactly as a missing one. The discard shall be audited with the registration as target | Medium |
 
 ### 3.9 Scope Permission Management
 
@@ -285,7 +291,7 @@ Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`,
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
 - **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
 
-`PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN` and `PENDING_REGISTRATION` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02 (for `PENDING_REGISTRATION`, the mailed token, of which only the hash is stored). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -383,6 +389,7 @@ erDiagram
 
     PENDING_REGISTRATION {
         bigint Id PK "Internal auto-increment identifier, never exposed"
+        guid PublicId "Administrative reference for listing and discarding (FR-SR-11, FR-SR-12); the registrant's reference is the token"
         bigint ScopeId FK "Scope registered into (internal Id)"
         string Name "Name the registrant gave"
         string Email "Address awaiting confirmation"
@@ -593,6 +600,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/email-links` | Set, or with null or empty clear, the scope's verification and password-reset link bases (FR-SR-10) | SystemAdmin, existing Owner |
+| GET | `/api/scopes/{id}/pending-registrations` | List the scope's self-registrations awaiting confirmation (FR-SR-11) | SystemAdmin, existing Owner |
+| DELETE | `/api/scopes/{id}/pending-registrations/{registrationId}` | Discard a pending self-registration; its link stops working (FR-SR-12) | SystemAdmin, existing Owner |
 
 ### 5.2 Person Endpoints
 
@@ -607,6 +616,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
+| POST | `/api/persons/{id}/verification-email` | Send a fresh verification link to the person's own address (FR-EV-06, FR-EV-07) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
+| POST | `/api/persons/{id}/password-reset` | Send a password-reset link to the person's own address (FR-PR-05, FR-PR-06) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
 
 ### 5.3 Application Endpoints
 
@@ -978,6 +989,8 @@ block-beta
 | Login | ✅ | ✅ | ✅ | ✅ |
 | Password Recovery | ✅ | ✅ | ✅ | ✅ |
 | Email Verification | ✅ | ✅ | ✅ | ❌ |
+| Send a Verification Email on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
+| Send a Password Reset on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
 | Create Application | ✅ | ✅ (owned scope, self as owner) | ❌ | ❌ |
 | Read Application | ✅ (any scope) | ✅ (owned application) | ❌ | ❌ |
 | Update Application | ✅ | ✅ (owned application) | ❌ | ❌ |
@@ -987,6 +1000,8 @@ block-beta
 | Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Set Scope Email Links | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Register a Password User | ✅ | ✅ | ✅ | ✅ |
+| List Pending Registrations | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Discard a Pending Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
 | Google Sign-Out | N/A | N/A | ✅ (self, as a Google User) | ❌ |
 | Read Google User | ✅ | ✅ (owned scope) | ✅ (self) | ❌ |
@@ -1090,10 +1105,10 @@ Notes on cascading behavior:
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-10 |
-| Password Recovery | FR-PR-01 through FR-PR-04 |
-| Email Verification | FR-EV-01 through FR-EV-05 |
+| Password Recovery | FR-PR-01 through FR-PR-06 |
+| Email Verification | FR-EV-01 through FR-EV-07 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
-| Self-Registration | FR-SR-01 through FR-SR-10 |
+| Self-Registration | FR-SR-01 through FR-SR-12 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
 | Audit Trail | FR-AT-01 through FR-AT-02 |
