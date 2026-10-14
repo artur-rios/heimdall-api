@@ -302,7 +302,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// </remarks>
     [HttpPost("persons/{id:guid}/verification-email")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
-    public async Task<ActionResult<DataOutput<SendPersonVerificationEmailCommandOutput?>>> SendVerificationEmail(Guid id)
+    public async Task<ActionResult<DataOutput<SendPersonVerificationEmailCommandOutput?>>> SendVerificationEmail(
+        Guid id)
     {
         var command = new SendPersonVerificationEmailCommand { Id = id };
         HttpContext.ApplyActor(command);

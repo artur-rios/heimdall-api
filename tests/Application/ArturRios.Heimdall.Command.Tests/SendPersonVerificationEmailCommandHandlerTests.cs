@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -5,6 +6,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
@@ -19,6 +21,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class SendPersonVerificationEmailCommandHandlerTests
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
+    private const string RetireFailure = "the token could not be retired";
     private static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(5);
 
     /// <summary>The one scope the acting Scope Admin owns in these tests.</summary>
@@ -302,6 +305,35 @@ public class SendPersonVerificationEmailCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(older.Used);
         fixture.EmailVerification.Verify(x => x.IssueAndSendAsync(target), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenALiveLinkThatCannotBeRetired_WhenSending_ThenReturnsTheWriteErrorsAndSendsNothing()
+    {
+        // Given a live link outside the cooldown window, and a token store whose writes fail
+        var target = User(10);
+        var fixture = await FixtureWith(target);
+        await TokenIssuedAsync(fixture, target, TimeSpan.FromMinutes(10));
+        var writer = new Mock<IAsyncRepository<EmailVerificationToken, long>>();
+        writer
+            .Setup(x => x.UpdateAsync(It.IsAny<EmailVerificationToken>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataOutput<EmailVerificationToken>.New.WithError(RetireFailure));
+        var handler = new SendPersonVerificationEmailCommandHandler(
+            fixture.Persons,
+            fixture.Tokens,
+            writer.Object,
+            fixture.Ownership.Object,
+            fixture.EmailVerification.Object,
+            new EmailVerificationOptions { TokenLifetime = Lifetime },
+            new AdminEmailOptions { Cooldown = Cooldown });
+
+        // When
+        var output = await handler.HandleAsync(Command(target.PublicId));
+
+        // Then — the retirement errors are the answer, and no new link goes out
+        Assert.False(output.Success);
+        Assert.Contains(RetireFailure, output.Errors);
+        NothingSent(fixture);
     }
 
     [UnitFact]
