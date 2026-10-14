@@ -8,7 +8,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///     internal <see cref="Entity{TKey}.Id" />; the caller-facing reference is the random token string
 ///     delivered by email, so it has no <c>PublicId</c>.
 /// </summary>
-public class PasswordResetToken : Entity<long>
+public class PasswordResetToken : Entity<long>, IPersonToken
 {
     /// <summary>Foreign key to the associated <see cref="Person" /> (internal Id). Required.</summary>
     public long PersonId { get; set; }

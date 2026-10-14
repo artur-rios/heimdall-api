@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- UC-51 and UC-52: an administrator can have a verification link (`POST /api/persons/{id}/verification-email`) or
+  a password-reset link (`POST /api/persons/{id}/password-reset`) mailed to a person's own address — a System
+  Admin for anyone, a Scope Admin for Users of scopes they own. No token is ever returned. Deleted or restricted
+  persons are refused (`409`), as are a verified address (`400`) and, for a reset, an account that could not sign
+  in (`409`, UC-12's rule, now shared). At most one email of each kind per person per cooldown: a repeat answers
+  `429`. The cooldown is best-effort. **Operators:** the new optional `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`
+  sets it (default `300`, `0` turns it off; unusable values fall back to `300`); `docker-compose.yml` passes it
+  through.
 - UC-49 and UC-50: a scope's owners and System Admins can list the self-registrations awaiting confirmation
   (`GET /api/scopes/{id}/pending-registrations` — name, address, expiry, guesses left, never the password hash
   or token) and discard one (`DELETE /api/scopes/{id}/pending-registrations/{registrationId}`), after which its

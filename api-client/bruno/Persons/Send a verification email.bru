@@ -1,0 +1,17 @@
+meta {
+  name: Send a verification email
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{host}}/api/persons/{{scopeUserId}}/verification-email
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-51. System Admin for anyone; a Scope Admin only for a User of a scope they own.
+
+  No body. Retires the person's live verification links and mails a fresh one to their own address. 409 when the person is deleted or restricted, 400 when already verified, 429 when an email of this kind went to them within HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS (5 minutes by default).
+}

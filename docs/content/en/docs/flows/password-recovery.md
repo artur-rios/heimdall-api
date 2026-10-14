@@ -62,6 +62,15 @@ A Mailgun failure here is **logged, never surfaced**. If a delivery error turned
 difference between "your guess was a real account" and "it wasn't" would be an HTTP status code.
 {{% /alert %}}
 
+### An administrator sending the link — UC-52
+
+`POST /api/persons/{id}/password-reset` lets a System Admin, or the owner of a User's scope, have the
+link mailed to the person's own address. Eligibility is UC-12's, from the same code — but because the
+caller is authenticated, a refusal is reported instead of hidden: 409 for a deleted or restricted
+person, or one whose account could not sign in. The send is not queued, since there is no anonymous
+caller to protect from a timing difference. The same per-person cooldown as UC-51 applies (429), and is best-effort: simultaneous requests for
+the same person can both pass it.
+
 ## Setting the new password — UC-13
 
 ```mermaid

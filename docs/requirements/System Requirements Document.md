@@ -167,6 +167,8 @@ graph LR
 | FR-PR-02 | The system shall generate a time-limited password reset token and send it via email. The request shall be answered before the person is looked up and the token issued and sent, so the response is the same in content and in time whether or not the address is registered (AF-12a) | High |
 | FR-PR-03 | The system shall allow the person to set a new password using a valid reset token | High |
 | FR-PR-04 | Expired or already-used reset tokens shall be rejected | High |
+| FR-PR-05 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a password-reset link sent to the person's own stored address. Eligibility shall be FR-PR-02's: a person whose processing is restricted, who is logically deleted, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused, with the reason. No token or password shall be returned, logged or accepted | Medium |
+| FR-PR-06 | At most one password-reset email per person shall be sent through FR-PR-05 within a configurable cooldown (5 minutes by default, `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`), counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.6 Email Verification
 
@@ -177,6 +179,8 @@ graph LR
 | FR-EV-03 | The system shall mark the person's email as verified upon receiving a valid verification token | High |
 | FR-EV-04 | The system shall allow re-sending the verification email | Medium |
 | FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
+| FR-EV-06 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a fresh verification link sent to the person's own stored address, retiring their live links as FR-EV-04 does. A person whose processing is restricted, who is logically deleted, or whose address is already verified shall be refused. No token shall be returned, logged or accepted | Medium |
+| FR-EV-07 | At most one verification email per person shall be sent through FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.7 Application Management
 
@@ -612,6 +616,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
+| POST | `/api/persons/{id}/verification-email` | Send a fresh verification link to the person's own address (FR-EV-06, FR-EV-07) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
+| POST | `/api/persons/{id}/password-reset` | Send a password-reset link to the person's own address (FR-PR-05, FR-PR-06) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
 
 ### 5.3 Application Endpoints
 
@@ -983,6 +989,8 @@ block-beta
 | Login | ✅ | ✅ | ✅ | ✅ |
 | Password Recovery | ✅ | ✅ | ✅ | ✅ |
 | Email Verification | ✅ | ✅ | ✅ | ❌ |
+| Send a Verification Email on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
+| Send a Password Reset on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
 | Create Application | ✅ | ✅ (owned scope, self as owner) | ❌ | ❌ |
 | Read Application | ✅ (any scope) | ✅ (owned application) | ❌ | ❌ |
 | Update Application | ✅ | ✅ (owned application) | ❌ | ❌ |
@@ -1097,8 +1105,8 @@ Notes on cascading behavior:
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-10 |
-| Password Recovery | FR-PR-01 through FR-PR-04 |
-| Email Verification | FR-EV-01 through FR-EV-05 |
+| Password Recovery | FR-PR-01 through FR-PR-06 |
+| Email Verification | FR-EV-01 through FR-EV-07 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Self-Registration | FR-SR-01 through FR-SR-12 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |

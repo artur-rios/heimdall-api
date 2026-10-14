@@ -659,6 +659,7 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
+| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | | `300`; `0` → no cooldown; outside 0–86400 → `300` |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
@@ -683,6 +684,12 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
+
+The administrator-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, UC-51/UC-52) is derived from
+the issued token rows (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:
+if `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` is `0` and a token lifetime is shorter than the cooldown, an expired
+token from inside the window may already have been purged, and the cooldown can undercount. And the cooldown
+is best-effort: simultaneous requests for the same person can both pass it.
 
 `Environments/.env` in the Web API project is a **tracked template** listing every variable; real
 values live in per-environment files that are gitignored.
