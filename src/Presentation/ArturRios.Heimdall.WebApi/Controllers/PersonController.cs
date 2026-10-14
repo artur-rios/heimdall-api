@@ -287,4 +287,29 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
+
+    /// <summary>
+    ///     Has a fresh verification link mailed to a person's own address (UC-51, FR-EV-06): outstanding
+    ///     links are retired first, as UC-15 does, and the link uses the scope's verification URL. A
+    ///     System Admin may ask for any person; a Scope Admin only for a <c>User</c> of a scope they own
+    ///     (AF-51b). No body; the token is never returned.
+    /// </summary>
+    /// <remarks>
+    ///     Refused when the person is deleted or restricted (409, AF-51c) or already verified (400,
+    ///     AF-51d), and with 429 when an email of this kind went to them within the cooldown,
+    ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c> (five minutes by default, AF-51e). 200 means
+    ///     the email was handed to the sender.
+    /// </remarks>
+    [HttpPost("persons/{id:guid}/verification-email")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SendPersonVerificationEmailCommandOutput?>>> SendVerificationEmail(Guid id)
+    {
+        var command = new SendPersonVerificationEmailCommand { Id = id };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
 }

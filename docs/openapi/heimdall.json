@@ -2894,6 +2894,60 @@
         ]
       }
     },
+    "/api/persons/{id}/verification-email": {
+      "post": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Has a fresh verification link mailed to a person's own address (UC-51, FR-EV-06): outstanding\nlinks are retired first, as UC-15 does, and the link uses the scope's verification URL. A\nSystem Admin may ask for any person; a Scope Admin only for a `User` of a scope they own\n(AF-51b). No body; the token is never returned.",
+        "description": "Refused when the person is deleted or restricted (409, AF-51c) or already verified (400,\nAF-51d), and with 429 when an email of this kind went to them within the cooldown,\n`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default, AF-51e). 200 means\nthe email was handed to the sender.\n\n**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Person_SendVerificationEmail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes": {
       "post": {
         "tags": [
@@ -7033,6 +7087,47 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonVerificationEmailCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonVerificationEmailCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutput"
           }
         },
         "additionalProperties": false

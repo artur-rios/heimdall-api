@@ -126,4 +126,30 @@ public static class PersonMessages
 
     /// <summary>AF-23d: the person already holds the <c>ScopeAdmin</c> role, so there is nothing to promote.</summary>
     public const string AlreadyScopeAdmin = "Person already holds the ScopeAdmin role.";
+
+    /// <summary>UC-51 main flow: a verification email was handed to the sender for the person's own address.</summary>
+    public const string VerificationEmailSentToPerson = "Verification email sent to the person's address.";
+
+    /// <summary>
+    ///     AF-51b / AF-52b: the caller may not have email sent to this person — a Scope Admin aiming at
+    ///     anyone but a <c>User</c> of a scope they own.
+    /// </summary>
+    public const string NotAuthorizedToEmailPerson = "You are not allowed to send email to this person.";
+
+    /// <summary>AF-51c / AF-52c: the person is logically deleted, so nothing was sent.</summary>
+    public const string PersonIsDeleted = "This person is deleted, so no email was sent.";
+
+    /// <summary>
+    ///     AF-51c / AF-52c: the person's processing is restricted (NFR-24). Sending would be processing
+    ///     them, and the address may be the very thing whose accuracy is contested.
+    /// </summary>
+    public const string PersonProcessingRestricted =
+        "Processing of this person's data is restricted, so no email was sent.";
+
+    /// <summary>
+    ///     AF-51e / AF-52e: an email of the same kind went to this person within the cooldown
+    ///     (FR-EV-07, FR-PR-06), so nothing was sent.
+    /// </summary>
+    public const string AccountEmailSentRecently =
+        "An email of this kind was sent to this person recently. Try again in a few minutes.";
 }
