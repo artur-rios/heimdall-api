@@ -99,7 +99,8 @@ check, in order:
   file, for one); a truncated or altered secret is not accepted.
 
 A request that is missing a field, carries a secret over 100 characters, or is not readable JSON
-(or carries an id that is not a GUID) is a `400` instead: the field's message, or "The request is malformed." for a body that cannot be read.
+(or carries an id that is not a GUID) is a `400` instead: the field's message, or
+"The request is malformed." for a body that cannot be read.
 
 ## The token
 

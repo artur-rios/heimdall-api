@@ -230,11 +230,19 @@ List endpoints accept pagination and filter parameters, all validated before the
 
 ## Malformed requests
 
-A request that cannot be bound — a body that is not JSON, or a value of the wrong type in the body,
-query string or route (`?succeeded=maybe`, `{"name": 123}`) — answers `400` with the error
-`The request is malformed.` in the usual `DataOutput` envelope, on every endpoint (**NFR-10**). It is
-checked after authorization, so a caller without a valid token still receives `401` or `403`. Only
-`POST …/credentials` accepts an empty body, meaning "no expiry".
+A request that cannot be bound — a body that is not JSON, or a value of the wrong type in the body or
+query string (`?succeeded=maybe`, `{"name": 123}`) — answers `400` with the error
+`The request is malformed.`, on every endpoint (**NFR-10**). The answer is a `DataOutput` envelope even
+on list endpoints. Authentication and role checks come first, so a caller without a valid token still
+receives `401`, and one of the wrong role `403`; refusals that depend on data, made in a handler, come
+after the `400`.
+
+A query parameter that is not nullable no longer falls back to its default when it is empty or
+unparseable: `?pageNumber=`, `?pageNumber=abc`, `?pageSize=`, `?includeDeleted=` and `?includeDeleted=1`
+are all `400`. A nullable one sent empty (`?succeeded=`) still binds to null and is ignored. A missing
+required field is not a binding failure: it keeps the field's own message from the validator.
+
+Of the endpoints that take a body, only `POST …/credentials` accepts an empty one, meaning "no expiry".
 
 ## Errors that are deliberately vague
 

@@ -14,8 +14,17 @@ namespace ArturRios.Heimdall.WebApi.Binding;
 /// </summary>
 public static class ModelBindingConfiguration
 {
-    public static void Configure(MvcOptions options) =>
+    public static void Configure(MvcOptions options)
+    {
         options.ModelMetadataDetailsProviders.Add(new ServerPopulatedBindingMetadataProvider());
+
+        // With nullable reference types on, MVC infers [Required] on every non-nullable string or
+        // collection property, so a JSON null would invalidate ModelState and MalformedRequestFilter
+        // would answer the generic "The request is malformed." before the handler runs — hiding the
+        // field's own message ("Secret is required.") and skipping the refused-write audit entry
+        // (NFR-09). FluentValidation owns required-ness; the filter means only "cannot be bound".
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    }
 }
 
 /// <summary>

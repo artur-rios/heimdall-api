@@ -8,7 +8,7 @@ namespace ArturRios.Heimdall.WebApi.Binding;
 /// <summary>
 ///     Answers <c>400 Bad Request</c> with <see cref="RequestMessages.Malformed" /> when the request
 ///     could not be bound to the action's parameters — a body that is not JSON, an empty one the
-///     action requires, or a value of the wrong type in the body, query string or route (NFR-10,
+///     action requires, or a value of the wrong type in the body or query string (NFR-10,
 ///     issue #186).
 /// </summary>
 /// <remarks>

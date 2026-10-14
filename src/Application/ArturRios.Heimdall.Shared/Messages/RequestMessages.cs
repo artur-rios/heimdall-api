@@ -10,7 +10,7 @@ public static class RequestMessages
 {
     /// <summary>
     ///     The request could not be bound to the action's parameters: a body that is not JSON, or a
-    ///     value of the wrong type in the body, query string or route. Deliberately says no more —
+    ///     value of the wrong type in the body or query string. Deliberately says no more —
     ///     the framework's own binding errors would name properties and types of the internal model.
     /// </summary>
     public const string Malformed = "The request is malformed.";

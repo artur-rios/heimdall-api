@@ -125,4 +125,74 @@ public class MalformedRequestTests(PostgresFixture db) : WebApiTest<Program>(Env
         Assert.Equal(HttpStatusCode.BadRequest, status);
         Assert.Equal([RequestMessages.Malformed], errors);
     }
+
+    [FunctionalFact]
+    public async Task GivenANullSecret_WhenExchangingAnApplicationSecret_ThenTheFieldMessageNotTheMalformedOne()
+    {
+        // Given — null binds fine; required-ness belongs to FluentValidation, not to the binder
+        var json = $$"""{"applicationId":"{{Guid.NewGuid()}}","scopeId":"{{Guid.NewGuid()}}","secret":null}""";
+
+        // When
+        var (status, errors) = await SendAsync(HttpMethod.Post, "/api/applications/token", json);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Equal([ApplicationTokenMessages.SecretRequired], errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenANullEmail_WhenLoggingIn_ThenTheFieldMessageNotTheMalformedOne()
+    {
+        // Given / When
+        var (status, errors) = await SendAsync(
+            HttpMethod.Post, "/api/auth/login", """{"email":null,"password":"x"}""");
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.DoesNotContain(RequestMessages.Malformed, errors);
+        Assert.NotEmpty(errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPageNumberThatIsNotANumber_WhenListingScopes_ThenBadRequest()
+    {
+        // Given
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        var (status, errors) = await SendAsync(HttpMethod.Get, "/api/scopes?pageNumber=abc");
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Equal([RequestMessages.Malformed], errors);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAUserToken_WhenListingTheAuditLogWithAMalformedQuery_ThenForbiddenNotBadRequest()
+    {
+        // Given — role checks come before binding is judged
+        Authorize(TestTokens.ForRole((int)Roles.User));
+
+        // When
+        var (status, _) = await SendAsync(HttpMethod.Get, "/api/audit-log?succeeded=maybe");
+
+        // Then
+        Assert.Equal(HttpStatusCode.Forbidden, status);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAMalformedRequest_WhenRefused_ThenTheEnvelopeIsAFailedDataOutputWithATimestamp()
+    {
+        // Given
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+
+        // When
+        using var response = await Gateway.Client.GetAsync("/api/audit-log?succeeded=maybe");
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        // Then
+        var root = document.RootElement;
+        Assert.False(root.GetProperty("success").GetBoolean());
+        Assert.True(root.TryGetProperty("timestamp", out _) || root.TryGetProperty("Timestamp", out _));
+    }
 }
