@@ -1079,6 +1079,11 @@ public class Startup : WebApiStartup
             // can meet it, and each has its own message map.
             options.Filters.Add<PasswordHashSaturationFilter>();
 
+            // NFR-10 (#186): a request MVC could not bind answers 400 instead of running the action with
+            // a null or default argument. An action filter, so after the authorization filters above —
+            // an unauthenticated caller still gets 401 — and after model binding has filled ModelState.
+            options.Filters.Add<MalformedRequestFilter>();
+
             // Also applied by ArturRios.Heimdall.OpenApiGen/Program.cs, which builds its own
             // AddControllers() rather than running this Startup, so that call site cannot catch a
             // removal here. Without it, [FromQuery] list-query properties marked server-populated

@@ -62,6 +62,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   starting. The Web API's `Environments/.env` holds only a placeholder; any other deployment must set it.
   Application tokens are validated with zero clock skew, so keep instance clocks synchronised (NTP).
 
+### Fixed
+
+- A request that cannot be bound now answers `400` with "The request is malformed." on every endpoint (#186),
+  instead of running the action with a missing or default argument: a body that is not JSON was a `500`, and a
+  query filter of the wrong type (`?succeeded=maybe`, `?actorId=not-a-guid`) was dropped and answered `200`
+  unfiltered. A global `MalformedRequestFilter` replaces the two per-action guards added in #178; it runs after
+  authentication and role checks, so an unauthenticated caller still receives `401`. A non-nullable query
+  parameter sent empty or unparseable (`?pageNumber=`, `?pageNumber=abc`, `?includeDeleted=1`) is now a `400`
+  rather than its default; a missing required field keeps its validator message.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
