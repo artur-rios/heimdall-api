@@ -83,7 +83,9 @@ Three design choices are worth calling out.
 **`ActorPersonId` is not a foreign key.** It is a bare `PublicId`, so an entry survives the *hard*
 deletion of the person who made the write — which is exactly the case an audit trail exists for.
 
-**The table is append-only.** Entries are never updated and never logically deleted.
+**The table is append-only.** Entries are never deleted. The only update a database trigger permits
+is the retention pass clearing the actor attribution, and a target naming a person or Google User,
+once due (NFR-21).
 
 **The target is resolved reflectively**, from the output's `Id` or `PublicId` property. Commands
 whose output carries neither record a `null` target rather than failing.
@@ -115,5 +117,6 @@ AND. `targetId` is indexed (`ix_audit_log_target_id`), so "what happened to this
 the table.
 
 The listing reads `AUDIT_LOG` and nothing else. A cleared attribution stays cleared: `actorId` and
-`actorRole` read `null`, and no join or neighbouring entry is used to put a name back. Listing is a read
+`actorRole` read `null`, and no join or neighbouring entry is used to put a name back. A cleared person
+target reads `targetId: null` the same way, so filtering by `targetId` cannot find that entry. Listing is a read
 and writes no entry of its own.
