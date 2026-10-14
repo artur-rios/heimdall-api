@@ -10,7 +10,11 @@ prevent. The clean-tree case is tested as carefully as the vulnerable one for th
 
 import unittest
 
-from vulnerabilities import describe, parse
+import json
+import tempfile
+from pathlib import Path
+
+from vulnerabilities import DriftCheckError, describe, ef_version_drift, parse
 
 CLEAN = """\
   Determining projects to restore...
@@ -109,6 +113,62 @@ class DescribeTests(unittest.TestCase):
 
         self.assertIn("System.Text.Json", describe(unknown)[0])
         self.assertEqual(2, len(describe(unknown)))
+
+
+class EfVersionDriftTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def write(self, name, text):
+        path = self.root / name
+        path.write_text(text)
+        return path
+
+    def manifest(self, version):
+        return self.write("tools.json", json.dumps({"tools": {"dotnet-ef": {"version": version}}}))
+
+    def props(self, version):
+        return self.write(
+            "props.xml",
+            f'<Project><ItemGroup><PackageVersion Include="Microsoft.EntityFrameworkCore" Version="{version}" />'
+            '<PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="1.0.0" /></ItemGroup></Project>')
+
+    def test_given_matching_versions_when_checked_then_there_is_no_drift(self):
+        self.assertIsNone(ef_version_drift(self.manifest("10.0.13"), self.props("10.0.13")))
+
+    def test_given_differing_versions_when_checked_then_both_are_named(self):
+        message = ef_version_drift(self.manifest("10.0.12"), self.props("10.0.13"))
+
+        self.assertIn("10.0.12", message)
+        self.assertIn("10.0.13", message)
+
+    def test_given_a_missing_manifest_when_checked_then_it_cannot_run(self):
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(self.root / "absent.json", self.props("10.0.13"))
+
+    def test_given_a_manifest_without_dotnet_ef_when_checked_then_it_cannot_run(self):
+        manifest = self.write("tools.json", json.dumps({"tools": {}}))
+
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(manifest, self.props("10.0.13"))
+
+    def test_given_malformed_json_when_checked_then_it_cannot_run(self):
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(self.write("tools.json", "{not json"), self.props("10.0.13"))
+
+    def test_given_malformed_xml_when_checked_then_it_cannot_run(self):
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(self.manifest("10.0.13"), self.write("props.xml", "<Project>"))
+
+    def test_given_a_missing_props_file_when_checked_then_it_cannot_run(self):
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(self.manifest("10.0.13"), self.root / "absent.xml")
+
+    def test_given_no_efcore_pin_when_checked_then_it_cannot_run(self):
+        with self.assertRaises(DriftCheckError):
+            ef_version_drift(self.manifest("10.0.13"), self.write("props.xml", "<Project />"))
 
 
 if __name__ == "__main__":
