@@ -106,7 +106,7 @@ The spec leaves these open; the plan fixes them as follows.
 13. **Retention.** `PurgeExpiredTokensCommandHandler` also removes credentials revoked or expired at or before the single-use-token grace cutoff. Its output gains `ApplicationCredentialsPurged`.
 14. **Bearer reading on `GET /api/applications/self`.** The controller takes the `Authorization` header and strips a `Bearer ` prefix, matched case-insensitively. Anything else, or no header, becomes a `null` token, which the handler answers `401 TokenNotAccepted`.
 15. **Documentation.**
-    - Use Case Specification Document: UC-53 to UC-57, after UC-48 (UC-49 to UC-52 arrive with the open #182 and #183; whichever merges later keeps both sides).
+    - Use Case Specification Document: UC-53 to UC-57, after UC-52.
     - System Requirements Document: FR-AP-10 to FR-AP-16 and §5.3 endpoint rows.
     - Threat Model: TH-33 to TH-35.
     - Data Protection Document and Data Retention Schedule.
@@ -129,7 +129,6 @@ The spec leaves these open; the plan fixes them as follows.
 - Build with `dotnet build src/ArturRios.Heimdall.sln`, clean before every commit.
 - Run test projects **one at a time** (Argon2id OOM-kills parallel runs): `dotnet test <project directory> --no-build`.
   - Clear an orphaned runner with `pkill -f 'testhost[.]dll'`, never `pkill -f testhost`.
-  - `tests/Domain/ArturRios.Heimdall.Domain.Tests` reporting "No test is available" before Task 1 is expected.
 - Functional-test traps:
   - Never assert on the gap between two instants stamped in one request.
   - Normalise `DataOutput.Timestamp` before comparing whole responses.
@@ -4678,7 +4677,7 @@ Alternative-flow letters, used verbatim in the Use Case document and already cit
 
 - [ ] **Step 1: Use Case Specification Document**
 
-After UC-48's section (and its closing `---`), add UC-53 to UC-57 in UC-48's exact shape: the field table (ID, Name, Actors, Description, Preconditions, Postconditions), a `mermaid` `sequenceDiagram`, a numbered main flow, the alternative-flow table from above, and a short notes block where noted.
+After UC-52's section (and its closing `---`), add UC-53 to UC-57 in UC-48's exact shape: the field table (ID, Name, Actors, Description, Preconditions, Postconditions), a `mermaid` `sequenceDiagram`, a numbered main flow, the alternative-flow table from above, and a short notes block where noted.
 
 - **UC-53 Issue an Application Credential** — Actors: System Admin, Scope Admin. `POST /api/scopes/{scopeId}/applications/{id}/credentials`. Postcondition: a credential exists whose hash alone is stored; the secret was returned once; the issue is audited with the credential as target. Main flow:
   1. the actor asks for a credential, optionally with an expiry (FR-AP-10);
@@ -4707,7 +4706,7 @@ After UC-48's section (and its closing `---`), add UC-53 to UC-57 in UC-48's exa
 
   Notes — **revocation policy** (FR-AP-16): revoking, expiring or deleting takes effect at the next check, for tokens already issued; consumers re-check before every sensitive release.
 
-Add to the traceability table, after UC-48's row:
+Add to the traceability table, after UC-52's row:
 
 ```markdown
 | UC-53: Issue an Application Credential | FR-AP-10, FR-AP-11, FR-AP-12, NFR-09 |
@@ -4716,8 +4715,6 @@ Add to the traceability table, after UC-48's row:
 | UC-56: Obtain an Application Token | FR-AP-13, FR-AP-14, NFR-09 |
 | UC-57: Check an Application Token | FR-AP-15, FR-AP-16 |
 ```
-
-UC-49 to UC-52 arrive with #182 and #183. Whichever branch merges later resolves the conflict by keeping every section in UC order and every traceability row.
 
 - [ ] **Step 2: System Requirements Document**
 
