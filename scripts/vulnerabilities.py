@@ -14,7 +14,12 @@ Usage (from anywhere in the repository):
     python scripts/vulnerabilities.py            # scan the solution, fail on any finding
     python scripts/vulnerabilities.py --quiet    # print only the findings
 
-Exit codes: 0 clean, 1 vulnerabilities found, 2 the scan itself could not run.
+It also fails when the `dotnet-ef` tool in .config/dotnet-tools.json is not the same version as
+Microsoft.EntityFrameworkCore in Directory.Packages.props: the tool and the runtime are released
+together, and a tool that lags the package scaffolds migrations against a different EF Core.
+
+Exit codes: 0 clean, 1 vulnerabilities found or the dotnet-ef version drifted, 2 the scan itself
+could not run.
 
 When a finding has no fixed version available -- a transitive dependency whose publisher has not
 released one -- the options are to pin a patched version of the intermediate package, to pin the
@@ -24,14 +29,18 @@ Deleting this check is not one of the options.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ElementTree
 from collections import namedtuple
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOLUTION = REPO_ROOT / "src/ArturRios.Heimdall.sln"
+TOOLS_MANIFEST = REPO_ROOT / ".config/dotnet-tools.json"
+PACKAGE_VERSIONS = REPO_ROOT / "Directory.Packages.props"
 
 # Two phrasings, and the difference is not cosmetic: scanning a solution produces
 #
@@ -96,10 +105,36 @@ def describe(findings):
     return [f"{f.severity:<8} {f.package} {f.resolved} ({f.project}) {f.advisory}" for f in ranked]
 
 
+def ef_version_drift(manifest=TOOLS_MANIFEST, props=PACKAGE_VERSIONS):
+    """Return a message when dotnet-ef and Microsoft.EntityFrameworkCore differ in version, else None."""
+    tool = json.loads(Path(manifest).read_text())["tools"]["dotnet-ef"]["version"]
+    package = None
+
+    for element in ElementTree.parse(props).getroot().iter("PackageVersion"):
+        if element.get("Include") == "Microsoft.EntityFrameworkCore":
+            package = element.get("Version")
+
+    if package is None:
+        return "Microsoft.EntityFrameworkCore is not pinned in Directory.Packages.props."
+
+    if tool != package:
+        return (f"dotnet-ef {tool} (.config/dotnet-tools.json) does not match "
+                f"Microsoft.EntityFrameworkCore {package} (Directory.Packages.props); "
+                "update the tool to the package version.")
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--quiet", action="store_true", help="print only the findings, not the raw scan output")
     arguments = parser.parse_args()
+
+    drift = ef_version_drift()
+
+    if drift:
+        print(drift, file=sys.stderr)
+        return 1
 
     command = ["dotnet", "list", str(SOLUTION), "package", "--vulnerable", "--include-transitive"]
 
