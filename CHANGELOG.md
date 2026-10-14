@@ -47,6 +47,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+  `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
+  at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
+  falls back to its default (`3600`) when zero, negative or not finite, where it was used as written, and the
+  lifetime settings now parse with the invariant culture rather than the host's.
+- A request turned away by the `AuthAnonymous` rate limit (`429`) now carries a `Retry-After` header, in whole
+  seconds, and the usual error envelope with the message "Too many requests.", instead of an empty body.
+- Contributors: the `dotnet-ef` tool in `.config/dotnet-tools.json` is now pinned to the version of
+  `Microsoft.EntityFrameworkCore`, and `scripts/vulnerabilities.py` fails when the two drift apart.
 - **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
   `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to
   `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps

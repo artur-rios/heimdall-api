@@ -80,4 +80,44 @@ public class AdminEmailOptionsTests
         // Then — a token issued at 11:55 expires at 12:55; any later expiry was issued inside the window
         Assert.Equal(new DateTime(2026, 10, 14, 12, 55, 0, DateTimeKind.Utc), threshold);
     }
+
+    [UnitTheory]
+    [InlineData("soon")]
+    [InlineData("-1")]
+    [InlineData("86401")]
+    public void GivenAnUnusableValue_WhenRead_ThenTheFallbackIsReported(string configured)
+    {
+        // Given / When
+        var options = AdminEmailOptions.From(configured);
+
+        // Then
+        Assert.Equal(configured, options.RejectedCooldown);
+        Assert.Equal(TimeSpan.FromSeconds(300), options.Cooldown);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void GivenNoValue_WhenRead_ThenNoFallbackIsReported(string? configured)
+    {
+        // Given / When
+        var options = AdminEmailOptions.From(configured);
+
+        // Then — absent is the documented default, not a fallback
+        Assert.Null(options.RejectedCooldown);
+    }
+
+    [UnitTheory]
+    [InlineData("0")]
+    [InlineData("120")]
+    [InlineData("86400")]
+    public void GivenAUsableValue_WhenRead_ThenNoFallbackIsReported(string configured)
+    {
+        // Given / When
+        var options = AdminEmailOptions.From(configured);
+
+        // Then
+        Assert.Null(options.RejectedCooldown);
+    }
 }

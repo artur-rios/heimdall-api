@@ -32,6 +32,13 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
     /// <summary>The variable carrying the lifetime in seconds. Optional.</summary>
     public const string ExpirationVariable = "HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS";
 
+    /// <summary>
+    ///     The configured lifetime text when it was present but unusable and
+    ///     <see cref="DefaultLifetime" /> was applied instead; <c>null</c> when the variable was absent
+    ///     or usable. Start-up warns on it.
+    /// </summary>
+    public string? RejectedExpiration { get; init; }
+
     private const string PersonAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
     private const double MaxLifetimeInSeconds = 86400;
@@ -69,13 +76,14 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
                 "validating person tokens would accept it as one.");
         }
 
-        var lifetime = double.TryParse(
-                           expirationInSeconds, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) &&
-                       double.IsFinite(seconds) && seconds > 0 && seconds <= MaxLifetimeInSeconds
-            ? TimeSpan.FromSeconds(seconds)
-            : DefaultLifetime;
+        var usable = double.TryParse(
+                         expirationInSeconds, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) &&
+                     double.IsFinite(seconds) && seconds > 0 && seconds <= MaxLifetimeInSeconds;
 
-        return new ApplicationTokenOptions(trimmed, lifetime);
+        return new ApplicationTokenOptions(trimmed, usable ? TimeSpan.FromSeconds(seconds) : DefaultLifetime)
+        {
+            RejectedExpiration = usable || string.IsNullOrWhiteSpace(expirationInSeconds) ? null : expirationInSeconds
+        };
     }
 
     /// <summary>An audience as a token validator compares it: trimmed, with no trailing slash.</summary>
