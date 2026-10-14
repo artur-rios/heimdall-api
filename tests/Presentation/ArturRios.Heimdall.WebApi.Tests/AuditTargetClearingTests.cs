@@ -309,7 +309,7 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
             $"UPDATE heimdall.audit_log SET target_id = '{somebody}' WHERE public_id = '{entry}'");
 
         // Then
-        AssertRefused(failure, "target may be cleared but not reassigned");
+        AssertRefused(failure, "target may be cleared but not set");
         Assert.Null(await TargetOfAsync(entry));
     }
 
@@ -400,6 +400,45 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         // Then
         AssertRefused(failure, "actor attribution is not yet due to be cleared");
         Assert.Equal(actor, await ActorOfAsync(entry));
+        Assert.Equal(target, await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnErasedActorAndALiveRecentTarget_WhenBothAreCleared_ThenTheDatabaseRefusesBoth()
+    {
+        // Given a recent entry by an erased actor about a live person: the actor is due on erasure,
+        // the target is not, and a due actor must not carry an undue target clearing through with it
+        var actor = await InsertPersonAsync(anonymised: true);
+        var target = await InsertPersonAsync(anonymised: false);
+        var entry = await InsertEntryAsync(actor, target, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET actor_person_id = NULL, actor_role = NULL, target_id = NULL " +
+            $"WHERE public_id = '{entry}'");
+
+        // Then
+        AssertRefused(failure, "target is not yet due to be cleared");
+        Assert.Equal(actor, await ActorOfAsync(entry));
+        Assert.Equal(target, await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnErasedActorAndALiveRecentTarget_WhenOnlyTheActorIsCleared_ThenTheDatabasePermitsIt()
+    {
+        // Given
+        var actor = await InsertPersonAsync(anonymised: true);
+        var target = await InsertPersonAsync(anonymised: false);
+        var entry = await InsertEntryAsync(actor, target, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET actor_person_id = NULL, actor_role = NULL " +
+            $"WHERE public_id = '{entry}'");
+
+        // Then the actor is gone and the target, written back unchanged, survives
+        Assert.Null(failure);
+        Assert.Null(await ActorOfAsync(entry));
         Assert.Equal(target, await TargetOfAsync(entry));
     }
 

@@ -99,6 +99,12 @@ namespace ArturRios.Heimdall.Data.Migrations
                     -- The target: unchanged, or cleared once due, and only when it names a person.
                     -- Anything else it can name is not personal data and stays as recorded.
                     IF NEW.target_id IS DISTINCT FROM OLD.target_id THEN
+                        IF NEW.target_id IS NOT NULL AND OLD.target_id IS NULL THEN
+                            RAISE EXCEPTION
+                                'heimdall.audit_log target may be cleared but not set'
+                                USING ERRCODE = 'restrict_violation';
+                        END IF;
+
                         IF NEW.target_id IS NOT NULL THEN
                             RAISE EXCEPTION
                                 'heimdall.audit_log target may be cleared but not reassigned'

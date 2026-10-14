@@ -13,8 +13,9 @@ namespace ArturRios.Heimdall.Command.Tests;
 // which of each entry's actor and person target it clears.
 //
 // What it is permitted to *write* is not tested here and cannot be — the database trigger is the
-// authority on that, and an in-memory fake enforces none of it. AuditActorClearingTests covers the
-// trigger against real PostgreSQL, and AuditRetentionTests covers the two together.
+// authority on that, and an in-memory fake enforces none of it. AuditActorClearingTests and
+// AuditTargetClearingTests cover the trigger against real PostgreSQL, and AuditRetentionTests covers
+// the two together.
 public class PseudonymiseAuditActorsCommandHandlerTests
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);

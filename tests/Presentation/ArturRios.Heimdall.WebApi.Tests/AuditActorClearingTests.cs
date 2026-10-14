@@ -188,15 +188,19 @@ public class AuditActorClearingTests(PostgresFixture fixture)
     [FunctionalFact]
     public async Task GivenADueAttribution_WhenOnlyThePersonIsCleared_ThenTheDatabaseRefuses()
     {
-        // The attribution is cleared as a pair: a role left behind on its own still says
-        // something about who acted.
+        // Given a due attribution. It is cleared as a pair: a role left behind on its own still
+        // says something about who acted.
         var actor = await InsertPersonAsync(anonymised: false);
         var entry = await InsertEntryAsync(actor, ageInDays: 400);
 
+        // When
         var failure = await RunAsync(
             $"UPDATE heimdall.audit_log SET actor_person_id = NULL WHERE public_id = '{entry}'");
 
-        Assert.IsType<PostgresException>(failure);
+        // Then
+        var refusal = Assert.IsType<PostgresException>(failure);
+        Assert.Equal("23001", refusal.SqlState);
+        Assert.Contains("actor attribution may be cleared but not reassigned", refusal.MessageText);
         Assert.Equal(actor, await ScalarAsync<Guid?>(
             $"SELECT actor_person_id FROM heimdall.audit_log WHERE public_id = '{entry}'"));
     }
