@@ -305,6 +305,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<IssueApplicationCredentialCommand>, IssueApplicationCredentialCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<IssueApplicationCredentialCommand, IssueApplicationCredentialCommandOutput, IssueApplicationCredentialCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<RevokeApplicationCredentialCommand, RevokeApplicationCredentialCommandOutput, RevokeApplicationCredentialCommandHandler>();
+        Builder.Services.AddScoped<IValidator<IssueApplicationTokenCommand>, IssueApplicationTokenCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<IssueApplicationTokenCommand, IssueApplicationTokenCommandOutput, IssueApplicationTokenCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateScopePermissionCommand>, CreateScopePermissionCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateScopePermissionCommand, CreateScopePermissionCommandOutput, CreateScopePermissionCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateScopePermissionCommand>, UpdateScopePermissionCommandValidator>();

@@ -667,6 +667,58 @@
         ]
       }
     },
+    "/api/applications/token": {
+      "post": {
+        "tags": [
+          "ApplicationToken"
+        ],
+        "summary": "Exchanges an application's secret for a token valid for ten minutes by default (UC-56).\nEvery refusal is the same 401, so the endpoint reveals nothing about which applications,\nscopes or credentials exist. Rate-limited per client address like the person sign-in.",
+        "description": "**Anonymous** — no bearer token required.",
+        "operationId": "ApplicationToken_IssueToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
     "/api/audit-log": {
       "get": {
         "tags": [
@@ -6651,6 +6703,73 @@
         },
         "additionalProperties": false
       },
+      "IssueApplicationTokenCommand": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationTokenCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationTokenCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/IssueApplicationTokenCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiftProcessingRestrictionCommand": {
         "type": "object",
         "properties": {
@@ -8943,6 +9062,9 @@
     },
     {
       "name": "ApplicationCredential"
+    },
+    {
+      "name": "ApplicationToken"
     },
     {
       "name": "Audit"
