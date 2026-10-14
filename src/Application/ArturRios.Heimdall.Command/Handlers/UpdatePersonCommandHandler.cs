@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -120,7 +121,8 @@ public class UpdatePersonCommandHandler(
         // anything sent to it — undoing the reset just made.
         if (emailChanged)
         {
-            var retirement = await RetireVerificationTokensAsync(person.Id);
+            var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
+                verificationTokenWriter, verificationTokenWriter, person.Id, DateTime.UtcNow);
 
             if (retirement is not null)
             {
@@ -150,29 +152,6 @@ public class UpdatePersonCommandHandler(
     ///     a Scope Admin may update a <c>User</c> belonging to a scope they own. Everything else is
     ///     denied.
     /// </summary>
-    private async Task<IEnumerable<string>?> RetireVerificationTokensAsync(long personId)
-    {
-        var now = DateTime.UtcNow;
-
-        var live = await verificationTokenWriter.Query()
-            .Where(x => x.PersonId == personId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
-        {
-            outstanding.Used = true;
-
-            var retirement = await verificationTokenWriter.UpdateAsync(outstanding);
-
-            if (!retirement.Success)
-            {
-                return retirement.Errors;
-            }
-        }
-
-        return null;
-    }
-
     private async Task<bool> MayUpdateAsync(UpdatePersonCommand command, Person person)
     {
         if (command.ActingRole == (int)Roles.SystemAdmin || command.ActingPersonId == person.PublicId)
