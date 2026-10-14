@@ -131,6 +131,7 @@ graph LR
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
+| FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
 
 ### 3.3 Role Assignment
 
@@ -594,6 +595,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/scopes/{scopeId}/persons` | Create a `User` person within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/scopes/{scopeId}/persons` | List Users within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/persons/{id}` | Get person by ID | Authenticated |
+| GET | `/api/persons/scope-admins` | List the persons who may own a scope (FR-PE-12) | SystemAdmin, ScopeAdmin |
+| GET | `/api/persons/system-admins` | List the `SystemAdmin` persons (FR-PE-13) | SystemAdmin |
 | PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
@@ -1068,7 +1071,7 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-12 |
+| Person CRUD | FR-PE-01 through FR-PE-13 |
 | Application CRUD | FR-AP-01 through FR-AP-09 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
