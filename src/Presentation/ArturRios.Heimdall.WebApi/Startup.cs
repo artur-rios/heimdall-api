@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using ArturRios.Data.PostgreSql;
@@ -845,7 +846,7 @@ public class Startup : WebApiStartup
 
                 context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 context.HttpContext.Response.Headers.RetryAfter =
-                    Math.Max(1, retryAfterSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    Math.Max(1, retryAfterSeconds).ToString(CultureInfo.InvariantCulture);
 
                 await context.HttpContext.Response.WriteAsJsonAsync(
                     DataOutput<object?>.New.WithError(RateLimitMessages.TooManyRequests),

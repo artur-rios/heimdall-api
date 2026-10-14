@@ -55,7 +55,7 @@ public class RateLimitRejectionTests() : WebApiTest<Program>(EnvironmentType.Loc
 
         Assert.NotNull(response.Headers.RetryAfter);
         Assert.NotNull(response.Headers.RetryAfter.Delta);
-        Assert.True(response.Headers.RetryAfter.Delta.Value.TotalSeconds >= 1);
+        Assert.InRange(response.Headers.RetryAfter.Delta.Value.TotalSeconds, 1, 60);
 
         using var document = JsonDocument.Parse(body);
         var errors = document.RootElement.GetProperty("errors").EnumerateArray().Select(e => e.GetString());

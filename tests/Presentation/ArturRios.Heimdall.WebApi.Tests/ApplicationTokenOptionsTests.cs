@@ -89,6 +89,7 @@ public class ApplicationTokenOptionsTests
 
         // Then
         Assert.Equal(raw, options.RejectedExpiration);
+        Assert.Equal(ApplicationTokenOptions.DefaultLifetime, options.Lifetime);
     }
 
     [UnitTheory]
