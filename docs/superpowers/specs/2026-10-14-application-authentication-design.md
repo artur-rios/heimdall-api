@@ -22,14 +22,27 @@ audience would pass that offline check as if it were a person. Application token
 a **distinct audience** (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, required, and required to differ
 from `HEIMDALL_AUTH_TOKEN_AUDIENCE`; startup refuses otherwise).
 
-That one choice gives the isolation the issue asks for in both directions, without a new filter:
+That choice protects consumers, and Heimdall itself refuses application tokens through their claims:
 
-- **Application tokens are refused everywhere else.** Util.WebApi's `AuthenticationMiddleware`
-  validates every non-anonymous route against the person audience, so an application token is a
-  `401` on every existing endpoint — in Heimdall and in any consumer that pins the person audience.
+- **Application tokens are refused everywhere else.** A consumer that pins the person audience
+  refuses one outright; Cerberus's `HeimdallTokenValidator` does (`ValidateAudience = true`), and the
+  consumer guide tells every consumer to. Heimdall's own `AuthenticationMiddleware` does **not**
+  check the audience: Util.WebApi validates through `ArturRios.Jwt`'s `IsTokenValidAsync`, which
+  checks the signature and lifetime only. So inside Heimdall the refusal comes from the claims. An
+  application token carries no `roleId`, which `IdentityUserMapper.FromClaims` already requires, and
+  the mapper refuses any token carrying a `tokenKind` claim. That second check means a later change
+  cannot turn an application token into a person by adding a role to it. Either way the result is
+  a `401` on every existing endpoint.
 - **Person tokens cannot pass as an application.** The only endpoint that accepts application
-  tokens validates them itself, against the application audience and a `tokenKind` claim of
-  `application`; a person, Google User, 2FA challenge or subject-rights-only token fails both.
+  tokens validates them itself, against the issuer, the application audience and a `tokenKind` claim
+  of `application`; a person, Google User, 2FA challenge or subject-rights-only token fails all
+  three.
+
+> **Amended 2026-10-14, while writing the plan.** The first version said the middleware validates
+> every route against the person audience. Reading `ArturRios.Jwt` showed it does not, so this
+> section now names the claim checks that give the same isolation. §3 was also tightened: the
+> status code for an issued credential, the per-actor rule, and the race on the two-credential
+> limit. The decisions in §1 are unchanged.
 
 ## 3. Credentials (UC-53, UC-54, UC-55)
 
@@ -58,13 +71,17 @@ by looking up the hash, so no timing difference depends on how much of a secret 
 
 **Endpoints** under `api/scopes/{scopeId}/applications/{id}/credentials`, in a new
 `ApplicationCredentialController`, `[RoleRequirement(SystemAdmin, ScopeAdmin)]`, with the same
-per-actor rule as `PUT /api/scopes/{scopeId}/applications/{id}` (a Scope Admin must own the scope):
+per-actor rule as `GET`/`PUT`/`DELETE /api/scopes/{scopeId}/applications/{id}`. A System Admin may
+manage any application; a Scope Admin only one they own **and** whose scope they still own (UC-17
+AF-17b). Owning the scope alone is not enough, as it is not for reading or renaming the application:
 
-- **UC-53 Issue** — `POST`, body `{ "expiresAt": "…" }` (optional; must be in the future). Answers
-  `200` with data `{ id, secret, createdAt,
-  expiresAt }` — the only time `secret` ever appears. Refused `409` when two live credentials
+- **UC-53 Issue** — `POST`, body `{ "expiresAt": "…" }` (optional; must be in the future; a value
+  without an offset is read as UTC). Answers `201 Created`, as every create in this API does, with
+  data `{ id, secret, createdAt, expiresAt }`. This is the only time `secret` ever appears. The
+  two-credential limit is checked and the row inserted under a lock on the application's row, so
+  concurrent requests cannot leave three live credentials. Refused `409` when two live credentials
   already exist; `404` when the scope or application is missing, logically deleted, or the
-  application is not in that scope; `403` for a non-owning Scope Admin; `400` for an expiry in the
+  application is not in that scope; `403` for a Scope Admin who does not own the application; `400` for an expiry in the
   past.
 - **UC-54 List** — `GET`, every credential of the application, newest first: `{ id, createdAt,
   expiresAt, revokedAt, lastUsedAt, live }`. Never the secret or its hash.
