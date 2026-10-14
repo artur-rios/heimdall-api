@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using System.Text.Json;
@@ -14,7 +15,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     Every claim value is a <c>PublicId</c> — an internal <c>bigint</c> Id is never written to a
 ///     token (NFR-15). Reading is total: any claim that cannot be interpreted yields <c>null</c>
 ///     rather than an exception, so a malformed token is rejected as unauthenticated instead of
-///     failing the request with a 500.
+///     failing the request with a 500. A token carrying <c>tokenKind</c> is an application token
+///     (UC-56) and yields <c>null</c>: it is never a person.
 /// </remarks>
 public class IdentityUserMapper : IAuthenticatedUserMapper
 {
@@ -116,6 +118,14 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
 
     public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
     {
+        // TH-35: an application token is never a person, whatever else it carries. The middleware
+        // validates signature and lifetime only — not the audience — so this is the check that
+        // keeps one off every endpoint but UC-57's, which validates application tokens itself.
+        if (claims.ContainsKey(ApplicationTokenClaims.TokenKind))
+        {
+            return null;
+        }
+
         if (!TryReadGuid(claims, TokenClaimKeys.Id, out var id))
         {
             return null;

@@ -120,6 +120,27 @@ even after the restriction is lifted, when the subject signs in again for a full
 An application's owner must be a **`ScopeAdmin` or `SystemAdmin` who owns that scope** — a `User` may never own one
 (**FR-AP-03**).
 
+### Application credentials — `/api/scopes/{scopeId}/applications/{id}/credentials`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `POST /` | System Admin + Scope Admin | UC-53 — issue a credential; the secret is in this response only; 409 with two live credentials already |
+| `GET /` | System Admin + Scope Admin | UC-54 — list the application's credentials, newest first; never a secret or hash |
+| `DELETE /{credentialId}` | System Admin + Scope Admin | UC-55 — revoke a credential; tokens issued from it fail the next live check |
+
+A Scope Admin may manage the credentials only of an application they own, in a scope they still own,
+the rule `GET`/`PUT /{id}` apply (**FR-AP-12**).
+
+### Application tokens — `/api/applications`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `POST /token` | Anonymous (the secret authenticates) | UC-56 — exchange a credential's secret for an application token; every refusal is one `401` |
+| `GET /self` | Anonymous (validates its own bearer token) | UC-57 — check an application token live; one `401` for every refusal |
+
+The [Application authentication](../flows/application-authentication/) guide is the page for the
+service consuming these tokens.
+
 ## Scope permissions — `/api/scopes/{scopeId}/permissions`
 
 | Method & path | Who | Use case |

@@ -76,6 +76,8 @@ Two consequences that are easy to miss:
 `APPLICATION` rows are out of scope: an application is a non-human identity representing another
 system. Its `OwnerId` names a person, but the row describes the system.
 
+`APPLICATION_CREDENTIAL` rows (UC-53) are out of scope for the same reason. Each holds an application reference, the SHA-256 of a random secret, and four instants (issued, expiring, revoked, last used). None of them relates to a person, and the audit entries of credential operations name the acting administrator as every audit entry does (§5.1 `AUDIT_LOG`).
+
 ## 5. Categories of personal data, purposes, and legal basis
 
 | Category | Fields | Purpose | LGPD basis | GDPR basis |

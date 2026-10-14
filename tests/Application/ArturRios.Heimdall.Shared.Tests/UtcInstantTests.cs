@@ -1,7 +1,7 @@
-using ArturRios.Heimdall.Query.Input;
+using ArturRios.Heimdall.Shared.Time;
 using ArturRios.Util.Test.Attributes;
 
-namespace ArturRios.Heimdall.Query.Tests;
+namespace ArturRios.Heimdall.Shared.Tests;
 
 // Unit tests for UtcInstant (UC-48 from/to). ASP.NET Core binds an instant with no offset as
 // DateTimeKind.Unspecified, which Npgsql refuses for a timestamptz parameter; every instant in this

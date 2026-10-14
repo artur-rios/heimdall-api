@@ -215,6 +215,8 @@ public class Startup : WebApiStartup
         // Spending single-use credentials and charging bounded budgets as one conditional UPDATE
         // each, so concurrent requests cannot both spend one code or lose each other's counts.
         Builder.Services.AddScoped<IAtomicWrites, AtomicWrites>();
+        // UC-53's two-live-credentials limit, held under a row lock so concurrent issues cannot pass it.
+        Builder.Services.AddScoped<IApplicationCredentialSlots, ApplicationCredentialSlots>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
@@ -300,6 +302,11 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<UpdateApplicationCommand, UpdateApplicationCommandOutput, UpdateApplicationCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<DeleteApplicationCommand, DeleteApplicationCommandOutput, DeleteApplicationCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput, HardDeleteApplicationCommandHandler>();
+        Builder.Services.AddScoped<IValidator<IssueApplicationCredentialCommand>, IssueApplicationCredentialCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<IssueApplicationCredentialCommand, IssueApplicationCredentialCommandOutput, IssueApplicationCredentialCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<RevokeApplicationCredentialCommand, RevokeApplicationCredentialCommandOutput, RevokeApplicationCredentialCommandHandler>();
+        Builder.Services.AddScoped<IValidator<IssueApplicationTokenCommand>, IssueApplicationTokenCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<IssueApplicationTokenCommand, IssueApplicationTokenCommandOutput, IssueApplicationTokenCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateScopePermissionCommand>, CreateScopePermissionCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateScopePermissionCommand, CreateScopePermissionCommandOutput, CreateScopePermissionCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateScopePermissionCommand>, UpdateScopePermissionCommandValidator>();
@@ -333,8 +340,14 @@ public class Startup : WebApiStartup
             .AddScoped<IQueryHandlerAsync<GetApplicationByIdQuery, ApplicationOutput>,
                 GetApplicationByIdQueryHandler>();
         Builder.Services
+            .AddScoped<IQueryHandlerAsync<CheckApplicationTokenQuery, ApplicationTokenCheckOutput>,
+                CheckApplicationTokenQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeApplicationsQuery, ApplicationOutput>,
                 ListScopeApplicationsQueryHandler>();
+        Builder.Services
+            .AddScoped<IQueryHandlerAsync<ListApplicationCredentialsQuery, ApplicationCredentialListOutput>,
+                ListApplicationCredentialsQueryHandler>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>,
                 GetScopePermissionByIdQueryHandler>();
@@ -647,6 +660,23 @@ public class Startup : WebApiStartup
         // and no database read happens per request.
         Builder.Services.AddSingleton(BuildJwtConfiguration());
         Builder.Services.AddSingleton<JwtHandler>();
+
+        // UC-56/UC-57: application tokens share the signing keys but not the audience. Read here,
+        // with the rest of the token configuration, so a missing or equal audience stops start-up
+        // before anything is served (TH-35).
+        var applicationTokens = ApplicationTokenOptions.FromEnvironment();
+        Builder.Services.AddSingleton(applicationTokens);
+        Builder.Services.AddScoped<JwtApplicationTokenService>();
+        Builder.Services.AddScoped<IApplicationTokenIssuer>(provider =>
+            provider.GetRequiredService<JwtApplicationTokenService>());
+        Builder.Services.AddScoped<IApplicationTokenValidator>(provider =>
+            provider.GetRequiredService<JwtApplicationTokenService>());
+
+        // The audience is not a secret; logging it makes a mismatch with a consumer diagnosable.
+        Log.Information(
+            "Application tokens: audience {Audience}, lifetime {Seconds}s",
+            applicationTokens.Audience, applicationTokens.Lifetime.TotalSeconds);
+
         Builder.Services.AddTokenAuthentication<IdentityUserMapper>(options =>
         {
             options.Source = TokenSource.Header;

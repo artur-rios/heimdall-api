@@ -198,4 +198,28 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         return Task.FromResult(true);
     }
+
+    public Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now)
+    {
+        if (!credential.IsLiveAt(now))
+        {
+            return Task.FromResult(false);
+        }
+
+        credential.LastUsedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt)
+    {
+        if (credential.RevokedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        credential.RevokedAt = revokedAt;
+
+        return Task.FromResult(true);
+    }
 }

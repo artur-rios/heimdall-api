@@ -44,4 +44,7 @@ public class Application : Entity<long>
 
     /// <summary>The person that owns this application.</summary>
     public Person Owner { get; set; } = null!;
+
+    /// <summary>The secrets this application can exchange for an application token (UC-53).</summary>
+    public ICollection<ApplicationCredential> Credentials { get; set; } = new List<ApplicationCredential>();
 }

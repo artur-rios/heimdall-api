@@ -82,14 +82,17 @@ public class PurgeExpiredTokensCommandHandlerTests
         AsyncFakeRepository<EmailVerificationToken, long> emailVerificationTokens,
         AsyncFakeRepository<TwoFactorEmailCode, long> twoFactorEmailCodes,
         DataRetentionOptions? retention = null,
-        AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null)
+        AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null,
+        AsyncFakeRepository<ApplicationCredential, long>? credentials = null)
     {
         pendingRegistrations ??= new AsyncFakeRepository<PendingRegistration, long>();
+        credentials ??= new AsyncFakeRepository<ApplicationCredential, long>();
 
         return new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
             pendingRegistrations, pendingRegistrations,
+            credentials, credentials,
             retention ?? Retention());
     }
 
@@ -289,5 +292,29 @@ public class PurgeExpiredTokensCommandHandlerTests
         Assert.DoesNotContain(longExpired.Id, remaining);
         Assert.Contains(recentlyExpired.Id, remaining);
         Assert.Contains(live.Id, remaining);
+    }
+
+    [UnitFact]
+    public async Task GivenSpentCredentialsPastTheGrace_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given — revoked past the grace, expired past the grace, revoked within it, and live
+        var cutoff = DateTime.UtcNow - Grace;
+        var credentials = new AsyncFakeRepository<ApplicationCredential, long>();
+        await credentials.CreateAsync(new ApplicationCredential { Id = 1, SecretHash = "a", RevokedAt = cutoff.AddMinutes(-1) });
+        await credentials.CreateAsync(new ApplicationCredential { Id = 2, SecretHash = "b", ExpiresAt = cutoff.AddMinutes(-1) });
+        await credentials.CreateAsync(new ApplicationCredential { Id = 3, SecretHash = "c", RevokedAt = cutoff.AddMinutes(5) });
+        await credentials.CreateAsync(new ApplicationCredential { Id = 4, SecretHash = "d" });
+
+        // When
+        var output = await Handler(
+                new AsyncFakeRepository<PasswordResetToken, long>(),
+                new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+                credentials: credentials)
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.Equal(2, output.Data!.ApplicationCredentialsPurged);
+        Assert.Equal([3L, 4L], credentials.Query().Select(c => c.Id).OrderBy(id => id));
     }
 }

@@ -9,6 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- UC-53 to UC-57 (#178): a registered application can authenticate to Heimdall as itself. A System Admin, or the
+  Scope Admin who owns the application and its scope, issues it up to two live credentials
+  (`POST /api/scopes/{scopeId}/applications/{id}/credentials`), lists them (`GET` the same path) and revokes one
+  (`DELETE …/credentials/{credentialId}`). The secret (`hds_…`) is returned once and only its SHA-256 is stored;
+  a third live credential is refused with `409`. The application exchanges a secret for a ten-minute token
+  (`POST /api/applications/token`, anonymous and rate-limited, every refusal the same `401`), and a consumer
+  re-checks that token live with `GET /api/applications/self`, which refuses it as soon as its credential is
+  revoked or expired or its application or scope is deleted. Application tokens carry their own audience and no
+  role, and Heimdall's own endpoints refuse them. A new migration, `AddApplicationCredential`, adds the
+  `application_credential` table; the retention purge removes spent credentials. **Operators:** new variables
+  `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` (required) and `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS`
+  (default `600`); see the consumer guide, "Application authentication".
 - UC-51 and UC-52: an administrator can have a verification link (`POST /api/persons/{id}/verification-email`) or
   a password-reset link (`POST /api/persons/{id}/password-reset`) mailed to a person's own address — a System
   Admin for anyone, a Scope Admin for Users of scopes they own. No token is ever returned. Deleted or restricted
@@ -32,6 +44,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `targetId` and `succeeded`. An actor the retention pass has cleared reads as `null` and is never reconstructed.
   A new migration, `AddAuditLogTargetIndex`, indexes `audit_log.target_id` so filtering by target does not scan
   the table.
+
+### Changed
+
+- **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
+  `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to
+  `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps
+  starting. The Web API's `Environments/.env` holds only a placeholder; any other deployment must set it.
+  Application tokens are validated with zero clock skew, so keep instance clocks synchronised (NTP).
 
 ## [1.4.0] - 2026-10-13
 

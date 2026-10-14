@@ -1080,7 +1080,7 @@ sequenceDiagram
 | **Actors** | System Admin |
 | **Description** | Permanently remove an application record from the database |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role; application exists |
-| **Postconditions** | Application record is permanently removed |
+| **Postconditions** | Application record is permanently removed, and with it, by cascade, every credential issued to it (UC-53), live, revoked or expired |
 
 **Main Flow:**
 
@@ -2393,6 +2393,248 @@ sequenceDiagram
 
 ---
 
+### UC-53: Issue an Application Credential
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-53 |
+| **Name** | Issue an Application Credential |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Give a registered application a secret it can exchange for a token (UC-56), via `POST /api/scopes/{scopeId}/applications/{id}/credentials`. The body is optional and carries only `expiresAt` |
+| **Preconditions** | Actor is authenticated as a System Admin, or as a Scope Admin who owns the application and still owns its scope (UC-17 AF-17b); the application is live and sits in the addressed, live scope; it holds fewer than two live credentials |
+| **Postconditions** | A credential exists whose SHA-256 hash alone is stored; the secret was returned once and is held nowhere; the issue is audited with the credential as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: POST /api/scopes/{scopeId}/applications/{id}/credentials (expiresAt?)
+    API->>API: Validate the expiry
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>API: Generate a secret, hash it
+    API->>DB: Lock the application's row, count live credentials, insert if fewer than two
+    API-->>A: 201 Created — id, secret, createdAt, expiresAt
+```
+
+1. A System Admin or a Scope Admin asks for a credential for an application, optionally with an expiry (`expiresAt`) (FR-AP-10).
+2. The system validates the expiry: it must be in the future, and a value without an offset (what a `datetime-local` input produces) is read as UTC.
+3. The system resolves the application in the addressed scope; it must be live, and so must the scope.
+4. The system checks the actor may manage the application: a System Admin always may; a Scope Admin only if they own the application and still own its scope (FR-AP-12).
+5. The system generates a secret (`hds_` plus 32 random bytes, base64url, 47 characters) and stores only its SHA-256, under a lock on the application's row, provided fewer than two live credentials exist (FR-AP-11). Two administrators issuing at the same moment cannot leave three live secrets.
+6. The system answers `201 Created` with the credential's `id`, the `secret`, `createdAt` and `expiresAt`. The audit entry names the credential as target and never holds the secret (NFR-09).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-53a | No live application with that id in the addressed, live scope (also a logically deleted application, or one in another scope) | `404 Not Found` — "Application not found." |
+| AF-53b | A Scope Admin who does not own the application, or no longer owns its scope | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-53c | `expiresAt` is not in the future, or the body cannot be read (not JSON, or an `expiresAt` that is not a date-time) | `400 Bad Request` — "The expiry must be in the future." or, for a body that cannot be read, "The request body is malformed."; never a credential without expiry |
+| AF-53d | The application already holds two live credentials | `409 Conflict` — "This application already has two live credentials. Revoke one before issuing another." |
+
+> **Why two.** A secret is rotated without downtime by issuing the second, deploying it to the
+> consumer, and only then revoking the first (FR-AP-11). A third would only let spent secrets pile
+> up unrevoked. A credential that has expired or been revoked does not count towards the two.
+>
+> **Why the secret is never shown again.** Heimdall keeps the hash alone, so neither the database,
+> a backup nor a log can leak it, and no later call can return it. A lost secret is replaced, not
+> recovered: issue another and revoke the lost one. The `hds_` prefix lets a secret scanner
+> recognise a leak (TH-33).
+
+---
+
+### UC-54: List an Application's Credentials
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-54 |
+| **Name** | List an Application's Credentials |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Read an application's credentials, newest first, via `GET /api/scopes/{scopeId}/applications/{id}/credentials`. Each carries `id`, `createdAt`, `expiresAt`, `revokedAt`, `lastUsedAt` and `live`; never the secret or its hash |
+| **Preconditions** | As UC-53: the actor may manage the application, which is live in a live scope |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: GET /api/scopes/{scopeId}/applications/{id}/credentials
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>DB: Read the application's credentials, newest first
+    API-->>A: 200 OK — the credentials
+```
+
+1. A System Admin or a Scope Admin asks for an application's credentials (FR-AP-12).
+2. The system resolves the application and checks the actor may manage it, exactly as UC-53 does, not-found before authorization.
+3. The system answers `200 OK` with every credential, newest first, each with whether it is live now (not revoked, and not expired). The list is not paginated: at most two credentials are live, and spent ones are purged (Data Retention Schedule §5).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-54a | As AF-53a | `404 Not Found` — "Application not found." |
+| AF-54b | As AF-53b | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-54c | The application has no credentials | `200 OK` with an empty list |
+
+---
+
+### UC-55: Revoke an Application Credential
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-55 |
+| **Name** | Revoke an Application Credential |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Withdraw one credential via `DELETE /api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}` |
+| **Preconditions** | As UC-53: the actor may manage the application, which is live in a live scope; the credential belongs to the application and is not yet revoked |
+| **Postconditions** | The credential's `RevokedAt` is set. UC-56 refuses its secret, and UC-57 refuses every token already issued from it. The revocation is audited with the credential as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: DELETE /api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>DB: Find the credential on this application
+    API->>DB: Set RevokedAt
+    API-->>A: 200 OK — id, revokedAt
+```
+
+1. A System Admin or a Scope Admin asks to revoke a credential of an application (FR-AP-12).
+2. The system resolves the application and checks the actor may manage it, as UC-53 does.
+3. The system finds the credential on that application; one that belongs to another application is not found.
+4. The system sets `RevokedAt` and answers `200 OK` with the credential's `id` and `revokedAt` (FR-AP-16, NFR-09).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-55a | As AF-53a | `404 Not Found` — "Application not found." |
+| AF-55b | As AF-53b | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-55c | No credential with that id on this application | `404 Not Found` — "Application credential not found." |
+| AF-55d | The credential is already revoked | `409 Conflict` — "This application credential is already revoked." |
+
+> **Expired credentials.** A credential that has expired may still be revoked: it is stored until the
+> retention purge, and revoking it only records the decision.
+>
+> **Revocation is immediate.** It does not wait for the tokens already issued from the credential
+> to expire; they fail UC-57's live check at once (FR-AP-16).
+
+---
+
+### UC-56: Obtain an Application Token
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-56 |
+| **Name** | Obtain an Application Token |
+| **Actors** | Application (anonymous; the secret authenticates) |
+| **Description** | Exchange a live credential's secret for an application token via `POST /api/applications/token`, with the body `applicationId`, `scopeId` and `secret` |
+| **Preconditions** | The credential is live (not revoked, not expired), belongs to the application, the application is live, and sits in the given live scope |
+| **Postconditions** | A token has been issued; the credential's `LastUsedAt` is stamped; the issue is audited with no actor and the application as target. The token is not stored |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant API as Heimdall API
+    participant DB as Database
+
+    App->>API: POST /api/applications/token (applicationId, scopeId, secret)
+    API->>API: Validate the fields
+    API->>DB: Find a live credential by the hash of the trimmed secret
+    API->>API: Confirm credential, application and scope match and are live
+    API->>API: Sign a token under the application audience
+    API->>DB: Stamp LastUsedAt, write the audit entry
+    API-->>App: 200 OK — token, expiresAt
+```
+
+1. The application sends its `applicationId`, the `scopeId` and the `secret`.
+2. The system validates their shape: each field is present and the secret is at most 100 characters.
+3. The system trims the secret (a secret read from a file often carries a trailing newline), hashes it and looks the hash up among live credentials.
+4. The system confirms the credential belongs to that application, the application to that scope, and that the application and scope are live.
+5. The system issues a token signed like person tokens (HMAC-SHA256, the same keys) but under `HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, valid for `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (default 600), with the claims `tokenKind`, `id`, `scopeId`, `credentialId` and `name` and no role (FR-AP-13).
+6. The system stamps the credential's `LastUsedAt`, audits the issue (no actor; the application as target), and answers `200 OK` with `id`, `token` and `expiresAt`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-56a | A field is missing, the secret is over 100 characters, or the body cannot be read (not JSON, or an id that is not a GUID) | `400 Bad Request` — the field's message ("Application id is required.", "Scope id is required.", "Secret is required.", "Secret must be at most 100 characters.") or, for a body that cannot be read, "The request body is malformed." |
+| AF-56b | Anything else is wrong: an unknown, revoked or expired secret; another application's secret; the application or scope deleted; the wrong scope | `401 Unauthorized` — "The application credentials were not accepted.", always the same |
+
+> **One refusal.** As for UC-11, every refusal of the exchange is the same `401` with the same
+> message, whatever failed, so the endpoint reveals nothing about which applications, scopes or
+> credentials exist (FR-AP-14). Only a malformed request is told apart, and it learns nothing about
+> any credential.
+>
+> **Rate limit.** The endpoint shares the `AuthAnonymous` limit with person sign-in, per client
+> address; TH-32's trusted-caller key applies to it as to them.
+
+---
+
+### UC-57: Check an Application Token
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-57 |
+| **Name** | Check an Application Token |
+| **Actors** | Consumer service, holding the application's token |
+| **Description** | Confirm, live, that an application token is valid and that the application, its scope and the credential it came from are all still live, via `GET /api/applications/self` with `Authorization: Bearer <token>` |
+| **Preconditions** | A token obtained through UC-56, still within its lifetime |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    participant C as Consumer service
+    participant API as Heimdall API
+    participant DB as Database
+
+    C->>API: GET /api/applications/self (Authorization: Bearer token)
+    API->>API: Validate the token
+    API->>DB: Is the credential live, the application and scope live and matching?
+    API-->>C: 200 OK — applicationId, name, scopeId, credentialId, expiresAt
+```
+
+1. The system validates the token: signature against the current and previous keys, HS256 only, the issuer (when one is configured), the application audience, the lifetime with zero clock skew, and `tokenKind = application`.
+2. The system confirms the credential named in the token is live, and that the application and scope it names are live and match the token (FR-AP-15).
+3. The system answers `200 OK` with `applicationId`, `name`, `scopeId`, `credentialId` and `expiresAt`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-57a | No or malformed token; wrong signature, issuer, audience or kind; expired; the application, scope or credential no longer live; or the scope not the token's | `401 Unauthorized` — "The application token was not accepted.", always the same |
+
+> **Revocation policy (FR-AP-16).** Revoking or expiring a credential, or deleting the application
+> or its scope, takes effect at the next check for every token already issued. A token's `exp` is
+> fixed at issue, so a consumer validating it offline alone would accept it for up to its whole
+> lifetime after its credential expires or is revoked. Only this check reflects that at once, which
+> is why consumers re-check here before every sensitive release.
+>
+> **Clock skew.** Tokens are validated with zero skew. Instances whose clocks differ can refuse a
+> freshly issued token for the length of the drift; keep them synchronised (NTP).
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2443,6 +2685,11 @@ sequenceDiagram
 | UC-50: Discard a Pending Registration | FR-SR-12, NFR-09 |
 | UC-51: Send a Verification Email on a Person's Behalf | FR-EV-06, FR-EV-07, NFR-24 |
 | UC-52: Send a Password Reset on a Person's Behalf | FR-PR-05, FR-PR-06, NFR-24 |
+| UC-53: Issue an Application Credential | FR-AP-10, FR-AP-11, FR-AP-12, NFR-09 |
+| UC-54: List an Application's Credentials | FR-AP-12 |
+| UC-55: Revoke an Application Credential | FR-AP-12, FR-AP-16, NFR-09 |
+| UC-56: Obtain an Application Token | FR-AP-13, FR-AP-14, NFR-09 |
+| UC-57: Check an Application Token | FR-AP-15, FR-AP-16 |
 
 ---
 

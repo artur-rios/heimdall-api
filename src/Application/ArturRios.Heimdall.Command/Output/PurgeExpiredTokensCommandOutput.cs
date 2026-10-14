@@ -26,8 +26,11 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Unconfirmed pending registrations removed (UC-47).</summary>
     public int PendingRegistrationsPurged { get; set; }
 
-    /// <summary>Rows removed across all four tables.</summary>
+    /// <summary>Revoked or expired application credentials removed (UC-55).</summary>
+    public int ApplicationCredentialsPurged { get; set; }
+
+    /// <summary>Rows removed across all five tables.</summary>
     public int TotalPurged =>
         PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +
-        PendingRegistrationsPurged;
+        PendingRegistrationsPurged + ApplicationCredentialsPurged;
 }

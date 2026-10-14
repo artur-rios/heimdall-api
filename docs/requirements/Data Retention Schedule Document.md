@@ -46,7 +46,7 @@ own record is covered below.
 | Active identity | `PERSON`, `GOOGLE_USER` | Life of the account | Performance of the service the account exists for. An identity provider cannot authenticate an identity it has deleted | By deletion (UC-09/UC-10, UC-28/UC-29) |
 | Logically deleted identity | `PERSON`, `GOOGLE_USER` where `is_deleted` | **30 days** where the subject asked, **90 days** where an administrator did — §4 | A soft delete is a restriction of processing, not an erasure, so it needs a terminal state. The shorter deadline is the law's, not a choice; the longer one is a reversal window. Both end in anonymisation | ✅ Scheduled anonymisation (§4.4) |
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
-| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE` | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
+| Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE`, `APPLICATION_CREDENTIAL` (revoked or expired) | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Pending registrations | `PENDING_REGISTRATION` — the registrant's name, email address, password hash and salt, before any account exists (UC-47) | Until the link is followed, when the row is removed, or until expiry **+ 7 days** (default, configurable) | The registrant asked for an account and has not yet proved the address is theirs. Nothing but the link's hash and the request itself is kept, and the row stops serving its purpose when the link is followed or expires; the grace period is §5's | ✅ Removed on confirmation or when a scope owner discards it (UC-50); scheduled purge otherwise (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
 | Application logs | Serilog file sink, including every request's client IP address | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
@@ -170,13 +170,21 @@ comfortably longer than any link is useful and far shorter than any purpose coul
 them. It is configurable, and it cannot be set to zero or a negative value — the options type
 refuses both and falls back to the default.
 
-The purge selects on `ExpiresAt <= now - grace`. That single condition covers a used row and an
-expired-unused row alike, and it is the only condition applicable to all four tables: neither token
-table records *when* it was consumed, and only `TWO_FACTOR_EMAIL_CODE` and `PENDING_REGISTRATION` carry a `CreatedAt`. Expiry
-is a sound proxy in any case, since each row is issued with a lifetime measured in minutes.
+For the four token and registration tables the purge selects on `ExpiresAt <= now - grace`. That
+single condition covers a used row and an expired-unused row alike, and it is the only condition
+applicable to all four of them: neither token table records *when* it was consumed, and only
+`TWO_FACTOR_EMAIL_CODE` and `PENDING_REGISTRATION` carry a `CreatedAt`. Expiry is a sound proxy in any
+case, since each row is issued with a lifetime measured in minutes. Application credentials purge on
+a condition of their own, below.
 
 **A live token is never at risk.** The cutoff is strictly in the past, so a token that has not yet
 expired cannot match however the grace period is configured.
+
+An application credential (UC-53) is not a single-use token, but once it is revoked or has expired
+it can never be accepted again, so it is kept for the same grace as a spent token and then purged by
+the same pass. Its condition is revoked **or** expired at or before `now - grace`, the grace running
+from whichever came first: expiry alone would never purge a revoked credential that has no expiry. A
+live credential is kept for as long as it is live, since it is in use.
 
 ## 6. How the purge runs
 

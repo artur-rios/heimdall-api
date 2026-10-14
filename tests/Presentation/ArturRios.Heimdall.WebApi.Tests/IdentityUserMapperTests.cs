@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.WebApi.Security.Constants;
@@ -256,5 +257,21 @@ public class IdentityUserMapperTests
         // malformed scope claim is dropped rather than rejecting the whole token
         Assert.Equal(id, restored.Id);
         Assert.Empty(restored.ScopePermissionClaims);
+    }
+
+    [UnitFact]
+    public void GivenATokenKindClaim_WhenReadingClaims_ThenNoIdentityIsBuilt()
+    {
+        // Given — a claim set that would otherwise be a valid SystemAdmin, but marked as an
+        // application token (TH-35): Heimdall's middleware checks no audience, so this is what keeps
+        // an application token off every person endpoint even if it ever carried a role
+        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
+        claims[ApplicationTokenClaims.TokenKind] = ApplicationTokenClaims.ApplicationKind;
+
+        // When
+        var user = Mapper.FromClaims(claims);
+
+        // Then
+        Assert.Null(user);
     }
 }

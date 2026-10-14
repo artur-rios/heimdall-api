@@ -1,8 +1,8 @@
-namespace ArturRios.Heimdall.Query.Input;
+namespace ArturRios.Heimdall.Shared.Time;
 
 /// <summary>
-///     Reads an instant bound from a query string as the UTC instant this API's contract says it is
-///     (UC-48's <c>From</c>/<c>To</c>).
+///     Reads an instant a caller sent as the UTC instant this API's contract says it is
+///     (UC-48's <c>From</c>/<c>To</c>, UC-53's <c>ExpiresAt</c>).
 /// </summary>
 /// <remarks>
 ///     ASP.NET Core binds <c>2026-10-14T00:00:00Z</c> as UTC but <c>2026-10-14T00:00:00</c>, with no

@@ -13,22 +13,27 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
-///     email verification tokens, two-factor email codes, and unconfirmed pending registrations
-///     (UC-47) whose retention period has run out. All failures are returned as errors on the
-///     <see cref="DataOutput{T}" /> rather than thrown.
+///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47)
+///     and spent application credentials (UC-55) whose retention period has run out. All failures
+///     are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>What makes a row purgeable.</b> One condition, <c>ExpiresAt &lt;= now - grace</c>,
-///         applied to all four tables. It covers a used row and an expired-unused row alike, and it
-///         is the only condition that can be applied to all four: neither
+///         <b>What makes a row purgeable.</b> The four token and registration tables purge on
+///         expiry: <c>ExpiresAt &lt;= now - grace</c>. It covers a used row and an expired-unused
+///         row alike, and it is the only condition that can be applied to all four: neither
 ///         <see cref="PasswordResetToken" /> nor <see cref="EmailVerificationToken" /> records when
-///         it was consumed, and only <see cref="TwoFactorEmailCode" /> carries a
-///         <c>CreatedAt</c>. Expiry is a sound proxy in any case — each of these is issued with a
-///         lifetime measured in minutes or hours, so a row's expiry is never far from its issue. A
-///         <see cref="PendingRegistration" /> is held for the same grace period, so that following a
-///         stale confirmation link answers "expired" rather than "invalid" for as long as it does for
-///         the tokens.
+///         it was consumed, and only <see cref="TwoFactorEmailCode" /> carries a <c>CreatedAt</c>.
+///         Expiry is a sound proxy in any case — each of these is issued with a lifetime measured
+///         in minutes or hours, so a row's expiry is never far from its issue. A
+///         <see cref="PendingRegistration" /> is held for the same grace period, so that following
+///         a stale confirmation link answers "expired" rather than "invalid" for as long as it does
+///         for the tokens.
+///     </para>
+///     <para>
+///         An <see cref="ApplicationCredential" /> purges on a condition of its own: revoked or
+///         expired at or before <c>now - grace</c>, whichever came first. Expiry alone would not
+///         do — a credential may have none, and would then be kept for ever once revoked.
 ///     </para>
 ///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token
@@ -54,6 +59,8 @@ public class PurgeExpiredTokensCommandHandler(
     IAsyncRepository<TwoFactorEmailCode, long> twoFactorEmailCodeWriter,
     IAsyncReadOnlyRepository<PendingRegistration, long> pendingRegistrationReader,
     IAsyncRepository<PendingRegistration, long> pendingRegistrationWriter,
+    IAsyncReadOnlyRepository<ApplicationCredential, long> applicationCredentialReader,
+    IAsyncRepository<ApplicationCredential, long> applicationCredentialWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -88,12 +95,22 @@ public class PurgeExpiredTokensCommandHandler(
                 .OrderBy(registration => registration.ExpiresAt),
             pendingRegistrationWriter);
 
+        // UC-55: a revoked or expired credential can never be accepted again, so after the same
+        // grace as the single-use tokens it is removed — revoked or expired, whichever came first.
+        var applicationCredentials = await PurgeAsync(
+            applicationCredentialReader.Query()
+                .Where(credential => (credential.RevokedAt != null && credential.RevokedAt <= cutoff) ||
+                                     (credential.ExpiresAt != null && credential.ExpiresAt <= cutoff))
+                .OrderBy(credential => credential.RevokedAt ?? credential.ExpiresAt),
+            applicationCredentialWriter);
+
         // Every table is attempted before the run reports, so one failing table does not hide
         // whether the others were cleared — and the next run retries whatever was missed.
         var errors = passwordResetTokens.Errors
             .Concat(emailVerificationTokens.Errors)
             .Concat(twoFactorEmailCodes.Errors)
             .Concat(pendingRegistrations.Errors)
+            .Concat(applicationCredentials.Errors)
             .ToList();
 
         if (errors.Count > 0)
@@ -109,7 +126,8 @@ public class PurgeExpiredTokensCommandHandler(
                 PasswordResetTokensPurged = passwordResetTokens.Count,
                 EmailVerificationTokensPurged = emailVerificationTokens.Count,
                 TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
-                PendingRegistrationsPurged = pendingRegistrations.Count
+                PendingRegistrationsPurged = pendingRegistrations.Count,
+                ApplicationCredentialsPurged = applicationCredentials.Count
             })
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }
