@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Time;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Output;
 using FluentValidation;

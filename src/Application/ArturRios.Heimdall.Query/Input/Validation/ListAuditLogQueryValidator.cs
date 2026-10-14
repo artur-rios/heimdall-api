@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Time;
 using FluentValidation;
 
 namespace ArturRios.Heimdall.Query.Input.Validation;

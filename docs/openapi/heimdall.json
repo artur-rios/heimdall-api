@@ -452,6 +452,88 @@
         ]
       }
     },
+    "/api/scopes/{scopeId}/applications/{id}/credentials": {
+      "post": {
+        "tags": [
+          "ApplicationCredential"
+        ],
+        "summary": "Issues a credential (UC-53). The body is optional and carries only `expiresAt`. The\nanswer is the only place the secret ever appears; Heimdall keeps its hash alone.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ApplicationCredential_Issue",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/audit-log": {
       "get": {
         "tags": [
@@ -6295,6 +6377,71 @@
         },
         "additionalProperties": false
       },
+      "IssueApplicationCredentialCommand": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationCredentialCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationCredentialCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiftProcessingRestrictionCommand": {
         "type": "object",
         "properties": {
@@ -8539,6 +8686,9 @@
   "tags": [
     {
       "name": "Application"
+    },
+    {
+      "name": "ApplicationCredential"
     },
     {
       "name": "Audit"

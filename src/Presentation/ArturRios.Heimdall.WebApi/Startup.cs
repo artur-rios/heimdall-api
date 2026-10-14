@@ -215,6 +215,8 @@ public class Startup : WebApiStartup
         // Spending single-use credentials and charging bounded budgets as one conditional UPDATE
         // each, so concurrent requests cannot both spend one code or lose each other's counts.
         Builder.Services.AddScoped<IAtomicWrites, AtomicWrites>();
+        // UC-53's two-live-credentials limit, held under a row lock so concurrent issues cannot pass it.
+        Builder.Services.AddScoped<IApplicationCredentialSlots, ApplicationCredentialSlots>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
@@ -300,6 +302,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<UpdateApplicationCommand, UpdateApplicationCommandOutput, UpdateApplicationCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<DeleteApplicationCommand, DeleteApplicationCommandOutput, DeleteApplicationCommandHandler>();
         Builder.Services.AddAuditedCommandHandler<HardDeleteApplicationCommand, HardDeleteApplicationCommandOutput, HardDeleteApplicationCommandHandler>();
+        Builder.Services.AddScoped<IValidator<IssueApplicationCredentialCommand>, IssueApplicationCredentialCommandValidator>();
+        Builder.Services.AddAuditedCommandHandler<IssueApplicationCredentialCommand, IssueApplicationCredentialCommandOutput, IssueApplicationCredentialCommandHandler>();
         Builder.Services.AddScoped<IValidator<CreateScopePermissionCommand>, CreateScopePermissionCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateScopePermissionCommand, CreateScopePermissionCommandOutput, CreateScopePermissionCommandHandler>();
         Builder.Services.AddScoped<IValidator<UpdateScopePermissionCommand>, UpdateScopePermissionCommandValidator>();
