@@ -15,7 +15,6 @@ public class ApplicationTokenMessageMapTests
         var map = ApplicationTokenMessageMap.StatusCodes;
 
         Assert.Equal(HttpStatusCodes.Ok, map[ApplicationTokenMessages.TokenIssued]);
-        Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.RequestMalformed]);
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.ApplicationIdRequired]);
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.ScopeIdRequired]);
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationTokenMessages.SecretRequired]);

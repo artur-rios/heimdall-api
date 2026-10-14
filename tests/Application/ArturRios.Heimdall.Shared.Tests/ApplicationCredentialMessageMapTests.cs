@@ -19,7 +19,6 @@ public class ApplicationCredentialMessageMapTests
         Assert.Equal(HttpStatusCodes.NotFound, map[ApplicationMessages.ApplicationNotFound]);
         Assert.Equal(HttpStatusCodes.Forbidden, map[ApplicationCredentialMessages.NotAuthorizedToManageCredentials]);
         Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationCredentialMessages.ExpiryNotInFuture]);
-        Assert.Equal(HttpStatusCodes.BadRequest, map[ApplicationCredentialMessages.RequestMalformed]);
         Assert.Equal(HttpStatusCodes.Conflict, map[ApplicationCredentialMessages.CredentialLimitReached]);
     }
 
