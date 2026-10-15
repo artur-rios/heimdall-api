@@ -33,11 +33,11 @@ decision rather than a side effect.
 
 `ProtectIdentityPublicIds` and `ProtectEntityPublicIds` make `public_id` immutable on `person`,
 `google_user`, `scope`, `application`, `application_credential`, `scope_permission`, `role` and
-`pending_registration`, refuse a new row whose `public_id` another of those tables holds, and refuse a
-new person or Google User whose id an audit entry names. They guard future writes only and do not
-look at what is already stored. The API only ever issues fresh random ids, so a duplicate can exist
-only if somebody wrote one by hand in SQL. To be sure, run both queries before migrating; each should
-return no rows.
+`pending_registration`, refuse a new row whose `public_id` another of those tables holds or a hard
+delete tombstoned, and refuse a new person or Google User whose id an audit entry names. They guard
+future writes only and do not look at what is already stored. The API only ever issues fresh random
+ids, so a duplicate can exist only if somebody wrote one by hand in SQL. To check for a hand-made
+duplicate, run both queries before migrating; each should return no rows.
 
 ```sql
 -- 1. Any public_id that rows of two or more guarded tables hold.
@@ -72,8 +72,12 @@ GROUP BY g.public_id;
 ```
 
 A row from either query is worth investigating before anything else: it is either a hand-made fix-up
-or somebody preparing to make audit entries clearable. Once migrated, hand-written SQL that rewrites a
-`public_id` — a support fix-up, or a restore that remaps ids — fails with `restrict_violation`.
+or somebody preparing to make audit entries clearable. No rows proves less than it seems. Query 1
+sees only rows that are there now. Query 2 trusts `created_at`, which an insert can set, so a
+backdated plant passes it. Neither sees a plant that has already run its course — target cleared,
+identity tombstoned and deleted — or a scope or other entity sitting on an id that `erased_subject`
+records. Once migrated, hand-written SQL that rewrites a `public_id` — a support fix-up, or a
+restore that remaps ids — fails with `restrict_violation`.
 
 ## Start-up sequence
 

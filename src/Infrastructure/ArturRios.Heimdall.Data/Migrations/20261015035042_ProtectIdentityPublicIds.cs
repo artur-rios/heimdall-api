@@ -32,6 +32,17 @@ namespace ArturRios.Heimdall.Data.Migrations
     ///         <c>role</c> and <c>pending_registration</c>. A table's own unique index covers itself.
     ///     </para>
     ///     <para>
+    ///         <b>Nor may any of them take a tombstoned id (#199, R4).</b> The target rule clears a
+    ///         target that <c>erased_subject</c> records and no identity holds, at any age. Without this,
+    ///         SQL alone could insert a person, tombstone it, delete it and insert a scope on the same
+    ///         id, and every entry later written about that scope would be cleared. The function
+    ///         therefore also refuses, for all eight tables, an id in <c>erased_subject</c>: one probe
+    ///         of its primary key. No legitimate write is refused: a tombstone is written only for a
+    ///         person or Google User about to be hard-deleted, whose id was a fresh
+    ///         <c>Guid.NewGuid()</c> and is never issued again, and the tombstone write itself inserts
+    ///         into <c>erased_subject</c>, which none of these triggers guards.
+    ///     </para>
+    ///     <para>
     ///         <b>An identity may not take an id the audit trail names, either.</b> A row that is gone
     ///         holds no id, so after an ordinary hard delete of a scope, an application or anything
     ///         else, a person inserted with its id and marked anonymised would have made every entry
@@ -79,7 +90,9 @@ namespace ArturRios.Heimdall.Data.Migrations
                 RETURNS TRIGGER AS $$
                 BEGIN
                     -- A new row may not take an id a row of another guarded table holds, soft-deleted
-                    -- or not. Its own table is covered by its unique index on public_id.
+                    -- or not, nor one a hard delete tombstoned: the target rule clears a tombstoned id
+                    -- that no identity holds, so any row on it would have its entries cleared. Its own
+                    -- table is covered by its unique index on public_id.
                     IF EXISTS (
                         SELECT 1 FROM heimdall.person x
                         WHERE TG_TABLE_NAME <> 'person' AND x.public_id = NEW.public_id
@@ -104,6 +117,8 @@ namespace ArturRios.Heimdall.Data.Migrations
                         UNION ALL
                         SELECT 1 FROM heimdall.pending_registration x
                         WHERE TG_TABLE_NAME <> 'pending_registration' AND x.public_id = NEW.public_id
+                        UNION ALL
+                        SELECT 1 FROM heimdall.erased_subject e WHERE e.public_id = NEW.public_id
                     ) THEN
                         RAISE EXCEPTION 'heimdall.% public_id is already used by another entity', TG_TABLE_NAME
                             USING ERRCODE = 'restrict_violation';

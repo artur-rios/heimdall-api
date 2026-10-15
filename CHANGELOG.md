@@ -108,16 +108,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   person clearable. Two new migrations add triggers to `person`, `google_user`, `scope`, `application`,
   `application_credential`, `scope_permission`, `role` and `pending_registration`. `ProtectIdentityPublicIds` creates
   `public_id_is_immutable()`, which refuses any `UPDATE` that changes `public_id`, and `public_id_is_unused()`, which
-  refuses an `INSERT` whose `public_id` a row of any other of those tables holds, soft-deleted or not, and, for a
-  person or Google User, one that an audit entry names, so a hard-deleted entity's id cannot be taken over while the
-  trail still names it; it binds both to the identity tables. `ProtectEntityPublicIds` binds both to the other six,
-  so `public_id` is immutable on every table the check trusts, which closes the rename-then-reuse path, and the check
-  runs whichever table is written second. Every other column stays writable, and the API only ever creates fresh ids
-  and never changes one, so no request behaves differently. **Operators:** no setting changes. The triggers guard
-  future writes only; the migrations do not look for a duplicate already stored, which could exist only if somebody
-  wrote one by hand in SQL. Operations, "Shared public ids", gives two queries to run before migrating; each should
-  return no rows. Once migrated, hand-written SQL that rewrites a `public_id`, such as a support fix-up or a restore
-  that remaps ids, fails with `restrict_violation`.
+  refuses an `INSERT` whose `public_id` a row of any other of those tables holds, soft-deleted or not, or a hard
+  delete tombstoned, and, for a person or Google User, one that an audit entry names, so a hard-deleted entity's id
+  cannot be taken over while the trail still names it; it binds both to the identity tables. `ProtectEntityPublicIds`
+  binds both to the other six, so `public_id` is immutable on every table the check trusts, which closes the
+  rename-then-reuse path, and the check runs whichever table is written second. Every other column stays writable,
+  and the API only ever creates fresh ids and never changes one, so no request behaves differently. **Operators:** no
+  setting changes. The triggers guard future writes only; the migrations do not look for a duplicate already stored,
+  which could exist only if somebody wrote one by hand in SQL. Operations, "Shared public ids", gives two queries to
+  run before migrating; each should return no rows. Once migrated, hand-written SQL that rewrites a `public_id`, such
+  as a support fix-up or a restore that remaps ids, fails with `restrict_violation`.
 
 ## [1.4.0] - 2026-10-13
 

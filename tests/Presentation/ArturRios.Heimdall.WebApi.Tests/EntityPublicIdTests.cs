@@ -451,6 +451,39 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     }
 
     [FunctionalFact]
+    public async Task GivenATombstonedId_WhenAScopeIsInsertedWithIt_ThenTheDatabaseRefuses()
+    {
+        // Given — the tombstone path (R4, N1): plant a person, tombstone it far in the future so the pass
+        // never settles it, delete the person. A scope on that id would have every entry about it cleared.
+        var with = await SeedDependenciesAsync();
+        var tombstoned = Guid.NewGuid();
+        Assert.Null(await RunAsync(InsertStatement("person", tombstoned, with)));
+        Assert.Null(await RunAsync(
+            $"""
+             INSERT INTO heimdall.erased_subject (public_id, kind, created_at)
+             VALUES ('{tombstoned}', {(int)ErasedSubjectKinds.Person}, '9999-01-01')
+             """));
+        Assert.Null(await RunAsync($"DELETE FROM heimdall.person WHERE public_id = '{tombstoned}'"));
+
+        try
+        {
+            // When
+            var (failure, _) = await RunRolledBackAsync(InsertStatement("scope", tombstoned, with), "scope", tombstoned);
+
+            // Then
+            var refusal = Assert.IsType<PostgresException>(failure);
+            Assert.Equal(RestrictViolation, refusal.SqlState);
+            Assert.Contains("heimdall.scope public_id is already used by another entity", refusal.MessageText);
+            Assert.Equal(0, await CountAsync("scope", tombstoned));
+        }
+        finally
+        {
+            // A tombstone dated in the future is never settled by the pass; leave none behind
+            await RunAsync($"DELETE FROM heimdall.erased_subject WHERE public_id = '{tombstoned}'");
+        }
+    }
+
+    [FunctionalFact]
     public async Task GivenAScopeNamedInTheAuditTrail_WhenTheRenameThenReuseChainIsAttempted_ThenTheTargetIsStillTheScope()
     {
         // Given — a scope an audit entry names, past every floor; not personal data, so it must stay

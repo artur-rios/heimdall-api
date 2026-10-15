@@ -24,8 +24,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///     <para>
 ///         "Already held" means by a row that is there, soft-deleted or not; no registry of issued
 ///         ids is kept, as it would keep a removed person's id for good. A hard-deleted entity's id
-///         is still refused while the audit trail names it (R3, I1), which is the only place a
-///         removed entity's id still matters.
+///         is still refused while the audit trail names it (R3, I1), and a hard-deleted person's
+///         while its tombstone stands (R4), the two places a removed entity's id still matters.
 ///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]

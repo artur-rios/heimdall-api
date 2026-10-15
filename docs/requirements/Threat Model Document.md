@@ -296,9 +296,13 @@ tombstone it and clear the targets naming that entity. Three rules now close eve
   could be walked round: move a scope off its id, insert a person with the freed id, clear the
   scope's targets, move the scope back.
 - **Ids are not shared.** A `BEFORE INSERT` trigger on the same eight tables refuses a `public_id`
-  that a row of any other of them holds, soft-deleted or not; a table's own unique index covers
-  itself. It runs on every table, not only the identity ones, so the order of the two inserts does
-  not matter: a person inserted first refuses a scope inserted with its id after it.
+  that a row of any other of them holds, soft-deleted or not, or that `ERASED_SUBJECT` records as a
+  hard-deleted person's or Google User's; a table's own unique index covers itself. It runs on every
+  table, not only the identity ones, so the order of the two inserts does not matter: a person
+  inserted first, or the tombstone it leaves when hard-deleted, refuses a scope inserted with its id
+  after it. The tombstone matters because the target rule clears, at any age, a tombstoned id that
+  no identity holds: without it, SQL alone could insert a person, tombstone it, delete it and put a
+  scope on the id, and every entry later written about that scope would be cleared (#199, R4).
 - **An identity may not take an id the trail names.** The same trigger refuses, for `PERSON` and
   `GOOGLE_USER` only, an id that an audit entry's `target_id` names. After an ordinary hard delete
   of a scope, an application or anything else, no row holds its id any more, and an anonymised
@@ -309,19 +313,20 @@ tombstone it and clear the targets naming that entity. Three rules now close eve
 
 The application only ever creates fresh random ids, and writes an identity's own entries after its
 row, so no legitimate write is refused. `IdentityPublicIdTests` and `EntityPublicIdTests` pin each
-rule, each table, and the rename-then-reuse chain end to end.
+rule, each table, the tombstone path, and the rename-then-reuse chain end to end.
 
 What remains is stated as plainly. No registry of issued ids is kept, because it would keep a
-removed person's id for good, so an id that neither a row nor the trail holds any more may be taken
-again; it then names nothing the trail could clear. The triggers guard future writes and do not
-inspect rows already stored; Operations gives the queries to check them. The insert check takes no
-lock, so two concurrent transactions that both choose the same id can both pass it, and an actor
-controls both. That race reaches only a row the actor inserts by SQL at that moment, never one that
-already exists or that the API creates, whose id cannot be known in advance; entries written later
-about such a planted row could be cleared. Closing it would need one unique index across all eight
-tables, which is a registry, and is out of scope. And an actor who can run DDL, or disable triggers
-(`ALTER TABLE … DISABLE TRIGGER`, or `session_replication_role` as a superuser), can do anything
-here, as with the audit triggers themselves; that is out of scope for the reason given under TH-18.
+removed person's id for good, so an id that neither a row, a tombstone nor the trail holds any more
+may be taken again; it then names nothing the trail could clear. The triggers guard future writes
+and do not inspect rows already stored; Operations gives the queries to check them. The insert check
+takes no lock, so two concurrent transactions that both choose the same id can both pass it, and an
+actor controls both. That race reaches only a row the actor inserts by SQL at that moment, never one
+that already exists or that the API creates, whose id cannot be known in advance; entries written
+later about such a planted row could be cleared. Closing it would need one unique index across all
+eight tables, which is a registry, and is out of scope. And an actor who can run DDL, or disable
+triggers (`ALTER TABLE … DISABLE TRIGGER`, or `session_replication_role` as a superuser), can do
+anything here, as with the audit triggers themselves; that is out of scope for the reason given
+under TH-18.
 
 **Residual risk: Low.** The property this threat is about — that an action cannot be denied — is
 intact: with DML alone, a target can be cleared only when it names an identity that has held its id
