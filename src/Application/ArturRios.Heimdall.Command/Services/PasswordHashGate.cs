@@ -1,3 +1,4 @@
+using System.Globalization;
 using ArturRios.Util.Hashing;
 
 namespace ArturRios.Heimdall.Command.Services;
@@ -180,4 +181,4 @@ public sealed class PasswordHashGate
 ///     test.
 /// </remarks>
 public sealed class PasswordHashGateSaturatedException(TimeSpan waited)
-    : Exception($"The password-hash gate stayed full for {waited.TotalSeconds:0.###} s.");
+    : Exception($"The password-hash gate stayed full for {waited.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)} s.");

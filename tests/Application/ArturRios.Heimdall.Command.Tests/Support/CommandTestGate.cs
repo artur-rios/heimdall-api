@@ -20,7 +20,10 @@ internal static class CommandTestGate
 {
     private static readonly TimeSpan PatientWait = TimeSpan.FromMinutes(2);
 
+    /// <summary>The gate this initializer installed, which a test can compare <c>Shared</c> against.</summary>
+    internal static PasswordHashGate Installed { get; } =
+        new(PasswordHashGate.DefaultMaxConcurrent, PatientWait);
+
     [ModuleInitializer]
-    internal static void Install() =>
-        PasswordHashGate.Shared = new PasswordHashGate(PasswordHashGate.DefaultMaxConcurrent, PatientWait);
+    internal static void Install() => PasswordHashGate.Shared = Installed;
 }

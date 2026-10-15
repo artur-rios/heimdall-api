@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -12,13 +13,15 @@ public class CommandTestGateTests
     public void GivenTheTestRun_WhenReadingTheSharedGate_ThenItWaitsAtLeastAMinuteWithTheProductionPermits()
     {
         // Given
-        var shared = PasswordHashGate.Shared;
+        // The captured instance, not Shared: a test may swap Shared briefly, and what this proves is
+        // that the initializer installed a patient gate.
+        var installed = CommandTestGate.Installed;
 
         // When
-        var wait = shared.MaxWait;
+        var wait = installed.MaxWait;
 
         // Then
-        Assert.True(wait >= TimeSpan.FromMinutes(1), $"the shared gate waits only {wait}");
-        Assert.Equal(PasswordHashGate.DefaultMaxConcurrent, shared.MaxConcurrent);
+        Assert.True(wait >= TimeSpan.FromMinutes(1), $"the installed gate waits only {wait}");
+        Assert.Equal(PasswordHashGate.DefaultMaxConcurrent, installed.MaxConcurrent);
     }
 }
