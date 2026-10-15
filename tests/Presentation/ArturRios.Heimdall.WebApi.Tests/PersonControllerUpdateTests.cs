@@ -126,9 +126,11 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
             await seed.SaveChangesAsync();
         }
 
-        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+        // An administrator makes the change: the retirement follows any change of address, and an own
+        // change would also need the person's password (FR-PE-14), which is not this test's subject.
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
-        // When they change it to an address nobody has proved they read
+        // When the address is changed to one nobody has proved they read
         var update = await Gateway.PutAsync<DataOutput<UpdatePersonCommandOutput?>>(
             $"/api/persons/{person.PublicId}", Body(person.Name, UniqueEmail("unproven")));
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);

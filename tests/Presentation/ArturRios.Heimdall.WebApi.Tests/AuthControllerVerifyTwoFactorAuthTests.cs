@@ -110,7 +110,8 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     private Task<HttpOutput<DataOutput<EnableTwoFactorAuthCommandOutput?>?>> EnableAsync(
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = methods.ToList() });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
 
     private Task<HttpOutput<DataOutput<ConfirmTwoFactorAuthCommandOutput?>?>> ConfirmAsync(
         string? appCode = null, string? emailCode = null) =>

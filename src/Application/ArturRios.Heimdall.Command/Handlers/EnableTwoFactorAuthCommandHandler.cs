@@ -15,7 +15,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="EnableTwoFactorAuthCommand" /> (UC-36, FR-2F-01…FR-2F-03): validates input
 ///     (AF-36c), confirms the caller is a live person eligible to opt in (AF-36b), refuses a caller
-///     whose configuration is already active (AF-36a), then creates or overwrites (AF-36d) a pending
+///     whose configuration is already active (AF-36a), verifies their current password (AF-36e,
+///     FR-2F-18), then creates or overwrites (AF-36d) a pending
 ///     <see cref="TwoFactorAuth" /> row for the method(s) selected — generating and encrypting a TOTP
 ///     secret for the App method, and issuing a fresh 6-digit email code for the Email method.
 /// </summary>
@@ -83,6 +84,17 @@ public class EnableTwoFactorAuthCommandHandler(
         if (existing is { IsActive: true })
         {
             return output.WithError(TwoFactorMessages.AlreadyActive);
+        }
+
+        // AF-36e (FR-2F-18): the current password, missing or wrong alike, through the gate every
+        // password check goes through (TH-03). A bearer token alone does not prove the account holder
+        // is present, and the factor chosen here is the one UC-38 will demand of them: chosen by a
+        // token thief, it would lock the holder out of their own account. After AF-36a, so a repeat
+        // request costs no Argon2id derivation — the same order UC-42 keeps.
+        if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
+            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
+        {
+            return output.WithError(TwoFactorMessages.PasswordMismatch);
         }
 
         // UC-36 step 2: create a pending row, or reuse the existing not-yet-confirmed one (AF-36d).

@@ -103,7 +103,8 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     private Task<HttpOutput<DataOutput<EnableTwoFactorAuthCommandOutput?>?>> EnableAsync(
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = methods.ToList() });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
 
     /// <summary>
     ///     Initiates App setup through the real <c>/2fa/enable</c> endpoint (as opposed to

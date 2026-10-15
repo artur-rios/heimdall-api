@@ -99,6 +99,9 @@ Authorization: Bearer {{token}}
 
 ### Update a person (UC-08) — any authenticated caller, subject to the handler's rules.
 # roleId may only be changed by a System Admin; omit it entirely for a self-service name/email edit.
+# Changing your own email also needs "currentPassword", plus "twoFactorCode" (an app or email code,
+# or a recovery code) when your 2FA is active; 401 when either is missing or wrong. Any email change
+# revokes the person's tokens, so sign in again after changing your own.
 PUT {{host}}/api/persons/{{personId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json

@@ -129,7 +129,8 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     private async Task<string> EnableAppSecretAsync(Person person)
     {
         var enable = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = ["App"] });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = ["App"], CurrentPassword = Password });
         Assert.Equal(HttpStatusCode.OK, enable.StatusCode);
 
         var uri = enable.Body!.Data!.OtpAuthUri!;

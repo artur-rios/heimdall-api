@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
@@ -15,10 +16,21 @@ namespace ArturRios.Heimdall.Command.Tests;
 // combination, AF-36a (already active), AF-36b (caller not resolvable as an eligible person — the
 // stand-in for "caller is a Google User", since a Google-issued token never names a Person to begin
 // with), AF-36c (no method selected, via the real validator), and AF-36d (re-initiating over a
-// pending setup overwrites it rather than creating a second row).
+// pending setup overwrites it rather than creating a second row). Also the current password the
+// request has to carry (FR-2F-18).
 public class EnableTwoFactorAuthCommandHandlerTests
 {
+    private const string Password = "Str0ng-Enable-Pass!";
+
     private static readonly byte[] EncryptedSecret = [1, 2, 3, 4];
+
+    /// <summary>One Argon2id derivation for the whole class, shared by every person it builds.</summary>
+    private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
+    {
+        var hash = Hash.EncodeWithRandomSalt(Password, out var salt);
+
+        return (hash, salt);
+    });
 
     private sealed record Fixture(
         AsyncFakeRepository<Person, long> Persons,
@@ -42,7 +54,10 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {
-            Methods = methods.ToList(), ActingPersonId = Person.PublicId, ActingRole = (int)Roles.User
+            Methods = methods.ToList(),
+            CurrentPassword = Password,
+            ActingPersonId = Person.PublicId,
+            ActingRole = (int)Roles.User
         };
     }
 
@@ -54,6 +69,8 @@ public class EnableTwoFactorAuthCommandHandlerTests
             PublicId = Guid.NewGuid(),
             Name = "person",
             Email = email,
+            PasswordHash = Credential.Value.Hash,
+            Salt = Credential.Value.Salt,
             RoleId = (long)Roles.User
         };
         await persons.CreateAsync(person);
@@ -328,5 +345,57 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(outstanding.Used);
         Assert.Equal(2, fixture.EmailCodes.Query().ToList().Count);
+    }
+
+    // FR-2F-18: a bearer token alone cannot choose the account's second factor.
+
+    [UnitFact]
+    public async Task GivenNoPassword_WhenHandlingEnableTwoFactorAuth_ThenRefusedAndNothingIsCreated()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var command = fixture.Command("App");
+        command.CurrentPassword = null;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Empty(fixture.TwoFactorAuths.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenHandlingEnableTwoFactorAuth_ThenRefusedAndNothingIsCreated()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var command = fixture.Command("App", "Email");
+        command.CurrentPassword = "not-the-password";
+
+        // When
+        var output = await fixture.Handler().HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Empty(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Empty(fixture.EmailCodes.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenTheRightPassword_WhenHandlingEnableTwoFactorAuth_ThenSetupIsInitiated()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Contains(TwoFactorMessages.SetupInitiated, output.Messages);
+        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
     }
 }
