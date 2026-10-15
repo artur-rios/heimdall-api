@@ -105,8 +105,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - A sign-in attempt cut short at the lockout threshold now locks the account for the usual period instead of
-  leaving it unable to sign in. Accounts already left at the limit without a lock are released by their next sign-in
-  attempt and by a new data migration, `ReleaseStuckLoginLockouts`.
+  leaving it unable to sign in. An account already left at the limit without a lock is handled normally again by
+  its next sign-in attempt, which locks it for the usual period, or clears it if the password is right. A new data
+  migration, `ReleaseStuckLoginLockouts`, also resets such accounts.
 - The Command tests no longer fail intermittently on password-hash gate timeouts under load (#196): the test
   assembly installs a gate with the production permit count and a two-minute wait, and the saturation
   exception's message now names the gate and how long it waited. Production behaviour and responses are
@@ -150,20 +151,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   upgraded ones until every instance is upgraded. The migration rewrites the `person` table (its default is
   evaluated per row) under an exclusive lock, which blocks sign-ins and every other read or write of the table
   until it finishes; on a large table, plan for that lock time. Consumers that validate person tokens offline
-  do not see the stamp, so a revoked token stays valid at them until it expires.
+  do not see the stamp, so a revoked token stays valid at them until it expires. Revocation and the
+  re-authentication below hold only once every instance runs this version: until then, an instance not yet
+  upgraded still accepts revoked tokens and own email changes without a password.
 - Changing your own email through `PUT /api/persons/{id}` now requires `currentPassword`, and `twoFactorCode` (an
   authenticator-app or email code, or a recovery code, which is spent) when your two-factor authentication is
-  active. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
+  active. No endpoint sends an email code to a signed-in caller, so a person whose only method is Email uses a
+  recovery code. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
   wrong second factor `401` with "The code or recovery code is missing, incorrect, or already used.", before the
   new address is checked, and nothing changes. An administrator changing someone else's email, and anyone changing
   only their name, send neither. The email counts as changed unless it matches exactly after trimming, so a change
   of case alone also asks for the password, revokes tokens, sends the notice and resets `emailVerified`. Starting
   two-factor setup (`POST /api/auth/2fa/enable`) now requires `currentPassword` too, refused the same way. Any
   email change also sends a notice to the previous address, which names neither the new address nor a link; a
-  failed delivery is logged and does not fail the update.
+  failed delivery is logged and does not fail the update. Addresses are now stored trimmed, on creation and on
+  update; an update that differs from the stored address only by surrounding whitespace is no change.
   **Clients:** send `currentPassword` (and `twoFactorCode` when 2FA is active) for an own email change, and
   `currentPassword` to enable 2FA; after an own email change, a password reset, confirming or disabling 2FA, or
-  regenerating recovery codes, sign in again.
+  regenerating recovery codes, sign in again. **Operators:** release the heimdall-ui version that sends
+  `currentPassword` together with this API, or before it; an older UI gets `401` on 2FA enable and on an own email
+  change.
 
 ## [1.4.0] - 2026-10-13
 

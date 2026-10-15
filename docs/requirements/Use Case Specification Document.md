@@ -556,7 +556,8 @@ sequenceDiagram
      (FR-PE-14): `currentPassword` must match their password, checked as UC-39 checks it (AF-08h), and
      when their two-factor authentication is active, `twoFactorCode` must be a current authenticator-app
      or email code or an unused recovery code, checked as UC-38 checks it (AF-08i). A recovery code is
-     spent, as everywhere. This happens before the uniqueness check, so a caller without them learns
+     spent, as everywhere. No endpoint sends an email code to a signed-in caller, so a person whose only
+     method is Email uses a recovery code here. This happens before the uniqueness check, so a caller without them learns
      nothing about the new address. An administrator changing someone else's email presents no
      credential of that person: their own authorisation (step 3) covers it. A change of name alone asks
      for nothing.
@@ -565,10 +566,12 @@ sequenceDiagram
      after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
    - Just before the update is saved, the system replaces the person's security stamp, which revokes
-     every token they hold (FR-AU-11) — whoever made the change. Replacing it first means a save that
-     fails costs one extra sign-in rather than leaving old sessions live. An actor who changed their own email is
-     answered `200 OK`, but the token that made the request is revoked with the rest: the client signs
-     in again, with the new address.
+     every token they hold (FR-AU-11) — whoever made the change — and replaces it once more after the
+     save. The first replacement means a save that fails costs one extra sign-in rather than leaving
+     old sessions live; the second ends any session opened while the save was in flight. The new
+     address is stored trimmed; an address that differs only by surrounding whitespace is no change and
+     is not written. An actor who changed their own email is answered `200 OK`, but the token that made
+     the request is revoked with the rest: the client signs in again, with the new address.
    - The system sends a notice to the **previous** address (FR-PE-15): the account's email was changed,
      and if that was not the person, they should contact an administrator. The notice names neither the
      new address nor any link. A failed delivery is logged and does not fail the update.
@@ -872,9 +875,12 @@ requests; a person who receives nothing asks again, as for any email that does n
 
 1. Caller provides the reset token and a new password.
 2. The system validates the token (exists, not expired, not used).
-3. The system generates a new random `Salt`, hashes the new password using it, and updates the person's `PasswordHash` and `Salt`.
-4. The system marks the token as used, and replaces the person's security stamp, which revokes every
-   token issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike.
+3. The system generates a new random `Salt` and hashes the new password using it.
+4. The system marks the token as used, replaces the person's security stamp, which revokes every token
+   issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike — then
+   saves the new `PasswordHash` and `Salt`, and replaces the stamp once more. The first replacement
+   means a save that fails leaves no old session live; the second ends any session opened with the old
+   password while the save was in flight.
 5. The system returns success. The person signs in again with the new password; a session opened with
    the old one, by them or by anybody else, ends at its next request.
 
@@ -1740,9 +1746,11 @@ sequenceDiagram
 
 1. Caller sends `POST /api/auth/2fa/confirm` with a code for every method they selected in UC-36 (an `appCode` if `AppEnabled`, an `emailCode` if `EmailEnabled` — both, if both).
 2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
-3. Only once every required code checks out, the system sets `IsActive = true`.
+3. Only once every required code checks out, the system replaces the person's security stamp, which
+   revokes every token issued before the second factor was required, the caller's own included
+   (FR-AU-11).
 4. The system generates ten random recovery codes, hashes each, and stores the hashes.
-5. The system replaces the person's security stamp, which revokes every token issued before the second factor was required, the caller's own included (FR-AU-11).
+5. The system sets `IsActive = true`.
 6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
 
 **Alternative Flows:**
@@ -1837,7 +1845,9 @@ sequenceDiagram
 1. Caller sends their current password together with a valid second factor — an app/email code or a recovery code.
 2. The system verifies the password, exactly as UC-11 does.
 3. The system verifies the second factor, exactly as UC-38 does.
-4. Only when both check out, the system deletes the `TWO_FACTOR_AUTH` row, which cascades to its recovery codes, and replaces the person's security stamp, revoking every token issued while the factor stood (FR-AU-11).
+4. Only when both check out, the system replaces the person's security stamp, revoking every token
+   issued while the factor stood (FR-AU-11), then deletes the `TWO_FACTOR_AUTH` row, which cascades to
+   its recovery codes.
 5. The system returns success. The token that made the request is revoked with the rest, so the client signs in again; two-factor authentication no longer applies to that login.
 
 **Alternative Flows:**
@@ -1882,8 +1892,11 @@ sequenceDiagram
 
 1. Caller sends a valid second factor — an app/email code, or one of their remaining recovery codes.
 2. The system verifies it, exactly as UC-38 does.
-3. The system deletes every existing recovery code row for the person, including any still unused.
-4. The system generates ten new codes, hashes each, and stores them, then replaces the person's security stamp, revoking every token issued before (FR-AU-11): the codes are usually replaced because the old set may be known to somebody else, and so may a session opened with one.
+3. The system replaces the person's security stamp, revoking every token issued before (FR-AU-11): the
+   codes are usually replaced because the old set may be known to somebody else, and so may a session
+   opened with one.
+4. The system generates ten new codes, hashes each, and stores them, then deletes every earlier
+   recovery code row for the person, including any still unused.
 5. The system returns the ten new codes in plaintext — the only response that will ever contain them. The client keeps them, then signs in again.
 
 **Alternative Flows:**
@@ -2724,7 +2737,7 @@ sequenceDiagram
 | UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, NFR-27 |
 | UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, NFR-27 |
-| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
+| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
 | UC-49: List Pending Registrations | FR-SR-11 |

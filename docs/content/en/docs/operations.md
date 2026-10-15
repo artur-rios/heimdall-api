@@ -301,8 +301,10 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
   `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — so
   someone holding **both** a leaked key
   and a stolen bearer token could spread guesses against those over invented addresses, bounded then
-  only by the password-hash gate. That is accepted residual risk, since it needs two independent
-  secrets (Threat Model Document, TB-1, TH-32).
+  only by the password-hash gate. A leaked key is not the only way to spread them: a token holder
+  with many source addresses, or any caller behind a proxy `HEIMDALL_TRUSTED_PROXIES` does not name,
+  needs none. Those endpoints have no per-account budget, so such guesses are bounded only per
+  address and by the gate (Threat Model Document, TH-32 and TH-36).
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25

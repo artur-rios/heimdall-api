@@ -10,12 +10,12 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         <b>Why the audience is required and distinct.</b> Application tokens are signed with the
 ///         person tokens' key pair. A consumer that validates person tokens offline would take an
 ///         application token for a person if both carried one audience; a distinct audience is what
-///         makes it refuse (Threat Model TH-35). So start-up refuses a missing audience, and one equal
-///         to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c> or to either audience derived from it for challenge
-///         and subject-rights-only tokens (<see cref="PersonTokenAudiences" />), rather than run
-///         without the separation. "Equal" is
-///         judged as a validator would: Microsoft.IdentityModel ignores a trailing slash when it
-///         matches <c>aud</c>, so <c>heimdall/</c> and <c>heimdall</c> are the same audience.
+///         makes it refuse (Threat Model TH-35). So start-up refuses a missing audience, and one
+///         equal to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c> or to either audience derived from it for
+///         challenge and subject-rights-only tokens (<see cref="PersonTokenAudiences" />), rather
+///         than run without the separation. "Equal" is judged as a validator would:
+///         Microsoft.IdentityModel ignores a trailing slash when it matches <c>aud</c>, so
+///         <c>heimdall/</c> and <c>heimdall</c> are the same audience.
 ///     </para>
 ///     <para>
 ///         <b>Lifetime.</b> Ten minutes by default (TH-34): short enough that a leaked token is soon

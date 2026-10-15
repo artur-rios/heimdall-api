@@ -93,10 +93,10 @@ discards the result. A lockout takes the same path, so it is not detectable eith
 attempts are already counted — before the password is derived; a wrong password leaves the
 reservation standing, a right one clears the count. The attempt that reaches ten also sets
 `locked_out_until` and resets the count in that same `UPDATE`, so a sign-in cut short at the limit
-still locks the account for the usual fifteen minutes, and it unlocks by itself. A right password on the tenth attempt still signs in and
-clears the lock. Counting after the derivation let ten
-simultaneous wrong passwords all read a count of zero and all write one, so the account never
-locked (FR-AU-09).
+still locks the account for the usual fifteen minutes, and it unlocks by itself. A right password on
+the tenth attempt still signs in and clears the lock. Counting after the derivation let ten
+simultaneous wrong passwords all read a count of zero and all write one, so the account never locked
+(FR-AU-09).
 
 ## Scope eligibility
 

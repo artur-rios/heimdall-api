@@ -82,14 +82,15 @@ the recovery codes, then signs in again, now through UC-38.
 `IsActive = false` means UC-36 created it and UC-37 has not yet activated it — and only an active
 configuration gates a login.
 
-**The order of the recovery-code and activation writes is deliberate.** The repository layer
-exposes no transaction, so ordering is what stands in for one, and the dangerous half-write is
-"two-factor is active but the caller holds no recovery codes" — which locks someone out of their own
-account on the strength of a request that reported failure. Writing the codes first (in one insert, not ten) leaves only harmless
-failure modes: codes stored against a configuration that never activated, which the next attempt
-replaces, and which authenticate nothing while `IsActive` is `false`. UC-40 orders its writes the
-same way and for the same reason, creating the replacements before deleting the set they replace, so
-a failure leaves the caller with the codes they already hold rather than none at all.
+**The order of the recovery-code and activation writes is deliberate.** The repository layer exposes
+no transaction, so ordering is what stands in for one, and the dangerous half-write is "two-factor
+is active but the caller holds no recovery codes" — which locks someone out of their own account on
+the strength of a request that reported failure. Writing the codes first (in one insert, not ten)
+leaves only harmless failure modes: codes stored against a configuration that never activated, which
+the next attempt replaces, and which authenticate nothing while `IsActive` is `false`. UC-40 orders
+its writes the same way and for the same reason, creating the replacements before deleting the set
+they replace, so a failure leaves the caller with the codes they already hold rather than none at
+all.
 
 Confirmation requires proof of **every** method selected at setup: an `appCode` if `AppEnabled`, an
 `emailCode` if `EmailEnabled`, both if both.

@@ -49,12 +49,13 @@ public interface IAtomicWrites
     /// </summary>
     /// <remarks>
     ///     The attempt that brings the counter to <paramref name="maxAttempts" /> also locks the
-    ///     account until <paramref name="lockedOutUntil" /> and resets the counter, in the same write.
-    ///     The lock therefore does not depend on the caller surviving to compare the password: a
-    ///     request that reserves the last attempt and then fails leaves an ordinary lock that expires
-    ///     on its own. A row already at or past the limit with no lockout date is admitted and locked
-    ///     the same way, so it cannot stay stuck. On success the instance's counter and lockout are set to match, from the value
-    ///     this request read, which under concurrent attempts can trail the stored count.
+    ///     account until <paramref name="lockedOutUntil" /> and resets the counter, in the same
+    ///     write. The lock therefore does not depend on the caller surviving to compare the
+    ///     password: a request that reserves the last attempt and then fails leaves an ordinary
+    ///     lock that expires on its own. A row already at or past the limit with no lockout date is
+    ///     admitted and locked the same way, so it cannot stay stuck. On success the instance's
+    ///     counter and lockout are set to match, from the value this request read, which under
+    ///     concurrent attempts can trail the stored count.
     /// </remarks>
     Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil);
 

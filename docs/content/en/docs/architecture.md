@@ -264,12 +264,13 @@ audience of its own, `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.2fa-challenge`, so a con
 person audience refuses it, and `IdentityUserMapper` reads `mfaPending` only under that audience.
 
 **A subject-rights-only token is confined to four actions.** A restricted identity that signs in
-(**NFR-24**, UC-11 AF-11i, UC-25 AF-25e) is issued a token carrying the `subjectRightsOnly` claim and
-no scope, under its own audience, `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.subject-rights`, which consumers
-pinning the person audience refuse. `SubjectRightsOnlyGuardFilter`, registered globally after the
-challenge-token guard, answers it `403` on every action not marked `[DataSubjectRight]` — on its
-claims alone, before the liveness check's read. The liveness check would refuse it there too while the restriction stands; the guard
-keeps it confined after the restriction is lifted, so a lift never turns it into a full token.
+(**NFR-24**, UC-11 AF-11i, UC-25 AF-25e) is issued a token carrying the `subjectRightsOnly` claim
+and no scope, under its own audience, `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.subject-rights`, which
+consumers pinning the person audience refuse. `SubjectRightsOnlyGuardFilter`, registered globally
+after the challenge-token guard, answers it `403` on every action not marked `[DataSubjectRight]` —
+on its claims alone, before the liveness check's read. The liveness check would refuse it there too
+while the restriction stands; the guard keeps it confined after the restriction is lifted, so a lift
+never turns it into a full token.
 
 ## Authorization
 

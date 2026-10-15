@@ -26,5 +26,5 @@ docs {
 
   roleId may only be changed by a System Admin; omit it entirely for a self-service name and email edit, which is what this body does.
 
-  Changing your own email also needs "currentPassword", and "twoFactorCode" (an app or email code, or a recovery code) when your two-factor authentication is active; either missing or wrong answers 401. An administrator changing someone else's email sends neither. Any email change revokes the person's tokens, so after changing your own, sign in again.
+  Changing your own email also needs "currentPassword", and "twoFactorCode" (an app or email code, or a recovery code) when your two-factor authentication is active (with only the Email method, use a recovery code: no endpoint sends an email code to a signed-in caller); either missing or wrong answers 401. An administrator changing someone else's email sends neither. Any email change revokes the person's tokens, so after changing your own, sign in again.
 }
