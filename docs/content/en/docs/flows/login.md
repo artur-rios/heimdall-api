@@ -128,15 +128,45 @@ Claims are written by `IdentityUserMapper`, the same class that reads them back 
 | `ownedScopeIds` | `ScopeAdmin` only, comma-separated |
 | `scopePermissions` | Anyone acting within a scope that has flagged permissions ([details](../scope-permission-claims/)) |
 | `mfaPending` | **Challenge tokens only** |
+| `subjectRightsOnly` | **Subject-rights-only tokens only** — a restricted identity's (**NFR-24**) |
 
 The claims are omitted rather than emitted empty, so a token never suggests a scope association the
 person does not have. Every value is a `PublicId` — an internal id never reaches a token (**NFR-15**).
 
+### Audiences: what a consumer must pin
+
+Heimdall issues three kinds of person token, signed with the same keys under the same issuer. Only
+the full token is a sign-in, and the audience says which kind a token is:
+
+| Token | `aud` |
+| --- | --- |
+| Full authentication token | `HEIMDALL_AUTH_TOKEN_AUDIENCE`, exactly as configured |
+| 2FA challenge token (carries `mfaPending`) | `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.2fa-challenge` |
+| Subject-rights-only token (carries `subjectRightsOnly`) | `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.subject-rights` |
+
+With `HEIMDALL_AUTH_TOKEN_AUDIENCE=heimdall`, those are `heimdall`, `heimdall.2fa-challenge` and
+`heimdall.subject-rights`. The two derived audiences need no configuration of their own, and start-up
+logs all three.
+
+> **A consumer that accepts person tokens must validate the audience, pinned to
+> `HEIMDALL_AUTH_TOKEN_AUDIENCE` exactly.** It then refuses challenge tokens, subject-rights-only
+> tokens and [application tokens](../application-authentication/) with no knowledge of Heimdall's
+> claims. A consumer that skips the audience check would take a challenge token, which a password
+> alone obtains, for a full sign-in. Set `HEIMDALL_AUTH_TOKEN_AUDIENCE` (it defaults to empty), so
+> there is an audience to pin.
+
+Inside Heimdall the bearer-token middleware checks no audience, so `IdentityUserMapper` holds each
+token to its own: it maps a token only when its audience and its `mfaPending` and `subjectRightsOnly`
+claims agree, and refuses one that carries either claim under the wrong audience or one of the derived
+audiences without its claim.
+
 ## The 2FA branch
 
 When the person has an **active** two-factor configuration, login does not return an authentication
-token at all. It returns a short-lived **challenge token** carrying `mfaPending`, which
-`MfaPendingGuardFilter` rejects at every endpoint except `POST /api/auth/2fa/verify`.
+token at all. It returns a short-lived **challenge token** carrying `mfaPending` under its own
+[audience](#audiences-what-a-consumer-must-pin). Only `POST /api/auth/2fa/verify` and the email-code
+resend accept it, as a body field; `MfaPendingGuardFilter` rejects it as a bearer token everywhere,
+and a consumer pinning the person audience refuses it.
 
 If the Email method is enabled, login retires every live email code for that configuration and mails
 a fresh one first — so only the code mailed *for this attempt* can complete it.

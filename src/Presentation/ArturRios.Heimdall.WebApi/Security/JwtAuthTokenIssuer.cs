@@ -21,10 +21,13 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     A User claims the permissions of the scope they belong to; a Scope Admin the union over the
 ///     scopes they own; a System Admin none, since they belong to no scope. Logically deleted scopes
 ///     and permissions are excluded, as a deleted resource is never claimed. A restricted identity
-///     is issued a subject-rights-only token instead (NFR-24), which claims none of this.
+///     is issued a subject-rights-only token instead (NFR-24), which claims none of this, under
+///     <see cref="PersonTokenAudiences.SubjectRights" /> rather than the full token's audience, so a
+///     consumer pinning the person audience refuses it (Threat Model TH-35).
 /// </remarks>
 public class JwtAuthTokenIssuer(
     JwtConfiguration configuration,
+    PersonTokenAudiences audiences,
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper,
     IAsyncReadOnlyRepository<ScopePermission, long> permissionReader) : IAuthTokenIssuer
@@ -56,7 +59,11 @@ public class JwtAuthTokenIssuer(
         // a token any downstream service should provision a profile from.
         var user = new IdentityUser(subjectId, roleId) { SubjectRightsOnly = true };
 
-        var tokenConfiguration = configuration with { Claims = mapper.ToClaims(user) };
+        var tokenConfiguration = configuration with
+        {
+            Audience = audiences.SubjectRights,
+            Claims = mapper.ToClaims(user)
+        };
 
         return Task.FromResult(new AuthToken(
             jwtHandler.CreateToken(tokenConfiguration),

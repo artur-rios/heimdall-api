@@ -39,9 +39,9 @@ public static class TestTokens
         Create(new IdentityUser(personId, role, scopeId, ownedScopeIds));
 
     /// <summary>
-    ///     Builds a UC-38 challenge-shaped bearer token — <c>MfaPending</c> set, no scope claims —
-    ///     for tests proving <see cref="MfaPendingGuardFilter" /> rejects one everywhere except
-    ///     <c>POST /api/auth/2fa/verify</c> (FR-2F-10).
+    ///     Builds a UC-38 challenge-shaped bearer token — <c>MfaPending</c> set, no scope claims, the
+    ///     challenge audience — for tests proving <see cref="MfaPendingGuardFilter" /> rejects one
+    ///     everywhere except <c>POST /api/auth/2fa/verify</c> (FR-2F-10).
     /// </summary>
     /// <param name="personId">The <c>PublicId</c> the challenge names.</param>
     /// <param name="role">The role value the challenge carries.</param>
@@ -61,7 +61,22 @@ public static class TestTokens
         Guid personId, int role, TimeSpan? lifetime = null, Guid? challengeId = null) =>
         Create(
             new IdentityUser(personId, role) { MfaPending = true, ChallengeId = challengeId ?? SeededChallengeId },
-            lifetime);
+            lifetime,
+            Audiences.TwoFactorChallenge);
+
+    /// <summary>
+    ///     Builds a token for <paramref name="user" /> under an audience of the test's choosing, signed
+    ///     with the host's real key — for tests proving that a token whose audience and claims disagree
+    ///     is refused (TH-06, TH-35), which no issuer in the host would ever produce.
+    /// </summary>
+    public static string WithAudience(IdentityUser user, string audience) => Create(user, audience: audience);
+
+    /// <summary>
+    ///     The audiences the host under test issues person tokens under, derived from the person
+    ///     audience <see cref="PostgresFixture" /> publishes, as the host derives them.
+    /// </summary>
+    public static PersonTokenAudiences Audiences =>
+        new(Environment.GetEnvironmentVariable(AudienceVariable) ?? string.Empty);
 
     /// <summary>
     ///     The outstanding challenge a seeded two-factor configuration records, and the one
@@ -70,14 +85,14 @@ public static class TestTokens
     /// </summary>
     public static readonly Guid SeededChallengeId = Guid.Parse("6f1c2a52-0d4e-4c1b-9a51-2f5e8b3c7d10");
 
-    private static string Create(IdentityUser user, TimeSpan? lifetime = null)
+    private static string Create(IdentityUser user, TimeSpan? lifetime = null, string? audience = null)
     {
         var configuration = new JwtConfiguration(
             lifetime?.TotalSeconds ?? 3600,
             Environment.GetEnvironmentVariable(IssuerVariable) ?? string.Empty,
-            Environment.GetEnvironmentVariable(AudienceVariable) ?? string.Empty,
+            audience ?? Audiences.Person,
             Environment.GetEnvironmentVariable(SecretVariable) ?? string.Empty,
-            new IdentityUserMapper().ToClaims(user));
+            new IdentityUserMapper(Audiences).ToClaims(user));
 
         return new JwtHandler().CreateToken(configuration);
     }

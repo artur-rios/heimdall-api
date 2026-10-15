@@ -47,6 +47,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- 2FA challenge tokens and subject-rights-only tokens now carry their own audience (`HEIMDALL_AUTH_TOKEN_AUDIENCE`
+  plus `.2fa-challenge` and `.subject-rights`, respectively); consumers that pin the person audience reject them.
+  Full authentication tokens keep `HEIMDALL_AUTH_TOKEN_AUDIENCE`, and Heimdall accepts a challenge or
+  subject-rights-only token only under its own audience. Clients that pass the challenge token back to
+  `POST /api/auth/2fa/verify` unread need no change. **Operators:** no new variable; start-up logs the three
+  audiences. Consumers that don't validate the audience should start doing so, pinned to
+  `HEIMDALL_AUTH_TOKEN_AUDIENCE` exactly; see the consumer guide, "Login: audiences".
 - A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
   `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
   at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now

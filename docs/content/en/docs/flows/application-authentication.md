@@ -136,7 +136,8 @@ A consumer can validate the token without calling Heimdall. It must check all of
 > **If the consumer also validates person tokens, it must pin the person audience.** Both kinds are
 > signed with the same keys. A consumer that checks the signature but not the audience would accept
 > an application token as a person's. Heimdall refuses to start when the two audiences are equal for
-> exactly this reason.
+> exactly this reason. Pinning it also refuses Heimdall's 2FA challenge and subject-rights-only tokens,
+> which carry audiences of their own ([Login: audiences](../login/#audiences-what-a-consumer-must-pin)).
 
 Heimdall itself validates with zero skew, so instances whose clocks differ can refuse a freshly issued
 token for the length of the drift. Keep clocks synchronised (NTP).

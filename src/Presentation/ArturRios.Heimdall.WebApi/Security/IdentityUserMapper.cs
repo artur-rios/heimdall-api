@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Util.WebApi.Security.Constants;
 using ArturRios.Util.WebApi.Security.Interfaces;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System.Text.Json;
 
 namespace ArturRios.Heimdall.WebApi.Security;
@@ -16,9 +17,12 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     token (NFR-15). Reading is total: any claim that cannot be interpreted yields <c>null</c>
 ///     rather than an exception, so a malformed token is rejected as unauthenticated instead of
 ///     failing the request with a 500. A token carrying <c>tokenKind</c> is an application token
-///     (UC-56) and yields <c>null</c>: it is never a person.
+///     (UC-56) and yields <c>null</c>: it is never a person. So does a token whose audience and marks
+///     disagree (<see cref="PersonTokenAudiences" />): a challenge or subject-rights-only token is
+///     read only under its own audience, and a token under either of those audiences only as that kind.
 /// </remarks>
-public class IdentityUserMapper : IAuthenticatedUserMapper
+/// <param name="audiences">The person token audiences, against which each token's marks are held.</param>
+public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticatedUserMapper
 {
     /// <summary>The claim carrying the caller's display name for downstream profile provisioning.</summary>
     public const string DisplayNameClaim = "name";
@@ -142,7 +146,7 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
             ? parsedScopeId
             : (Guid?)null;
 
-        return new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims))
+        var identity = new IdentityUser(id, roleId, scopeId, ReadOwnedScopeIds(claims))
         {
             DisplayName = claims.GetValueOrDefault(DisplayNameClaim),
             ScopePermissionClaims = ReadScopePermissionClaims(claims),
@@ -156,6 +160,29 @@ public class IdentityUserMapper : IAuthenticatedUserMapper
                                 bool.TryParse(rawSubjectRightsOnly, out var parsedSubjectRightsOnly) &&
                                 parsedSubjectRightsOnly
         };
+
+        return AudienceAgrees(claims, identity) ? identity : null;
+    }
+
+    /// <summary>
+    ///     Whether the token's audience is the one its marks call for (TH-06, TH-35): the challenge
+    ///     audience exactly when <see cref="IdentityUser.MfaPending" /> is set, the subject-rights
+    ///     audience exactly when <see cref="IdentityUser.SubjectRightsOnly" /> is, and neither on any
+    ///     other token.
+    /// </summary>
+    /// <remarks>
+    ///     The middleware checks no audience, so without this a full-audience token carrying a mark
+    ///     would be read as marked, and a challenge-audience token without one as a sign-in. No issuer
+    ///     writes either, so either is refused rather than read as whichever half is believed. An
+    ///     audience that is neither derived one is held to the full token's rule, as before: Heimdall
+    ///     did not check the person audience and still does not.
+    /// </remarks>
+    private bool AudienceAgrees(IReadOnlyDictionary<string, string> claims, IdentityUser identity)
+    {
+        var audience = claims.GetValueOrDefault(JwtRegisteredClaimNames.Aud);
+
+        return identity.MfaPending == string.Equals(audience, audiences.TwoFactorChallenge, StringComparison.Ordinal) &&
+               identity.SubjectRightsOnly == string.Equals(audience, audiences.SubjectRights, StringComparison.Ordinal);
     }
 
     private static IReadOnlyCollection<Guid> ReadOwnedScopeIds(IReadOnlyDictionary<string, string> claims)

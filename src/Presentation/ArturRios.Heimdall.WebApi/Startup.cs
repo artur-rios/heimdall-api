@@ -673,8 +673,20 @@ public class Startup : WebApiStartup
         // and the scope claims of FR-AU-04. Defaults are kept otherwise: app JWT only, read from the
         // Authorization header, user rebuilt from claims — so no IAuthenticationProvider is required
         // and no database read happens per request.
-        Builder.Services.AddSingleton(BuildJwtConfiguration());
+        var jwtConfiguration = BuildJwtConfiguration();
+        Builder.Services.AddSingleton(jwtConfiguration);
         Builder.Services.AddSingleton<JwtHandler>();
+
+        // TH-06/TH-35: the challenge and subject-rights-only tokens carry audiences derived from the
+        // person audience, so a consumer pinning it refuses them. Logged, like the application
+        // audience below, so a consumer can be checked against them.
+        var personTokenAudiences = PersonTokenAudiences.From(jwtConfiguration);
+        Builder.Services.AddSingleton(personTokenAudiences);
+        Log.Information(
+            "Person tokens: audience {Audience}; challenge tokens {ChallengeAudience}; " +
+            "subject-rights-only tokens {SubjectRightsAudience}",
+            personTokenAudiences.Person, personTokenAudiences.TwoFactorChallenge,
+            personTokenAudiences.SubjectRights);
 
         // UC-56/UC-57: application tokens share the signing keys but not the audience. Read here,
         // with the rest of the token configuration, so a missing or equal audience stops start-up

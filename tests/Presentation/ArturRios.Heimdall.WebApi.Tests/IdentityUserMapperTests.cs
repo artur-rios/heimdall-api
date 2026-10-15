@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.WebApi.Security.Constants;
+using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -10,9 +11,23 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // claims, so the property that matters is the round trip: whatever ToClaims writes, FromClaims must
 // give back. Reading is also total — a claim set it cannot interpret yields null, never an
 // exception, so a malformed token is rejected as unauthenticated rather than failing with a 500.
+// And a token is read only when its audience agrees with its challenge and subject-rights marks.
 public class IdentityUserMapperTests
 {
-    private static readonly IdentityUserMapper Mapper = new();
+    private const string PersonAudience = "heimdall-unit";
+    private const string ChallengeAudience = PersonAudience + PersonTokenAudiences.TwoFactorChallengeSuffix;
+    private const string SubjectRightsAudience = PersonAudience + PersonTokenAudiences.SubjectRightsSuffix;
+
+    private static readonly IdentityUserMapper Mapper = new(new PersonTokenAudiences(PersonAudience));
+
+    /// <summary>The claims a token for <paramref name="user" /> carries once issued under <paramref name="audience" />.</summary>
+    private static Dictionary<string, string> IssuedUnder(string audience, IdentityUser user)
+    {
+        var claims = Mapper.ToClaims(user);
+        claims[JwtRegisteredClaimNames.Aud] = audience;
+
+        return claims;
+    }
 
     [UnitFact]
     public void GivenUserIdentity_WhenRoundTrippingClaims_ThenScopeIsPreserved()
@@ -88,7 +103,7 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin) { SubjectRightsOnly = true };
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = IssuedUnder(SubjectRightsAudience, user);
         var restored = (IdentityUser)Mapper.FromClaims(claims)!;
 
         // Then
@@ -273,5 +288,74 @@ public class IdentityUserMapperTests
 
         // Then
         Assert.Null(user);
+    }
+
+    [UnitTheory]
+    [InlineData(PersonAudience, false, false)]
+    [InlineData(ChallengeAudience, true, false)]
+    [InlineData(SubjectRightsAudience, false, true)]
+    public void GivenAnAudienceAndTheMarkItCalls_WhenReadingClaims_ThenTheIdentityIsBuiltWithIt(
+        string audience, bool mfaPending, bool subjectRightsOnly)
+    {
+        // Given — each of the three person tokens as its issuer writes it: a full token under the
+        // person audience, a challenge under its own with mfaPending, and a restricted identity's
+        // under its own with subjectRightsOnly
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+        {
+            MfaPending = mfaPending,
+            ChallengeId = mfaPending ? Guid.NewGuid() : null,
+            SubjectRightsOnly = subjectRightsOnly
+        };
+
+        // When
+        var restored = Mapper.FromClaims(IssuedUnder(audience, user));
+
+        // Then
+        Assert.Equal(user, restored);
+    }
+
+    [UnitTheory]
+    [InlineData(PersonAudience, true, false)]
+    [InlineData(PersonAudience, false, true)]
+    [InlineData(ChallengeAudience, false, false)]
+    [InlineData(ChallengeAudience, false, true)]
+    [InlineData(ChallengeAudience, true, true)]
+    [InlineData(SubjectRightsAudience, false, false)]
+    [InlineData(SubjectRightsAudience, true, false)]
+    [InlineData(SubjectRightsAudience, true, true)]
+    public void GivenAnAudienceAndMarksThatDisagree_WhenReadingClaims_ThenNoIdentityIsBuilt(
+        string audience, bool mfaPending, bool subjectRightsOnly)
+    {
+        // Given — a token whose audience says one kind and whose claims say another (TH-06, TH-35):
+        // a full-audience token marked pending or restricted, or a challenge or subject-rights token
+        // missing its own mark or carrying the other's. No issuer writes one, so it is refused rather
+        // than read as whichever half is believed
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+        {
+            MfaPending = mfaPending,
+            ChallengeId = mfaPending ? Guid.NewGuid() : null,
+            SubjectRightsOnly = subjectRightsOnly
+        };
+
+        // When
+        var restored = Mapper.FromClaims(IssuedUnder(audience, user));
+
+        // Then
+        Assert.Null(restored);
+    }
+
+    [UnitFact]
+    public void GivenAChallengeMarkWithNoAudience_WhenReadingClaims_ThenNoIdentityIsBuilt()
+    {
+        // Given — a pending mark on a token carrying no audience at all, which is not the
+        // challenge's, so it is held to the same rule as the full audience
+        var claims = Mapper.ToClaims(
+            new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin) { MfaPending = true, ChallengeId = Guid.NewGuid() });
+
+        // When
+        var restored = Mapper.FromClaims(claims);
+
+        // Then
+        Assert.Null(restored);
     }
 }

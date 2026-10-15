@@ -102,7 +102,7 @@ sequenceDiagram
     C->>AC: POST /api/auth/2fa/verify {challengeToken, code | recoveryCode}
     AC->>VH: HandleAsync
 
-    VH->>CT: validate signature, expiry, mfaPending claim
+    VH->>CT: validate signature, expiry, challenge audience + mfaPending claim
     alt invalid (AF-38a)
         CT-->>VH: rejected
         VH-->>C: 401 challenge invalid

@@ -108,7 +108,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
 
     /// <summary>Reads the claims out of an issued token, to assert on what UC-25 step 8 requires.</summary>
     private static IdentityUser ClaimsOf(string token) =>
-        (IdentityUser)new IdentityUserMapper().FromClaims(TokenClaimsReader.Read(token)!)!;
+        (IdentityUser)new IdentityUserMapper(TestTokens.Audiences).FromClaims(TokenClaimsReader.Read(token)!)!;
 
     [FunctionalFact]
     public async Task GivenGoogleSignInEnabledAndUnknownGoogleAccount_WhenPostAuthGoogle_ThenGoogleUserIsCreatedAndTokenReturned()

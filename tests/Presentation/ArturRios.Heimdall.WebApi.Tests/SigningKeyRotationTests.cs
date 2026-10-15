@@ -36,7 +36,7 @@ public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Loc
             Environment.GetEnvironmentVariable("HEIMDALL_AUTH_TOKEN_ISSUER") ?? string.Empty,
             Environment.GetEnvironmentVariable("HEIMDALL_AUTH_TOKEN_AUDIENCE") ?? string.Empty,
             secret,
-            new IdentityUserMapper().ToClaims(new IdentityUser(personId, role)));
+            new IdentityUserMapper(TestTokens.Audiences).ToClaims(new IdentityUser(personId, role)));
 
         return new JwtHandler().CreateToken(configuration);
     }
