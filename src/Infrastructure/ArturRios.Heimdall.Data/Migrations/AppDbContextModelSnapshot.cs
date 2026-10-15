@@ -251,6 +251,32 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("email_verification_token", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ErasedSubject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasColumnOrder(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.HasKey("Id")
+                        .HasName("pk_erased_subject");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_erased_subject_created_at");
+
+                    b.ToTable("erased_subject", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.GoogleUser", b =>
                 {
                     b.Property<long>("Id")

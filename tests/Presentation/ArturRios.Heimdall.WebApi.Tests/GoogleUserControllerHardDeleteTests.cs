@@ -113,6 +113,11 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
 
         // Then — the row is gone for good (FR-GO-16), not merely flagged
         Assert.False(await ExistsAsync(googleUser.PublicId));
+
+        // Then — and its id is tombstoned, so the trail's entries about it can still be cleared (#195)
+        await using var context = db.CreateContext();
+        var tombstone = await context.ErasedSubjects.AsNoTracking().SingleAsync(x => x.Id == googleUser.PublicId);
+        Assert.Equal((int)ErasedSubjectKinds.GoogleUser, tombstone.Kind);
     }
 
     [FunctionalFact]

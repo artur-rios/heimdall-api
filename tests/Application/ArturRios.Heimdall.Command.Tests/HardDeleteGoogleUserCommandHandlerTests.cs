@@ -1,6 +1,8 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -9,7 +11,8 @@ namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for HardDeleteGoogleUserCommandHandler (UC-29, FR-GO-16): the main flow, the logically
 // deleted record a cleanup pass starts from, and every shape of AF-29a — unknown id, a Google User
-// belonging to another scope, and a repeated call.
+// belonging to another scope, and a repeated call. Also the tombstone (#195): written for exactly the
+// Google User removed, before it is removed, never on a refusal, and harmlessly again on a retry.
 //
 // There is no authorization test here: UC-29's only actor is the System Admin and the endpoint's
 // RoleRequirement settles it, so the command carries no acting person and the handler applies no
@@ -52,7 +55,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // Given an active Google User (UC-29 main flow)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
-        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, new InMemoryErasedSubjects());
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
@@ -73,7 +76,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // which is why the lookup omits an !IsDeleted filter
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
-        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, new InMemoryErasedSubjects());
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
@@ -89,15 +92,17 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // Given an id nobody holds (AF-29a)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
-        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
+        var erasedSubjects = new InMemoryErasedSubjects();
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, erasedSubjects);
 
         // When
         var output = await handler.HandleAsync(Command(Guid.NewGuid()));
 
-        // Then — and the Google User that does exist was left alone
+        // Then — and the Google User that does exist was left alone, with no tombstone
         Assert.False(output.Success);
         Assert.Contains(GoogleUserMessages.GoogleUserNotFound, output.Errors);
         Assert.Single((await googleUsers.GetAllAsync()).Data!);
+        Assert.Empty(erasedSubjects.Recorded);
     }
 
     [UnitFact]
@@ -107,15 +112,17 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // addresses (AF-29a)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, scopePublicId: Guid.NewGuid());
-        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
+        var erasedSubjects = new InMemoryErasedSubjects();
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, erasedSubjects);
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
 
-        // Then — refused, and untouched: a wrong-scope path must not destroy anything
+        // Then — refused, and untouched: a wrong-scope path must not destroy anything, nor tombstone it
         Assert.False(output.Success);
         Assert.Contains(GoogleUserMessages.GoogleUserNotFound, output.Errors);
         Assert.Single((await googleUsers.GetAllAsync()).Data!);
+        Assert.Empty(erasedSubjects.Recorded);
     }
 
     [UnitFact]
@@ -125,7 +132,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // unlike UC-28's AF-28b, so the repeat is AF-29a.
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
-        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers);
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, new InMemoryErasedSubjects());
         await handler.HandleAsync(Command(googleUser.PublicId));
 
         // When
@@ -134,5 +141,53 @@ public class HardDeleteGoogleUserCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(GoogleUserMessages.GoogleUserNotFound, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenGoogleUser_WhenHandlingHardDelete_ThenTheirIdIsTombstonedBeforeTheRecordGoes()
+    {
+        // Given a Google User, watched at the moment the tombstone is written
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var bystander = await SeedGoogleUserAsync(googleUsers);
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var present = false;
+        var erasedSubjects = new InMemoryErasedSubjects(_ =>
+            present = googleUsers.Query().Any(g => g.PublicId == googleUser.PublicId));
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, erasedSubjects);
+        var before = DateTime.UtcNow;
+
+        // When
+        var output = await handler.HandleAsync(Command(googleUser.PublicId));
+
+        // Then — one tombstone, for exactly the Google User removed, written while it was still there
+        Assert.True(output.Success);
+        var tombstone = Assert.Single(erasedSubjects.Recorded);
+        Assert.Equal(googleUser.PublicId, tombstone.Id);
+        Assert.Equal((int)ErasedSubjectKinds.GoogleUser, tombstone.Kind);
+        Assert.InRange(tombstone.CreatedAt, before, DateTime.UtcNow);
+        Assert.True(present);
+        Assert.Equal(bystander.PublicId, Assert.Single((await googleUsers.GetAllAsync()).Data!).PublicId);
+    }
+
+    [UnitFact]
+    public async Task GivenATombstoneFromAFailedAttempt_WhenHandlingHardDeleteAgain_ThenItSucceedsWithOneTombstone()
+    {
+        // Given a Google User still on record whose earlier hard delete wrote its tombstone and failed
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var earlier = DateTime.UtcNow.AddDays(-3);
+        var erasedSubjects = new InMemoryErasedSubjects();
+        erasedSubjects.Seed(googleUser.PublicId, (int)ErasedSubjectKinds.GoogleUser, earlier);
+        var handler = new HardDeleteGoogleUserCommandHandler(googleUsers, googleUsers, erasedSubjects);
+
+        // When
+        var output = await handler.HandleAsync(Command(googleUser.PublicId));
+
+        // Then — the retry is not an error, still one row for the id, its grace counted from now
+        Assert.True(output.Success);
+        var tombstone = Assert.Single(erasedSubjects.Recorded);
+        Assert.Equal(googleUser.PublicId, tombstone.Id);
+        Assert.True(tombstone.CreatedAt > earlier.AddDays(1));
+        Assert.Empty((await googleUsers.GetAllAsync()).Data!);
     }
 }

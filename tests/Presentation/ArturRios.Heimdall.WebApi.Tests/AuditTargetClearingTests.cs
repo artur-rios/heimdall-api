@@ -22,6 +22,11 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         and what happened stays exactly as recorded. Each case is proved against the real trigger,
 ///         and each refusal is checked for its own reason, so a test cannot pass on the wrong one.
 ///     </para>
+///     <para>
+///         #195 adds one more permitted change: a target whose id a hard delete tombstoned, and that
+///         no row has any more, may be cleared at any age. A tombstone with its row still there, and
+///         an id that resolves to nobody but was never tombstoned, permit nothing.
+///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]
 public class AuditTargetClearingTests(PostgresFixture fixture)
@@ -117,6 +122,20 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         await command.ExecuteNonQueryAsync();
 
         return publicId;
+    }
+
+    /// <summary>Tombstones <paramref name="publicId" /> as a hard delete would have.</summary>
+    private async Task InsertTombstoneAsync(Guid publicId)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = new NpgsqlCommand(
+            "INSERT INTO heimdall.erased_subject (public_id, kind) VALUES (@publicId, 1)", connection);
+
+        command.Parameters.AddWithValue("publicId", publicId);
+
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<Scope> InsertScopeAsync()
@@ -267,7 +286,8 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
     [FunctionalFact]
     public async Task GivenAnOldEntryTargetingNobodyStillOnRecord_WhenTheTargetIsCleared_ThenTheDatabaseRefuses()
     {
-        // Given a target that resolves to no row at all, as a hard-deleted person's no longer does
+        // Given a target that resolves to no row at all and was never tombstoned — a hard-deleted
+        // scope's, or a person's removed before tombstones existed
         var vanished = Guid.NewGuid();
         var entry = await InsertEntryAsync(actorId: null, vanished, ageInDays: 4000);
 
@@ -475,5 +495,98 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         // Then
         Assert.Null(failure);
         Assert.Null(await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenARecentEntryTargetingAHardDeletedPerson_WhenTheTargetIsCleared_ThenTheDatabasePermitsIt()
+    {
+        // Given a day-old entry by a live actor about somebody hard-deleted since: tombstoned, and no
+        // row left — due at once, like an anonymised person
+        var actor = await InsertPersonAsync(anonymised: false);
+        var removed = Guid.NewGuid();
+        await InsertTombstoneAsync(removed);
+        var entry = await InsertEntryAsync(actor, removed, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(ClearTargetStatement(entry));
+
+        // Then the target is gone and the actor, written back unchanged, is still there
+        Assert.Null(failure);
+        Assert.Null(await TargetOfAsync(entry));
+        Assert.Equal(actor, await ActorOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenATombstonedPersonStillOnRecord_WhenARecentTargetIsCleared_ThenTheDatabaseRefuses()
+    {
+        // Given a hard delete that tombstoned the id and then failed: the row is still there, so the
+        // tombstone is no ground, and a recent entry about a live person is not due
+        var target = await InsertPersonAsync(anonymised: false);
+        await InsertTombstoneAsync(target);
+        var entry = await InsertEntryAsync(actorId: null, target, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(ClearTargetStatement(entry));
+
+        // Then
+        AssertRefused(failure, "target is not yet due to be cleared");
+        Assert.Equal(target, await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAHardDeletedPersonsTarget_WhenReassignedToSomebodyElse_ThenTheDatabaseRefuses()
+    {
+        // Given — a tombstone permits forgetting the target, never naming somebody else
+        var removed = Guid.NewGuid();
+        await InsertTombstoneAsync(removed);
+        var someoneElse = await InsertPersonAsync(anonymised: false);
+        var entry = await InsertEntryAsync(actorId: null, removed, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET target_id = '{someoneElse}' WHERE public_id = '{entry}'");
+
+        // Then
+        AssertRefused(failure, "target may be cleared but not reassigned");
+        Assert.Equal(removed, await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAHardDeletedPersonsTarget_WhenTheActionIsRewrittenAlongside_ThenTheDatabaseRefuses()
+    {
+        // Given — the tombstone ground is for the target alone, not a way to smuggle a rewrite
+        var removed = Guid.NewGuid();
+        await InsertTombstoneAsync(removed);
+        var entry = await InsertEntryAsync(actorId: null, removed, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET target_id = NULL, action = 'SomethingElse' " +
+            $"WHERE public_id = '{entry}'");
+
+        // Then
+        AssertRefused(failure, "append-only");
+        Assert.Equal(removed, await TargetOfAsync(entry));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAHardDeletedPersonsTargetAndAnUndueActor_WhenBothAreCleared_ThenTheDatabaseRefusesBoth()
+    {
+        // Given a recent entry by a live actor about a hard-deleted person: the target is due, the
+        // actor is not, and the actor rule is unchanged
+        var actor = await InsertPersonAsync(anonymised: false);
+        var removed = Guid.NewGuid();
+        await InsertTombstoneAsync(removed);
+        var entry = await InsertEntryAsync(actor, removed, ageInDays: 1);
+
+        // When
+        var failure = await RunAsync(
+            $"UPDATE heimdall.audit_log SET actor_person_id = NULL, actor_role = NULL, target_id = NULL " +
+            $"WHERE public_id = '{entry}'");
+
+        // Then
+        AssertRefused(failure, "actor attribution is not yet due to be cleared");
+        Assert.Equal(actor, await ActorOfAsync(entry));
+        Assert.Equal(removed, await TargetOfAsync(entry));
     }
 }

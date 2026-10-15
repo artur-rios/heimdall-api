@@ -145,6 +145,11 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
         Assert.False(await context.EmailVerificationTokens.AsNoTracking().AnyAsync(t => t.PersonId == person.Id));
         Assert.False(await context.ScopeUsers.AsNoTracking().AnyAsync(su => su.PersonId == person.Id));
         Assert.True(await context.Scopes.AsNoTracking().AnyAsync(s => s.Id == scope.Id));
+
+        // Then — and their id is tombstoned, so the trail's entries about them can still be cleared
+        // (NFR-21, #195)
+        var tombstone = await context.ErasedSubjects.AsNoTracking().SingleAsync(x => x.Id == person.PublicId);
+        Assert.Equal((int)ErasedSubjectKinds.Person, tombstone.Kind);
     }
 
     [FunctionalFact]
