@@ -100,6 +100,12 @@ classDiagram
         +bool EmailVerified
         +int FailedLoginAttempts
         +DateTime? LockedOutUntil
+        +int FailedSecondFactorAttempts
+        +DateTime? SecondFactorLockedOutUntil
+        +int SecondFactorLockouts
+        +int FailedReauthenticationAttempts
+        +DateTime? ReauthenticationWindowStartedAt
+        +DateTime? ReauthenticationPausedUntil
         +long? ScopeId
     }
     class TwoFactorAuth {

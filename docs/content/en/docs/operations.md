@@ -263,6 +263,44 @@ against any address they know. It answers with UC-11's ordinary `InvalidCredenti
 same Argon2id work a real check would, so it is not observable — by message or by timing — to a
 caller who does not already know the password.
 
+### Releasing a second-factor lock or a re-authentication pause
+
+Both run out on their own: a second-factor lock after at most 24 hours, a re-authentication pause
+after 15 minutes. Heimdall has no endpoint to release either early, on purpose. For a support case
+that cannot wait, an operator can clear them in the database.
+
+{{% alert title="Verify the person first" color="warning" %}}
+A second-factor lock means **someone holding the account's password** has been guessing the second
+factor. Before releasing it, confirm through a channel you already trust that you are dealing with the
+account holder, and have them **change their password first** (UC-12/UC-13). If the password is not
+changed, releasing the lock only gives the guesser a fresh budget. A re-authentication pause likewise
+means someone holding a token was guessing, so make sure the person's sessions are their own. The
+write bypasses the API, so the audit trail does not record it: log the release in your support
+ticket.
+{{% /alert %}}
+
+Replace the id with the person's `public_id` (the `id` the API returns for them):
+
+```sql
+-- Second-factor lock at sign-in (FR-AU-12): the count, the lock, and the repeat count that sets
+-- how long the next lock lasts.
+UPDATE heimdall.person
+SET failed_second_factor_attempts = 0,
+    second_factor_locked_out_until = NULL,
+    second_factor_lockouts = 0
+WHERE public_id = '00000000-0000-0000-0000-000000000000';
+
+-- Re-authentication pause (FR-AU-13): the count, the window and the pause.
+UPDATE heimdall.person
+SET failed_reauthentication_attempts = 0,
+    reauthentication_window_started_at = NULL,
+    reauthentication_paused_until = NULL
+WHERE public_id = '00000000-0000-0000-0000-000000000000';
+```
+
+Each statement should report `UPDATE 1`. Run only the one you need. The `person` table's triggers
+guard `public_id` alone, so these columns are writable by the API's own role.
+
 {{% alert title="Not a substitute for a gateway" color="warning" %}}
 The limiter's partition key is the connection's remote IP — the real caller's only when
 `HEIMDALL_TRUSTED_PROXIES` names the proxy in front of the API

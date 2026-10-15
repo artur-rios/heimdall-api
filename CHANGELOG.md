@@ -25,9 +25,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   replaces the `400` answers "The authenticator app code is missing or incorrect." and "The email code is missing,
   incorrect, expired, or already used." with the same `401`. A client that treats a `401` as the end of its session
   must recognise the new message as a refused credential instead. A Google User's erasure request still answers
-  "The credential presented was not accepted.". A new migration, `AddFactorBudgets`, adds six columns to `person`,
-  all starting empty; only targeted writes change them, and anonymisation clears them. **Operators:** no setting
-  changes.
+  "The credential presented was not accepted.", but a person who sends no credential at all now gets the new message
+  and is charged like a wrong password. A new migration, `AddFactorBudgets`, adds six columns to `person`, all
+  starting empty; only targeted writes change them, and anonymisation clears them. The data export
+  (`POST /api/auth/data-export`) now includes all six in `security`, beside `failedLoginAttempts` and
+  `lockedOutUntil`. **Deploy order:** deploy the heimdall-ui release that recognises "The password or code is
+  incorrect." and the `401` from `2fa/confirm` **before this API, or together with it**. Against an older UI, a
+  mistyped password or code on any of these endpoints signs the user out. That UI release only adds the message, so
+  it is safe to deploy first. Third-party clients need the same change before upgrading. **Operators:** no setting
+  changes; the operations guide has SQL to release a second-factor lock or a re-authentication pause for a verified
+  person.
 - The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) now also bounds the
   sends a person can repeat themselves (FR-EV-07, FR-2F-19). `POST /api/auth/resend-verification` answers `429` "An
   email of this kind was sent to you recently. Try again in a few minutes." when any verification link went to the
