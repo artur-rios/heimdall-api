@@ -279,7 +279,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAppEnabledAndMissingAppCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsAppCodeInvalidError()
+    public async Task GivenAppEnabledAndMissingAppCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37b
         var fixture = await FixtureAsync();
@@ -290,12 +290,12 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.AppCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
     }
 
     [UnitFact]
-    public async Task GivenAppEnabledAndIncorrectAppCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsAppCodeInvalidError()
+    public async Task GivenAppEnabledAndIncorrectAppCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37b
         var fixture = await FixtureAsync();
@@ -306,11 +306,11 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.AppCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     [UnitFact]
-    public async Task GivenEmailEnabledAndMissingEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsEmailCodeInvalidError()
+    public async Task GivenEmailEnabledAndMissingEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37c
         var fixture = await FixtureAsync();
@@ -322,12 +322,12 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
     }
 
     [UnitFact]
-    public async Task GivenEmailEnabledAndIncorrectEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsEmailCodeInvalidError()
+    public async Task GivenEmailEnabledAndIncorrectEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37c
         var fixture = await FixtureAsync();
@@ -339,11 +339,11 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     [UnitFact]
-    public async Task GivenEmailEnabledAndExpiredEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsEmailCodeInvalidError()
+    public async Task GivenEmailEnabledAndExpiredEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37c
         var fixture = await FixtureAsync();
@@ -355,11 +355,11 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     [UnitFact]
-    public async Task GivenEmailEnabledAndAlreadyUsedEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsEmailCodeInvalidError()
+    public async Task GivenEmailEnabledAndAlreadyUsedEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37c
         var fixture = await FixtureAsync();
@@ -371,7 +371,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     [UnitFact]
@@ -425,5 +425,63 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAPausedBudget_WhenTheRightCodesArePresented_ThenRefusedAndNothingIsSpentOrActivated()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+        fixture.Person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(10);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(emailCode: EmailCode));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.False(twoFactorAuth.IsActive);
+        Assert.False(emailCode.Used);
+        Assert.Empty(fixture.RecoveryCodes.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongAppCodeAndAWrongEmailCode_WhenEachIsPresented_ThenTheAnswersAreIdentical()
+    {
+        // Given both methods pending
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: true);
+        await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        // When
+        var wrongApp = await fixture.Handler().HandleAsync(fixture.Command(appCode: "000000", emailCode: EmailCode));
+        var wrongEmail = await fixture.Handler().HandleAsync(fixture.Command(appCode: CurrentTotpCode(), emailCode: "000000"));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], wrongApp.Errors);
+        Assert.Equal(wrongApp.Errors, wrongEmail.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenFiveWrongCodes_WhenTheRightOneFollows_ThenItIsRefused()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        for (var attempt = 0; attempt < ReauthenticationBudget.MaxFailures; attempt++)
+        {
+            await fixture.Handler().HandleAsync(fixture.Command(appCode: "000000"));
+        }
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(appCode: CurrentTotpCode()));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.False(twoFactorAuth.IsActive);
     }
 }

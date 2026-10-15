@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Persistence;
@@ -87,6 +88,128 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 
         Accept(person, x => x.FailedLoginAttempts, 0);
         Accept(person, x => x.LockedOutUntil, null);
+    }
+
+    public async Task<bool> TryReserveSecondFactorAttemptAsync(
+        Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil)
+    {
+        ArgumentOutOfRangeException.ThrowIfZero(lockedOutUntil.Count, nameof(lockedOutUntil));
+
+        // The login reservation's shape, for the same reasons: the reservation that reaches the limit
+        // is the one that locks, and a row stuck at the limit with no lock heals itself. What differs
+        // is the lock's length, which depends on how many locks came before — so it is chosen by the
+        // stored lockout count, inside the same statement, rather than from the count this request
+        // read: two requests that both read "one lock so far" cannot both set the second lock's end.
+        var reserved = await context.Persons
+            .Where(x => x.Id == person.Id &&
+                        ((x.FailedSecondFactorAttempts < maxAttempts &&
+                          (x.SecondFactorLockedOutUntil == null || x.SecondFactorLockedOutUntil <= now)) ||
+                         (x.FailedSecondFactorAttempts >= maxAttempts && x.SecondFactorLockedOutUntil == null)))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.SecondFactorLockedOutUntil, SecondFactorLockEnd(maxAttempts, lockedOutUntil))
+                .SetProperty(x => x.SecondFactorLockouts,
+                    x => x.FailedSecondFactorAttempts + 1 >= maxAttempts
+                        ? x.SecondFactorLockouts + 1
+                        : x.SecondFactorLockouts)
+                .SetProperty(x => x.FailedSecondFactorAttempts,
+                    x => x.FailedSecondFactorAttempts + 1 >= maxAttempts ? 0 : x.FailedSecondFactorAttempts + 1)) == 1;
+
+        if (reserved)
+        {
+            var reachedLimit = person.FailedSecondFactorAttempts + 1 >= maxAttempts;
+
+            if (reachedLimit)
+            {
+                Accept(person, x => x.SecondFactorLockedOutUntil, LockEndAfter(person.SecondFactorLockouts, lockedOutUntil));
+                Accept(person, x => x.SecondFactorLockouts, person.SecondFactorLockouts + 1);
+            }
+
+            Accept(person, x => x.FailedSecondFactorAttempts, reachedLimit ? 0 : person.FailedSecondFactorAttempts + 1);
+        }
+
+        return reserved;
+    }
+
+    public async Task ClearSecondFactorAttemptsAsync(Person person)
+    {
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.FailedSecondFactorAttempts, 0)
+                .SetProperty(x => x.SecondFactorLockedOutUntil, (DateTime?)null)
+                .SetProperty(x => x.SecondFactorLockouts, 0));
+
+        Accept(person, x => x.FailedSecondFactorAttempts, 0);
+        Accept(person, x => x.SecondFactorLockedOutUntil, null);
+        Accept(person, x => x.SecondFactorLockouts, 0);
+    }
+
+    public async Task<bool> TryReserveReauthenticationAsync(
+        Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil)
+    {
+        // One statement, every right-hand side reading the row as it was. The window is open when it
+        // started after windowStartedBy (a NULL start is no window, and compares false); the failure
+        // counted here is then the window's next, or else the first of a new window. The failure that
+        // reaches the limit pauses and closes the window in the same write, as the login reservation
+        // locks, so a burst cannot each read "below the limit" and pass it together.
+        var reserved = await context.Persons
+            .Where(x => x.Id == person.Id &&
+                        (x.ReauthenticationPausedUntil == null || x.ReauthenticationPausedUntil <= now))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ReauthenticationPausedUntil,
+                    x => (x.ReauthenticationWindowStartedAt > windowStartedBy
+                        ? x.FailedReauthenticationAttempts + 1
+                        : 1) >= maxFailures
+                        ? (DateTime?)pausedUntil
+                        : x.ReauthenticationPausedUntil)
+                .SetProperty(x => x.ReauthenticationWindowStartedAt,
+                    x => (x.ReauthenticationWindowStartedAt > windowStartedBy
+                        ? x.FailedReauthenticationAttempts + 1
+                        : 1) >= maxFailures
+                        ? null
+                        : x.ReauthenticationWindowStartedAt > windowStartedBy
+                            ? x.ReauthenticationWindowStartedAt
+                            : (DateTime?)now)
+                .SetProperty(x => x.FailedReauthenticationAttempts,
+                    x => (x.ReauthenticationWindowStartedAt > windowStartedBy
+                        ? x.FailedReauthenticationAttempts + 1
+                        : 1) >= maxFailures
+                        ? 0
+                        : x.ReauthenticationWindowStartedAt > windowStartedBy
+                            ? x.FailedReauthenticationAttempts + 1
+                            : 1)) == 1;
+
+        if (reserved)
+        {
+            var windowOpen = person.ReauthenticationWindowStartedAt > windowStartedBy;
+            var failures = windowOpen ? person.FailedReauthenticationAttempts + 1 : 1;
+            var paused = failures >= maxFailures;
+
+            if (paused)
+            {
+                Accept(person, x => x.ReauthenticationPausedUntil, pausedUntil);
+            }
+
+            Accept(person, x => x.ReauthenticationWindowStartedAt,
+                paused ? null : windowOpen ? person.ReauthenticationWindowStartedAt : now);
+            Accept(person, x => x.FailedReauthenticationAttempts, paused ? 0 : failures);
+        }
+
+        return reserved;
+    }
+
+    public async Task ClearReauthenticationAttemptsAsync(Person person)
+    {
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.FailedReauthenticationAttempts, 0)
+                .SetProperty(x => x.ReauthenticationWindowStartedAt, (DateTime?)null)
+                .SetProperty(x => x.ReauthenticationPausedUntil, (DateTime?)null));
+
+        Accept(person, x => x.FailedReauthenticationAttempts, 0);
+        Accept(person, x => x.ReauthenticationWindowStartedAt, null);
+        Accept(person, x => x.ReauthenticationPausedUntil, null);
     }
 
     public async Task StartChallengeAsync(TwoFactorAuth configuration, Guid challengeId)
@@ -299,6 +422,50 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 
         Accept(person, x => x.SecurityStamp, stamp);
     }
+
+    /// <summary>
+    ///     The value <see cref="TryReserveSecondFactorAttemptAsync" /> writes to the lock: unchanged,
+    ///     unless this reservation reaches <paramref name="maxAttempts" />, and then the entry of
+    ///     <paramref name="lockedOutUntil" /> the stored lockout count selects — a <c>CASE</c> over the
+    ///     count, with the last entry for every count from its own on.
+    /// </summary>
+    /// <remarks>
+    ///     Built as an expression tree because the number of entries is the caller's. Each end is read
+    ///     from a box rather than inlined, so EF Core sends it as a parameter, and the statement — and
+    ///     its cached plan — is the same on every call.
+    /// </remarks>
+    private static Expression<Func<Person, DateTime?>> SecondFactorLockEnd(
+        int maxAttempts, IReadOnlyList<DateTime> lockedOutUntil)
+    {
+        var row = Expression.Parameter(typeof(Person), "x");
+        var lockouts = Expression.Property(row, nameof(Person.SecondFactorLockouts));
+
+        Expression end = Boxed(lockedOutUntil[^1]);
+
+        for (var lockout = lockedOutUntil.Count - 2; lockout >= 0; lockout--)
+        {
+            end = Expression.Condition(
+                Expression.Equal(lockouts, Expression.Constant(lockout)), Boxed(lockedOutUntil[lockout]), end);
+        }
+
+        var reachesLimit = Expression.GreaterThanOrEqual(
+            Expression.Add(Expression.Property(row, nameof(Person.FailedSecondFactorAttempts)), Expression.Constant(1)),
+            Boxed(maxAttempts));
+
+        return Expression.Lambda<Func<Person, DateTime?>>(
+            Expression.Condition(reachesLimit, end, Expression.Property(row, nameof(Person.SecondFactorLockedOutUntil))),
+            row);
+    }
+
+    /// <summary>The lock end <see cref="SecondFactorLockEnd" /> selects, for the instance.</summary>
+    private static DateTime LockEndAfter(int lockouts, IReadOnlyList<DateTime> lockedOutUntil) =>
+        lockouts >= 0 && lockouts < lockedOutUntil.Count - 1 ? lockedOutUntil[lockouts] : lockedOutUntil[^1];
+
+    private static MemberExpression Boxed(DateTime value) =>
+        Expression.Field(Expression.Constant(new StrongBox<DateTime?>(value)), nameof(StrongBox<DateTime?>.Value));
+
+    private static MemberExpression Boxed(int value) =>
+        Expression.Field(Expression.Constant(new StrongBox<int>(value)), nameof(StrongBox<int>.Value));
 
     /// <summary>
     ///     Brings the caller's instance in line with a write the change tracker did not see: the new

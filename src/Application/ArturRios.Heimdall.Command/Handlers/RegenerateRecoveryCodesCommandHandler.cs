@@ -40,6 +40,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         was in before the request, which is the only safe direction to fail in for a credential
 ///         of last resort.
 ///     </para>
+///     <para>
+///         A missing, wrong or already-spent factor answers the one re-authentication refusal
+///         (<c>AuthMessages.PasswordOrCodeIncorrect</c>, 401), and every attempt is charged to the
+///         account's re-authentication budget (<see cref="ReauthenticationBudget" />, FR-AU-13).
+///     </para>
 /// </remarks>
 public class RegenerateRecoveryCodesCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -74,12 +79,17 @@ public class RegenerateRecoveryCodesCommandHandler(
             return output.WithError(TwoFactorMessages.NotActive);
         }
 
-        // UC-40 step 2 (AF-40b): the same second-factor check UC-38 and UC-39 make.
+        // FR-AU-13: charged to the re-authentication budget before the factor is compared. A paused
+        // budget still has it compared, and refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
+        // UC-40 step 2 (AF-40b): the same second-factor check UC-38 and UC-39 make, refused as every
+        // re-authentication is.
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
-        if (!verification.Matched)
+        if (!verification.Matched || !admitted)
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         // An email code is single-use wherever it is accepted (FR-2F-03): the one that authorized
@@ -91,14 +101,16 @@ public class RegenerateRecoveryCodesCommandHandler(
         if (verification.ConsumedEmailCode is { } consumedEmailCode &&
             !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         if (verification.ConsumedRecoveryCode is { } consumedRecoveryCode &&
             !await atomicWrites.TryConsumeRecoveryCodeAsync(consumedRecoveryCode, DateTime.UtcNow))
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // FR-AU-11: a new set of recovery codes is a new second factor, and revokes every token issued
         // before it, the caller's own included — the codes are usually regenerated because the old

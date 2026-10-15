@@ -770,7 +770,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Equal("a@x\u03c3.gr", target.Email);
         Assert.Equal(stamp, target.SecurityStamp);
         Assert.Empty(twoFactor.NoticesSentTo);
@@ -793,7 +793,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Equal("root@test.local", admin.Email);
         Assert.Equal(stamp, admin.SecurityStamp);
     }
@@ -837,7 +837,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Equal("user@test.local", target.Email);
         Assert.True(target.EmailVerified);
         Assert.Equal(stamp, target.SecurityStamp);
@@ -859,7 +859,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Equal("user@test.local", target.Email);
     }
 
@@ -880,7 +880,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Equal("user@test.local", target.Email);
     }
 
@@ -902,7 +902,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     [UnitFact]
@@ -981,7 +981,7 @@ public class UpdatePersonCommandHandlerTests
         var output = await handler.HandleAsync(command);
 
         // Then
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.DoesNotContain(PersonMessages.EmailAlreadyExists, output.Errors);
     }
 
@@ -1141,5 +1141,76 @@ public class UpdatePersonCommandHandlerTests
         Assert.NotEqual(original, duringSave);
         Assert.NotEqual(duringSave, target.SecurityStamp);
         Assert.NotEqual(original, target.SecurityStamp);
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAWrongPasswordAndAWrongCode_WhenEachIsPresented_ThenTheAnswersAreIdentical()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        await twoFactor.ActivateAsync(target);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+
+        var wrongPassword = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        wrongPassword.Email = "moved@test.local";
+        wrongPassword.CurrentPassword = "not-the-password";
+        wrongPassword.TwoFactorCode = CurrentTotpCode();
+
+        var wrongCode = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        wrongCode.Email = "moved@test.local";
+        wrongCode.TwoFactorCode = "000000";
+
+        // When
+        var first = await handler.HandleAsync(wrongPassword);
+        var second = await handler.HandleAsync(wrongCode);
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], first.Errors);
+        Assert.Equal(first.Errors, second.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAPausedBudget_WhenTheRightPasswordIsPresented_ThenTheEmailIsNotChanged()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        target.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(10);
+        var stamp = target.SecurityStamp;
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Equal("user@test.local", target.Email);
+        Assert.Equal(stamp, target.SecurityStamp);
+        Assert.Empty(twoFactor.NoticesSentTo);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenChangingTheOwnEmail_ThenTheFailureIsCountedAndTheSignInBudgetsAreUntouched()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+        command.CurrentPassword = "not-the-password";
+
+        // When
+        await handler.HandleAsync(command);
+
+        // Then
+        Assert.Equal(1, target.FailedReauthenticationAttempts);
+        Assert.Equal(0, target.FailedLoginAttempts);
+        Assert.Equal(0, target.FailedSecondFactorAttempts);
     }
 }

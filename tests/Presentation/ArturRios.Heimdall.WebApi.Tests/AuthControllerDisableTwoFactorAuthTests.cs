@@ -273,7 +273,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.NotNull(await ConfigurationForAsync(person));
     }
 
@@ -290,7 +290,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.NotNull(await ConfigurationForAsync(person));
     }
 
@@ -309,7 +309,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.NotNull(await ConfigurationForAsync(person));
     }
 

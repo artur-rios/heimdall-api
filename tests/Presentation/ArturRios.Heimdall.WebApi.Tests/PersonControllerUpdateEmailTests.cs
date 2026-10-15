@@ -112,7 +112,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -128,7 +128,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -145,7 +145,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -240,7 +240,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(admin);
     }
 

@@ -358,11 +358,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
     ///     the authorization matrix grants disabling two-factor authentication to all three person
     ///     roles and withholds it from anonymous callers, which authentication alone already enforces.
-    ///     AF-39a (404, not active) and AF-39b/AF-39c (401, wrong password / wrong second factor) are
-    ///     kept as the three separate flows the Use Case Specification Document defines them as —
-    ///     unlike UC-38's AF-38b/AF-38c, which the spec collapses into one message, UC-39 lists the
-    ///     password mismatch and the second-factor mismatch as distinct conditions, so they are not
-    ///     merged here.
+    ///     AF-39a answers 404 (not active). AF-39b and AF-39c — a wrong password and a wrong second
+    ///     factor — answer the same 401, "The password or code is incorrect.", so the answer never
+    ///     says which was wrong; a paused re-authentication budget (FR-AU-13) answers it too.
     /// </remarks>
     [HttpPost("2fa/disable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -390,8 +388,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
     ///     the authorization matrix grants regenerating recovery codes to all three person roles and
     ///     withholds it from anonymous callers, which authentication alone already enforces. AF-40a
-    ///     (404, not active) and AF-40b (401, second factor invalid) reuse UC-39's "not active" and
-    ///     UC-38's "factor invalid" messages rather than inventing new ones.
+    ///     (404, not active) reuses UC-39's "not active" message; AF-40b (401, second factor invalid,
+    ///     or a paused re-authentication budget, FR-AU-13) answers "The password or code is
+    ///     incorrect.", as every re-authentication does.
     /// </remarks>
     [HttpPost("2fa/recovery-codes/regenerate")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

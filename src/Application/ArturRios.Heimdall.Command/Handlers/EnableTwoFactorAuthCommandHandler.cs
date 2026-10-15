@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -38,6 +39,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         caller's not-yet-active row (if any) and updating it in place rather than inserting a
 ///         second one, since §4.9 allows at most one row per person.
 ///     </para>
+///     <para>
+///         The password check is charged to the account's re-authentication budget
+///         (<see cref="ReauthenticationBudget" />, FR-AU-13), and a missing or wrong password, or a
+///         paused budget, is refused with the one message every re-authentication shares.
+///     </para>
 /// </remarks>
 public class EnableTwoFactorAuthCommandHandler(
     IValidator<EnableTwoFactorAuthCommand> validator,
@@ -45,7 +51,8 @@ public class EnableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
-    ITotpSecretProtector totpSecretProtector)
+    ITotpSecretProtector totpSecretProtector,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
 {
     private const string Issuer = "Heimdall";
@@ -91,11 +98,19 @@ public class EnableTwoFactorAuthCommandHandler(
         // one does (UC-39): the factor chosen here is the one UC-38 will demand of the account holder,
         // and a bearer token is not proof that they are present. After AF-36a, so a repeat
         // request costs no Argon2id derivation — the same order UC-42 keeps.
+        //
+        // FR-AU-13: charged to the re-authentication budget first. A paused budget still has the
+        // password compared, and refuses it whatever the result, with the answer a wrong one gets.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
-            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
+            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt) ||
+            !admitted)
         {
-            return output.WithError(TwoFactorMessages.PasswordMismatch);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // UC-36 step 2: create a pending row, or reuse the existing not-yet-confirmed one (AF-36d).
         var twoFactorAuth = existing;

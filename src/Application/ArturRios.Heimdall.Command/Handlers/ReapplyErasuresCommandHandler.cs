@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -41,7 +42,8 @@ public class ReapplyErasuresCommandHandler(
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
-    IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter)
+    IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>
 {
     public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command, CancellationToken cancellationToken = default)
@@ -84,6 +86,10 @@ public class ReapplyErasuresCommandHandler(
             person.DeletionKind = (int)DeletionKinds.SubjectRequested;
 
             IdentityAnonymiser.Anonymise(person, now);
+
+            // The factor budgets, as the scheduled pass clears them: by their own targeted writes.
+            await atomicWrites.ClearSecondFactorAttemptsAsync(person);
+            await atomicWrites.ClearReauthenticationAttemptsAsync(person);
 
             // Nothing blocks it any more; it is done — as the scheduled pass leaves it.
             person.ErasureBlockedReason = null;

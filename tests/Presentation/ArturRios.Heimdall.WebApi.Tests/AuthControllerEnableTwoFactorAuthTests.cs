@@ -298,7 +298,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Null(await ConfigurationForAsync(person));
     }
 
@@ -316,7 +316,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Null(await ConfigurationForAsync(person));
     }
 

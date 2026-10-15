@@ -230,7 +230,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var replay = await RegenerateAsync(recoveryCode: recoveryCode);
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, replay.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, replay.Body!.Errors);
     }
 
     [FunctionalFact]
@@ -286,7 +286,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Single(await RecoveryCodesForAsync(twoFactorAuth.Id));
     }
 
@@ -305,7 +305,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Single(await RecoveryCodesForAsync(twoFactorAuth.Id));
     }
 

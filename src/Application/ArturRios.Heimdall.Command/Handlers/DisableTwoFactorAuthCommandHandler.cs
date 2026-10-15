@@ -22,15 +22,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     email codes.
 /// </summary>
 /// <remarks>
-///     Unlike UC-38, where a wrong code and a reused recovery code are made deliberately
-///     indistinguishable from one another, UC-39 keeps the password check (AF-39b) and the second
-///     factor check (AF-39c) as two separate alternative flows, each answering its own 401 — the
-///     Use Case Specification Document lists them as distinct conditions rather than collapsing them
-///     the way AF-38b/AF-38c are collapsed, so this handler follows that distinction rather than
-///     inventing a shared message the spec does not define. Both still answer with the same 401
-///     status code, and neither discloses more than "one of these two things was wrong" — a caller
-///     who gets AF-39b already knows their password is wrong (they typed it), and AF-39c does not
-///     name which factor was expected.
+///     AF-39b (wrong password) and AF-39c (wrong second factor) answer identically —
+///     <c>AuthMessages.PasswordOrCodeIncorrect</c>, 401 — so the answer never says which of the two
+///     was wrong. Both checks are charged, together, to the account's re-authentication budget
+///     (<see cref="ReauthenticationBudget" />, FR-AU-13), and a paused budget is refused the same way,
+///     after the same checks, so it does not show either.
 /// </remarks>
 public class DisableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -61,21 +57,27 @@ public class DisableTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.NotActive);
         }
 
+        // FR-AU-13: one charge for the request, before either credential is compared. A paused
+        // budget still has both compared, as far as they get, and refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         // UC-39 step 2 (AF-39b): the same check LoginCommandHandler makes.
         if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
         {
-            return output.WithError(TwoFactorMessages.PasswordMismatch);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
-        // UC-39 step 3 (AF-39c): the same second-factor check UC-38 makes. The matched row (if any)
-        // never needs marking used here — the whole configuration, recovery codes included, is about
-        // to be removed regardless of which factor matched.
+        // UC-39 step 3 (AF-39c): the same second-factor check UC-38 makes, answered as AF-39b is. The
+        // matched row (if any) never needs marking used here — the whole configuration, recovery
+        // codes included, is about to be removed regardless of which factor matched.
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
-        if (!verification.Matched)
+        if (!verification.Matched || !admitted)
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // FR-AU-11: removing a credential revokes every token issued while it stood, the caller's own
         // included, so the account's sessions after this point are only ones signed in without it.

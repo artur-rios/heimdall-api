@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -26,7 +27,8 @@ public class ReapplyErasuresCommandHandlerTests
         new(persons, persons, googleUsers, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
-            twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>());
+            twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),
+            InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons, DateTime? anonymisedAt = null)
@@ -183,5 +185,28 @@ public class ReapplyErasuresCommandHandlerTests
         Assert.Equal(1, output.Data.AlreadyAnonymised);
         Assert.Equal(missing, Assert.Single(output.Data.NotFound));
         Assert.NotEqual("1", googleUser.GoogleId);
+    }
+
+    [UnitFact]
+    public async Task GivenARestoredIdentityWithFactorBudgetsSpent_WhenReapplying_ThenTheCountersAreCleared()
+    {
+        var (persons, googleUsers) = Fakes();
+        var person = await SeedPersonAsync(persons);
+        person.FailedSecondFactorAttempts = 4;
+        person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddHours(1);
+        person.SecondFactorLockouts = 2;
+        person.FailedReauthenticationAttempts = 3;
+        person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-5);
+        person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(5);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Equal(0, person.FailedSecondFactorAttempts);
+        Assert.Null(person.SecondFactorLockedOutUntil);
+        Assert.Equal(0, person.SecondFactorLockouts);
+        Assert.Equal(0, person.FailedReauthenticationAttempts);
+        Assert.Null(person.ReauthenticationWindowStartedAt);
+        Assert.Null(person.ReauthenticationPausedUntil);
     }
 }

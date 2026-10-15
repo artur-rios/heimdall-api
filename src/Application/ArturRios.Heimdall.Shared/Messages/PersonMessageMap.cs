@@ -40,11 +40,10 @@ public static class PersonMessageMap
             // UC-08 — caller may not update the person; AF-08c for the role-change case.
             [PersonMessages.NotAuthorizedToUpdatePerson] = HttpStatusCodes.Forbidden,
             [PersonMessages.RoleChangeRequiresSystemAdmin] = HttpStatusCodes.Forbidden,
-            // AF-08h / AF-08i (FR-PE-14) — an own email change without the current password, or without
-            // the second factor when it is active. UC-39's own refusals (AF-39b, AF-39c), and UC-39's
-            // status for them.
-            [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized,
-            [TwoFactorMessages.FactorInvalid] = HttpStatusCodes.Unauthorized,
+            // AF-08h / AF-08i (FR-PE-14, FR-AU-13) — an own email change without the current password,
+            // or without the second factor when it is active, or while the re-authentication budget is
+            // paused. UC-39's one refusal, and UC-39's status for it.
+            [AuthMessages.PasswordOrCodeIncorrect] = HttpStatusCodes.Unauthorized,
             // UC-08 — the transition needs a scope the request does not carry, or the role is unknown.
             [PersonMessages.UnsupportedRoleTransition] = HttpStatusCodes.BadRequest,
             [PersonMessages.UnknownRole] = HttpStatusCodes.BadRequest,

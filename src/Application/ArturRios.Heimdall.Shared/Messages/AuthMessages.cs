@@ -46,6 +46,15 @@ public static class AuthMessages
     /// </summary>
     public const string InvalidCredentials = "Invalid credentials.";
 
+    /// <summary>
+    ///     FR-AU-13: a re-authentication under a bearer token was refused — enabling, confirming or
+    ///     disabling two-factor authentication, regenerating recovery codes, changing one's own email,
+    ///     or a person requesting erasure. Deliberately one message, and one status, for a wrong or
+    ///     missing password, a wrong, missing or already-used code, and a paused budget, so the answer
+    ///     says neither which of the two credentials was wrong nor whether any was compared at all.
+    /// </summary>
+    public const string PasswordOrCodeIncorrect = "The password or code is incorrect.";
+
     /// <summary>AF-11f: email was not supplied.</summary>
     public const string EmailRequired = "Email is required.";
 

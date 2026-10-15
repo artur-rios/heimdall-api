@@ -111,6 +111,51 @@ public class Person : Entity<long>
     public DateTime? LockedOutUntil { get; set; }
 
     /// <summary>
+    ///     Failed second-factor verifications at sign-in (UC-38) since the last successful one,
+    ///     whatever challenge each was made against (FR-AU-12). A correct password does not reset it;
+    ///     only a second factor that checks out does.
+    /// </summary>
+    /// <remarks>
+    ///     This and the two columns after it are written only through <c>IAtomicWrites</c>, never by
+    ///     a whole-row save: the mapping ignores them after insert, so a save of a copy read before a
+    ///     failure was counted cannot write the count back down. The same holds for the three
+    ///     re-authentication columns below.
+    /// </remarks>
+    public int FailedSecondFactorAttempts { get; set; }
+
+    /// <summary>
+    ///     When set and still in the future, every second factor presented at sign-in is refused,
+    ///     right or wrong, with UC-38's ordinary refusal (FR-AU-12).
+    /// </summary>
+    public DateTime? SecondFactorLockedOutUntil { get; set; }
+
+    /// <summary>
+    ///     How many second-factor lockouts the account has had since its last successful second
+    ///     factor. Each lockout lasts twice as long as the one before it, up to a cap (FR-AU-12).
+    /// </summary>
+    public int SecondFactorLockouts { get; set; }
+
+    /// <summary>
+    ///     Failed re-authentications — a password or a second factor checked under a bearer token, such
+    ///     as disabling two-factor authentication or changing one's own email — in the window that
+    ///     began at <see cref="ReauthenticationWindowStartedAt" /> (FR-AU-13). Kept apart from
+    ///     <see cref="FailedLoginAttempts" />, so a stolen token cannot lock its owner out of signing in.
+    /// </summary>
+    public int FailedReauthenticationAttempts { get; set; }
+
+    /// <summary>
+    ///     When the first of the failures in <see cref="FailedReauthenticationAttempts" /> was counted, or
+    ///     <c>null</c> when none is. A failure after the window has run out starts a new one.
+    /// </summary>
+    public DateTime? ReauthenticationWindowStartedAt { get; set; }
+
+    /// <summary>
+    ///     When set and still in the future, every re-authentication is refused, right or wrong, with
+    ///     the same answer a wrong password or code gets (FR-AU-13).
+    /// </summary>
+    public DateTime? ReauthenticationPausedUntil { get; set; }
+
+    /// <summary>
     ///     A random value every token issued to this person carries, and must still carry when it is
     ///     presented (FR-AU-11). Replaced whenever a credential changes — the password, the email, or
     ///     the second factor — which revokes every token issued before the change.

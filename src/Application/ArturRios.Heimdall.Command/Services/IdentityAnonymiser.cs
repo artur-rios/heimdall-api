@@ -66,6 +66,8 @@ public static class IdentityAnonymiser
 
         // Behavioural data: how often this person mistyped their password, and whether they were
         // locked out, describes them as surely as their name does.
+        // The factor budgets (FR-AU-12, FR-AU-13) are behavioural data of the same kind, but only
+        // targeted writes reach their columns, so the callers clear them through IAtomicWrites.
         person.FailedLoginAttempts = 0;
         person.LockedOutUntil = null;
 

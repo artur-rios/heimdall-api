@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/2fa/confirm (UC-37, FR-2F-04/05): the main flow for each
 // method combination, AF-37a (404, no pending setup, including a token naming no eligible person),
-// AF-37b (400, appCode missing/incorrect), AF-37c (400, emailCode missing/incorrect/expired/used),
+// AF-37b (401, appCode missing/incorrect), AF-37c (401, emailCode missing/incorrect/expired/used),
 // AF-37d (409, already active), and the 401 an unauthenticated caller gets.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
@@ -221,7 +221,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     }
 
     [FunctionalFact]
-    public async Task GivenAppEnabledAndMissingAppCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenAppEnabledAndMissingAppCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37b
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -232,14 +232,14 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync();
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.AppCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         var stored = await ConfigurationForAsync(person);
         Assert.False(stored!.IsActive);
     }
 
     [FunctionalFact]
-    public async Task GivenAppEnabledAndIncorrectAppCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenAppEnabledAndIncorrectAppCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37b, enabled for real so the TOTP secret is genuinely encrypted
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -250,12 +250,12 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync("000000");
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.AppCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
     }
 
     [FunctionalFact]
-    public async Task GivenEmailEnabledAndMissingEmailCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenEmailEnabledAndMissingEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -267,14 +267,14 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync();
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         var stored = await ConfigurationForAsync(person);
         Assert.False(stored!.IsActive);
     }
 
     [FunctionalFact]
-    public async Task GivenEmailEnabledAndIncorrectEmailCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenEmailEnabledAndIncorrectEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -286,12 +286,12 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync(emailCode: "654321");
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
     }
 
     [FunctionalFact]
-    public async Task GivenEmailEnabledAndExpiredEmailCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenEmailEnabledAndExpiredEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -303,12 +303,12 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync(emailCode: EmailCode);
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
     }
 
     [FunctionalFact]
-    public async Task GivenEmailEnabledAndAlreadyUsedEmailCode_WhenPostConfirm2fa_ThenBadRequest()
+    public async Task GivenEmailEnabledAndAlreadyUsedEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
@@ -320,8 +320,8 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         var response = await ConfirmAsync(emailCode: EmailCode);
 
         // Then
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.EmailCodeInvalid, response.Body!.Errors);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
     }
 
     [FunctionalFact]

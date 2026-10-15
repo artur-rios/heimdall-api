@@ -44,6 +44,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         and further guessing costs a fresh password check. An email-only configuration's guesses
 ///         are not charged here: the email code's own cap already bounds them.
 ///     </para>
+///     <para>
+///         <b>Ten failures per account</b> (FR-AU-12, <see cref="SecondFactorLockout" />). The
+///         challenge's budgets start afresh with every login, and a login costs nothing to whoever
+///         holds the password, so every guess — app code, email code or recovery code — is also
+///         charged to the account, across challenges. A correct password does not reset that count;
+///         only a second factor that checks out does. The tenth failure locks the second factor, for
+///         fifteen minutes and twice as long at each repeat, up to a day, and while it is locked every
+///         factor is refused as AF-38b, the right one included.
+///     </para>
 /// </remarks>
 public class VerifyTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -115,11 +124,20 @@ public class VerifyTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.ChallengeTokenInvalid);
         }
 
+        // FR-AU-12: every guess is charged to the account as well, whatever challenge it is made
+        // against, and a locked second factor accepts nothing. After the challenge's own charge, so
+        // the challenge's five still run out and retire it while the account is locked, exactly as
+        // they would otherwise.
+        var now = DateTime.UtcNow;
+        var admitted = await atomicWrites.TryReserveSecondFactorAttemptAsync(
+            person, SecondFactorLockout.MaxFailedAttempts, now, SecondFactorLockout.LockoutEndsFrom(now));
+
         // AF-38b/AF-38c: an app code, a live email code, or an unused recovery code — or the same
-        // rejection either way.
+        // rejection either way. A locked account's factor is verified too and the result discarded,
+        // so the refusal costs and reads as a wrong code's, and the lock does not show.
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
-        if (!verification.Matched)
+        if (!admitted || !verification.Matched)
         {
             if (chargedToChallenge)
             {
@@ -128,6 +146,10 @@ public class VerifyTwoFactorAuthCommandHandler(
 
             return output.WithError(TwoFactorMessages.FactorInvalid);
         }
+
+        // FR-AU-12: a second factor checked out, which is the only thing that resets the account's
+        // count — and with it the lock, and the lockout count that sets how long the next one lasts.
+        await atomicWrites.ClearSecondFactorAttemptsAsync(person);
 
         // UC-11 step 6 / UC-38 step 5 (FR-2F-09): the same scope-eligibility rules a direct login
         // enforces still apply to a 2FA-gated one. The factor already checked out, so this is a

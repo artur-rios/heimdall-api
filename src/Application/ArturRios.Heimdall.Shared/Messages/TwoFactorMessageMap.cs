@@ -23,10 +23,11 @@ public static class TwoFactorMessageMap
             [TwoFactorMessages.SetupConfirmed] = HttpStatusCodes.Ok,
             // AF-37a — no pending setup exists for the caller.
             [TwoFactorMessages.NoPendingSetup] = HttpStatusCodes.NotFound,
-            // AF-37b — appCode missing or incorrect.
-            [TwoFactorMessages.AppCodeInvalid] = HttpStatusCodes.BadRequest,
-            // AF-37c — emailCode missing, incorrect, expired, or already used.
-            [TwoFactorMessages.EmailCodeInvalid] = HttpStatusCodes.BadRequest,
+            // AF-36e, AF-37b, AF-37c, AF-39b, AF-39c and AF-40b (FR-AU-13) — a password or code checked
+            // under a bearer token was wrong, missing or already used, or the account's
+            // re-authentication budget is paused: one message, and the status the password refusal
+            // has always had.
+            [AuthMessages.PasswordOrCodeIncorrect] = HttpStatusCodes.Unauthorized,
             // UC-38 main flow — challenge redeemed, full token issued.
             [TwoFactorMessages.VerificationSuccessful] = HttpStatusCodes.Ok,
             // UC-38 for a restricted person (NFR-24) — a subject-rights-only token.
@@ -37,17 +38,14 @@ public static class TwoFactorMessageMap
             [TwoFactorMessages.ChallengeCodeResent] = HttpStatusCodes.Ok,
             // UC-38 step 5 — the second factor checked out but scope eligibility no longer holds.
             [TwoFactorMessages.ScopeNoLongerEligible] = HttpStatusCodes.Unauthorized,
-            // AF-38b and AF-38c — collapsed to the same 401 so a wrong code and a reused recovery code
-            // cannot be told apart. Also UC-39's AF-39c (the second factor submitted to disable was
-            // invalid) and UC-40's AF-40b (the second factor submitted to regenerate was invalid).
+            // AF-38b and AF-38c — collapsed to the same 401 so a wrong code, a reused recovery code and
+            // a locked second factor (FR-AU-12) cannot be told apart.
             [TwoFactorMessages.FactorInvalid] = HttpStatusCodes.Unauthorized,
             // UC-39 main flow — the configuration and its recovery codes were removed.
             [TwoFactorMessages.Disabled] = HttpStatusCodes.Ok,
             // AF-39a — two-factor authentication is not active for the caller. Also UC-40's AF-40a: the
             // same "not active" refusal, reused rather than duplicated.
             [TwoFactorMessages.NotActive] = HttpStatusCodes.NotFound,
-            // AF-39b — the submitted password did not match.
-            [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized,
             // UC-40 main flow — every existing recovery code was replaced with ten new ones.
             [TwoFactorMessages.RecoveryCodesRegenerated] = HttpStatusCodes.Ok,
             // FR-2F-15 main flow — status read, including the all-false "never enabled" state.

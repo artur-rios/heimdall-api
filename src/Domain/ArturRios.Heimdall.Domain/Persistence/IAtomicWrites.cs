@@ -18,8 +18,9 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         database applies the two together.
 ///     </para>
 ///     <para>
-///         <b>Charge first, then check.</b> Every budget here — login attempts (FR-AU-09), guesses at
-///         an email code (FR-2F-13) or at a challenge, guesses at the password of a pending
+///         <b>Charge first, then check.</b> Every budget here — login attempts (FR-AU-09), second
+///         factors at sign-in (FR-AU-12), re-authentications under a bearer token (FR-AU-13), guesses
+///         at an email code (FR-2F-13) or at a challenge, guesses at the password of a pending
 ///         registration (FR-SR-09), reissues of a challenge's code (FR-2F-16) — is reserved before the
 ///         expensive or secret comparison runs, not counted after it fails.
 ///         Counting afterwards let a burst of parallel guesses all pass the "under the cap" check
@@ -72,6 +73,65 @@ public interface IAtomicWrites
 
     /// <summary>FR-AU-09: after a correct password, clears the counter and any lockout.</summary>
     Task ClearLoginAttemptsAsync(Person person);
+
+    /// <summary>
+    ///     FR-AU-12: reserves one second-factor verification at sign-in — increments the account's
+    ///     second-factor failure counter, but only while the second factor is not locked out at
+    ///     <paramref name="now" /> and the counter is below <paramref name="maxAttempts" />.
+    ///     <c>false</c> means the second factor is locked and no factor may be accepted.
+    /// </summary>
+    /// <param name="person">The account the verification is charged to.</param>
+    /// <param name="maxAttempts">The failures that lock the second factor.</param>
+    /// <param name="now">The time the lock is compared against.</param>
+    /// <param name="lockedOutUntil">
+    ///     When each lock ends, by how many the account has had before it: the first entry for the
+    ///     first lock, the second for the next, and the last for every lock from then on. Must not
+    ///     be empty.
+    /// </param>
+    /// <remarks>
+    ///     As <see cref="TryReserveLoginAttemptAsync" /> does, the reservation that brings the counter
+    ///     to <paramref name="maxAttempts" /> locks in the same write — choosing the end by the
+    ///     stored lockout count, which it then increments — and resets the counter, so the lock does
+    ///     not depend on the caller surviving to compare the factor. A row at or past the limit with
+    ///     no lock is admitted and locked the same way.
+    /// </remarks>
+    Task<bool> TryReserveSecondFactorAttemptAsync(
+        Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil);
+
+    /// <summary>
+    ///     FR-AU-12: after a second factor checks out at sign-in, clears the failure counter, any lock,
+    ///     and the lockout count that sets how long the next lock lasts. Also how anonymisation clears
+    ///     them (NFR-20).
+    /// </summary>
+    Task ClearSecondFactorAttemptsAsync(Person person);
+
+    /// <summary>
+    ///     FR-AU-13: reserves one re-authentication — a password or a factor checked under a bearer
+    ///     token — while the account's re-authentication is not paused at <paramref name="now" />.
+    ///     <c>false</c> means it is paused and no credential may be accepted.
+    /// </summary>
+    /// <param name="person">The account the re-authentication is charged to.</param>
+    /// <param name="maxFailures">The failures within one window that pause re-authentication.</param>
+    /// <param name="now">The time the pause is compared against, and a new window starts at.</param>
+    /// <param name="windowStartedBy">
+    ///     The earliest a window may have started and still be open; one that started at or before
+    ///     it has run out, and the reservation starts a new one.
+    /// </param>
+    /// <param name="pausedUntil">When the pause the reservation may set ends.</param>
+    /// <remarks>
+    ///     The reservation counts as a failure until <see cref="ClearReauthenticationAttemptsAsync" />
+    ///     says otherwise. The one that brings the window's count to <paramref name="maxFailures" />
+    ///     pauses re-authentication until <paramref name="pausedUntil" /> and closes the window, in the
+    ///     same write. Nothing here touches the login lockout or the second-factor budget.
+    /// </remarks>
+    Task<bool> TryReserveReauthenticationAsync(
+        Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil);
+
+    /// <summary>
+    ///     FR-AU-13: after a re-authentication succeeds, clears the window's count and any pause. Also
+    ///     how anonymisation clears them (NFR-20).
+    /// </summary>
+    Task ClearReauthenticationAttemptsAsync(Person person);
 
     /// <summary>
     ///     FR-2F-10: makes <paramref name="challengeId" /> the configuration's one outstanding

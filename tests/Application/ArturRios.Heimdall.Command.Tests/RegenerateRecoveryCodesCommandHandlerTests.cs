@@ -272,7 +272,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenWrongAppCode_WhenHandlingRegenerate_ThenReturnsFactorInvalidErrorAndOldCodesSurvive()
+    public async Task GivenWrongAppCode_WhenHandlingRegenerate_ThenReturnsTheSharedRefusalAndOldCodesSurvive()
     {
         // Given — AF-40b
         var fixture = await FixtureAsync();
@@ -285,12 +285,12 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
     }
 
     [UnitFact]
-    public async Task GivenAlreadyUsedRecoveryCode_WhenHandlingRegenerate_ThenReturnsFactorInvalidError()
+    public async Task GivenAlreadyUsedRecoveryCode_WhenHandlingRegenerate_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-40b's recovery-code shape
         var fixture = await FixtureAsync();
@@ -303,12 +303,12 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
     }
 
     [UnitFact]
-    public async Task GivenNoCodeOrRecoveryCode_WhenHandlingRegenerate_ThenReturnsFactorInvalidError()
+    public async Task GivenNoCodeOrRecoveryCode_WhenHandlingRegenerate_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-40b: neither a code nor a recovery code submitted
         var fixture = await FixtureAsync();
@@ -319,7 +319,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     // FR-AU-11: replacing the recovery codes revokes every token issued before it.
@@ -354,5 +354,43 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAPausedBudget_WhenTheRightCodeIsPresented_ThenRefusedAndTheOldCodesSurvive()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        await SeedRecoveryCodeAsync(fixture, twoFactorAuth.Id, "KEEP-CODE");
+        fixture.Person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(10);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenFiveWrongCodes_WhenCounted_ThenReauthenticationPausesAndTheSignInBudgetsAreUntouched()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        for (var attempt = 0; attempt < ReauthenticationBudget.MaxFailures; attempt++)
+        {
+            await fixture.Handler().HandleAsync(fixture.Command(code: "000000"));
+        }
+
+        // Then
+        Assert.NotNull(fixture.Person.ReauthenticationPausedUntil);
+        Assert.Equal(0, fixture.Person.FailedSecondFactorAttempts);
+        Assert.Equal(0, fixture.Person.FailedLoginAttempts);
     }
 }

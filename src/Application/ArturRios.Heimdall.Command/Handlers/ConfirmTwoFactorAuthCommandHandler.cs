@@ -42,6 +42,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         endpoint has been presented, whatever the rest of the request went on to do.
 ///     </para>
 ///     <para>
+///         <b>One refusal, one budget.</b> A missing or wrong code for either method answers the one
+///         re-authentication refusal (<c>AuthMessages.PasswordOrCodeIncorrect</c>, 401), and every
+///         confirmation is charged to the account's re-authentication budget
+///         (<see cref="ReauthenticationBudget" />, FR-AU-13), so a bearer token alone cannot guess
+///         the pending factor's codes without bound, nor learn which of the two codes was wrong.
+///     </para>
+///     <para>
 ///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
 ///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
 ///         <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten separate inserts. The
@@ -83,7 +90,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
             ? null
             : await twoFactorReader.Query().FirstOrDefaultAsync(x => x.PersonId == person.Id);
 
-        if (twoFactorAuth is null)
+        if (person is null || twoFactorAuth is null)
         {
             return output.WithError(TwoFactorMessages.NoPendingSetup);
         }
@@ -94,12 +101,17 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.AlreadyActive);
         }
 
+        // FR-AU-13: the codes are a re-authentication like any other made under a bearer token, so
+        // the check is charged to the account's budget before anything is compared. A paused budget
+        // still has the codes compared, and refuses them whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
         // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
         // ITwoFactorFactorVerifier.
         if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
         {
-            return output.WithError(TwoFactorMessages.AppCodeInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         // AF-37c: the Email method's code, if the method was selected.
@@ -109,20 +121,34 @@ public class ConfirmTwoFactorAuthCommandHandler(
         {
             consumedEmailCode = await FindMatchingEmailCodeAsync(twoFactorAuth.Id, command.EmailCode);
 
-            // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write
-            // only one request can win, so two confirmations racing on the same code cannot both
-            // issue a set of recovery codes and activate.
-            if (consumedEmailCode is null || !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+            if (consumedEmailCode is null)
             {
-                return output.WithError(TwoFactorMessages.EmailCodeInvalid);
+                return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
             }
         }
+
+        // Only now is the pause decided, so that it answers as a wrong code does, and before the
+        // email code is spent, so a paused request leaves it for the account holder.
+        if (!admitted)
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
+        // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write only
+        // one request can win, so two confirmations racing on the same code cannot both issue a set
+        // of recovery codes and activate.
+        if (consumedEmailCode is not null && !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // FR-AU-11: every token issued before the second factor was required is revoked — including
         // the one confirming it, so the caller signs in again, this time through UC-38. A token that
         // predates the factor proves only the password, which is what the factor guards against.
         // Before the writes that activate it, so a failure among them costs one extra sign-in at most.
-        await atomicWrites.RotateSecurityStampAsync(person!);
+        await atomicWrites.RotateSecurityStampAsync(person);
 
         // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once —
         // written before the activation below, per the write-order note in the remarks.

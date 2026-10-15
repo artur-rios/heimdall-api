@@ -60,6 +60,74 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         return Task.CompletedTask;
     }
 
+    public Task<bool> TryReserveSecondFactorAttemptAsync(
+        Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil)
+    {
+        var stuck = person.FailedSecondFactorAttempts >= maxAttempts && person.SecondFactorLockedOutUntil is null;
+
+        if (!stuck && (person.FailedSecondFactorAttempts >= maxAttempts || person.SecondFactorLockedOutUntil > now))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (person.FailedSecondFactorAttempts + 1 >= maxAttempts)
+        {
+            person.SecondFactorLockedOutUntil = lockedOutUntil[Math.Min(person.SecondFactorLockouts, lockedOutUntil.Count - 1)];
+            person.SecondFactorLockouts++;
+            person.FailedSecondFactorAttempts = 0;
+        }
+        else
+        {
+            person.FailedSecondFactorAttempts++;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task ClearSecondFactorAttemptsAsync(Person person)
+    {
+        person.FailedSecondFactorAttempts = 0;
+        person.SecondFactorLockedOutUntil = null;
+        person.SecondFactorLockouts = 0;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TryReserveReauthenticationAsync(
+        Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil)
+    {
+        if (person.ReauthenticationPausedUntil > now)
+        {
+            return Task.FromResult(false);
+        }
+
+        var windowOpen = person.ReauthenticationWindowStartedAt > windowStartedBy;
+        var failures = windowOpen ? person.FailedReauthenticationAttempts + 1 : 1;
+
+        if (failures >= maxFailures)
+        {
+            person.ReauthenticationPausedUntil = pausedUntil;
+            person.FailedReauthenticationAttempts = 0;
+            person.ReauthenticationWindowStartedAt = null;
+        }
+        else
+        {
+            person.FailedReauthenticationAttempts = failures;
+            person.ReauthenticationWindowStartedAt = windowOpen ? person.ReauthenticationWindowStartedAt : now;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task ClearReauthenticationAttemptsAsync(Person person)
+    {
+        person.FailedReauthenticationAttempts = 0;
+        person.ReauthenticationWindowStartedAt = null;
+        person.ReauthenticationPausedUntil = null;
+
+        return Task.CompletedTask;
+    }
+
     public Task StartChallengeAsync(TwoFactorAuth configuration, Guid challengeId)
     {
         configuration.ChallengeId = challengeId;

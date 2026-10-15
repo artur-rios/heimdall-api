@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -50,7 +51,8 @@ public class EnableTwoFactorAuthCommandHandlerTests
                 // assertions about what lands in EmailCodes — and about the address the code went
                 // to — keep testing the behaviour rather than the call.
                 new TwoFactorEmailCodeIssuer(EmailCodes, EmailCodes, EmailSender.Object),
-                Protector.Object);
+                Protector.Object,
+                InMemoryAtomicWrites.Instance);
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {
@@ -362,7 +364,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Empty(fixture.TwoFactorAuths.Query().ToList());
     }
 
@@ -379,7 +381,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Empty(fixture.TwoFactorAuths.Query().ToList());
         Assert.Empty(fixture.EmailCodes.Query().ToList());
     }
@@ -397,5 +399,80 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.Contains(TwoFactorMessages.SetupInitiated, output.Messages);
         Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAPausedBudget_WhenTheRightPasswordIsPresented_ThenRefusedAndNothingIsCreated()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        fixture.Person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(10);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App", "Email"));
+
+        // Then — the same answer a wrong password gets
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Empty(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Empty(fixture.EmailCodes.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenFourFailuresInAnOpenWindow_WhenAnotherPasswordIsWrong_ThenReauthenticationPausesForFifteenMinutes()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        fixture.Person.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
+        fixture.Person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-14);
+        var command = fixture.Command("App");
+        command.CurrentPassword = "not-the-password";
+        var before = DateTime.UtcNow;
+
+        // When
+        await fixture.Handler().HandleAsync(command);
+
+        // Then
+        Assert.InRange(fixture.Person.ReauthenticationPausedUntil!.Value,
+            before.AddMinutes(15), DateTime.UtcNow.AddMinutes(15));
+        Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
+        Assert.Null(fixture.Person.ReauthenticationWindowStartedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenFourFailuresInAWindowThatHasRunOut_WhenAnotherPasswordIsWrong_ThenANewWindowStarts()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        fixture.Person.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
+        fixture.Person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-16);
+        var command = fixture.Command("App");
+        command.CurrentPassword = "not-the-password";
+        var before = DateTime.UtcNow;
+
+        // When
+        await fixture.Handler().HandleAsync(command);
+
+        // Then
+        Assert.Null(fixture.Person.ReauthenticationPausedUntil);
+        Assert.Equal(1, fixture.Person.FailedReauthenticationAttempts);
+        Assert.InRange(fixture.Person.ReauthenticationWindowStartedAt!.Value, before, DateTime.UtcNow);
+    }
+
+    [UnitFact]
+    public async Task GivenAPauseThatHasRunOut_WhenTheRightPasswordIsPresented_ThenSetupIsInitiatedAndThePauseIsCleared()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        fixture.Person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(-1);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Null(fixture.Person.ReauthenticationPausedUntil);
+        Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
     }
 }

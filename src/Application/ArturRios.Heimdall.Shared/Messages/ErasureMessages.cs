@@ -18,7 +18,9 @@ public static class ErasureMessages
         "Erasure requested. It cannot be completed yet and an administrator has been notified.";
 
     /// <summary>
-    ///     AF-42a: the credential presented alongside the request was not accepted.
+    ///     AF-42a: the Google ID token a Google User presented alongside the request was not
+    ///     accepted. A person's password is refused with
+    ///     <c>AuthMessages.PasswordOrCodeIncorrect</c>, which every re-authentication shares (FR-AU-13).
     /// </summary>
     /// <remarks>
     ///     Erasure is irreversible, so a valid session alone is not enough to trigger it — a token

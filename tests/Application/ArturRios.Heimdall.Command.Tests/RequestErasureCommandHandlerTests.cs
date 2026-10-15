@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -44,7 +45,7 @@ public class RequestErasureCommandHandlerTests
         GoogleIdTokenPayload? payload = null) =>
         new(new RequestErasureCommandValidator(),
             persons, persons, googleUsers, googleUsers,
-            Verifier(payload), Retention());
+            Verifier(payload), Retention(), InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons,
@@ -132,7 +133,7 @@ public class RequestErasureCommandHandlerTests
             .HandleAsync(Command(person.PublicId, password: WrongPassword));
 
         Assert.False(output.Success);
-        Assert.Contains(ErasureMessages.CredentialNotAccepted, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.False(person.IsDeleted);
         Assert.Null(person.ErasureRequestedAt);
     }
@@ -468,5 +469,38 @@ public class RequestErasureCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(ErasureMessages.CredentialNotAccepted, output.Errors);
         Assert.False(googleUser.IsDeleted);
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAPausedBudget_WhenAPersonPresentsTheRightPassword_ThenNothingIsRecorded()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(10);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.False(person.IsDeleted);
+        Assert.Null(person.ErasureRequestedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenFiveWrongPasswords_WhenCounted_ThenReauthenticationPauses()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+
+        for (var attempt = 0; attempt < ReauthenticationBudget.MaxFailures; attempt++)
+        {
+            await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId, password: WrongPassword));
+        }
+
+        Assert.NotNull(person.ReauthenticationPausedUntil);
+        Assert.Equal(0, person.FailedLoginAttempts);
     }
 }

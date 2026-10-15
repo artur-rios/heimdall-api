@@ -27,7 +27,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         identity, because recovery follows the address, and a bearer token is not proof that the
 ///         account holder is present. So a caller changing their own address presents their
 ///         current password, and their second factor when it is active (FR-PE-14), checked as UC-39
-///         checks them and answered with UC-39's refusals (AF-08h, AF-08i). Both are checked before
+///         checks them, charged to the same re-authentication budget, and answered with UC-39's one
+///         refusal (AF-08h, AF-08i). Both are checked before
 ///         anything that depends on the new address, so a caller without them cannot even learn
 ///         whether it is taken. An administrator changing someone else's address presents nothing of
 ///         theirs: the administrator's own authorisation covers it, as it always has.
@@ -248,9 +249,9 @@ public class UpdatePersonCommandHandler(
     ///     FR-PE-14: the current password, through <see cref="PasswordHashGate" /> as every password
     ///     check is (Threat Model TH-03), then — when the person's two-factor authentication is
     ///     active — a current second factor, through the same <see cref="ITwoFactorFactorVerifier" />
-    ///     UC-38, UC-39 and UC-40 use. The refusals are UC-39's own (AF-39b, AF-39c), and like them
-    ///     count nothing against the account: the rate limit on the endpoint and the hash gate bound
-    ///     the guessing, as they do for UC-39 and UC-42.
+    ///     UC-38, UC-39 and UC-40 use. Charged, once, to the account's re-authentication budget
+    ///     (<see cref="ReauthenticationBudget" />, FR-AU-13), and refused as UC-39 refuses: one
+    ///     message for a wrong password, a wrong factor and a paused budget alike.
     /// </summary>
     /// <remarks>
     ///     One field carries the second factor, so its shape decides how it is checked: six digits are
@@ -259,31 +260,45 @@ public class UpdatePersonCommandHandler(
     /// </remarks>
     private async Task<Reauthentication> ReauthenticateAsync(UpdatePersonCommand command, Person person)
     {
+        // FR-AU-13: charged before anything is compared. A paused budget still has the credentials
+        // compared, and refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         // AF-08h: missing or wrong alike.
         if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
             !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
         {
-            return Reauthentication.Refused(TwoFactorMessages.PasswordMismatch);
+            return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         var twoFactorAuth = await twoFactorReader.Query()
             .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
 
-        if (twoFactorAuth is null)
+        TwoFactorFactorVerificationResult? verification = null;
+
+        if (twoFactorAuth is not null)
         {
-            return Reauthentication.NotRequired;
+            var factor = command.TwoFactorCode?.Trim();
+            var isCode = factor is null || (factor.Length == CodeLength && factor.All(char.IsAsciiDigit));
+
+            verification = await factorVerifier.VerifyAsync(
+                twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
+
+            // AF-08i, answered as AF-08h is.
+            if (!verification.Matched)
+            {
+                return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
+            }
         }
 
-        var factor = command.TwoFactorCode?.Trim();
-        var isCode = factor is null || (factor.Length == CodeLength && factor.All(char.IsAsciiDigit));
+        if (!admitted)
+        {
+            return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
+        }
 
-        var verification = await factorVerifier.VerifyAsync(
-            twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
-        // AF-08i.
-        return verification.Matched
-            ? new Reauthentication(null, verification)
-            : Reauthentication.Refused(TwoFactorMessages.FactorInvalid);
+        return new Reauthentication(null, verification);
     }
 
     /// <summary>
@@ -297,13 +312,13 @@ public class UpdatePersonCommandHandler(
         if (verification?.ConsumedEmailCode is { } emailCode &&
             !await atomicWrites.TryConsumeEmailCodeAsync(emailCode))
         {
-            return TwoFactorMessages.FactorInvalid;
+            return AuthMessages.PasswordOrCodeIncorrect;
         }
 
         if (verification?.ConsumedRecoveryCode is { } recoveryCode &&
             !await atomicWrites.TryConsumeRecoveryCodeAsync(recoveryCode, DateTime.UtcNow))
         {
-            return TwoFactorMessages.FactorInvalid;
+            return AuthMessages.PasswordOrCodeIncorrect;
         }
 
         return null;

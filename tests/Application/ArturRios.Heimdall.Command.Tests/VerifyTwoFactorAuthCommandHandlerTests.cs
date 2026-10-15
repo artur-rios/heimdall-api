@@ -714,4 +714,200 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.Equal(fixture.Person.SecurityStamp, fixture.TokenIssuer.RightsOnlyStamp);
     }
+
+    // FR-AU-12: second-factor failures are counted on the account, across challenges
+
+    /// <summary>
+    ///     What a fresh login does to the configuration (FR-2F-10): a new outstanding challenge, with
+    ///     the challenge's own budgets reset. Returns the new challenge.
+    /// </summary>
+    private static async Task<Guid> StartFreshChallengeAsync(TwoFactorAuth twoFactorAuth)
+    {
+        var challengeId = Guid.NewGuid();
+        await InMemoryAtomicWrites.Instance.StartChallengeAsync(twoFactorAuth, challengeId);
+
+        return challengeId;
+    }
+
+    [UnitFact]
+    public async Task GivenTenWrongCodesAcrossTwoChallenges_WhenTheRightOneFollowsOnAThird_ThenItIsRefusedLikeAWrongOne()
+    {
+        // Given two logins' worth of wrong recovery codes — five each, the most a challenge allows
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var recoveryCode = await SeedRecoveryCodeAsync(fixture, twoFactorAuth.Id, "GOOD-CODE");
+
+        for (var login = 0; login < 2; login++)
+        {
+            var challengeId = await StartFreshChallengeAsync(twoFactorAuth);
+
+            for (var attempt = 0; attempt < VerifyTwoFactorAuthCommandHandler.MaxGuessesPerChallenge; attempt++)
+            {
+                await fixture.Handler(null, challengeId).HandleAsync(fixture.Command(recoveryCode: $"BAD-{login}-{attempt}"));
+            }
+        }
+
+        var third = await StartFreshChallengeAsync(twoFactorAuth);
+
+        // When
+        var output = await fixture.Handler(null, third).HandleAsync(fixture.Command(recoveryCode: "GOOD-CODE"));
+
+        // Then the right code is refused exactly as a wrong one is, and nothing is spent
+        Assert.False(output.Success);
+        Assert.Equal([TwoFactorMessages.FactorInvalid], output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.False(recoveryCode.Used);
+        Assert.NotNull(fixture.Person.SecondFactorLockedOutUntil);
+    }
+
+    [UnitFact]
+    public async Task GivenNineFailures_WhenTheTenthIsWrong_ThenTheSecondFactorLocksForFifteenMinutes()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
+        var before = DateTime.UtcNow;
+
+        // When
+        await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.InRange(fixture.Person.SecondFactorLockedOutUntil!.Value,
+            before.AddMinutes(15), DateTime.UtcNow.AddMinutes(15));
+        Assert.Equal(0, fixture.Person.FailedSecondFactorAttempts);
+        Assert.Equal(1, fixture.Person.SecondFactorLockouts);
+    }
+
+    [UnitFact]
+    public async Task GivenTwoEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheLockLastsAnHour()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
+        fixture.Person.SecondFactorLockouts = 2;
+        var before = DateTime.UtcNow;
+
+        // When
+        await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.InRange(fixture.Person.SecondFactorLockedOutUntil!.Value,
+            before.AddHours(1), DateTime.UtcNow.AddHours(1));
+        Assert.Equal(3, fixture.Person.SecondFactorLockouts);
+    }
+
+    [UnitFact]
+    public async Task GivenManyEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheLockStopsAtADay()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
+        fixture.Person.SecondFactorLockouts = 40;
+        var before = DateTime.UtcNow;
+
+        // When
+        await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.InRange(fixture.Person.SecondFactorLockedOutUntil!.Value,
+            before.AddHours(24), DateTime.UtcNow.AddHours(24));
+    }
+
+    [UnitFact]
+    public async Task GivenALockedSecondFactor_WhenTheRightEmailCodeIsPresented_ThenItIsRefusedAndTheCodeStaysLive()
+    {
+        // Given an email-only configuration, which the challenge's own budget does not cover
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+        fixture.Person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(10);
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(code: EmailCode));
+
+        // Then
+        Assert.Equal([TwoFactorMessages.FactorInvalid], output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.False(emailCode.Used);
+        Assert.Equal(twoFactorAuth.ChallengeId, OutstandingChallenge);
+    }
+
+    [UnitFact]
+    public async Task GivenALockedSecondFactor_WhenFourWrongCodesAndThenTheRightOneArrive_ThenAllAreRefusedAndTheChallengeIsRetired()
+    {
+        // Given — a lock that answered differently from an ordinary wrong code, or that left the
+        // challenge standing after its five, would tell the caller that guessing had stopped counting
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(10);
+
+        for (var attempt = 0; attempt < VerifyTwoFactorAuthCommandHandler.MaxGuessesPerChallenge - 1; attempt++)
+        {
+            var wrong = await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+            Assert.Equal([TwoFactorMessages.FactorInvalid], wrong.Errors);
+        }
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.Equal([TwoFactorMessages.FactorInvalid], output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+        Assert.Null(twoFactorAuth.ChallengeId);
+    }
+
+    [UnitFact]
+    public async Task GivenALockThatHasRunOut_WhenTheRightCodeIsPresented_ThenItSucceedsAndTheBudgetIsCleared()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
+        fixture.Person.SecondFactorLockouts = 3;
+        fixture.Person.FailedSecondFactorAttempts = 4;
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(0, fixture.Person.FailedSecondFactorAttempts);
+        Assert.Null(fixture.Person.SecondFactorLockedOutUntil);
+        Assert.Equal(0, fixture.Person.SecondFactorLockouts);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongEmailCode_WhenHandlingVerify_ThenTheAccountsFailureIsCounted()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        // When
+        await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.Equal(1, fixture.Person.FailedSecondFactorAttempts);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongCode_WhenHandlingVerify_ThenTheLoginLockoutIsUntouched()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        await fixture.Handler(null).HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.Equal(1, fixture.Person.FailedSecondFactorAttempts);
+        Assert.Equal(0, fixture.Person.FailedLoginAttempts);
+        Assert.Null(fixture.Person.LockedOutUntil);
+    }
 }
