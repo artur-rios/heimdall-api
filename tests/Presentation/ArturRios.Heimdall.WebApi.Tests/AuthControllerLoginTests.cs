@@ -426,6 +426,75 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     }
 
     [FunctionalFact]
+    public async Task GivenTheHashGateShedsTheTenthAttempt_WhenPostLogin_ThenTheAccountIsLockedAndUnlocksByItself()
+    {
+        // Given nine failures, seeded rather than sent: the nine that matter here are the count, not
+        // nine hashes
+        var email = UniqueEmail("shed-tenth");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using (var seed = db.CreateContext())
+        {
+            await seed.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedLoginAttempts, 9));
+        }
+
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var original = PasswordHashGate.Shared;
+        var saturated = new PasswordHashGate(1, TimeSpan.FromMilliseconds(100));
+
+        PasswordHashGate.Shared = saturated;
+
+        var holder = saturated.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        try
+        {
+            await holding.Task;
+
+            // When the tenth attempt reserves its slot and the gate sheds it
+            var response = await LoginAsync(email);
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+
+            PasswordHashGate.Shared = original;
+        }
+
+        // Then the row is locked for the usual period, with the counter folded into the lock
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+            Assert.NotNull(stored.LockedOutUntil);
+            Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
+            Assert.Equal(0, stored.FailedLoginAttempts);
+        }
+
+        // Then — the correct password is refused while the lock holds
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email)).StatusCode);
+
+        // Then — and once it has expired, the correct password signs in
+        await using (var context = db.CreateContext())
+        {
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.LockedOutUntil, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
     public async Task GivenAnAddressFreedByADeletedAdmin_WhenItsNewHolderLogsIn_ThenTheyAreAuthenticated()
     {
         // FR-PE-09 keeps addresses unique among live persons only, so a deleted admin awaiting

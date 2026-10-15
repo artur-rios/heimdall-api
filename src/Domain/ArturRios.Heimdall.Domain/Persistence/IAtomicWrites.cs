@@ -47,7 +47,15 @@ public interface IAtomicWrites
     ///     account is not locked out at <paramref name="now" /> and the counter is below
     ///     <paramref name="maxAttempts" />. <c>false</c> means no attempt may be made.
     /// </summary>
-    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now);
+    /// <remarks>
+    ///     The attempt that brings the counter to <paramref name="maxAttempts" /> also locks the
+    ///     account until <paramref name="lockedOutUntil" /> and resets the counter, in the same write.
+    ///     The lock therefore does not depend on the caller surviving to compare the password: a
+    ///     request that reserves the last attempt and then fails leaves an ordinary lock that expires
+    ///     on its own. On success the instance's counter and lockout are set to match, from the value
+    ///     this request read, which under concurrent attempts can trail the stored count.
+    /// </remarks>
+    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil);
 
     /// <summary>
     ///     FR-SR-09: reserves one guess at the sign-up password of a pending registration, while it has
@@ -59,12 +67,6 @@ public interface IAtomicWrites
     ///     (to tell whether this was the last guess) must ask the database for it.
     /// </remarks>
     Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses);
-
-    /// <summary>
-    ///     FR-AU-09: after a wrong password, locks the account until <paramref name="lockedOutUntil" />
-    ///     and resets the counter — if, and only if, the counter has reached <paramref name="maxAttempts" />.
-    /// </summary>
-    Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil);
 
     /// <summary>FR-AU-09: after a correct password, clears the counter and any lockout.</summary>
     Task ClearLoginAttemptsAsync(Person person);

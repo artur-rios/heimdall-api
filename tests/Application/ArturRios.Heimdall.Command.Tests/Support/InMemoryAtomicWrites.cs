@@ -29,27 +29,25 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         return Task.FromResult(true);
     }
 
-    public Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now)
+    public Task<bool> TryReserveLoginAttemptAsync(
+        Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil)
     {
         if (person.FailedLoginAttempts >= maxAttempts || person.LockedOutUntil > now)
         {
             return Task.FromResult(false);
         }
 
-        person.FailedLoginAttempts++;
-
-        return Task.FromResult(true);
-    }
-
-    public Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil)
-    {
-        if (person.FailedLoginAttempts >= maxAttempts)
+        if (person.FailedLoginAttempts + 1 >= maxAttempts)
         {
             person.LockedOutUntil = lockedOutUntil;
             person.FailedLoginAttempts = 0;
         }
+        else
+        {
+            person.FailedLoginAttempts++;
+        }
 
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task ClearLoginAttemptsAsync(Person person)

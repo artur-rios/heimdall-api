@@ -102,19 +102,19 @@ public class LoginCommandHandler(
         // is locked out — or whose remaining attempts parallel requests have already taken — is
         // refused without considering it at all. The decoy keeps the cost of that refusal equal to a
         // real check's, so a lockout cannot be detected by how quickly it answers.
-        if (!await atomicWrites.TryReserveLoginAttemptAsync(person, MaxFailedLoginAttempts, now))
+        if (!await atomicWrites.TryReserveLoginAttemptAsync(
+                person, MaxFailedLoginAttempts, now, now.Add(LockoutDuration)))
         {
             await VerifyAgainstDecoy(command.Password);
 
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 
-        // UC-11 step 3 (AF-11b). The reserved attempt stands as a failure; at the tenth the account
-        // locks.
+        // UC-11 step 3 (AF-11b). The reserved attempt stands as a failure. The tenth has already
+        // locked the account, in the reserving write, so nothing here has to finish for the lock to
+        // hold — a comparison the hash gate sheds, or that fails, leaves a lock that expires.
         if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
         {
-            await atomicWrites.LockOutIfExhaustedAsync(person, MaxFailedLoginAttempts, now.Add(LockoutDuration));
-
             return output.WithError(AuthMessages.InvalidCredentials);
         }
 

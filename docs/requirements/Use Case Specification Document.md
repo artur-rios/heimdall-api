@@ -744,7 +744,7 @@ sequenceDiagram
 | AF-11e | Scope Admin's owned scopes are all logically deleted | Return `401 Unauthorized` |
 | AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
 | AF-11g | Person has active two-factor authentication (FR-2F-07) | Return `200 OK` with a short-lived challenge token and the available second-factor methods, instead of the full authentication token; if the Email method is enabled, also send a fresh email code (FR-2F-08). See UC-38 for how the login is completed |
-| AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09) | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
+| AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09); the tenth attempt locks the account when it is reserved, whether or not its comparison completes | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
 | AF-11i | The password checks out and processing of the person is restricted (NFR-24, UC-44), whether or not they are logically deleted | Return `200 OK` with a **subject-rights-only token** and `processingRestricted: true`, instead of the full token. The token names the person and their role and claims no scope; it is accepted only by UC-41, UC-42, UC-44 and UC-45, and every other endpoint answers it `403 Forbidden`. A person with active two-factor authentication gets AF-11g's challenge first, and UC-38 ends the same way |
 
 > **On the lockout.** AF-11h joins the collapse deliberately. Answering it distinctly would tell an

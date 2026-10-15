@@ -91,7 +91,11 @@ discards the result. A lockout takes the same path, so it is not detectable eith
 **The lockout counts attempts as they start, not as they fail.** Each attempt reserves itself in
 `failed_login_attempts` — one conditional `UPDATE`, refused once the account is locked or ten
 attempts are already counted — before the password is derived; a wrong password leaves the
-reservation standing, a right one clears the count. Counting after the derivation let ten
+reservation standing, a right one clears the count. The attempt that reaches ten also sets
+`locked_out_until` and resets the count in that same `UPDATE`, so the lock holds even if the request
+never finishes comparing (the hash gate shed it, or the database failed): the account is locked for the
+usual fifteen minutes and unlocks by itself. A right password on the tenth attempt still signs in and
+clears the lock. Counting after the derivation let ten
 simultaneous wrong passwords all read a count of zero and all write one, so the account never
 locked (FR-AU-09).
 
