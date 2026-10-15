@@ -35,15 +35,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   it is safe to deploy first. Third-party clients need the same change before upgrading. **Operators:** no setting
   changes; the operations guide has SQL to release a second-factor lock or a re-authentication pause for a verified
   person.
-- The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) now also bounds the
-  sends a person can repeat themselves (FR-EV-07, FR-2F-19). `POST /api/auth/resend-verification` answers `429` "An
-  email of this kind was sent to you recently. Try again in a few minutes." when any verification link went to the
-  person inside the window, including the one sent when the account was created, and sends nothing.
-  `POST /api/auth/2fa/enable` gives the same answer when `Email` is selected and a setup code went out inside the
-  window; it is checked before the password, and `App` alone is not affected. `resend-verification` is now also under
-  the credential endpoints' rate limit, whose `429` is "Too many requests." with `Retry-After`. **Clients:** treat
-  both `429`s as "wait and try again", not as a session end; a resend straight after sign-up is now refused for the
-  first five minutes.
+- A person's own requests now share one account-email budget (FR-PE-16): asking for the verification link again
+  (`POST /api/auth/resend-verification`), starting two-factor setup with the `Email` method (`POST /api/auth/2fa/enable`)
+  and an own email change (`PUT /api/persons/{id}`, whose notice goes to the previous address). At most one such email
+  per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five a day, reserved by one conditional
+  write before anything is sent, so simultaneous requests cannot exceed it. A refusal is `429` and changes and sends
+  nothing: "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, "You
+  have reached today's limit for account emails. Try again tomorrow." once the day is spent. Two-factor setup checks
+  it before the password and charges it only after, and `App` alone is never charged; an email change charges it
+  after the password and second factor, before the factor is spent. Administrator-initiated mail (UC-51, UC-52) is
+  not charged, so a person whose account was just created by an administrator, or who has spent their day, can still
+  be helped. `resend-verification` is now also under the credential endpoints' rate limit, whose `429` is "Too many
+  requests." with `Retry-After`. A new migration, `AddAccountEmailBudget`, adds three columns to `person`, starting
+  empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and
+  try again", not as a session end or a refused credential; the second asks the person to wait until tomorrow.
+- Anonymous password recovery (`POST /api/auth/password-recovery`) sends at most one reset link per person per
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, counting links sent by an administrator too (FR-PR-07). The answer is
+  unchanged.
+- Creating a person with a password (`POST /api/persons`, `POST /api/scopes/{id}/persons`,
+  `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator; a rejection is `429`
+  "Too many requests." with `Retry-After`.
 - Self-registration bounds the mail one address can be sent (FR-SR-13, FR-SR-14): at most three live pending
   registrations per address in a scope, and at most three "someone tried to register your address" notices per
   address a day, across every scope. A request beyond either stores and sends nothing, and is answered `202` exactly

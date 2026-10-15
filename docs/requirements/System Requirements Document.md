@@ -134,6 +134,7 @@ graph LR
 | FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
 | FR-PE-14 | A person changing their own email shall prove they are the account holder: the request shall carry their current password (`currentPassword`) and, when their two-factor authentication is active, a current second factor (`twoFactorCode`: an authenticator-app or email code, or an unused recovery code, which is spent; since no endpoint sends an email code to a signed-in caller, a person whose only method is Email uses a recovery code). A missing or wrong password, or a missing or wrong second factor when one is required, shall be refused with `401 Unauthorized` and "The password or code is incorrect." (FR-AU-13), the refusal UC-39 gives for the same failures, before the new address is checked for uniqueness, and nothing shall change. The password is verified through the password-hash gate (TH-03), and the endpoint is under the credential endpoints' rate limit (NFR-18). An administrator changing another person's email presents no credential of that person, and a change that leaves the email as it is asks for none. The email counts as changed unless the trimmed values are equal ordinally, so a change of case is a change, and a changed address is stored trimmed | High |
 | FR-PE-15 | On every change of a person's email, whoever made it, the system shall send a notice to the previous address saying that the account's email was changed and that, if the person did not make the change, they should contact an administrator. The notice shall contain neither the new address nor any link. A failed delivery shall be logged and shall not fail the update | High |
+| FR-PE-16 | The account emails a person's own requests can have sent — a verification link asked for again (FR-EV-04), a two-factor setup code (FR-2F-03) and the notice an own email change sends to the previous address (FR-PE-15) — shall share one per-person budget: at most one within the cooldown of FR-PR-06 and at most five in a day, the first send opening a one-day window. Each send shall be reserved by one conditional write before anything is issued, changed or mailed, so that simultaneous requests cannot exceed it (NFR-27), and a refused request shall change and send nothing: `429 Too Many Requests` with "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, and "You have reached today's limit for account emails. Try again tomorrow." once the day is spent. Administrator-initiated mail (FR-EV-06, FR-PR-05) is not charged to it. The budget shall be returned in the data export and cleared by anonymisation | Medium |
 
 ### 3.3 Role Assignment
 
@@ -174,6 +175,7 @@ graph LR
 | FR-PR-04 | Expired or already-used reset tokens shall be rejected | High |
 | FR-PR-05 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a password-reset link sent to the person's own stored address. Eligibility shall be FR-PR-02's: a person whose processing is restricted, who is logically deleted, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused, with the reason. No token or password shall be returned, logged or accepted | Medium |
 | FR-PR-06 | At most one password-reset email per person shall be sent through FR-PR-05 within a configurable cooldown (5 minutes by default, `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`), counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
+| FR-PR-07 | At most one password-reset email per person shall be sent through FR-PR-01 within the cooldown of FR-PR-06, counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall send nothing and be answered exactly as any other (FR-PR-02). There shall be no daily cap, so that nobody but the owner can exhaust the owner's recovery | Medium |
 
 ### 3.6 Email Verification
 
@@ -185,7 +187,7 @@ graph LR
 | FR-EV-04 | The system shall allow re-sending the verification email | Medium |
 | FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
 | FR-EV-06 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a fresh verification link sent to the person's own stored address, retiring their live links as FR-EV-04 does. A person whose processing is restricted, who is logically deleted, or whose address is already verified shall be refused. No token shall be returned, logged or accepted | Medium |
-| FR-EV-07 | At most one verification email per person shall be sent through FR-EV-04 or FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent: `429 Too Many Requests` with "An email of this kind was sent to you recently. Try again in a few minutes." for the person themselves (FR-EV-04), and the administrator wording of UC-51 for FR-EV-06 | Medium |
+| FR-EV-07 | At most one verification email per person shall be sent through FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent. A person's own request for the link again (FR-EV-04) is bounded by FR-PE-16 instead | Medium |
 
 ### 3.7 Application Management
 
@@ -287,7 +289,7 @@ graph LR
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
 | FR-2F-18 | Initiating two-factor setup (UC-36) shall require the caller's current password (`currentPassword`). A missing or wrong password shall be refused with `401 Unauthorized` and "The password or code is incorrect." (FR-AU-13), and nothing shall be created or sent. The password is verified through the password-hash gate, and the endpoint is under the credential endpoints' rate limit. Confirming setup (UC-37) requires no password, only the codes of the methods selected, which are charged to the re-authentication budget of FR-AU-13 | High |
-| FR-2F-19 | At most one setup code shall be mailed per person through FR-2F-03 within the cooldown of FR-PR-06, counting every email code issued for the person's two-factor configuration in that window, whether or not it was used. A setup request that selects the email method inside the window shall be refused with `429 Too Many Requests` and "An email of this kind was sent to you recently. Try again in a few minutes.", before the password is checked, and nothing changed or sent; a request selecting only the authenticator app is not affected | Medium |
+| FR-2F-19 | A setup request that selects the email method shall be charged to the person's account-email budget (FR-PE-16). The budget shall be read before the password is checked, so a request it would refuse is refused first, with nothing changed or sent, and charged only once the password checks out, so a wrong password never spends it; a request selecting only the authenticator app is not charged | Medium |
 
 ### 3.11 Audit Trail
 
@@ -489,6 +491,9 @@ erDiagram
 | FailedReauthenticationAttempts | Integer | Default: `0`; failed re-authentications in the current window (FR-AU-13) |
 | ReauthenticationWindowStartedAt | DateTime | Null unless a window is open; when its first failure was counted (FR-AU-13) |
 | ReauthenticationPausedUntil | DateTime | Null unless re-authentication is or was paused; while in the future, every re-authentication is refused (FR-AU-13) |
+| AccountEmailsSent | Integer | Default: `0`; account emails the person's own requests had sent in the current window (FR-PE-16); written only by the conditional write that reserves a send |
+| AccountEmailWindowEndsAt | DateTime | Null before the first such send; when the current one-day window ends (FR-PE-16) |
+| AccountEmailLastSentAt | DateTime | Null before the first such send; when the last was reserved, which the cooldown counts from (FR-PE-16) |
 | IsDeleted | Boolean | Default: `false` |
 | EmailVerified | Boolean | Default: `false` |
 | RoleId | BigInt | Foreign key to Role.Id (internal), required |
@@ -747,7 +752,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate for anything but its subject's own rights, shall receive no email but a second-factor code its subject asks for when signing in, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. Signing in (UC-11, UC-25, UC-38) shall issue it a subject-rights-only token instead of a full one, so the subject can always reach their rights, however long ago their last token expired. That token, and any token the identity already holds, shall be refused everywhere except where the subject exercises their own rights — export (UC-41), erasure (UC-42), restriction (UC-44) and lifting their own restriction (UC-45); a subject-rights-only token shall stay so confined after the restriction is lifted, and a restricted System Admin, or one holding such a token, shall not lift anybody else's. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)). The subject's own erasure request (UC-42) shall lift their restriction as their own lift would; a restriction imposed after the request shall hold it |
 | NFR-25 | Security | The database and its backups shall be encrypted at rest, and the API's connection to the database shall require TLS (GDPR Art. 32, LGPD Art. 46). Backups shall have a stated schedule, retention period, location and restore-testing cadence, published in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md). Because a backup is a full copy that is never edited, a restore shall be followed by re-applying every erasure completed since it was taken, from a ledger kept outside the database |
 | NFR-26 | Security | The signals the system already records — refused writes, account lockouts, credential-verification shedding — shall be read on a schedule and the ones exceeding their thresholds written to the log at warning level, with a stable marker and kind an alerting rule can match. Each threshold shall be measured over a window rather than as a total, because the same count means different things at different rates. Detection shall not declare a breach: a signal is a reason to look, and the [Incident Response Document](Incident%20Response%20Document.md) is what turns looking into a declaration. The signals shall additionally be **collected and delivered to a person on a schedule**, reporting each signal once and failing loudly when delivery does not succeed — writing a signal nobody receives satisfies the letter of detection and none of its purpose, since both notification clocks run from awareness rather than from recording |
-| NFR-27 | Security | Single-use credentials — recovery codes, email codes, password reset and email verification tokens, the two-factor challenge, and an authenticator-app time step — shall be spent at most once, and the bounded budgets of FR-AU-09, FR-AU-12, FR-AU-13, FR-SR-09, FR-SR-14, FR-2F-13, FR-2F-16 and FR-2F-17 shall never admit more attempts than they state, **including when requests arrive concurrently**. Each check shall be made by the same database write that spends or charges, and every budget shall be charged before the comparison it guards rather than after it fails |
+| NFR-27 | Security | Single-use credentials — recovery codes, email codes, password reset and email verification tokens, the two-factor challenge, and an authenticator-app time step — shall be spent at most once, and the bounded budgets of FR-AU-09, FR-AU-12, FR-AU-13, FR-PE-16, FR-SR-09, FR-SR-14, FR-2F-13, FR-2F-16 and FR-2F-17 shall never admit more attempts than they state, **including when requests arrive concurrently**. Each check shall be made by the same database write that spends or charges, and every budget shall be charged before the comparison it guards rather than after it fails |
 
 ### 6.1 The reference configuration
 
@@ -804,8 +809,9 @@ the way two instances would and requires one to read the other's payload.
 
 What remains per-instance is the rate limiter's fixed window (§ Operations). That is deliberate and
 documented there: it is a defence-in-depth throttle, and the per-account budgets of FR-AU-09,
-FR-AU-12, FR-AU-13 and FR-2F-13, the per-address notice budget of FR-SR-14 and the account-email
-cooldown of FR-EV-07 and FR-2F-19 — which are in the database — are what hold across instances.
+FR-AU-12, FR-AU-13, FR-PE-16 and FR-2F-13, the per-address notice budget of FR-SR-14 and the
+token-derived cooldowns of FR-EV-07, FR-PR-06 and FR-PR-07 — which are in the database — are what hold
+across instances.
 
 
 ### 6.3 Under load
@@ -1140,12 +1146,12 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-13 |
+| Person CRUD | FR-PE-01 through FR-PE-16 |
 | Application CRUD and authentication | FR-AP-01 through FR-AP-16 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-13 |
-| Password Recovery | FR-PR-01 through FR-PR-06 |
+| Password Recovery | FR-PR-01 through FR-PR-07 |
 | Email Verification | FR-EV-01 through FR-EV-07 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
 | Self-Registration | FR-SR-01 through FR-SR-14 |

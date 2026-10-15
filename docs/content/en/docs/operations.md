@@ -236,6 +236,13 @@ unthrottled. The person update is limited whether or not it checks a password, a
 updates included. The verification-link resend (`POST /api/auth/resend-verification`) shares it too,
 because every call mails the account's address.
 
+**Per administrator — account creation.** The three endpoints that create a person with a password —
+`POST /api/persons`, `POST /api/scopes/{id}/persons` and `POST /api/scopes/{id}/owners` — each derive
+an Argon2id hash, and need nothing but an administrator's token. They are limited to **30 requests a
+minute per acting person**, whatever address the requests come from, so one administrator account
+cannot keep the password-hash gate full; a rejection is the same `429` with `Retry-After`. Thirty a
+minute is more than anyone creates by hand, and a bulk import should pace itself to it.
+
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
 
@@ -320,36 +327,61 @@ cannot stop this itself** (Threat Model Document, TH-03): those callers look lik
 global budget in the API would only let the attacker spend it and deny everybody at a lower cost.
 The bound belongs at the edge, where the request costs nothing to refuse.
 
-On the VPS that edge is Traefik. Add a rate-limit middleware to a router of its own for the
-credential routes, in the stack overlay that declares Heimdall's routers (yggdrasil's
-`stacks/heimdall-api.proxy.yml`):
+On the VPS that edge is Traefik (v3.6). Add these labels to the overlay that declares Heimdall's
+routers, yggdrasil's `stacks/heimdall-api.proxy.yml`, beside its `heimdall-api-${YGG_ENVIRONMENT}` and
+`heimdall-api-${YGG_ENVIRONMENT}-same-origin` routers. Every name carries `${YGG_ENVIRONMENT}`, because
+the environments share one Traefik.
 
 ```yaml
 labels:
-  # A second router for the credential routes, so only they carry the stricter limit.
-  - traefik.http.routers.heimdall-auth.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/api/auth`)
-  - traefik.http.routers.heimdall-auth.priority=100
-  - traefik.http.routers.heimdall-auth.middlewares=heimdall-auth-limit
-  - traefik.http.routers.heimdall-auth.service=heimdall-api
-  # The same router TLS settings as the main router go here.
+  # The credential routes, on both hosts: the API's own and the web UI's same-origin /api/.
+  # (?i): Traefik matches paths case-sensitively and ASP.NET does not, so /api/AUTH/login must not
+  # slip past on the main router.
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.rule=(Host(`${PUBLIC_HOST}`) || Host(`${UI_HOST}`)) && PathRegexp(`(?i)^/api/auth/`)
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.entrypoints=websecure
+  # The chain is replaced, not extended, so keep the headers every other router has.
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.middlewares=secure-headers@file,heimdall-api-${YGG_ENVIRONMENT}-auth-limit
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.service=heimdall-api-${YGG_ENVIRONMENT}
   # Per source: 10 a minute with a burst of 10, an IPv6 caller counted by its /56, as the API does.
-  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.average=10
-  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.period=1m
-  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.burst=10
-  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=56
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.average=10
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.period=1m
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.burst=10
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=56
+
+  # A client system that signs its users in through Heimdall (Fortuna) reaches it from one source,
+  # so under the limit above all of its users would share one bucket of 10 a minute. It gets a
+  # router and a bucket of its own, matched on that source; Heimdall still counts each of its users
+  # apart, by the address it names with HEIMDALL_TRUSTED_CALLER_KEYS.
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.rule=Host(`${PUBLIC_HOST}`) && PathRegexp(`(?i)^/api/auth/`) && ClientIP(`<fortuna-source>`)
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.priority=1000
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.entrypoints=websecure
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.middlewares=secure-headers@file,heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.service=heimdall-api-${YGG_ENVIRONMENT}
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.average=600
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.period=1m
+  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.burst=100
 ```
 
-- The names (`heimdall-auth`, `heimdall-api`) are placeholders: use the router and service names the
-  overlay already declares, and repeat its `tls` and `entrypoints` settings on the new router.
-  `ipv6subnet` needs Traefik 3.1 or later; on an older one, leave that line out.
+- TLS is set on the `websecure` entrypoint, so the routers need nothing more. No priority is needed on
+  the first router: Traefik ranks the longer rule first, and it is longer than the main router's.
+  The relay router takes an explicit priority so it always wins over the first.
+- **Give each consumer its own bucket.** One router and one middleware per client system that relays
+  its users, each matched on that system's source and sized for its users; never one bucket shared
+  by every consumer, and never the public bucket for a relaying system. Replace `<fortuna-source>`
+  with Fortuna's address as Traefik sees it: the `ClientHost` of its requests in Traefik's access
+  log. Size `average` for the sign-ins Fortuna's users make in a minute at their busiest.
+- **Check the addresses first.** Before relying on any of this, confirm in Traefik's access log that
+  `ClientHost` shows real client addresses, IPv6 ones included, rather than a proxy's or Docker's. A
+  limiter keyed on the wrong address puts everybody in one bucket.
 - This is the same per-source limit the API applies, moved in front of it: a refused request then
   never reaches an instance, and one Traefik counts across every replica behind it, where each
   instance's own limiter counts alone.
 - It does not, by itself, stop a flood from enough unrelated networks: that is the definition of one.
   What does is visibility and a decision: the hash gate's 503s and the
-  `CREDENTIAL_VERIFICATION_SHEDDING` security signal show it starting; the source networks are in Traefik's access log; and a flood that persists is for the
-  host firewall or an upstream filtering service, which can drop whole networks before they reach
-  Traefik. Raising the replica count raises the gate's total in proportion while it lasts.
+  `CREDENTIAL_VERIFICATION_SHEDDING` security signal show it starting; the source networks are in
+  Traefik's access log; and a flood that persists is for the host firewall or an upstream filtering
+  service, which can drop whole networks before they reach Traefik. Raising the replica count raises
+  the gate's total in proportion while it lasts.
 - Do **not** add a global limit (one with `sourcecriterion.requesthost=true`) to the credential
   routes. It turns the flood into a denial of every caller at a lower cost, which is exactly what the
   API declines to do.
@@ -358,22 +390,20 @@ labels:
 
 Heimdall sends mail from the operator's Mailgun domain, so mail an attacker can trigger costs the
 operator quota and sender reputation as well as annoying its recipient. A per-caller limit does not
-bound what one recipient receives from many callers, so most sends a caller can repeat are bounded
-per recipient as well:
+bound what one recipient receives from many callers, so every send a caller can repeat is bounded
+per recipient or per account as well:
 
 | Mail | Bound |
 | --- | --- |
-| Verification link, resent by the person (UC-15) or by an administrator (UC-51) | One per person per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes), counting every link issued for them; `429` inside it |
-| Password reset by an administrator (UC-52) | The same cooldown, for reset links |
-| Two-factor setup code (UC-36, email method) | The same cooldown, for setup codes; `429` inside it |
+| A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16): one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five a day, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached today's limit for account emails. Try again tomorrow." once the day is spent |
+| Verification link or password reset sent by an administrator (UC-51, UC-52) | One of each kind per person per cooldown, counting every link of that kind issued for them; not charged to the person's own budget, so an administrator can still help someone who has spent theirs |
+| Password recovery requested anonymously (UC-12) | One reset link per person per cooldown, whoever asks; further requests send nothing and are answered as before |
 | Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16) |
 | Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
 | "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
-| Password recovery requested anonymously (UC-12) | **Per-IP rate limit only.** No per-recipient bound yet |
-| Email-change notice to the previous address (FR-PE-15) | Needs the account's password; per-IP rate limit and the re-authentication budget, no per-recipient bound |
 
-The self-registration bounds are silent by design: the caller gets the same `202` whatever happened,
-so the bound cannot be used to learn whether an address is registered.
+The self-registration and recovery bounds are silent by design: the caller gets the same answer
+whatever happened, so the bound cannot be used to learn whether an address is registered.
 
 ### A client system calling for its users — `HEIMDALL_TRUSTED_CALLER_KEYS`
 
@@ -408,7 +438,7 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
   `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — which share the
   re-authentication budget above, whatever addresses the guesses come from (Threat Model Document,
   TH-32 and TH-36). The seventh, `resend-verification`, is bounded per person by the account-email
-  cooldown below, whatever bucket it is counted in.
+  budget below, whatever bucket it is counted in.
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25
@@ -868,18 +898,18 @@ so instances whose clocks differ can refuse a freshly issued token for the lengt
 instance clocks synchronised (NTP).
 
 The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`) began as the administrators'
-(UC-51/UC-52) and keeps that name, but it now bounds the self-service sends as well: a person's own
-verification-link resend (UC-15, AF-15b) and a two-factor setup that selects the email method (UC-36,
-AF-36f). Each answers **429** "An email of this kind was sent to you recently. Try again in a few
-minutes." and sends nothing. A shorter value lets people retry sooner; `0` removes the bound from
-those endpoints entirely, leaving only the per-IP limit, so keep it on wherever the API faces the
-internet.
+(UC-51/UC-52) and keeps that name, but it now also sets the cooldown of a person's own account-email
+budget (FR-PE-16) — resend, email setup code, email-change notice — and of anonymous password recovery
+(UC-12). A shorter value lets people retry sooner; `0` removes the cooldown, leaving the budget's five
+a day and the per-IP limit, so keep it on wherever the API faces the internet.
 
-The cooldown is derived from the issued token and code rows (`ExpiresAt` minus the lifetime), not
-from a separate record. Two consequences:
+For the administrators' sends and for recovery, the cooldown is derived from the issued token rows
+(`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:
 if `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` is `0` and a token lifetime is shorter than the cooldown, an expired
-token from inside the window may already have been purged, and the cooldown can undercount. And the cooldown
-is best-effort: simultaneous requests for the same person can both pass it.
+token from inside the window may already have been purged, and the cooldown can undercount. And it is
+best-effort: simultaneous administrator requests for the same person can both pass it. Recovery requests
+are worked one at a time per instance, so only a second instance could overlap one. A person's own
+budget is a conditional write on their row and has neither weakness.
 
 `Environments/.env` in the Web API project is a **tracked template** listing every variable; real
 values live in per-environment files that are gitignored.

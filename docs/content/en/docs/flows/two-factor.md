@@ -44,11 +44,14 @@ sequenceDiagram
     alt already active (AF-36a)
         EH-->>P: rejected — configuration untouched
     end
-    alt Email selected and a setup code was mailed within the cooldown (AF-36f)
+    alt Email selected and the account-email budget would refuse (AF-36f, AF-36g)
         EH-->>P: 429 — nothing changed or sent, no password check
     end
     alt currentPassword missing or wrong (AF-36e)
-        EH-->>P: 401 — nothing created
+        EH-->>P: 401 — nothing created, no account email charged
+    end
+    opt Email selected
+        EH->>DB: reserve one account email (FR-PE-16) — a burst gets one
     end
     EH->>DB: UPSERT pending row (IsActive = false)
     Note over EH,DB: AF-36d — re-initiating overwrites<br/>the pending selection entirely

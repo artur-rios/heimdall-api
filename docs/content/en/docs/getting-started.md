@@ -90,7 +90,7 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — at most one verification link, administrator-initiated reset, or two-factor setup code per person per window, whoever asked; `0` turns it off |
+| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five a day); `0` turns the cooldown off |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](../operations/#metrics--prometheus)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty → every cross-origin request is refused. Set it to your front end's origin (`https://app.example.com`, comma separated for several) or a browser client cannot call the API |

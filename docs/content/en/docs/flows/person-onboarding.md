@@ -95,9 +95,9 @@ the bearer token, so a caller can only ever ask for their own link.
 flowchart TD
     A[POST /api/auth/resend-verification<br/>bearer token only] --> B{Already verified?}
     B -->|Yes| C["400 — AF-15a<br/>a link mailed to it could do nothing"]
-    B -->|No| G{Link mailed within<br/>the cooldown?}
-    G -->|Yes| H["429 — AF-15b<br/>nothing sent; the last link still works"]
-    G -->|No| D[Retire outstanding tokens]
+    B -->|No| G{Account-email budget<br/>reserves a send?}
+    G -->|"No — cooldown or daily limit"| H["429 — AF-15b / AF-15c<br/>nothing sent; the last link still works"]
+    G -->|Yes| D[Retire outstanding tokens]
     D --> E[Issue + mail a fresh one]
     E --> F[200 — only the newest link works]
 ```
@@ -106,13 +106,15 @@ Note the asymmetry with UC-14: verifying an already-verified address answers **2
 to one answers **400**. Verification's job is done either way; a resend would mail a link that could
 do nothing when clicked.
 
-A resend is also held to the account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five
-minutes by default): if any verification link went to the person inside it — the one sent when the
-account was created, an administrator's, or an earlier resend — the answer is **429** "An email of
-this kind was sent to you recently. Try again in a few minutes." and nothing is sent or retired
-(AF-15b). The endpoint is under the credential endpoints' rate limit too, whose own 429 says "Too
-many requests." and carries a `Retry-After` header. A client should tell the person to check their
-inbox and try again in a few minutes.
+A resend is charged to the person's account-email budget (FR-PE-16), which it shares with a
+two-factor setup code and the notice an own email change sends: one per
+`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five a day, reserved by one
+write before anything is sent. Inside the cooldown the answer is **429** "An email of this kind was
+sent to you recently. Try again in a few minutes." (AF-15b); once the day is spent, **429** "You have
+reached today's limit for account emails. Try again tomorrow." (AF-15c). Nothing is sent or retired
+either way. A link an administrator sent, at creation or through UC-51, is not charged, so the
+person may still ask once straight after. The endpoint is under the credential endpoints' rate limit
+too, whose own 429 says "Too many requests." and carries a `Retry-After` header.
 
 ### An administrator resending it — UC-51
 

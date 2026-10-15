@@ -106,6 +106,9 @@ classDiagram
         +int FailedReauthenticationAttempts
         +DateTime? ReauthenticationWindowStartedAt
         +DateTime? ReauthenticationPausedUntil
+        +int AccountEmailsSent
+        +DateTime? AccountEmailWindowEndsAt
+        +DateTime? AccountEmailLastSentAt
         +long? ScopeId
     }
     class TwoFactorAuth {

@@ -607,6 +607,7 @@ sequenceDiagram
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
+| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five today. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached today's limit for account emails. Try again tomorrow." Nothing is changed or sent, and the second factor is not spent |
 
 ---
 
@@ -857,6 +858,7 @@ requests; a person who receives nothing asks again, as for any email that does n
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-12a | Email not found, or the person is logically deleted, restricted (NFR-24), or cannot sign in because their scope or scopes are deleted | Return `200 OK` with the same generic message, in the same time (prevents enumeration). No token is issued and nothing is sent |
+| AF-12b | A reset token was issued for the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), by an earlier request or by UC-52, used or not (FR-PR-07) | Return `200 OK` with the same generic message. Nothing is issued or sent; the link already mailed keeps working |
 
 ---
 
@@ -956,7 +958,7 @@ sequenceDiagram
 **Main Flow:**
 
 1. Authenticated person requests a new verification email.
-2. The system checks that the email is not already verified, and that no verification email went to the person within the account-email cooldown (FR-EV-07).
+2. The system checks that the email is not already verified, and reserves the send against the person's account-email budget (FR-PE-16).
 3. The system invalidates any existing verification tokens.
 4. The system generates a new time-limited verification token.
 5. The system sends the verification email.
@@ -967,13 +969,17 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-15a | Email already verified | Return `400 Bad Request` — "Email already verified" |
-| AF-15b | A verification token was issued for the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — by UC-06, UC-51 or an earlier resend, used or not (FR-EV-07) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
+| AF-15b | The person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — a resend, a setup code or an email-change notice (FR-PE-16) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
+| AF-15c | The person's own requests have had five account emails sent today (FR-PE-16) | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." Nothing is retired or sent |
 
 > **On the cooldown and the rate limit.** The endpoint mails the account's own address on every
 > successful call, and a bearer token is all it asks for, so without a bound whoever held one could
-> mail that address once per request. The cooldown is UC-51's, asked the same way, so one person gets
-> at most one link per window however it was asked for. The endpoint is also under the credential
-> endpoints' rate limit, whose own `429` is "Too many requests." with a `Retry-After` header.
+> mail that address once per request — and the address may be one the account holder set without
+> proving it. The resend shares one budget with the person's other self-service account mail (FR-PE-16),
+> reserved by one write before anything is sent, so even a burst of simultaneous requests sends one.
+> A link an administrator sent (UC-06, UC-51) is not charged to it, so the person may still ask once
+> straight after. The endpoint is also under the credential endpoints' rate limit, whose own `429` is
+> "Too many requests." with a `Retry-After` header.
 
 ---
 
@@ -1694,7 +1700,7 @@ sequenceDiagram
 ```
 
 1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both, and their `currentPassword` (FR-2F-18).
-2. The system confirms the caller has no already-active two-factor configuration, that no setup code went to them within the account-email cooldown when `Email` is selected (AF-36f), and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+2. The system confirms the caller has no already-active two-factor configuration, that their account-email budget would admit a send when `Email` is selected (AF-36f, AF-36g), and that `currentPassword` matches their password (AF-36e); with `Email`, it then reserves the send (FR-2F-19), and creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
 3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
@@ -1715,7 +1721,8 @@ sequenceDiagram
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
 | AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
-| AF-36f | `Email` is selected and a setup code was mailed to the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), used or not (FR-2F-19) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; the code already mailed still confirms. Selecting `App` alone is not affected |
+| AF-36f | `Email` is selected and the person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), FR-PE-16, FR-2F-19 | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; a code already mailed still confirms. Selecting `App` alone is not affected |
+| AF-36g | As AF-36f, but five account emails have been sent today | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." As AF-36f otherwise |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
 > does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
