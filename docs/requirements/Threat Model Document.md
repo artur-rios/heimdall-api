@@ -182,7 +182,7 @@ one asks is what that reader can do with what they find.
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) — spent by a conditional write, so two simultaneous requests cannot both redeem it (NFR-27) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
-| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User — on record, or tombstoned by a hard delete and gone — once due (NFR-21); a trigger on `ERASED_SUBJECT` accepts a tombstone only for a person or Google User that exists, `public_id` is immutable on `PERSON`, `GOOGLE_USER` and every table whose ids the identity check trusts, and a new person or Google User may not take an id another entity holds (#199), so no target that is not a person's can be made clearable | Test | Low — but see below on DDL |
+| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User — on record, or tombstoned by a hard delete and gone — once due (NFR-21); a trigger on `ERASED_SUBJECT` accepts a tombstone only for a person or Google User that exists, `public_id` is immutable on `PERSON`, `GOOGLE_USER` and every table whose ids the identity check trusts, no new row of those tables may take an id another holds, and a new person or Google User may not take an id an audit entry names (#199), so with DML alone no existing target that is not a person's can be made clearable | Test | Low — but see below on DDL and §6.1's insert race |
 
 **TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
 `EmailVerificationService` both used to write the token they had just generated straight into the
@@ -283,45 +283,54 @@ gone. What the guard stops is tombstoning an id that is not a person's, so two s
 make a target naming a scope, an application or a credential clearable, as they would have without
 it.
 
-**The identity ids are guarded too (#199).** The guard, and #184's rule before it, read a `PERSON`
-or `GOOGLE_USER` row's `public_id` as proof that an id is a person's, and until #199 that proof
-could be forged: an actor could give a person or Google User row a scope's, an application's or a
+**The ids are guarded too (#199).** The guard, and #184's rule before it, read a `PERSON` or
+`GOOGLE_USER` row's `public_id` as proof that an id is a person's, and until #199 that proof could
+be forged with DML alone: give a person or Google User row a scope's, an application's or a
 credential's `public_id`, by rewriting an existing row or by inserting a new one, then anonymise or
-tombstone it and clear the targets naming that entity. Two row-level triggers on each table now
-close it. A `BEFORE UPDATE` trigger refuses any change to `public_id`, and every other column stays
-writable, so names, addresses, anonymisation and soft deletes are unaffected. A `BEFORE INSERT`
-trigger refuses a `public_id` that a row of `SCOPE`, `APPLICATION`, `APPLICATION_CREDENTIAL`,
-`SCOPE_PERMISSION`, `ROLE`, `PENDING_REGISTRATION` or the other identity table already holds; the
-table's own unique index covers itself. The application never sets either id, since every one is a
-fresh random GUID, so no legitimate write is refused. `IdentityPublicIdTests` pins both.
+tombstone it and clear the targets naming that entity. Three rules now close every such path.
 
-The insert check can only see who holds an id at that moment, so it is only as good as those ids
-are fixed. Had they stayed writable, it could be walked round: move a scope off its id, insert a
-person with the freed id, anonymise or tombstone them, clear every target naming the scope, and move
-the scope back. The same `BEFORE UPDATE` trigger therefore guards `public_id` on every table the
-check consults (#199, R2): `SCOPE`, `APPLICATION`, `APPLICATION_CREDENTIAL`, `SCOPE_PERMISSION`,
-`ROLE` and `PENDING_REGISTRATION`, with every other column writable. The rename is refused, so the
-chain cannot start, and an audit target can only be cleared for an id that has always been a
-person's or a Google User's. `EntityPublicIdTests` pins each table, and the chain end to end.
+- **Ids are immutable.** A `BEFORE UPDATE` trigger refuses any change to `public_id` on `PERSON`,
+  `GOOGLE_USER`, `SCOPE`, `APPLICATION`, `APPLICATION_CREDENTIAL`, `SCOPE_PERMISSION`, `ROLE` and
+  `PENDING_REGISTRATION`, every table the identity check trusts. Every other column stays writable,
+  so names, addresses, anonymisation and soft deletes are unaffected. Without it the check below
+  could be walked round: move a scope off its id, insert a person with the freed id, clear the
+  scope's targets, move the scope back.
+- **Ids are not shared.** A `BEFORE INSERT` trigger on the same eight tables refuses a `public_id`
+  that a row of any other of them holds, soft-deleted or not; a table's own unique index covers
+  itself. It runs on every table, not only the identity ones, so the order of the two inserts does
+  not matter: a person inserted first refuses a scope inserted with its id after it.
+- **An identity may not take an id the trail names.** The same trigger refuses, for `PERSON` and
+  `GOOGLE_USER` only, an id that an audit entry's `target_id` names. After an ordinary hard delete
+  of a scope, an application or anything else, no row holds its id any more, and an anonymised
+  person planted with it would have made every entry about that entity clearable. Only the identity
+  tables need it, because the target rule reads only them, and the tombstones, to tell a person's
+  id. It keeps nothing new, since the trail already holds the id, and once the trail no longer names
+  it the id is free again.
 
-What remains is stated as plainly. "Already holds" means a row that is there, soft-deleted or not:
-the id of an entity that was hard-deleted is not remembered, by design, because a registry of issued
-ids would keep a removed person's id for good. Such an id names nothing the trail can still resolve,
-and an entry naming it stays as recorded. The triggers guard future writes and do not inspect rows
-already stored. The insert check takes no lock, so a concurrent insert of the same id into another
-table could pass both checks; with random GUIDs, and no audit entry naming a row inserted that
-moment, it gains nothing. An actor who can drop triggers can do anything here, as with the audit
-triggers themselves; that is DDL, and out of scope for the same reason given under TH-18.
+The application only ever creates fresh random ids, and writes an identity's own entries after its
+row, so no legitimate write is refused. `IdentityPublicIdTests` and `EntityPublicIdTests` pin each
+rule, each table, and the rename-then-reuse chain end to end.
 
-**Residual risk: Low, and no longer qualified by §6.1.** The property this threat is about — that an
-action cannot be denied — is intact, and since #199 the only way to make a target clearable that
-does not name a person is DDL, which TH-18 already names. What became time-limited is attribution,
-which is what storage limitation requires of it, and the person an action was taken on is forgotten
-on the same terms.
-`AuditActorClearingTests` and `AuditTargetClearingTests` pin every case against real PostgreSQL,
-each refusal by its own reason, the tombstone cases included; `ErasedSubjectsTests` pins the
-tombstone table's guard, and `IdentityPublicIdTests` and `EntityPublicIdTests` the `public_id`
-triggers.
+What remains is stated as plainly. No registry of issued ids is kept, because it would keep a
+removed person's id for good, so an id that neither a row nor the trail holds any more may be taken
+again; it then names nothing the trail could clear. The triggers guard future writes and do not
+inspect rows already stored; Operations gives the queries to check them. The insert check takes no
+lock, so two concurrent transactions that both choose the same id can both pass it, and an actor
+controls both. That race reaches only a row the actor inserts by SQL at that moment, never one that
+already exists or that the API creates, whose id cannot be known in advance; entries written later
+about such a planted row could be cleared. Closing it would need one unique index across all eight
+tables, which is a registry, and is out of scope. And an actor who can run DDL, or disable triggers
+(`ALTER TABLE … DISABLE TRIGGER`, or `session_replication_role` as a superuser), can do anything
+here, as with the audit triggers themselves; that is out of scope for the reason given under TH-18.
+
+**Residual risk: Low.** The property this threat is about — that an action cannot be denied — is
+intact: with DML alone, a target can be cleared only when it names an identity that has held its id
+since it was created, or one the actor planted in the same moment as the entity it shares an id
+with. What became time-limited is attribution, which is what storage limitation requires of it, and
+the person an action was taken on is forgotten on the same terms. `AuditActorClearingTests` and
+`AuditTargetClearingTests` pin every case against real PostgreSQL, each refusal by its own reason,
+the tombstone cases included; `ErasedSubjectsTests` pins the tombstone table's guard, and
+`IdentityPublicIdTests` and `EntityPublicIdTests` the `public_id` triggers.
 
 ## 7. TB-4 — The API to Google
 
@@ -476,7 +485,7 @@ this document has been worth.
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
-| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists, `public_id` immutable on the identity tables and every table they are checked against, and never another entity's on a new identity — see §6.1 |
+| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists, `public_id` immutable on the identity tables and every table they are checked against, never shared by a new row of any of them, and never one the trail names on a new identity — see §6.1 |
 | TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 |
 | TH-35 | Finding: Heimdall's middleware validates signature and lifetime only, not the audience (`ArturRios.Jwt` `IsTokenValidAsync`), so an application token, signed with the person tokens' keys, would pass it | Response: `IdentityUserMapper` refuses any token carrying `tokenKind`; a functional test pins an application token's `401` on a person endpoint |
 
