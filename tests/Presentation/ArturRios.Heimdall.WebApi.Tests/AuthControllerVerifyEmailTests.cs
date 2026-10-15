@@ -16,9 +16,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Functional tests for POST /api/auth/verify-email (UC-14, FR-EV-03): the main flow for a User and
-// for an admin, AF-14a…AF-14c (400, each named), the input validation NFR-10 requires, and the
-// anonymous access the endpoint depends on.
+// Functional tests for POST /api/auth/verify-email (UC-14, FR-EV-03/08): the main flow for a User and
+// for an admin, AF-14a…AF-14c (400, each named), AF-14d (400, as AF-14c), the conditional write, the
+// input validation NFR-10 requires, and the anonymous access the endpoint depends on.
 //
 // Unlike UC-13, the result of this use case is directly observable — EmailVerified is a column — so
 // every test reads the person row back rather than proving the change through a login. Tokens are
@@ -334,28 +334,6 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     }
 
     [FunctionalFact]
-    public async Task GivenLogicallyDeletedPerson_WhenPostVerifyEmail_ThenEmailIsVerifiedButLoginStillFails()
-    {
-        // Given a deletion that landed between the email and the click. UC-14 defines no alternative
-        // flow for it, and verifying grants nothing: UC-11 refuses the login by AF-11c either way.
-        var email = UniqueEmail("deleted");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
-        var token = await SeedTokenAsync(person);
-
-        // When
-        var response = await VerifyAsync(token);
-
-        // Then
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(await IsVerifiedAsync(person));
-
-        var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
-            "/api/auth/login", new LoginCommand { Email = email, Password = Password });
-
-        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
-    }
-
-    [FunctionalFact]
     public async Task GivenNoBearerToken_WhenPostVerifyEmail_ThenEndpointAnswersAnonymously()
     {
         // Given no bearer token on the gateway: someone clicking a link in their mail client holds
@@ -399,5 +377,74 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         Assert.False(issued.Used);
         Assert.True(issued.ExpiresAt > DateTime.UtcNow);
         Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
+    }
+
+    // AF-14d (FR-EV-08): the account is checked when the link is followed.
+
+    [FunctionalFact]
+    public async Task GivenAPersonRestrictedSinceTheLinkWasMailed_WhenPostVerifyEmail_ThenInvalidTokenAndNothingIsWritten()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted"));
+        var token = await SeedTokenAsync(person);
+
+        await using (var context = db.CreateContext())
+        {
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
+        }
+
+        // When
+        var response = await VerifyAsync(token);
+
+        // Then — exactly what an unknown token gets (AF-14c), and the record is kept (NFR-24)
+        var unknown = await VerifyAsync(UniqueToken());
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(unknown.StatusCode, response.StatusCode);
+        Assert.Equal(["Invalid token."], response.Body!.Errors);
+        Assert.Equal(unknown.Body!.Errors, response.Body.Errors);
+        Assert.False(await IsVerifiedAsync(person));
+        Assert.All(await TokensForAsync(person), stored => Assert.False(stored.Used));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPersonDeletedSinceTheLinkWasMailed_WhenPostVerifyEmail_ThenInvalidTokenAndNothingIsWritten()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("deleted"), isDeleted: true);
+        var token = await SeedTokenAsync(person);
+
+        // When
+        var response = await VerifyAsync(token);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal([AuthMessages.TokenInvalid], response.Body!.Errors);
+        Assert.False(await IsVerifiedAsync(person));
+        Assert.All(await TokensForAsync(person), stored => Assert.False(stored.Used));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheAddressChangedAfterThePersonWasRead_WhenMarkedVerified_ThenNothingIsWritten()
+    {
+        // Given a person read, as UC-14 reads them with the token, and an address change saved after
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var changing = db.CreateContext())
+        {
+            await changing.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.Email, UniqueEmail("moved")));
+        }
+
+        // When
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TryMarkEmailVerifiedAsync(read, DateTime.UtcNow);
+
+        // Then — the new address is not verified by a link mailed to the old one (FR-PE-17)
+        Assert.False(written);
+        Assert.False(await IsVerifiedAsync(person));
     }
 }

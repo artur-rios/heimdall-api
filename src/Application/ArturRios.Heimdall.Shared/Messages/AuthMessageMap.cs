@@ -59,6 +59,9 @@ public static class AuthMessageMap
             // AF-25b — the scope is missing, deleted, or has the setting off. 403 rather than 404: the
             // use case refuses the operation without saying which of the three is the reason.
             [AuthMessages.GoogleSignInUnavailable] = HttpStatusCodes.Forbidden,
+            // AF-25f — a sign-up whose address Google does not vouch for. 403, as AF-25b: the caller
+            // is who the token says, and is refused the operation.
+            [AuthMessages.GoogleEmailNotVerified] = HttpStatusCodes.Forbidden,
             // AF-25c — the verified address is already taken within the scope.
             [AuthMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict,
             // UC-47 main flow and AF-47b — queued, answered alike for every address.

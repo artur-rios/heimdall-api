@@ -455,6 +455,42 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return consumed;
     }
 
+    public async Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now)
+    {
+        var written = await context.Persons
+            .Where(RedeemableAsRead(person))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.PasswordHash, passwordHash)
+                .SetProperty(x => x.Salt, salt)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.PasswordHash, passwordHash);
+            Accept(person, x => x.Salt, salt);
+            Accept(person, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
+    {
+        var written = await context.Persons
+            .Where(RedeemableAsRead(person))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.EmailVerified, true)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.EmailVerified, true);
+            Accept(person, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
     public async Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now)
     {
         var stamped = await context.ApplicationCredentials
@@ -493,6 +529,21 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             .ExecuteUpdateAsync(set => set.SetProperty(x => x.SecurityStamp, stamp));
 
         Accept(person, x => x.SecurityStamp, stamp);
+    }
+
+    /// <summary>
+    ///     The row <paramref name="person" /> was read from, if it still holds the address it was
+    ///     read with and is not deleted, restricted or anonymised: the condition a single-use token
+    ///     is redeemed under (FR-PR-08, FR-EV-08). The address is captured now, so the comparison is
+    ///     against the value the caller read, not whatever the row holds by the time it runs.
+    /// </summary>
+    private static Expression<Func<Person, bool>> RedeemableAsRead(Person person)
+    {
+        var id = person.Id;
+        var email = person.Email;
+
+        return x => x.Id == id && x.Email == email && !x.IsDeleted &&
+                    x.ProcessingRestrictedAt == null && x.AnonymisedAt == null;
     }
 
     /// <summary>

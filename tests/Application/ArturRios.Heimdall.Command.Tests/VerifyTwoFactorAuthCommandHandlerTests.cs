@@ -412,6 +412,45 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAnIssuedRecoveryCode_WhenTypedInLowerCaseWithSpacesForHyphens_ThenFullTokenIsIssued()
+    {
+        // Given a code of the current shape, stored as UC-37 and UC-40 store it (FR-2F-20)
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var issued = RecoveryCodes.Issue()[0];
+        var recoveryCode = new TwoFactorRecoveryCode
+        {
+            TwoFactorAuthId = twoFactorAuth.Id, CodeHash = issued.CodeHash, Used = false
+        };
+        await fixture.RecoveryCodes.CreateAsync(recoveryCode);
+
+        // When
+        var typed = issued.Code.Replace('-', ' ').ToLowerInvariant();
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(recoveryCode: typed));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal("full-token", output.Data!.Token);
+        Assert.True(recoveryCode.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenALegacyRecoveryCode_WhenTypedInLowerCaseWithoutTheHyphen_ThenFullTokenIsIssued()
+    {
+        // Given a code issued before 80-bit codes, stored as the digest of its exact text
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var recoveryCode = await SeedRecoveryCodeAsync(fixture, twoFactorAuth.Id, "Q7ZK-0OIL");
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(recoveryCode: "q7zk0oil"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(recoveryCode.Used);
+    }
+
+    [UnitFact]
     public async Task GivenARedeemedChallenge_WhenPresentedAgainWithAnotherFactor_ThenReturnsChallengeTokenInvalidError()
     {
         // Given — FR-2F-10: a challenge already traded for a full token, presented again with a

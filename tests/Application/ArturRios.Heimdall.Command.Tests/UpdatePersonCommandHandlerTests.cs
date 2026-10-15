@@ -163,7 +163,8 @@ public class UpdatePersonCommandHandlerTests
         AsyncFakeRepository<GoogleUser, long>? googleUsers = null,
         AsyncFakeRepository<EmailVerificationToken, long>? verificationTokens = null,
         TwoFactorState? twoFactor = null,
-        TimeSpan? cooldown = null)
+        TimeSpan? cooldown = null,
+        AsyncFakeRepository<PasswordResetToken, long>? resetTokens = null)
     {
         twoFactor ??= new TwoFactorState();
 
@@ -174,6 +175,7 @@ public class UpdatePersonCommandHandlerTests
             persons,
             Ownership(ownershipAllowed),
             verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
+            resetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             InMemoryAtomicWrites.Instance,
             twoFactor.Configurations,
             twoFactor.Verifier(),
@@ -284,6 +286,168 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.All(tokens.Query().ToList(), token => Assert.False(token.Used));
+    }
+
+    // FR-PE-17: a password-reset link was mailed to the address being replaced, and goes with it.
+
+    private static async Task<AsyncFakeRepository<PasswordResetToken, long>> ResetTokensAsync(
+        params PasswordResetToken[] tokens)
+    {
+        var repository = new AsyncFakeRepository<PasswordResetToken, long>();
+
+        foreach (var token in tokens)
+        {
+            await repository.CreateAsync(token);
+        }
+
+        return repository;
+    }
+
+    [UnitFact]
+    public async Task GivenOutstandingResetTokens_WhenTheOwnEmailChanges_ThenTheLiveOnesAreRetiredAndNoOtherIsTouched()
+    {
+        // Given a live and an expired reset token of the person, and a live one of someone else
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var live = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var expired = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "expired", ExpiresAt = DateTime.UtcNow.AddMinutes(-1)
+        };
+        var someoneElses = new PasswordResetToken
+        {
+            PersonId = target.Id + 1, TokenHash = "other", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var resetTokens = await ResetTokensAsync(live, expired, someoneElses);
+        var handler = HandlerFor(persons, resetTokens: resetTokens);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "elsewhere@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(live.Used);
+        Assert.False(expired.Used);
+        Assert.False(someoneElses.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingResetToken_WhenAnAdministratorChangesTheEmail_ThenTheTokenIsRetired()
+    {
+        // Given — whoever makes the change
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var live = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "corrected@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(live.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingResetToken_WhenTheEmailIsUnchanged_ThenTheTokenStaysLive()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var live = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.False(live.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingResetToken_WhenAnOwnEmailChangeIsRefused_ThenTheTokenStaysLive()
+    {
+        // Given a wrong password: a refused change changes nothing
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var live = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "live", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var handler = HandlerFor(persons, resetTokens: await ResetTokensAsync(live));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "elsewhere@test.local";
+        command.CurrentPassword = "not-the-password";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.False(live.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEmailChange_WhenTheNewAddressIsSaved_ThenTheResetAndVerificationLinksWereAlreadyRetired()
+    {
+        // Given a writer that records the links' state at the moment the new address is saved
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var reset = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "reset", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var verification = new EmailVerificationToken
+        {
+            PersonId = target.Id, TokenHash = "verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var verificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        await verificationTokens.CreateAsync(verification);
+        bool? resetUsedDuringSave = null;
+        bool? verificationUsedDuringSave = null;
+
+        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
+        writer
+            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
+            .Returns((Person person, CancellationToken ct) =>
+            {
+                resetUsedDuringSave = reset.Used;
+                verificationUsedDuringSave = verification.Used;
+                return persons.UpdateAsync(person, ct);
+            });
+
+        var twoFactor = new TwoFactorState();
+        var handler = new UpdatePersonCommandHandler(
+            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
+            Ownership(true), verificationTokens, await ResetTokensAsync(reset),
+            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
+            twoFactor.NoticeSender(), new AdminEmailOptions());
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then — neither link was still live once the new address could be read
+        Assert.True(output.Success);
+        Assert.True(resetUsedDuringSave);
+        Assert.True(verificationUsedDuringSave);
     }
 
     [UnitFact]
@@ -1129,6 +1293,7 @@ public class UpdatePersonCommandHandlerTests
         var handler = new UpdatePersonCommandHandler(
             PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
             Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
+            new AsyncFakeRepository<PasswordResetToken, long>(),
             InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
             twoFactor.NoticeSender(), new AdminEmailOptions());
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());

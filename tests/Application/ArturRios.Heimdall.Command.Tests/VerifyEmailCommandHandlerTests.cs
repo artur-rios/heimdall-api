@@ -14,9 +14,10 @@ using Moq;
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for VerifyEmailCommandHandler (UC-14). Cover the main flow, AF-14a (expired), AF-14b
-// (used), AF-14c (unknown), and the input validation NFR-10 requires, plus the three decisions the
-// specification leaves open: every live token the person holds is consumed, an already-verified
-// address verifies again idempotently, and a logically deleted person's address is still verified.
+// (used), AF-14c (unknown), AF-14d (the account may no longer be acted on, answered as AF-14c), and
+// the input validation NFR-10 requires, plus the two decisions the specification leaves open: every
+// live token the person holds is consumed, and an already-verified address verifies again
+// idempotently.
 public class VerifyEmailCommandHandlerTests
 {
     private static readonly DateTime Now = DateTime.UtcNow;
@@ -29,7 +30,7 @@ public class VerifyEmailCommandHandlerTests
         public VerifyEmailCommandHandler Handler(
             IValidator<VerifyEmailCommand>? validator = null,
             IPendingRegistrationConfirmer? pendingRegistrations = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance,
+            new(validator ?? PassingValidator(), Tokens, Tokens, InMemoryAtomicWrites.Instance,
                 pendingRegistrations ?? Confirming(PendingRegistrationOutcome.NotFound));
     }
 
@@ -332,20 +333,44 @@ public class VerifyEmailCommandHandlerTests
         Assert.True(token.Used);
     }
 
-    [UnitFact]
-    public async Task GivenLogicallyDeletedPerson_WhenHandlingVerifyEmail_ThenEmailIsStillVerified()
+    [UnitTheory]
+    [InlineData("deleted")]
+    [InlineData("restricted")]
+    [InlineData("anonymised")]
+    [InlineData("user of a deleted scope")]
+    [InlineData("scope admin without a live scope")]
+    public async Task GivenAPersonNoLongerEligible_WhenHandlingVerifyEmail_ThenAnsweredAsAnUnknownTokenAndNothingChanges(
+        string state)
     {
-        // Given a deletion that landed between the email and the click. UC-14 defines no alternative
-        // flow for it, and verifying grants nothing: UC-11 refuses the login by AF-11c.
-        var fixture = await FixtureAsync(isDeleted: true);
-        await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
+        // Given a link mailed while the person was eligible, and an account change since (AF-14d)
+        var fixture = await FixtureAsync();
+        var token = await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
+        ResetPasswordCommandHandlerTests.MakeIneligible(fixture.Person, state);
+        var updatedAt = fixture.Person.UpdatedAt;
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("live-token"));
 
+        // Then — the answer an unknown token gets (AF-14c), and the record and token are untouched
+        Assert.False(output.Success);
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+        Assert.False(fixture.Person.EmailVerified);
+        Assert.Equal(updatedAt, fixture.Person.UpdatedAt);
+        Assert.False(token.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenASpentTokenOfAPersonNoLongerEligible_WhenHandlingVerifyEmail_ThenAnsweredAsAnUnknownToken()
+    {
+        // Given — the account is checked before the token's own state, so it says nothing more
+        var fixture = await FixtureAsync(isDeleted: true);
+        await TokenForAsync(fixture.Tokens, fixture.Person, "spent-token", used: true);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("spent-token"));
+
         // Then
-        Assert.True(output.Success);
-        Assert.True(fixture.Person.EmailVerified);
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
     }
 
     [UnitFact]

@@ -124,4 +124,23 @@ public class LocalGoogleIdTokenVerifierTests
         Assert.Null(await Verifier().VerifyAsync("   "));
         Assert.Null(await Verifier().VerifyAsync("not-a-jwt"));
     }
+
+    [UnitFact]
+    public async Task GivenATokenCarryingANonce_WhenVerified_ThenTheNonceIsReturned()
+    {
+        // FR-GO-20 compares the claim, so the substitute must read it as the real verifier does.
+        var payload = await Verifier().VerifyAsync(TestGoogleTokens.For(nonce: "n-42"));
+
+        Assert.NotNull(payload);
+        Assert.Equal("n-42", payload.Nonce);
+    }
+
+    [UnitFact]
+    public async Task GivenATokenWithoutANonce_WhenVerified_ThenTheNonceIsAbsent()
+    {
+        var payload = await Verifier().VerifyAsync(Token());
+
+        Assert.NotNull(payload);
+        Assert.Null(payload.Nonce);
+    }
 }

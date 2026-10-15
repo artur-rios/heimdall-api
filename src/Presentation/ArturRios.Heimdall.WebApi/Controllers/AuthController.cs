@@ -94,7 +94,11 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Unlike the two endpoints above, each rejection is named — unknown (AF-13c), expired
     ///     (AF-13a), and spent (AF-13b) tokens all answer 400 with their own message, as does a
     ///     malformed request (AF-13d). Nothing is disclosed by the distinction: the token identifies
-    ///     no account to a caller who does not already hold it.
+    ///     no account to a caller who does not already hold it. The account is checked again when the
+    ///     link is followed (AF-13e, FR-PR-08): a person restricted, deleted or anonymised since it was
+    ///     mailed, or who can no longer sign in through their scope, gets exactly the unknown-token
+    ///     answer, 400 "Invalid token.", and nothing is changed. A link mailed before the person's
+    ///     address changed has been retired (FR-PE-17) and answers 400 "Token already used.".
     /// </remarks>
     [HttpPost("password-reset")]
     [AllowAnonymous]
@@ -118,7 +122,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Each rejection is named, as UC-13's are — unknown (AF-14c), expired (AF-14a), and spent
     ///     (AF-14b) tokens all answer 400 with their own message, as does a request carrying no token
     ///     at all. An address that was already verified answers 200: UC-14 defines no alternative flow
-    ///     for it, and the link did what it promised.
+    ///     for it, and the link did what it promised. As in UC-13, the account is checked when the link
+    ///     is followed (AF-14d, FR-EV-08): a person restricted, deleted or anonymised since it was
+    ///     mailed, or who can no longer sign in through their scope, gets 400 "Invalid token.", and
+    ///     nothing is changed.
     ///     <para>
     ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
     ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
@@ -180,14 +187,21 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>PublicId</c> of the scope they are entering; the first call for a given Google account
     ///     in a given scope creates the Google User, every later one authenticates it. Open to
     ///     anonymous callers for the same reason <c>login</c> is — this is where a Google User gets
-    ///     the token every other endpoint requires.
+    ///     the token every other endpoint requires. <c>nonce</c> is optional: the value the client
+    ///     sent Google when it asked for the ID token. When it is present, the token's <c>nonce</c>
+    ///     claim must equal it exactly, so a token issued to any other sign-in is refused (AF-25g,
+    ///     FR-GO-20); when it is absent or empty, nothing is compared.
     /// </summary>
     /// <remarks>
-    ///     Both 401 flows answer alike (AF-25a, AF-25d), as UC-11's do, so an anonymous caller cannot
-    ///     use the endpoint to learn which Google accounts a scope has registered or which were
-    ///     deleted. AF-25b answers 403 for a missing, deleted, and disabled scope alike — a scope is
-    ///     not enumerable through here either. Only AF-25c (409) is named, and it discloses nothing:
-    ///     the caller has already proved the address is theirs.
+    ///     The 401 flows answer alike (AF-25a, AF-25d, AF-25g) with "Google authentication failed.",
+    ///     as UC-11's do, so an anonymous caller cannot use the endpoint to learn which Google accounts
+    ///     a scope has registered or which were deleted. AF-25b answers 403 for a missing, deleted, and
+    ///     disabled scope alike — a scope is not enumerable through here either. A first sign-in whose
+    ///     token does not carry <c>email_verified: true</c> creates nothing and answers 403 "Google
+    ///     sign-up requires a verified email address." (AF-25f, FR-GO-07), before the address is
+    ///     compared with the scope's; a Google User that already exists signs in whatever the claim
+    ///     says. AF-25c (409) is named, and it discloses nothing: the caller has proved the address is
+    ///     theirs, and Google vouches for it.
     /// </remarks>
     [HttpPost("google")]
     [AllowAnonymous]
@@ -268,7 +282,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving
     ///     control of every method selected in UC-36 — an <c>appCode</c> if <c>AppEnabled</c>, an
     ///     <c>emailCode</c> if <c>EmailEnabled</c>, both if both. On success, activates the
-    ///     configuration and returns ten recovery codes in plaintext, exactly once. The person acted on
+    ///     configuration and returns ten recovery codes in plaintext, exactly once: sixteen characters
+    ///     of Crockford's base32 (the digits and the uppercase letters but I, L, O and U), shown as
+    ///     <c>XXXX-XXXX-XXXX-XXXX</c> (FR-2F-20). The person acted on
     ///     is always the caller themselves — read from the bearer token, the same as
     ///     <see cref="EnableTwoFactorAuth" />.
     /// </summary>
@@ -306,7 +322,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     AF-38a (invalid/expired challenge token) and AF-38b/AF-38c (wrong code, or a reused
     ///     recovery code) all answer the same 401 with the same message, so this endpoint cannot be
     ///     used to distinguish a forged challenge from an expired one, or a wrong code from a
-    ///     recovery code that was already spent. <see cref="MfaPendingGuardFilter" /> is what keeps a
+    ///     recovery code that was already spent. A recovery code is accepted with or without its
+    ///     hyphens, with spaces, and in any case, and an O, I or L in a sixteen-character code reads as
+    ///     0, 1 and 1; codes of the shorter <c>XXXX-XXXX</c> shape issued before keep working until used
+    ///     or regenerated (FR-2F-20). <see cref="MfaPendingGuardFilter" /> is what keeps a
     ///     challenge token from working anywhere else (FR-2F-10) — it never applies here, since this
     ///     action never reads the challenge token as a bearer credential in the first place.
     /// </remarks>
@@ -399,7 +418,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     FR-2F-12), requiring a valid second factor — an app/email code or one of the caller's
     ///     remaining recovery codes — verified exactly as <see cref="VerifyTwoFactorAuth" /> verifies
     ///     one. On success, every existing <c>TWO_FACTOR_RECOVERY_CODE</c> row for the caller is
-    ///     removed, including any still unused, and replaced with ten new ones. The person acted on is
+    ///     removed, including any still unused, and replaced with ten new ones of the current
+    ///     <c>XXXX-XXXX-XXXX-XXXX</c> shape (FR-2F-20) — which is also how a person holding the shorter
+    ///     <c>XXXX-XXXX</c> codes issued before gets the stronger ones. The person acted on is
     ///     always the caller themselves — read from the bearer token, the same as
     ///     <see cref="EnableTwoFactorAuth" />.
     /// </summary>

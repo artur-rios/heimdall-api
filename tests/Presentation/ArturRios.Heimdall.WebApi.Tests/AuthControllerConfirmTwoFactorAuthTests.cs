@@ -145,6 +145,8 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         Assert.True(response.Body.Data!.Enabled);
         Assert.Equal(10, response.Body.Data.RecoveryCodes.Count);
         Assert.Equal(10, response.Body.Data.RecoveryCodes.Distinct().Count());
+        Assert.All(response.Body.Data.RecoveryCodes, code =>
+            Assert.Matches("^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$", code));
 
         // Then — database state
         var stored = await ConfigurationForAsync(person);

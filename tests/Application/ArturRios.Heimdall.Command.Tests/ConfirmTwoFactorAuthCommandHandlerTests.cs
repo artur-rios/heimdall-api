@@ -168,12 +168,9 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         var stored = fixture.RecoveryCodes.Query().ToList();
         Assert.Equal(10, stored.Count);
 
-        var issued = output.Data!.RecoveryCodes.Select(HashRecoveryCode).ToList();
+        var issued = output.Data!.RecoveryCodes.Select(code => RecoveryCodes.DigestOf(code)!).ToList();
         Assert.All(stored, code => Assert.Contains(issued, hash => hash.SequenceEqual(code.CodeHash)));
     }
-
-    private static byte[] HashRecoveryCode(string recoveryCode) =>
-        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(recoveryCode));
 
     /// <summary>
     ///     A recovery-code store whose writes always fail, for proving what the handler does when it
@@ -212,6 +209,27 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         Assert.True(emailCode.Used);
         Assert.Equal(10, fixture.RecoveryCodes.Query().ToList().Count);
         Assert.All(fixture.RecoveryCodes.Query().ToList(), code => Assert.False(code.Used));
+    }
+
+    [UnitFact]
+    public async Task GivenValidAppCode_WhenHandlingConfirmTwoFactorAuth_ThenTheCodesAreSixteenCrockfordCharactersStoredByDigest()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then — FR-2F-20: XXXX-XXXX-XXXX-XXXX from Crockford's base32
+        Assert.True(output.Success);
+        Assert.All(output.Data!.RecoveryCodes, code =>
+            Assert.Matches("^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$", code));
+
+        // Then — stored as SHA-256 of the sixteen characters, hyphens removed
+        var stored = fixture.RecoveryCodes.Query().Select(x => x.CodeHash).ToList();
+        Assert.All(output.Data.RecoveryCodes, code => Assert.Contains(stored, hash => hash.SequenceEqual(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(code.Replace("-", string.Empty))))));
     }
 
     [UnitFact]

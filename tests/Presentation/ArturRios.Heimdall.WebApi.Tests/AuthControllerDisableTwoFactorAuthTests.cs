@@ -85,7 +85,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
 
     private async Task<string> SeedRecoveryCodeAsync(long twoFactorAuthId, bool used = false)
     {
-        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9];
+        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext));
 
         await using var context = db.CreateContext();

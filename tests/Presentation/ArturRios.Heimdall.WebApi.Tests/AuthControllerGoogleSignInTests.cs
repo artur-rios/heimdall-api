@@ -20,8 +20,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/google (UC-25, FR-GO-03…FR-GO-13): both halves of the main
 // flow with assertions on the persisted Google User and the issued token's claims, a round trip
-// proving the token the endpoint issues is one the API accepts, AF-25a and AF-25d (401), AF-25b
-// (403), and AF-25c (409). The host under test verifies ID tokens with LocalGoogleIdTokenVerifier —
+// proving the token the endpoint issues is one the API accepts, AF-25a, AF-25d and AF-25g (401),
+// AF-25b and AF-25f (403), and AF-25c (409). The host under test verifies ID tokens with LocalGoogleIdTokenVerifier —
 // see PostgresFixture — so the tokens are locally signed but still genuinely verified.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -94,10 +94,10 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     }
 
     private Task<HttpOutput<DataOutput<GoogleSignInCommandOutput?>?>> SignInAsync(
-        Guid scopeId, string idToken) =>
+        Guid scopeId, string idToken, string? nonce = null) =>
         Gateway.PostAsync<DataOutput<GoogleSignInCommandOutput?>>(
             "/api/auth/google",
-            new GoogleSignInCommand { ScopeId = scopeId, IdToken = idToken });
+            new GoogleSignInCommand { ScopeId = scopeId, IdToken = idToken, Nonce = nonce });
 
     private async Task<List<GoogleUser>> StoredAsync(Scope scope)
     {
@@ -541,19 +541,89 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Equal(HttpStatusCode.Forbidden, view.StatusCode);
     }
 
-    [FunctionalFact]
-    public async Task GivenTokenReportsUnverifiedAddress_WhenPostAuthGoogle_ThenResponseReportsEmailVerifiedFalse()
+    [FunctionalTheory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task GivenASignUpTokenWhoseAddressIsNotVerified_WhenPostAuthGoogle_ThenForbiddenAndNothingIsStored(
+        bool? emailVerified)
     {
-        // Given a first sign-in with a Google token whose email_verified claim is false (FR-EV-05)
+        // Given a first sign-in with email_verified false or absent (AF-25f, FR-GO-07)
         var scope = await SeedScopeAsync();
 
         // When
         var response = await SignInAsync(
-            scope.PublicId, TestGoogleTokens.For(emailVerified: false));
+            scope.PublicId, TestGoogleTokens.For(emailVerified: emailVerified));
+
+        // Then
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(["Google sign-up requires a verified email address."], response.Body!.Errors);
+        Assert.Empty(await StoredAsync(scope));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnUnverifiedSignUpTokenForAnAddressTakenInTheScope_WhenPostAuthGoogle_ThenForbiddenNotConflict()
+    {
+        // Given the address held by a User person, and a token Google does not vouch for
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("held");
+        await SeedUserPersonAsync(scope, email);
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(email: email, emailVerified: false));
+
+        // Then — the answer a free address gets: nothing about the scope's addresses
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal([AuthMessages.GoogleEmailNotVerified], response.Body!.Errors);
+    }
+
+    // AF-25g (FR-GO-20): an optional nonce binds the token to the sign-in that asked for it.
+
+    [FunctionalFact]
+    public async Task GivenANonceTheTokenCarries_WhenPostAuthGoogle_ThenSignedIn()
+    {
+        // Given
+        var scope = await SeedScopeAsync();
+        var nonce = $"nonce-{Guid.NewGuid():N}";
+
+        // When
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(nonce: nonce), nonce);
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(response.Body!.Data!.EmailVerified);
+        Assert.Single(await StoredAsync(scope));
+    }
+
+    [FunctionalTheory]
+    [InlineData("some-other-nonce")]
+    [InlineData(null)]
+    public async Task GivenANonceTheTokenDoesNotCarry_WhenPostAuthGoogle_ThenUnauthorizedAndNothingIsStored(
+        string? tokenNonce)
+    {
+        // Given a token minted for another nonce, or with none
+        var scope = await SeedScopeAsync();
+
+        // When
+        var response = await SignInAsync(
+            scope.PublicId, TestGoogleTokens.For(nonce: tokenNonce), $"nonce-{Guid.NewGuid():N}");
+
+        // Then — answered as any token that fails verification (AF-25a)
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(["Google authentication failed."], response.Body!.Errors);
+        Assert.Empty(await StoredAsync(scope));
+    }
+
+    [FunctionalFact]
+    public async Task GivenNoNonceInTheRequest_WhenTheTokenCarriesOne_ThenSignedInAsBefore()
+    {
+        // Given
+        var scope = await SeedScopeAsync();
+
+        // When
+        var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(nonce: "unasked"));
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [FunctionalFact]

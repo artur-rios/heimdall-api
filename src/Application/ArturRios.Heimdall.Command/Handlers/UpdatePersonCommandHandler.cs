@@ -35,8 +35,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 ///     <para>
 ///         <b>What follows any email change.</b> Whoever made it, the person's security stamp is
-///         replaced, which revokes every token they hold (FR-AU-11), and the previous address is told
-///         (FR-PE-15) — so a change its owner did not make does not go unnoticed.
+///         replaced, which revokes every token they hold (FR-AU-11), every live verification and
+///         password-reset link is retired (FR-PE-17), and the previous address is told (FR-PE-15) —
+///         so a change its owner did not make does not go unnoticed, and nothing mailed to the old
+///         address still acts on the account.
 ///     </para>
 /// </remarks>
 public class UpdatePersonCommandHandler(
@@ -46,6 +48,7 @@ public class UpdatePersonCommandHandler(
     IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter,
+    IAsyncRepository<PasswordResetToken, long> resetTokenWriter,
     IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     ITwoFactorFactorVerifier factorVerifier,
@@ -161,6 +164,18 @@ public class UpdatePersonCommandHandler(
             return output.WithError(spending);
         }
 
+        // FR-PE-17: the links that act on the account through its address — password reset and
+        // verification — were mailed to the address being replaced, and go with it. Retired here,
+        // before the new address is written, so none can be followed once it is; and again after
+        // the save, for any mailed to the old address in between. Here also means before the person
+        // is modified below, since each retirement saves. A reset or verification already under
+        // way cannot land after the change either: both write only while the address is the one
+        // they read (IAtomicWrites.TrySetPasswordAsync, TryMarkEmailVerifiedAsync).
+        if (emailChanged && await RetireAddressLinksAsync(person.Id) is { } earlyRetirement)
+        {
+            return output.WithErrors(earlyRetirement);
+        }
+
         var previousEmail = person.Email;
 
         if (emailChanged)
@@ -215,14 +230,12 @@ public class UpdatePersonCommandHandler(
             // not fail an update that has already been made.
             await emailChangeNoticeSender.SendAsync(previousEmail);
 
-            // UC-08 step 4, continued: a verification token is proof of control of the address it
-            // was mailed to, and that is no longer the person's address. Left live, one mailed to the
-            // old address would mark the new one verified through UC-14 without anybody having read
-            // anything sent to it — undoing the reset just made.
-            var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
-                verificationTokenWriter, verificationTokenWriter, person.Id, DateTime.UtcNow);
-
-            if (retirement is not null)
+            // UC-08 step 4, continued (FR-PE-17): a verification token is proof of control of the
+            // address it was mailed to, and that is no longer the person's address. Left live, one
+            // mailed to the old address would mark the new one verified through UC-14 without
+            // anybody having read anything sent to it — undoing the reset just made. A reset token
+            // mailed there would let that mailbox set the password. The second pass of the two.
+            if (await RetireAddressLinksAsync(person.Id) is { } retirement)
             {
                 return output.WithErrors(retirement);
             }
@@ -243,6 +256,20 @@ public class UpdatePersonCommandHandler(
                 UpdatedAt = person.UpdatedAt
             })
             .WithMessage(PersonMessages.PersonUpdatedSuccessfully);
+    }
+
+    /// <summary>
+    ///     FR-PE-17: retires every live verification and password-reset link the person holds.
+    ///     Returns the persistence errors of the first failed write, or <c>null</c>.
+    /// </summary>
+    private async Task<IEnumerable<string>?> RetireAddressLinksAsync(long personId)
+    {
+        var now = DateTime.UtcNow;
+
+        return await EmailVerificationTokenRetirement.RetireLiveAsync(
+                   verificationTokenWriter, verificationTokenWriter, personId, now)
+               ?? await PasswordResetTokenRetirement.RetireLiveAsync(
+                   resetTokenWriter, resetTokenWriter, personId, now);
     }
 
     /// <summary>
@@ -269,8 +296,9 @@ public class UpdatePersonCommandHandler(
     /// </summary>
     /// <remarks>
     ///     One field carries the second factor, so its shape decides how it is checked: six digits are
-    ///     an authenticator-app or email code, anything else a recovery code, which is never all
-    ///     digits (<c>XXXX-XXXX</c>). A missing one is checked as a code and so refused like a wrong one.
+    ///     an authenticator-app or email code, anything else a recovery code, which is never six
+    ///     characters long (<c>XXXX-XXXX-XXXX-XXXX</c>, or <c>XXXX-XXXX</c> for one issued before
+    ///     those). A missing one is checked as a code and so refused like a wrong one.
     /// </remarks>
     private async Task<Reauthentication> ReauthenticateAsync(UpdatePersonCommand command, Person person)
     {

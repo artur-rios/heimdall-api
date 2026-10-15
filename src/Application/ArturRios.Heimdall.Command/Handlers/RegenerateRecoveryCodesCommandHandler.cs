@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -9,7 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Handlers;
@@ -20,8 +17,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the same <see cref="ITwoFactorFactorVerifier" /> <c>VerifyTwoFactorAuthCommandHandler</c>
 ///     (UC-38) and <c>DisableTwoFactorAuthCommandHandler</c> (UC-39) use (AF-40b), and — only once
 ///     that check passes — permanently removes every existing recovery code row for the
-///     configuration, including any still unused, and issues ten fresh ones, hashed the same way
-///     <c>ConfirmTwoFactorAuthCommandHandler</c> (UC-37) hashes the codes it issues.
+///     configuration, including any still unused, and issues ten fresh ones through
+///     <see cref="RecoveryCodes" />, as <c>ConfirmTwoFactorAuthCommandHandler</c> (UC-37) does.
 /// </summary>
 /// <remarks>
 ///     Per the Use Case Specification Document's closing note on UC-40: regeneration replaces the
@@ -55,9 +52,6 @@ public class RegenerateRecoveryCodesCommandHandler(
     ITwoFactorFactorVerifier factorVerifier)
     : ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>
 {
-    private const int RecoveryCodeCount = 10;
-    private const int RecoveryCodeSegmentLength = 4;
-
     public async Task<DataOutput<RegenerateRecoveryCodesCommandOutput?>> HandleAsync(
         RegenerateRecoveryCodesCommand command, CancellationToken cancellationToken = default)
     {
@@ -125,14 +119,15 @@ public class RegenerateRecoveryCodesCommandHandler(
             .Select(x => x.Id)
             .ToListAsync();
 
-        // UC-40 steps 4-5 (FR-2F-12): ten fresh recovery codes, hashed at rest, returned once,
-        // written in one insert before the old set is removed — see the write-order note below.
-        var recoveryCodes = GenerateRecoveryCodes();
+        // UC-40 steps 4-5 (FR-2F-12, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
+        // once, written in one insert before the old set is removed — see the write-order note below.
+        // Always the current shape, so regenerating is also how a set issued before it is replaced.
+        var recoveryCodes = RecoveryCodes.Issue();
 
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = recoveryCode.CodeHash, Used = false
             }));
 
         if (!creation.Success)
@@ -151,44 +146,10 @@ public class RegenerateRecoveryCodesCommandHandler(
         }
 
         return output
-            .WithData(new RegenerateRecoveryCodesCommandOutput { RecoveryCodes = recoveryCodes })
+            .WithData(new RegenerateRecoveryCodesCommandOutput
+            {
+                RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+            })
             .WithMessage(TwoFactorMessages.RecoveryCodesRegenerated);
     }
-
-    /// <summary>
-    ///     Generates <see cref="RecoveryCodeCount" /> random, human-typeable recovery codes, formatted
-    ///     exactly as <c>ConfirmTwoFactorAuthCommandHandler</c> formats the ones it issues — two
-    ///     <see cref="RecoveryCodeSegmentLength" />-character uppercase alphanumeric segments separated
-    ///     by a hyphen (e.g. <c>"A1B2-C3D4"</c>) — so a regenerated code is indistinguishable in shape
-    ///     from one issued at confirmation (FR-2F-12).
-    /// </summary>
-    private static List<string> GenerateRecoveryCodes()
-    {
-        var codes = new List<string>(RecoveryCodeCount);
-
-        for (var i = 0; i < RecoveryCodeCount; i++)
-        {
-            var raw = CustomRandom.Text(new RandomStringOptions
-            {
-                Length = RecoveryCodeSegmentLength * 2,
-                IncludeDigits = true,
-                IncludeUppercase = true,
-                IncludeLowercase = false,
-                IncludeSpecialCharacters = false
-            });
-
-            codes.Add($"{raw[..RecoveryCodeSegmentLength]}-{raw[RecoveryCodeSegmentLength..]}");
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    ///     Hashes a recovery code for storage, identically to
-    ///     <c>ConfirmTwoFactorAuthCommandHandler.HashRecoveryCode</c> — see its remarks for why a
-    ///     plain SHA-256 digest, with no per-code salt column, is consistent with §4.10 of the System
-    ///     Requirements Document.
-    /// </summary>
-    private static byte[] HashRecoveryCode(string recoveryCode) =>
-        SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode));
 }

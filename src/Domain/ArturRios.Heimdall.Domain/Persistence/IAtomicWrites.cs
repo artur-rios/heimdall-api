@@ -214,6 +214,30 @@ public interface IAtomicWrites
     Task<bool> TryConsumeEmailVerificationTokenAsync(EmailVerificationToken token, DateTime now);
 
     /// <summary>
+    ///     UC-13 (FR-PR-08): writes the reset password — <paramref name="passwordHash" />,
+    ///     <paramref name="salt" /> and <c>UpdatedAt</c>, and no other column — while the person still
+    ///     holds the address they were read with and is neither logically deleted, under a
+    ///     restriction (NFR-24), nor anonymised. <c>false</c> means one of those changed after the
+    ///     caller read the person, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted rather than a whole-row save for the reason <see cref="RotateSecurityStampAsync" />
+    ///     is: a save of the copy read when the token was found would write back every other column
+    ///     as it was then, and so undo an address change, or a restriction, that landed meanwhile.
+    ///     The address in the condition is what orders a reset against an address change (FR-PE-17):
+    ///     a token read before the change cannot set a password after it.
+    /// </remarks>
+    Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now);
+
+    /// <summary>
+    ///     UC-14 (FR-EV-08): marks the person's address verified and stamps <c>UpdatedAt</c>, writing
+    ///     no other column, under the same condition as <see cref="TrySetPasswordAsync" />: the
+    ///     address is the one the person was read with, and the record is not deleted, restricted or
+    ///     anonymised. <c>false</c> means nothing was written.
+    /// </summary>
+    Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now);
+
+    /// <summary>
     ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes
     ///     no other column — while the credential is still live at <paramref name="now" />
     ///     (<see cref="ApplicationCredential.LiveAt" />). <c>false</c> means it was revoked or expired

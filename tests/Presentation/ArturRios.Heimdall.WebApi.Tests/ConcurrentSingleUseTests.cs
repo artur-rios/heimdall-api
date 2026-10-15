@@ -118,7 +118,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
 
     private async Task<string> SeedRecoveryCodeAsync(long twoFactorAuthId)
     {
-        var plaintext = $"CONC-{Guid.NewGuid():N}"[..9];
+        var plaintext = $"CONC-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
 
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
@@ -202,7 +202,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
 
         Assert.Equal(10, stored.Count);
         Assert.All(winner.Body!.Data!.RecoveryCodes, code =>
-            Assert.Contains(stored, row => row.CodeHash.SequenceEqual(SHA256.HashData(Encoding.UTF8.GetBytes(code)))));
+            Assert.Contains(stored, row => row.CodeHash.SequenceEqual(RecoveryCodes.DigestOf(code)!)));
     }
 
     // FR-2F-14: an app code is accepted once

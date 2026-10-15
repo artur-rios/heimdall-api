@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -9,8 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
-using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Handlers;
@@ -72,9 +68,6 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ITotpCodeVerifier totpCodeVerifier)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {
-    private const int RecoveryCodeCount = 10;
-    private const int RecoveryCodeSegmentLength = 4;
-
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
         ConfirmTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
@@ -150,9 +143,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         // Before the writes that activate it, so a failure among them costs one extra sign-in at most.
         await atomicWrites.RotateSecurityStampAsync(person);
 
-        // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once —
-        // written before the activation below, per the write-order note in the remarks.
-        var recoveryCodes = GenerateRecoveryCodes();
+        // UC-37 steps 4-5 (FR-2F-05, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
+        // once — written before the activation below, per the write-order note in the remarks.
+        var recoveryCodes = RecoveryCodes.Issue();
 
         var issuance = await IssueRecoveryCodesAsync(twoFactorAuth.Id, recoveryCodes);
 
@@ -173,7 +166,10 @@ public class ConfirmTwoFactorAuthCommandHandler(
         }
 
         return output
-            .WithData(new ConfirmTwoFactorAuthCommandOutput { Enabled = true, RecoveryCodes = recoveryCodes })
+            .WithData(new ConfirmTwoFactorAuthCommandOutput
+            {
+                Enabled = true, RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+            })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
     }
 
@@ -189,9 +185,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
             emailCodeReader, atomicWrites, twoFactorAuthId, emailCode);
 
     /// <summary>
-    ///     Persists <paramref name="recoveryCodes" /> as the configuration's whole recovery code set,
-    ///     replacing anything already stored against it, in one insert. Returns the persistence errors,
-    ///     or <c>null</c> on success.
+    ///     Persists the digests of <paramref name="recoveryCodes" /> as the configuration's whole
+    ///     recovery code set, replacing anything already stored against it, in one insert. Returns the
+    ///     persistence errors, or <c>null</c> on success.
     /// </summary>
     /// <remarks>
     ///     The delete is what makes a retry after a failed attempt safe: a prior run that stored its
@@ -200,7 +196,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ///     same "old codes valid alongside new ones" UC-40 exists to prevent.
     /// </remarks>
     private async Task<IEnumerable<string>?> IssueRecoveryCodesAsync(
-        long twoFactorAuthId, IReadOnlyCollection<string> recoveryCodes)
+        long twoFactorAuthId, IReadOnlyCollection<IssuedRecoveryCode> recoveryCodes)
     {
         var supersededIds = await recoveryCodeReader.Query()
             .Where(x => x.TwoFactorAuthId == twoFactorAuthId)
@@ -220,45 +216,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuthId, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+                TwoFactorAuthId = twoFactorAuthId, CodeHash = recoveryCode.CodeHash, Used = false
             }));
 
         return creation.Success ? null : creation.Errors;
     }
-
-    /// <summary>
-    ///     Generates <see cref="RecoveryCodeCount" /> random, human-typeable recovery codes, formatted
-    ///     as two <see cref="RecoveryCodeSegmentLength" />-character uppercase alphanumeric segments
-    ///     separated by a hyphen (e.g. <c>"A1B2-C3D4"</c>), for FR-2F-05.
-    /// </summary>
-    private static List<string> GenerateRecoveryCodes()
-    {
-        var codes = new List<string>(RecoveryCodeCount);
-
-        for (var i = 0; i < RecoveryCodeCount; i++)
-        {
-            var raw = CustomRandom.Text(new RandomStringOptions
-            {
-                Length = RecoveryCodeSegmentLength * 2,
-                IncludeDigits = true,
-                IncludeUppercase = true,
-                IncludeLowercase = false,
-                IncludeSpecialCharacters = false
-            });
-
-            codes.Add($"{raw[..RecoveryCodeSegmentLength]}-{raw[RecoveryCodeSegmentLength..]}");
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    ///     Hashes a recovery code for storage. §4.10 of the System Requirements Document documents no
-    ///     per-code salt column for <see cref="TwoFactorRecoveryCode" /> — unlike a user-chosen
-    ///     password, a recovery code is already a high-entropy random string, so a plain SHA-256 digest
-    ///     is a one-way function consistent with that schema without inventing a column the design
-    ///     never called for.
-    /// </summary>
-    private static byte[] HashRecoveryCode(string recoveryCode) =>
-        SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode));
 }

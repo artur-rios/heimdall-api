@@ -162,6 +162,30 @@ public class RegenerateRecoveryCodesCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenALegacySet_WhenRegeneratedWithOneOfItsCodes_ThenTheNewSetHasTheCurrentShapeAndVerifies()
+    {
+        // Given a set issued before 80-bit codes (FR-2F-20): regenerating is how it is replaced
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        await SeedRecoveryCodeAsync(fixture, twoFactorAuth.Id, "AAAA-BBBB");
+
+        // When the legacy code is typed as a person might
+        var output = await fixture.Handler().HandleAsync(fixture.Command(recoveryCode: "aaaa bbbb"));
+
+        // Then — ten codes of the current shape
+        Assert.True(output.Success);
+        Assert.All(output.Data!.RecoveryCodes, code =>
+            Assert.Matches("^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$", code));
+
+        // Then — each one, typed without its hyphens, verifies against what was stored
+        var verifier = new TwoFactorFactorVerifier(
+            fixture.EmailCodes, InMemoryAtomicWrites.Instance, fixture.RecoveryCodes, fixture.TotpVerifier());
+        var verification = await verifier.VerifyAsync(
+            twoFactorAuth, code: null, recoveryCode: output.Data.RecoveryCodes[3].Replace("-", string.Empty));
+        Assert.True(verification.Matched);
+    }
+
+    [UnitFact]
     public async Task GivenValidEmailCode_WhenHandlingRegenerate_ThenTenNewCodesAreIssued()
     {
         // Given

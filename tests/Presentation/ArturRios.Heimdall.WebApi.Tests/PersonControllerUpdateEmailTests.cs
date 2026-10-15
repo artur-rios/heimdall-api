@@ -62,7 +62,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         context.TwoFactorAuths.Add(twoFactorAuth);
         await context.SaveChangesAsync();
 
-        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9];
+        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
             TwoFactorAuthId = twoFactorAuth.Id, CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode))
@@ -190,6 +190,40 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(newEmail, (await ReloadAsync(person)).Email);
+    }
+
+    [FunctionalFact]
+    public async Task GivenALiveResetLink_WhenTheOwnEmailChanges_ThenTheLinkNoLongerSetsAPassword()
+    {
+        // Given a reset link mailed to the current address (FR-PE-17), of a person who could use it
+        var person = await SeedPersonAsync("reset-link", Roles.SystemAdmin);
+        var plaintext = $"token-{Guid.NewGuid():N}";
+
+        await using (var context = db.CreateContext())
+        {
+            context.PasswordResetTokens.Add(new PasswordResetToken
+            {
+                PersonId = person.Id,
+                TokenHash = ArturRios.Heimdall.Command.Services.SingleUseTokenHash.Of(plaintext),
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        ActAs(person);
+        var changed = await UpdateAsync(person, person.Name, UniqueEmail("reset-link-new"), Password);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        // When the link is followed afterwards
+        var reset = await Gateway.PostAsync<DataOutput<ResetPasswordCommandOutput?>>(
+            "/api/auth/password-reset",
+            new ResetPasswordCommand { Token = plaintext, NewPassword = "An0ther-Str0ng-Pass!" });
+
+        // Then — the link was retired with the address, and the password is the one it was
+        Assert.Equal(HttpStatusCode.BadRequest, reset.StatusCode);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, reset.Body!.Errors);
+        var stored = await ReloadAsync(person);
+        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt));
     }
 
     [FunctionalFact]

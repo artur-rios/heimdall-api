@@ -12,7 +12,7 @@ public enum RecoveryEligibility
     /// <summary>Processing of the person is restricted (NFR-24); sending would be processing them.</summary>
     Restricted,
 
-    /// <summary>The person is logically deleted.</summary>
+    /// <summary>The person is logically deleted, or their record has been anonymised (NFR-20).</summary>
     Deleted,
 
     /// <summary>
@@ -24,14 +24,17 @@ public enum RecoveryEligibility
 
 /// <summary>
 ///     Who a password-reset link is worth sending to: UC-12's rule, shared with UC-52 so the anonymous
-///     recovery and the administrator's request cannot disagree (FR-PR-02, FR-PR-05).
+///     recovery and the administrator's request cannot disagree (FR-PR-02, FR-PR-05). Run again when
+///     a reset or verification link is followed (UC-13, UC-14: FR-PR-08, FR-EV-08), so a link issued
+///     before the account changed cannot act on it afterwards.
 /// </summary>
 /// <remarks>
 ///     It mirrors the account checks UC-11 applies at login: a link is only worth issuing to someone
 ///     who could use the resulting password. UC-12 needs only yes or no, since it answers every caller
 ///     alike; UC-52's caller is authenticated and owed the reason, so the outcome names it. The
 ///     restriction is checked first, as UC-12 always has, so a person both restricted and deleted is
-///     reported as restricted.
+///     reported as restricted. An anonymised record counts as deleted whatever its flag says: it
+///     belongs to nobody, and its address is a placeholder.
 /// </remarks>
 public static class PasswordRecoveryEligibility
 {
@@ -46,7 +49,7 @@ public static class PasswordRecoveryEligibility
             return RecoveryEligibility.Restricted;
         }
 
-        if (person.IsDeleted)
+        if (person.IsDeleted || person.AnonymisedAt is not null)
         {
             return RecoveryEligibility.Deleted;
         }

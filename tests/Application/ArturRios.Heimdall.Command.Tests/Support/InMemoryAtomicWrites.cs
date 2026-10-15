@@ -13,6 +13,12 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 {
     public static readonly InMemoryAtomicWrites Instance = new();
 
+    /// <summary>
+    ///     Called with the person as <see cref="TrySetPasswordAsync" /> is about to write their new
+    ///     password, so a test can see what the row held at that moment.
+    /// </summary>
+    public Action<Person>? OnPasswordWrite { get; init; }
+
     /// <summary>How many pending-registration guesses have been charged through this instance.</summary>
     public int PendingGuessCharges { get; private set; }
 
@@ -298,6 +304,42 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         return Task.FromResult(true);
     }
+
+    public Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now)
+    {
+        if (!RedeemableAsRead(person))
+        {
+            return Task.FromResult(false);
+        }
+
+        OnPasswordWrite?.Invoke(person);
+
+        person.PasswordHash = passwordHash;
+        person.Salt = salt;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
+    {
+        if (!RedeemableAsRead(person))
+        {
+            return Task.FromResult(false);
+        }
+
+        person.EmailVerified = true;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    /// <summary>
+    ///     The state half of the condition. The instance is the row here, so the address it was read
+    ///     with is always the one it holds; only the functional suite can change it in between.
+    /// </summary>
+    private static bool RedeemableAsRead(Person person) =>
+        !person.IsDeleted && person.ProcessingRestrictedAt is null && person.AnonymisedAt is null;
 
     public Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now)
     {

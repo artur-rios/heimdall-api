@@ -75,7 +75,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
 
     private async Task<string> SeedRecoveryCodeAsync(long twoFactorAuthId)
     {
-        var plaintext = $"BUDG-{Guid.NewGuid():N}"[..9];
+        var plaintext = $"BUDG-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
 
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode

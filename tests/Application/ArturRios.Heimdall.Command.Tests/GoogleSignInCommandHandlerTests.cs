@@ -14,8 +14,9 @@ namespace ArturRios.Heimdall.Command.Tests;
 // Unit tests for GoogleSignInCommandHandler (UC-25): both halves of the main flow — sign-up on a
 // first visit (FR-GO-09) and sign-in on every later one (FR-GO-10) — the claims of the issued token
 // (FR-GO-04), AF-25a (token fails verification), AF-25b (scope missing, deleted, or with the setting
-// off), AF-25c (address taken in the scope by a Google User or a User person), and AF-25d (the Google
-// User is logically deleted). The per-scope reach of the uniqueness rules (FR-GO-06/07/08) is pinned
+// off), AF-25c (address taken in the scope by a Google User or a User person), AF-25d (the Google
+// User is logically deleted), AF-25f (a sign-up whose address Google does not vouch for) and AF-25g
+// (a nonce the token does not carry). The per-scope reach of the uniqueness rules (FR-GO-06/07/08) is pinned
 // by the two "another scope" tests. The 401/403-by-attribute flows do not apply — the endpoint is
 // anonymous — and the end-to-end behavior is covered by AuthControllerGoogleSignInTests.
 public class GoogleSignInCommandHandlerTests
@@ -531,12 +532,14 @@ public class GoogleSignInCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenPayloadReportsUnverifiedAddress_WhenHandlingGoogleSignIn_ThenOutputReportsEmailVerifiedFalse()
+    public async Task GivenPayloadReportsUnverifiedAddress_WhenAnExistingGoogleUserSignsIn_ThenOutputReportsEmailVerifiedFalse()
     {
-        // Given Google asserting the address is not verified — email_verified can be false
+        // Given Google asserting the address is not verified — email_verified can be false — for a
+        // Google User that already exists: sign-in is not gated on the claim, only sign-up is
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
@@ -665,14 +668,61 @@ public class GoogleSignInCommandHandlerTests
         Assert.True(stored.EmailVerified);
     }
 
-    [UnitFact]
-    public async Task GivenSignUpTokenOmitsEmailVerifiedClaim_WhenHandlingGoogleSignIn_ThenGoogleUserIsCreatedUnverified()
+    // AF-25f (FR-GO-07): a sign-up needs an address Google vouches for.
+
+    [UnitTheory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task GivenASignUpTokenWhoseAddressIsNotVerified_WhenHandlingGoogleSignIn_ThenRefusedAndNothingIsCreated(
+        bool? emailVerified)
     {
-        // Given a first sign-in with a token carrying no email_verified claim: there is nothing
-        // stored to preserve, and the column is not nullable, so the new row starts unverified
+        // Given a first sign-in with email_verified false, or absent — absence proves nothing
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var (issuer, issuerMock) = TokenIssuer();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: emailVerified)), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([AuthMessages.GoogleEmailNotVerified], output.Errors);
+        Assert.Empty((await googleUsers.GetAllAsync()).Data!);
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenAnUnverifiedSignUpTokenForATakenAddress_WhenHandlingGoogleSignIn_ThenItIsNotToldTheAddressIsTaken()
+    {
+        // Given the address held by a User person of the scope, and a token Google does not vouch for
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var persons = new AsyncFakeRepository<Person, long>();
+        await SeedUserPersonAsync(persons, scope, Email);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(emailVerified: false)), scopes, persons, googleUsers, googleUsers,
+            TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then — the same answer a free address gets, not AF-25c's
+        Assert.Equal([AuthMessages.GoogleEmailNotVerified], output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAnExistingGoogleUserAndATokenWithoutTheClaim_WhenHandlingGoogleSignIn_ThenSignedIn()
+    {
+        // Given — FR-GO-07's gate is on creating a Google User, not on signing one in
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
             googleUsers, googleUsers, TokenIssuer().issuer);
@@ -682,8 +732,93 @@ public class GoogleSignInCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.False(output.Data!.EmailVerified);
-        var stored = (await googleUsers.GetAllAsync()).Data!.Single();
-        Assert.False(stored.EmailVerified);
+        Assert.Contains(AuthMessages.GoogleSignInSuccessful, output.Messages);
+    }
+
+    // AF-25g (FR-GO-20): a nonce the caller sends binds the token to this sign-in.
+
+    private static GoogleSignInCommand Command(Guid scopeId, string? nonce) =>
+        new() { ScopeId = scopeId, IdToken = "a-google-id-token", Nonce = nonce };
+
+    [UnitFact]
+    public async Task GivenANonceTheTokenCarries_WhenHandlingGoogleSignIn_ThenSignedIn()
+    {
+        // Given
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload() with { Nonce = "n-0123456789" }), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
+
+        // Then
+        Assert.True(output.Success);
+    }
+
+    [UnitTheory]
+    [InlineData("n-other")]
+    [InlineData("N-0123456789")]
+    [InlineData(null)]
+    public async Task GivenANonceTheTokenDoesNotCarry_WhenHandlingGoogleSignIn_ThenRefusedAsAnUnverifiableToken(
+        string? tokenNonce)
+    {
+        // Given a different nonce, one differing only in case, or none at all on the token
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        await SeedGoogleUserAsync(googleUsers, scope);
+        var (issuer, issuerMock) = TokenIssuer();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload() with { Nonce = tokenNonce }), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], output.Errors);
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongNonceForAScopeWithoutGoogleSignIn_WhenHandlingGoogleSignIn_ThenTheTokenIsRefusedFirst()
+    {
+        // Given — like AF-25a, the nonce is part of the token check, made before the scope is read
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes, googleSignInEnabled: false);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload() with { Nonce = "n-other" }), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
+
+        // Then
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], output.Errors);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GivenNoNonce_WhenTheTokenCarriesOne_ThenNothingIsComparedAndSignedIn(string? nonce)
+    {
+        // Given a request that sends no nonce, or an empty one: behaviour as before FR-GO-20
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload() with { Nonce = "n-0123456789" }), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, TokenIssuer().issuer);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, nonce));
+
+        // Then
+        Assert.True(output.Success);
     }
 }

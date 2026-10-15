@@ -210,6 +210,16 @@ public static class AuthMessages
     public const string GoogleSignInUnavailable = "Google sign-in is not available for this scope.";
 
     /// <summary>
+    ///     UC-25 AF-25f: the token is genuine but Google does not vouch for its address — the
+    ///     <c>email_verified</c> claim is <c>false</c> or absent — and no Google User exists for it in
+    ///     the scope yet, so none is created (FR-GO-07). An address nobody has proved may not hold a
+    ///     place in a scope. Checked before the address is compared with the scope's, so such a
+    ///     token learns nothing about which addresses a scope holds. A Google User that already
+    ///     exists still signs in.
+    /// </summary>
+    public const string GoogleEmailNotVerified = "Google sign-up requires a verified email address.";
+
+    /// <summary>
     ///     UC-25 AF-25c: the address on the verified token is already used within the scope, by
     ///     another Google User or by a <c>User</c> person (FR-GO-07). Unlike AF-25a/AF-25d this is
     ///     named separately, and nothing is disclosed by that: the caller has proved to Google that
