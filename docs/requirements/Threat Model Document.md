@@ -281,9 +281,13 @@ That is the power they already had — delete a person outright, or anonymise th
 same targets — exercised on the same people, and it is destructive and visible, since the person is
 gone. What the guard stops is tombstoning an id that is not a person's, so two statements no longer
 make a target naming a scope, an application or a credential clearable, as they would have without
-it. It is not airtight: the identity tables are not immutable, and an actor willing first to give a
-person row another entity's `public_id` could pass the check with it. That takes a rewrite of
-identity rows on top of the edit to the trail, and is recorded here as the guard's limit.
+it. It is not airtight, and the limit is stated plainly. `public_id` on the identity tables is not
+immutable, so an actor willing to give a person or Google User row another entity's `public_id` — by
+rewriting an existing row, or just as well by inserting a new one — passes the check with it. That
+is not new with #195: the same row, with `anonymised_at` set, already made the target clearable
+under #184's rule. The guard therefore restores the protection to its level before #195, no further.
+The remaining gap is that `public_id` on `PERSON` and `GOOGLE_USER` can be set to any value, which
+no trigger yet prevents; closing it is a follow-up for the owner, not part of this change.
 
 **Residual risk: Low, unchanged.** The property this threat is about — that an action cannot be
 denied — is intact. What became time-limited is attribution, which is what storage limitation
