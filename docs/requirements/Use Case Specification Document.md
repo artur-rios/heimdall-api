@@ -551,7 +551,7 @@ sequenceDiagram
    - The actor **is** the person being updated — every actor may update their own name and email.
    - The actor is a Scope Admin and the person is a `User` of a scope the actor owns — name and email
      only; a Scope Admin may never change `RoleId`.
-4. If email changes:
+4. If email changes — compared exactly, after trimming, so a change of case is a change too:
    - When the actor **is** the person being updated, the system first re-authenticates them
      (FR-PE-14): `currentPassword` must match their password, checked as UC-39 checks it (AF-08h), and
      when their two-factor authentication is active, `twoFactorCode` must be a current authenticator-app
@@ -564,8 +564,9 @@ sequenceDiagram
      `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
      after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
-   - Once the update is saved, the system replaces the person's security stamp, which revokes every
-     token they hold (FR-AU-11) — whoever made the change. An actor who changed their own email is
+   - Just before the update is saved, the system replaces the person's security stamp, which revokes
+     every token they hold (FR-AU-11) — whoever made the change. Replacing it first means a save that
+     fails costs one extra sign-in rather than leaving old sessions live. An actor who changed their own email is
      answered `200 OK`, but the token that made the request is revoked with the rest: the client signs
      in again, with the new address.
    - The system sends a notice to the **previous** address (FR-PE-15): the account's email was changed,
@@ -580,12 +581,11 @@ sequenceDiagram
 6. The system applies updates and sets `UpdatedAt`.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
 
-> **On re-authenticating an email change.** The address is where account recovery is sent, so whoever
-> can change it can take the account: change it, ask UC-12 for a reset link, and set a password. A
-> bearer token alone is not proof that its holder is the person — it can be left open on a shared
-> machine or lifted from a log — so an own email change asks for what UC-39 and UC-42 ask for. The
-> previous address is told, so a change its owner did not make does not go unnoticed, and the stamp
-> rotation ends every session the change was made from.
+> **On re-authenticating an email change.** An address change requires proof of identity, because
+> account recovery follows the address and a bearer token is not proof that the account holder is
+> present. An own email change therefore asks for what UC-39 and UC-42 ask for. The previous address
+> is told, so a change its owner did not make does not go unnoticed, and the stamp rotation ends the
+> sessions opened before it.
 >
 > **On FR-RO-05.** FR-RO-05 states that Scope Admins may assign the `User` role to persons within
 > their scope. That is satisfied by UC-06 path (a), where a Scope Admin creates a person in a scope
@@ -1703,10 +1703,9 @@ sequenceDiagram
 | AF-36e | `currentPassword` missing or wrong (FR-2F-18) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
 
-> **On requiring the password.** The method chosen here is what UC-38 will demand at every later
-> login. Chosen by somebody holding only a bearer token — an authenticator they control, with the
-> recovery codes UC-37 returns to them — it would lock the person out of their own account. The
-> password is what UC-39 asks for to remove a factor, so it is asked for to add one.
+> **On requiring the password.** Adding a second factor requires proof of identity, as removing one
+> does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
+> is not proof that the account holder is present.
 
 ---
 

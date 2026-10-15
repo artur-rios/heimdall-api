@@ -147,15 +147,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   targeted write replaces it, so a concurrent whole-row save cannot restore an old one. Google User tokens are
   unchanged. **Operators:** tokens issued before the upgrade carry no stamp and are refused, so everyone signs in
   once more after deploying; during a rolling deploy, tokens issued by instances not yet upgraded are refused by
-  upgraded ones until every instance is upgraded.
+  upgraded ones until every instance is upgraded. The migration rewrites the `person` table (its default is
+  evaluated per row) under an exclusive lock, which blocks sign-ins and every other read or write of the table
+  until it finishes; on a large table, plan for that lock time. Consumers that validate person tokens offline
+  do not see the stamp, so a revoked token stays valid at them until it expires.
 - Changing your own email through `PUT /api/persons/{id}` now requires `currentPassword`, and `twoFactorCode` (an
   authenticator-app or email code, or a recovery code, which is spent) when your two-factor authentication is
   active. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
   wrong second factor `401` with "The code or recovery code is missing, incorrect, or already used.", before the
   new address is checked, and nothing changes. An administrator changing someone else's email, and anyone changing
-  only their name, send neither. Starting two-factor setup (`POST /api/auth/2fa/enable`) now requires
-  `currentPassword` too, refused the same way. Any email change also sends a notice to the previous address, which
-  names neither the new address nor a link; a failed delivery is logged and does not fail the update.
+  only their name, send neither. The email counts as changed unless it matches exactly after trimming, so a change
+  of case alone also asks for the password, revokes tokens, sends the notice and resets `emailVerified`. Starting
+  two-factor setup (`POST /api/auth/2fa/enable`) now requires `currentPassword` too, refused the same way. Any
+  email change also sends a notice to the previous address, which names neither the new address nor a link; a
+  failed delivery is logged and does not fail the update.
   **Clients:** send `currentPassword` (and `twoFactorCode` when 2FA is active) for an own email change, and
   `currentPassword` to enable 2FA; after an own email change, a password reset, confirming or disabling 2FA, or
   regenerating recovery codes, sign in again.

@@ -66,15 +66,15 @@ sequenceDiagram
     CH->>DB: SELECT pending row
     CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
+    CH->>DB: replace the person's security stamp
     CH->>DB: INSERT 10 recovery codes (hashes only)
     CH->>DB: UPDATE IsActive = true
     CH->>DB: mark the confirming email code Used
-    CH->>DB: replace the person's security stamp
     CH-->>P: 200 — ten recovery codes, shown exactly once
 ```
 
-**Enabling needs the password** (**FR-2F-18**): a bearer token alone does not prove the person is
-present, and a second factor chosen by whoever holds one would lock its owner out. **Confirming
+**Enabling needs the password** (**FR-2F-18**): adding a second factor requires proof of identity,
+as removing one does, and a bearer token alone is not that proof. **Confirming
 revokes every token** the person holds, the confirming one included (**FR-AU-11**): the client keeps
 the recovery codes, then signs in again, now through UC-38.
 
