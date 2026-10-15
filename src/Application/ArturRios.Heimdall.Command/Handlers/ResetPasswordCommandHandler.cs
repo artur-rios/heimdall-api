@@ -116,6 +116,11 @@ public class ResetPasswordCommandHandler(
             return output.WithErrors(update.Errors);
         }
 
+        // FR-AU-11 again, once the new password is saved: a sign-in with the old password between the
+        // first rotation and the save read the first new stamp, and its token must not outlive the
+        // reset. The first rotation is what makes a failed save safe; this one closes that gap.
+        await atomicWrites.RotateSecurityStampAsync(person);
+
         // UC-13 step 4, for every other token the person still holds.
         var consumption = await ConsumeTokensAsync(token, now);
 

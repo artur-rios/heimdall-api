@@ -265,4 +265,23 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         Assert.Equal(HttpStatusCode.Unauthorized, next.StatusCode);
         Assert.Contains(ActorLivenessFilter.ActorTokenRevoked, next.Body!.Errors);
     }
+
+    [FunctionalFact]
+    public async Task GivenOwnAddressPaddedWithWhitespace_WhenPutPersonWithoutPassword_ThenNothingNewIsStored()
+    {
+        // Given — the same address with surrounding whitespace is no change, and is not written
+        var person = await SeedPersonAsync("reauth-padded");
+        ActAs(person);
+
+        // When
+        var response = await UpdateAsync(person, person.Name, $"  {person.Email} ");
+
+        // Then — accepted without a password, and the stored address is exactly what it was, so
+        // sign-in still finds it and the token is not revoked
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertUnchangedAsync(person);
+
+        var next = await Gateway.GetAsync<DataOutput<object?>>($"/api/persons/{person.PublicId}");
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+    }
 }

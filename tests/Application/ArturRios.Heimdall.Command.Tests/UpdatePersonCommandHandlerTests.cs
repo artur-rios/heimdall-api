@@ -732,9 +732,9 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenOnlySurroundingWhitespace_WhenHandlingUpdate_ThenItIsNoChange()
+    public async Task GivenOnlySurroundingWhitespace_WhenHandlingUpdate_ThenItIsNoChangeAndNothingNewIsStored()
     {
-        // Given — the comparison is of the trimmed values
+        // Given — the comparison is of the trimmed values, and the padding is not written either
         var target = User(10, Scope(1), email: "user@test.local");
         var stamp = target.SecurityStamp;
         var handler = HandlerFor(await PersonsWith(target));
@@ -747,6 +747,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
+        Assert.Equal("user@test.local", target.Email);
         Assert.Equal(stamp, target.SecurityStamp);
         Assert.True(target.EmailVerified);
     }
@@ -1075,5 +1076,70 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.Empty(twoFactor.NoticesSentTo);
+    }
+
+    // A stored address never carries surrounding whitespace: sign-in and recovery match it exactly
+    // (case aside), so a padded copy would no longer be found.
+
+    [UnitFact]
+    public async Task GivenAPaddedNewAddress_WhenHandlingUpdate_ThenTheTrimmedAddressIsStored()
+    {
+        // Given
+        var target = User(10, Scope(1), email: "before@test.local");
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "  after@test.local ";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal("after@test.local", target.Email);
+        Assert.Equal("after@test.local", output.Data!.Email);
+        Assert.Equal(["before@test.local"], twoFactor.NoticesSentTo);
+    }
+
+    // FR-AU-11: the stamp is replaced before the save, so a failed save leaves tokens revoked, and
+    // again after it, so a token issued while the save was in flight — under the first new stamp,
+    // with the old address — does not survive the change either.
+
+    [UnitFact]
+    public async Task GivenAnEmailChange_WhenHandlingUpdate_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
+    {
+        // Given a writer that records the stamp a concurrent sign-in would have read during the save
+        var target = User(10, Scope(1));
+        var original = target.SecurityStamp;
+        var persons = await PersonsWith(target);
+        Guid? duringSave = null;
+
+        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
+        writer
+            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
+            .Returns((Person person, CancellationToken ct) =>
+            {
+                duringSave = person.SecurityStamp;
+                return persons.UpdateAsync(person, ct);
+            });
+
+        var twoFactor = new TwoFactorState();
+        var handler = new UpdatePersonCommandHandler(
+            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
+            Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
+            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
+            twoFactor.NoticeSender());
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then — rotated before the save, and again after it
+        Assert.True(output.Success);
+        Assert.NotNull(duringSave);
+        Assert.NotEqual(original, duringSave);
+        Assert.NotEqual(duringSave, target.SecurityStamp);
+        Assert.NotEqual(original, target.SecurityStamp);
     }
 }

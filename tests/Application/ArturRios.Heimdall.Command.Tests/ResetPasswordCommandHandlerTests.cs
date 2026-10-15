@@ -366,4 +366,36 @@ public class ResetPasswordCommandHandlerTests
         Assert.False(output.Success);
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
     }
+
+    [UnitFact]
+    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
+    {
+        // Given a writer that records the stamp a concurrent sign-in with the old password would have
+        // read while the new password was being saved
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
+        var original = fixture.Person.SecurityStamp;
+        Guid? duringSave = null;
+
+        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
+        writer
+            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
+            .Returns((Person person, CancellationToken ct) =>
+            {
+                duringSave = person.SecurityStamp;
+                return fixture.Persons.UpdateAsync(person, ct);
+            });
+
+        var handler = new ResetPasswordCommandHandler(
+            PassingValidator(), fixture.Tokens, fixture.Tokens, writer.Object, InMemoryAtomicWrites.Instance);
+
+        // When
+        var output = await handler.HandleAsync(Command("race-token"));
+
+        // Then — rotated before the save, and again after it
+        Assert.True(output.Success);
+        Assert.NotNull(duringSave);
+        Assert.NotEqual(original, duringSave);
+        Assert.NotEqual(duringSave, fixture.Person.SecurityStamp);
+    }
 }

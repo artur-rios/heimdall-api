@@ -108,6 +108,11 @@ public class UpdatePersonCommandHandler(
         // notice: it fails closed.
         var emailChanged = !string.Equals(person.Email.Trim(), command.Email.Trim(), StringComparison.Ordinal);
 
+        // What is written when it did change: trimmed, because sign-in and recovery match the stored
+        // address exactly, case aside, and a padded copy would no longer be found. When it did not,
+        // the stored value is left exactly as it is.
+        var newEmail = emailChanged ? command.Email.Trim() : person.Email;
+
         // UC-08 step 4 (FR-PE-14, AF-08h, AF-08i): changing your own address needs your password, and
         // your second factor when it is active. Before the uniqueness check, so without them a caller
         // learns nothing about the new address either.
@@ -170,7 +175,7 @@ public class UpdatePersonCommandHandler(
 
         // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it).
         person.Name = command.Name;
-        person.Email = command.Email;
+        person.Email = newEmail;
         person.UpdatedAt = DateTime.UtcNow;
 
         var update = await personWriter.UpdateAsync(person);
@@ -178,6 +183,14 @@ public class UpdatePersonCommandHandler(
         if (!update.Success)
         {
             return output.WithErrors(update.Errors);
+        }
+
+        // FR-AU-11 again, once the new address is saved: a sign-in between the first rotation and
+        // the save read the first new stamp beside the old address, and its token must not outlive
+        // the change. The first rotation is what makes a failed save safe; this one closes that gap.
+        if (emailChanged)
+        {
+            await atomicWrites.RotateSecurityStampAsync(person);
         }
 
         if (emailChanged)
@@ -398,7 +411,7 @@ public class UpdatePersonCommandHandler(
     /// </summary>
     private async Task<bool> EmailTakenAsync(UpdatePersonCommand command, Person person, long targetRoleId)
     {
-        var email = command.Email.ToLower();
+        var email = command.Email.Trim().ToLower();
 
         if (targetRoleId == (long)Roles.User && person.ScopeMembership is not null)
         {
