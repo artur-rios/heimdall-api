@@ -56,7 +56,8 @@ public class HardDeleteScopeCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 3: the scope's members, counted regardless of individual deletion state.
+        // The scope's members, counted regardless of individual deletion state: the rows steps 3
+        // and 4 act on, and the totals step 7 reports.
         var users = await personReader.Query()
             .Where(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id)
             .ToListAsync();

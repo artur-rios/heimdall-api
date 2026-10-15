@@ -24,16 +24,16 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <para>
 ///         No self-deletion refusal, unlike <see cref="DeletePersonCommandHandler" /> (AF-09d) and
 ///         <see cref="HardDeletePersonCommandHandler" /> (AF-10c). A Google User is always
-///         <c>User</c>-equivalent (FR-GO-04) and can never hold <c>SystemAdmin</c>, so the only actor who
-///         may call this endpoint can never be its target — there is no way to lock yourself out, and a
-///         guard against it would be a flow no document defines.
+///         <c>User</c>-equivalent (FR-GO-04) and can never hold <c>SystemAdmin</c>, so the only actor
+///         who may call this endpoint can never be its target — there is no way to lock yourself out,
+///         and a guard against it would be a flow no document defines.
 ///     </para>
 ///     <para>
-///         Before the record is removed, its <c>PublicId</c> is tombstoned (<see cref="ErasedSubject" />,
-///         NFR-21, #195), so the audit entries that name it as their target — this hard delete's own
-///         among them — can still be cleared once nothing else says the id was a person's. Written
-///         first, a failed delete leaves a tombstone for a live row, which nothing acts on; and a retry
-///         writes it again without error.
+///         Before the record is removed, its <c>PublicId</c> is tombstoned
+///         (<see cref="ErasedSubject" />, NFR-21, #195), so the audit entries that name it as their
+///         target — this hard delete's own among them — can still be cleared once nothing else says the
+///         id was a person's. Written first, a failed delete leaves a tombstone for a live row, which
+///         nothing acts on; and a retry writes it again without error.
 ///     </para>
 /// </remarks>
 public class HardDeleteGoogleUserCommandHandler(

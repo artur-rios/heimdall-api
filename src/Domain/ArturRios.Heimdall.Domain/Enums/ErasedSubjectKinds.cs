@@ -17,7 +17,9 @@ public enum ErasedSubjectKinds
     [Description("A hard-deleted person")]
     Person = 1,
 
-    /// <summary>A <c>GOOGLE_USER</c> row, removed by UC-29 or by UC-05 as a member of its scope.</summary>
+    /// <summary>
+    ///     A <c>GOOGLE_USER</c> row, removed by UC-29 or by UC-05 as a member of its scope.
+    /// </summary>
     [Description("A hard-deleted Google User")]
     GoogleUser = 2
 }

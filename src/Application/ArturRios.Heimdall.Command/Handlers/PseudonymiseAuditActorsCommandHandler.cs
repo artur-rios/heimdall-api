@@ -65,11 +65,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <para>
 ///         <b>Why the database is the authority, not this handler.</b> The trigger installed by
 ///         <c>AllowClearingAuditTarget</c>, and widened by <c>AllowClearingErasedSubjectTarget</c>,
-///         permits exactly two changes — the actor attribution set to NULL, and a person target set
-///         to NULL — every other column identical, and each only once due. This handler cannot clear either early, cannot reassign either, and cannot
-///         alter anything else, because the database refuses all three regardless of what the code
-///         asks for. The rule lives where it cannot be bypassed by a future caller who did not read
-///         this comment.
+///         permits exactly two changes — the actor attribution set to NULL, and a person target set to
+///         NULL — every other column identical, and each only once due. This handler cannot clear
+///         either early, cannot reassign either, and cannot alter anything else, because the database
+///         refuses all three regardless of what the code asks for. The rule lives where it cannot be
+///         bypassed by a future caller who did not read this comment.
 ///     </para>
 ///     <para>
 ///         <b>Why an erased identity is not left to the clock.</b> A subject-requested erasure

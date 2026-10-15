@@ -22,12 +22,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
-///     Before anything is removed, the person's <c>PublicId</c> is tombstoned (<see cref="ErasedSubject" />,
-///     NFR-21, #195). Audit entries name their target by that bare id, so once the row is gone the
-///     tombstone is the only evidence the retention pass and the database have that those entries —
-///     this hard delete's own among them — name a person whose target must be cleared. Written first,
-///     a failure later leaves a tombstone for a live row, which nothing acts on; and a retry writes it
-///     again without error.
+///     Before anything is removed, the person's <c>PublicId</c> is tombstoned
+///     (<see cref="ErasedSubject" />, NFR-21, #195). Audit entries name their target by that bare id,
+///     so once the row is gone the tombstone is the only evidence the retention pass and the database
+///     have that those entries — this hard delete's own among them — name a person whose target must be
+///     cleared. Written first, a failure later leaves a tombstone for a live row, which nothing acts
+///     on; and a retry writes it again without error.
 /// </remarks>
 public class HardDeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
