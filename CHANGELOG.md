@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-15
+
 ### Added
 
 - UC-53 to UC-57 (#178): a registered application can authenticate to Heimdall as itself. A System Admin, or the
@@ -380,7 +382,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0
