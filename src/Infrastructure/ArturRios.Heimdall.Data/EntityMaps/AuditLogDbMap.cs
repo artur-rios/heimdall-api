@@ -16,6 +16,10 @@ internal static class AuditLogDbMap
         auditLog.HasIndex(x => x.CreatedAt);
         auditLog.HasIndex(x => x.ActorPersonId);
 
+        // UC-48 filters by target ("what happened to this entity?"); without this that is a scan of
+        // a table that only grows.
+        auditLog.HasIndex(x => x.TargetId);
+
         auditLog.Property(x => x.Action).IsRequired();
         auditLog.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
 

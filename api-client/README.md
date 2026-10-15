@@ -7,9 +7,9 @@ Ready-to-send requests for every endpoint the API exposes, in two formats:
 | [`http/`](http) | JetBrains HTTP Client (`.http`) | Rider, IntelliJ IDEA, and VS Code with the REST Client extension |
 | [`bruno/`](bruno) | [Bruno](https://www.usebruno.com) collection | The Bruno app, or `bru run` on the command line |
 
-Both cover the same 49 operations — the same set the
+Both cover every operation — the same set the
 [published OpenAPI document](../docs/openapi/heimdall.json) describes — and both are organised by
-subject: authentication, scopes, persons, applications, scope permissions, Google Users, health.
+subject: authentication, scopes, persons, applications, scope permissions, Google Users, health, audit trail.
 
 For what each endpoint means and who may call it, see the
 [API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/). To read the schemas,

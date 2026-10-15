@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ArturRios.Heimdall.Data.EntityMaps;
@@ -70,6 +71,15 @@ internal static class PersonDbMap
         person.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
         person.Property(x => x.EmailVerified).HasDefaultValue(false);
+
+        // FR-AU-11: the database fills the stamp for a row inserted without one, as the migration
+        // filled the rows that predate it. After insert a whole-row save ignores it: only the
+        // targeted write in AtomicWrites replaces it, so a save of a copy read before a rotation
+        // cannot write the revoked stamp back.
+        person.Property(x => x.SecurityStamp)
+            .IsRequired()
+            .HasDefaultValueSql("gen_random_uuid()")
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
         // Deliberately not a foreign key and not a navigation. It carries no relationship of its own
         // — SCOPE_USER is the relationship, and mapping this as a second one would give EF two ways

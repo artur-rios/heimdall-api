@@ -1,0 +1,19 @@
+meta {
+  name: List system admins
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{host}}/api/persons/system-admins?pageNumber=1&pageSize=10
+  body: none
+  auth: inherit
+}
+
+docs {
+  UC-07 read e, FR-PE-13. System Admin only.
+
+  Lists the deployment's System Admins: who else holds full access. Returns identifier, name, and email only. Logically deleted and restricted administrators are not listed.
+
+  Add &name= or &email= to filter by a case-insensitive substring.
+}

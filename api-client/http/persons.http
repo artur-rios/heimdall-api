@@ -91,8 +91,18 @@ Authorization: Bearer {{token}}
 GET {{host}}/api/persons/scope-admins?pageNumber=1&pageSize=10&excludeOwnersOfScopeId={{scopeId}}
 Authorization: Bearer {{token}}
 
+### List System Admins (UC-07 read e, FR-PE-13) — System Admin only.
+# Live, unrestricted System Admins only, projected to id, name, and email. name and email filter
+# by a case-insensitive substring.
+GET {{host}}/api/persons/system-admins?pageNumber=1&pageSize=10
+Authorization: Bearer {{token}}
+
 ### Update a person (UC-08) — any authenticated caller, subject to the handler's rules.
 # roleId may only be changed by a System Admin; omit it entirely for a self-service name/email edit.
+# Changing your own email also needs "currentPassword", plus "twoFactorCode" (an app or email code,
+# or a recovery code; with only the Email method, a recovery code, since nothing sends an email code
+# to a signed-in caller) when your 2FA is active; 401 when either is missing or wrong. Any email change
+# revokes the person's tokens, so sign in again after changing your own.
 PUT {{host}}/api/persons/{{personId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -101,6 +111,18 @@ Content-Type: application/json
   "name": "Example Scope Admin, renamed",
   "email": "scope.admin@example.com"
 }
+
+### Send a person a fresh verification link (UC-51) — System Admin, or the owning Scope Admin for a User.
+# No body. Retires their live links and mails a new one to their own address. 409 when deleted or
+# restricted, 400 when already verified, 429 within the cooldown (5 minutes by default).
+POST {{host}}/api/persons/{{scopeUserId}}/verification-email
+Authorization: Bearer {{token}}
+
+### Send a person a password-reset link (UC-52) — System Admin, or the owning Scope Admin for a User.
+# No body. UC-12's eligibility, but refusals are reported: 409 when deleted, restricted, or unable to
+# sign in. 429 within the cooldown.
+POST {{host}}/api/persons/{{scopeUserId}}/password-reset
+Authorization: Bearer {{token}}
 
 ### Remove an owner from a scope (UC-22) — System Admin or owning Scope Admin.
 # Refused if it would leave the scope with no owner.

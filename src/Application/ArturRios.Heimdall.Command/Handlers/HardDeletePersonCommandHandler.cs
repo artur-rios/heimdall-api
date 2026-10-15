@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -20,6 +21,14 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     totals of the removed dependents, counted regardless of their individual deletion state. All
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
+/// <remarks>
+///     Before anything is removed, the person's <c>PublicId</c> is tombstoned
+///     (<see cref="ErasedSubject" />, NFR-21, #195). Audit entries name their target by that bare id,
+///     so once the row is gone the tombstone is the only evidence the retention pass and the database
+///     have that those entries — this hard delete's own among them — name a person whose target must be
+///     cleared. Written first, a failure later leaves a tombstone for a live row, which nothing acts
+///     on; and a retry writes it again without error.
+/// </remarks>
 public class HardDeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncRepository<Person, long> personWriter,
@@ -28,7 +37,8 @@ public class HardDeletePersonCommandHandler(
     IAsyncReadOnlyRepository<PasswordResetToken, long> passwordResetTokenReader,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
-    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter)
+    IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
+    IErasedSubjects erasedSubjects)
     : ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>
 {
     public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command, CancellationToken cancellationToken = default)
@@ -55,7 +65,7 @@ public class HardDeletePersonCommandHandler(
             return output.WithError(PersonMessages.CannotDeleteSelf);
         }
 
-        // UC-10 step 2 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
+        // UC-10 step 3 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
         // deletion state: NFR-12 names hard-deleting the last owning person explicitly, and the guard
         // keeps every scope row backed by at least one SCOPE_OWNER row.
         if (await WouldStripLastOwnerAsync(person))
@@ -63,7 +73,20 @@ public class HardDeletePersonCommandHandler(
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
 
-        // UC-10 steps 3-4: the dependents, counted regardless of individual deletion state.
+        // UC-10 step 4 (NFR-21, #195): tombstone the id before anything irreversible happens, so the
+        // trail's entries about this person can still be cleared once the row that said who they
+        // were is gone.
+        await erasedSubjects.RecordAsync(
+        [
+            new ErasedSubject
+            {
+                Id = person.PublicId,
+                Kind = (int)ErasedSubjectKinds.Person,
+                CreatedAt = DateTime.UtcNow
+            }
+        ]);
+
+        // UC-10 steps 5-6: the dependents, counted regardless of individual deletion state.
         var applications = await applicationReader.Query()
             .Where(a => a.OwnerId == person.Id)
             .ToListAsync();
@@ -86,7 +109,7 @@ public class HardDeletePersonCommandHandler(
             return output.WithErrors(deleteErrors);
         }
 
-        // UC-10 steps 5-6: delete the person; its ON DELETE CASCADE foreign keys clear the SCOPE_USER
+        // UC-10 steps 7-8: delete the person; its ON DELETE CASCADE foreign keys clear the SCOPE_USER
         // or SCOPE_OWNER join rows.
         var personDelete = await personWriter.DeleteAsync(person);
 
@@ -95,7 +118,7 @@ public class HardDeletePersonCommandHandler(
             return output.WithErrors(personDelete.Errors);
         }
 
-        // UC-10 step 7.
+        // UC-10 step 9.
         return output
             .WithData(new HardDeletePersonCommandOutput
             {

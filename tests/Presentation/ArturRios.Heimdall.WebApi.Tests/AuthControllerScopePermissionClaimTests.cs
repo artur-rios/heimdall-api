@@ -110,7 +110,7 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
 
     /// <summary>Reads the identity out of an issued token, to assert on its permission claims.</summary>
     private static IdentityUser ClaimsOf(string token) =>
-        (IdentityUser)new IdentityUserMapper().FromClaims(TokenClaimsReader.Read(token)!)!;
+        (IdentityUser)new IdentityUserMapper(TestTokens.Audiences).FromClaims(TokenClaimsReader.Read(token)!)!;
 
     [FunctionalFact]
     public async Task GivenUserOfScopeWithFlaggedAndUnflaggedPermissions_WhenPostLogin_ThenTokenCarriesOnlyFlaggedNames()

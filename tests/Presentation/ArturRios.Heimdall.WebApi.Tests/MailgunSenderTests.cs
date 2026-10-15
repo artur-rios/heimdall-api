@@ -313,4 +313,41 @@ public class MailgunSenderTests
         Assert.Contains(Token, emailService.Body);
         Assert.DoesNotContain("http", emailService.Body);
     }
+
+    // FR-PE-15: the notice an email change sends to the previous address.
+
+    private static MailgunEmailChangeNoticeSender NoticeSender(IEmailService emailService) =>
+        new(emailService, NullLogger<MailgunEmailChangeNoticeSender>.Instance);
+
+    [UnitFact]
+    public async Task GivenAnEmailChange_WhenSendingTheNotice_ThenThePreviousAddressIsToldWithNoLinkAndNoNewAddress()
+    {
+        // Given
+        var emailService = new StubEmailService();
+
+        // When
+        await NoticeSender(emailService).SendAsync(Recipient);
+
+        // Then — the old address, told what happened and what to do if it was not them
+        Assert.Equal(Recipient, emailService.To);
+        Assert.Equal("The email address on your account was changed", emailService.Subject);
+        Assert.Contains("was changed", emailService.Body);
+        Assert.Contains("contact an administrator", emailService.Body);
+
+        // Then — nothing to follow, and no address at all: the sender is never handed the new one
+        Assert.DoesNotContain("http", emailService.Body);
+        Assert.DoesNotContain("@", emailService.Body);
+    }
+
+    [UnitFact]
+    public async Task GivenMailgunThrows_WhenSendingTheEmailChangeNotice_ThenNothingIsThrown()
+    {
+        // Given — the change has been made; a failed notice must not turn it into an error
+        var emailService = new StubEmailService { ExceptionToThrow = new HttpRequestException("down") };
+
+        // When / Then
+        await NoticeSender(emailService).SendAsync(Recipient);
+
+        Assert.True(emailService.Called);
+    }
 }

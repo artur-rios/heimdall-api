@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("heimdall")
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -85,6 +85,63 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("application", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ApplicationCredential", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ApplicationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("application_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("secret_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_application_credential");
+
+                    b.HasIndex("ApplicationId")
+                        .HasDatabaseName("ix_application_credential_application_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_application_credential_public_id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_application_credential_secret_hash");
+
+                    b.ToTable("application_credential", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -145,6 +202,9 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_audit_log_public_id");
 
+                    b.HasIndex("TargetId")
+                        .HasDatabaseName("ix_audit_log_target_id");
+
                     b.ToTable("audit_log", "heimdall");
                 });
 
@@ -189,6 +249,32 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasDatabaseName("ix_email_verification_token_token_hash");
 
                     b.ToTable("email_verification_token", "heimdall");
+                });
+
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ErasedSubject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasColumnOrder(1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.HasKey("Id")
+                        .HasName("pk_erased_subject");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_erased_subject_created_at");
+
+                    b.ToTable("erased_subject", "heimdall");
                 });
 
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.GoogleUser", b =>
@@ -420,6 +506,10 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("password_hash");
 
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id");
+
                     b.Property<byte[]>("Salt")
                         .IsRequired()
                         .HasColumnType("bytea")
@@ -437,6 +527,10 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_pending_registration");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pending_registration_public_id");
 
                     b.HasIndex("ScopeId")
                         .HasDatabaseName("ix_pending_registration_scope_id");
@@ -569,6 +663,12 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.Property<long?>("ScopeId")
                         .HasColumnType("bigint")
                         .HasColumnName("scope_id");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -1048,6 +1148,18 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.Navigation("Scope");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ApplicationCredential", b =>
+                {
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Application", "Application")
+                        .WithMany("Credentials")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_application_credential_application_application_id");
+
+                    b.Navigation("Application");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.EmailVerificationToken", b =>
                 {
                     b.HasOne("ArturRios.Heimdall.Domain.Entities.Person", "Person")
@@ -1196,6 +1308,11 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasConstraintName("fk_two_factor_recovery_code_two_factor_auth_two_factor_auth_id");
 
                     b.Navigation("TwoFactorAuth");
+                });
+
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Application", b =>
+                {
+                    b.Navigation("Credentials");
                 });
 
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.Person", b =>

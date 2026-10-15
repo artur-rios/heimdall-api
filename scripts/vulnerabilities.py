@@ -14,7 +14,13 @@ Usage (from anywhere in the repository):
     python scripts/vulnerabilities.py            # scan the solution, fail on any finding
     python scripts/vulnerabilities.py --quiet    # print only the findings
 
-Exit codes: 0 clean, 1 vulnerabilities found, 2 the scan itself could not run.
+It also fails when the `dotnet-ef` tool in .config/dotnet-tools.json is not the same version as
+Microsoft.EntityFrameworkCore in Directory.Packages.props: the tool and the runtime are released
+together, and a tool that lags the package scaffolds migrations against a different EF Core.
+
+Exit codes: 0 clean, 1 vulnerabilities found or the dotnet-ef version drifted, 2 the scan itself
+(or the version check's inputs) could not run. The scan runs first and the version check after, so
+drift never hides findings.
 
 When a finding has no fixed version available -- a transitive dependency whose publisher has not
 released one -- the options are to pin a patched version of the intermediate package, to pin the
@@ -24,14 +30,18 @@ Deleting this check is not one of the options.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ElementTree
 from collections import namedtuple
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOLUTION = REPO_ROOT / "src/ArturRios.Heimdall.sln"
+TOOLS_MANIFEST = REPO_ROOT / ".config/dotnet-tools.json"
+PACKAGE_VERSIONS = REPO_ROOT / "Directory.Packages.props"
 
 # Two phrasings, and the difference is not cosmetic: scanning a solution produces
 #
@@ -96,6 +106,42 @@ def describe(findings):
     return [f"{f.severity:<8} {f.package} {f.resolved} ({f.project}) {f.advisory}" for f in ranked]
 
 
+class DriftCheckError(Exception):
+    """The versions could not be read, so no conclusion about drift can be drawn."""
+
+
+def ef_version_drift(manifest=TOOLS_MANIFEST, props=PACKAGE_VERSIONS):
+    """Return a message when dotnet-ef and Microsoft.EntityFrameworkCore differ in version, else None.
+
+    Raises DriftCheckError when either file is missing or malformed, or lacks the entry to compare.
+    """
+    try:
+        tool = json.loads(Path(manifest).read_text())["tools"]["dotnet-ef"]["version"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise DriftCheckError(f"Could not read the dotnet-ef version from {manifest}: {error!r}") from error
+
+    try:
+        root = ElementTree.parse(props).getroot()
+    except (OSError, ElementTree.ParseError) as error:
+        raise DriftCheckError(f"Could not read {props}: {error}") from error
+
+    package = None
+
+    for element in root.iter("PackageVersion"):
+        if element.get("Include") == "Microsoft.EntityFrameworkCore":
+            package = element.get("Version")
+
+    if package is None:
+        raise DriftCheckError(f"Microsoft.EntityFrameworkCore is not pinned in {props}.")
+
+    if tool != package:
+        return (f"dotnet-ef {tool} (.config/dotnet-tools.json) does not match "
+                f"Microsoft.EntityFrameworkCore {package} (Directory.Packages.props); "
+                "update the tool to the package version.")
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--quiet", action="store_true", help="print only the findings, not the raw scan output")
@@ -128,14 +174,23 @@ def main():
 
     if not findings:
         print("No known vulnerabilities in any dependency, direct or transitive.")
-        return 0
+    else:
+        print(f"\n{len(findings)} vulnerable package reference(s):\n", file=sys.stderr)
 
-    print(f"\n{len(findings)} vulnerable package reference(s):\n", file=sys.stderr)
+        for line in describe(findings):
+            print(f"  {line}", file=sys.stderr)
 
-    for line in describe(findings):
-        print(f"  {line}", file=sys.stderr)
+    # After the scan, not before: a drifted tool must not hide the scan's findings.
+    try:
+        drift = ef_version_drift()
+    except DriftCheckError as error:
+        print(f"The dotnet-ef version check could not run: {error}", file=sys.stderr)
+        return 2
 
-    return 1
+    if drift:
+        print(drift, file=sys.stderr)
+
+    return 1 if findings or drift else 0
 
 
 if __name__ == "__main__":

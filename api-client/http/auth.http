@@ -58,6 +58,7 @@ Content-Type: application/json
 ### Set a new password from the mailed token (UC-13) — anonymous.
 # The token arrives by email. With the logging sender configured (EMAIL_DELIVERY=Logging) it is
 # written to the API's log instead of being sent, which is where to copy it from locally.
+# Revokes every token the person holds: sign in again with the new password.
 POST {{host}}/api/auth/password-reset
 Content-Type: application/json
 
@@ -111,7 +112,8 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "methods": ["App"]
+  "methods": ["App"],
+  "currentPassword": "{{adminPassword}}"
 }
 
 > {%
@@ -122,7 +124,8 @@ Content-Type: application/json
 
 ### Confirm two-factor setup (UC-37) — authenticated.
 # Prove control of every method selected above: appCode if App was selected, emailCode if Email was,
-# both if both. Answers ten recovery codes in plaintext, exactly once.
+# both if both. Answers ten recovery codes in plaintext, exactly once. Revokes every token the
+# person holds, this one included: keep the codes, then sign in again (now through 2fa/verify).
 POST {{host}}/api/auth/2fa/confirm
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -157,7 +160,7 @@ Content-Type: application/json
 
 ### Turn two-factor authentication off (UC-39) — authenticated.
 # Requires the current password *and* a second factor — as hard to satisfy as a login. Send either
-# code or recoveryCode.
+# code or recoveryCode. Revokes every token the person holds, this one included: sign in again.
 POST {{host}}/api/auth/2fa/disable
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -169,6 +172,7 @@ Content-Type: application/json
 
 ### Issue a fresh set of ten recovery codes (UC-40) — authenticated.
 # Invalidates every existing code, including unused ones. Send either code or recoveryCode.
+# Revokes every token the person holds, this one included: keep the codes, then sign in again.
 POST {{host}}/api/auth/2fa/recovery-codes/regenerate
 Authorization: Bearer {{token}}
 Content-Type: application/json

@@ -11,6 +11,7 @@ using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
@@ -118,7 +119,14 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     any authenticated actor because a User may update their own record; the per-actor rule and
     ///     the role-change restriction (AF-08c) are enforced by the handler.
     /// </summary>
+    /// <remarks>
+    ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
+    ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
+    ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
+    ///     password-verifying endpoint does.
+    /// </remarks>
     [HttpPut("persons/{id:guid}")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(
         Guid id, [FromBody] UpdatePersonCommand command)
     {
@@ -261,6 +269,80 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
 
         var result = await queryMediator
             .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Lists the system's <c>SystemAdmin</c> persons (UC-07 read e, FR-PE-13), projected to
+    ///     identifier, name, and email: who else holds full access to the deployment. System Admin
+    ///     only.
+    /// </summary>
+    /// <remarks>
+    ///     A Scope Admin is deliberately excluded: a System Admin's address is not tenant-facing,
+    ///     which is also why <c>GET /api/persons/scope-admins</c> offers System Admins only to a
+    ///     System Admin caller.
+    /// </remarks>
+    [HttpGet("persons/system-admins")]
+    [RoleRequirement((int)Roles.SystemAdmin)]
+    public async Task<ActionResult<PaginatedOutput<PersonSummaryOutput>>> ListSystemAdmins(
+        [FromQuery] ListSystemAdminsQuery query)
+    {
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Has a fresh verification link mailed to a person's own address (UC-51, FR-EV-06): outstanding
+    ///     links are retired first, as UC-15 does, and the link uses the scope's verification URL. A
+    ///     System Admin may ask for any person; a Scope Admin only for a <c>User</c> of a scope they own
+    ///     (AF-51b). No body; the token is never returned.
+    /// </summary>
+    /// <remarks>
+    ///     Refused when the person is deleted or restricted (409, AF-51c) or already verified (400,
+    ///     AF-51d), and with 429 when an email of this kind went to them within the cooldown,
+    ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c> (five minutes by default, AF-51e). 200 means
+    ///     the email was handed to the sender.
+    /// </remarks>
+    [HttpPost("persons/{id:guid}/verification-email")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SendPersonVerificationEmailCommandOutput?>>> SendVerificationEmail(
+        Guid id)
+    {
+        var command = new SendPersonVerificationEmailCommand { Id = id };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Has a password-reset link mailed to a person's own address (UC-52, FR-PR-05). A System Admin
+    ///     may ask for any person; a Scope Admin only for a <c>User</c> of a scope they own (AF-52b). No
+    ///     body; neither a token nor a password is accepted or returned.
+    /// </summary>
+    /// <remarks>
+    ///     Eligibility is UC-12's: refused (409) when the person is deleted or restricted (AF-52c) or
+    ///     their account could not sign in — a User whose scope is deleted, a Scope Admin with no live
+    ///     scope (AF-52d). 429 when a reset went to them within the cooldown (AF-52e). Unlike UC-12 the
+    ///     send is not queued: the caller is authenticated and owed a real answer. 200 means the email
+    ///     was handed to the sender.
+    /// </remarks>
+    [HttpPost("persons/{id:guid}/password-reset")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<SendPersonPasswordResetCommandOutput?>>> SendPasswordReset(Guid id)
+    {
+        var command = new SendPersonPasswordResetCommand { Id = id };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<SendPersonPasswordResetCommand, SendPersonPasswordResetCommandOutput>(command);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }

@@ -3,6 +3,8 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -19,6 +21,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the scope's members and permissions, counted regardless of their individual deletion state.
 ///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
+/// <remarks>
+///     Before anything is removed, the <c>PublicId</c> of every member person and Google User about
+///     to go is tombstoned (<see cref="ErasedSubject" />, NFR-21, #195), one per row, in one write.
+///     Audit entries name their target by that bare id, so without the tombstone nothing would say,
+///     once the rows are gone, that those entries name people whose targets must be cleared. The
+///     scope's own id is not tombstoned: a scope is not a person, and its entries stay as recorded.
+///     Written first, a failure later leaves tombstones for live rows, which nothing acts on; and a
+///     retry writes them again without error.
+/// </remarks>
 public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncRepository<Scope, long> scopeWriter,
@@ -28,7 +39,8 @@ public class HardDeleteScopeCommandHandler(
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
     IAsyncRepository<Application, long> applicationWriter,
-    IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader)
+    IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader,
+    IErasedSubjects erasedSubjects)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -44,7 +56,8 @@ public class HardDeleteScopeCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 3: the scope's members, counted regardless of individual deletion state.
+        // The scope's members, counted regardless of individual deletion state: the rows steps 3
+        // and 4 act on, and the totals step 7 reports.
         var users = await personReader.Query()
             .Where(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id)
             .ToListAsync();
@@ -56,6 +69,25 @@ public class HardDeleteScopeCommandHandler(
             .ToListAsync();
         var scopePermissionCount = await scopePermissionReader.Query()
             .CountAsync(p => p.ScopeId == scope.Id);
+
+        // Step 3 (NFR-21, #195): tombstone exactly the persons and Google Users step 4 removes,
+        // before any of it happens. Owners are not members and are not removed, so they are not
+        // tombstoned.
+        var erased = users
+            .Select(user => new ErasedSubject
+            {
+                Id = user.PublicId, Kind = (int)ErasedSubjectKinds.Person, CreatedAt = DateTime.UtcNow
+            })
+            .Concat(googleUsers.Select(googleUser => new ErasedSubject
+            {
+                Id = googleUser.PublicId, Kind = (int)ErasedSubjectKinds.GoogleUser, CreatedAt = DateTime.UtcNow
+            }))
+            .ToList();
+
+        if (erased.Count > 0)
+        {
+            await erasedSubjects.RecordAsync(erased);
+        }
 
         // Step 4: delete the members explicitly, in an order that never violates a foreign key
         // (applications reference their owning person, so they go first).
@@ -69,7 +101,7 @@ public class HardDeleteScopeCommandHandler(
             return output.WithErrors(deleteErrors);
         }
 
-        // Step 5: delete the scope; its ON DELETE CASCADE foreign keys clear the SCOPE_OWNER and any
+        // Steps 5-6: delete the scope; its ON DELETE CASCADE foreign keys clear the SCOPE_OWNER and any
         // remaining SCOPE_USER join rows, as well as any remaining scope permissions. Owner person
         // records are untouched.
         var scopeDelete = await scopeWriter.DeleteAsync(scope);
@@ -79,7 +111,7 @@ public class HardDeleteScopeCommandHandler(
             return output.WithErrors(scopeDelete.Errors);
         }
 
-        // Step 6: return the scope id and the member/permission totals.
+        // Step 7: return the scope id and the member/permission totals.
         return output
             .WithData(new HardDeleteScopeCommandOutput
             {

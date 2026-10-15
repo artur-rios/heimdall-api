@@ -12,8 +12,9 @@ namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
 ///     Global authorization filter rejecting a request whose bearer token names an identity that no
-///     longer exists or has been logically deleted (FR-AU-05, FR-GO-12), or whose role claim no
-///     longer matches that identity's role (Threat Model TH-08), with <c>401 Unauthorized</c>.
+///     longer exists or has been logically deleted (FR-AU-05, FR-GO-12), whose role claim no longer
+///     matches that identity's role (Threat Model TH-08), or — for a person — whose security stamp is
+///     missing or no longer the person's (FR-AU-11, TH-36), with <c>401 Unauthorized</c>.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -72,6 +73,14 @@ public class ActorLivenessFilter(
     /// </summary>
     public const string ActorRoleChanged = "This token's role is out of date. Sign in again.";
 
+    /// <summary>
+    ///     The refusal for a person token whose security stamp is missing or is no longer the
+    ///     person's (FR-AU-11): a password reset, an email change or a second-factor change since it
+    ///     was issued revoked it, or it predates the stamp. Worded like <see cref="ActorRoleChanged" />
+    ///     and for the same reason: the token is the caller's own, and signing in again is the remedy.
+    /// </summary>
+    public const string ActorTokenRevoked = "This token has been revoked. Sign in again.";
+
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
         var user = context.HttpContext.GetUser<IdentityUser>();
@@ -83,7 +92,7 @@ public class ActorLivenessFilter(
 
         var subjectRight = context.ActionDescriptor.EndpointMetadata.OfType<DataSubjectRightAttribute>().Any();
 
-        var error = await RefusalReasonAsync(user.Id, user.RoleId, subjectRight);
+        var error = await RefusalReasonAsync(user, subjectRight);
 
         if (error is null)
         {
@@ -116,25 +125,39 @@ public class ActorLivenessFilter(
     ///         It costs nothing: the row was already being read to check liveness, so this reads the
     ///         role from that same row instead of asking whether it exists.
     ///     </para>
+    ///     <para>
+    ///         The security stamp is read from the same row for the same reason, and checked first
+    ///         (FR-AU-11): a token a credential change has revoked is refused whatever else it claims.
+    ///         A credential change is when a person's earlier sessions should end, and the stamp is
+    ///         what makes them end then rather than when each token expires (TH-36). A token with
+    ///         no stamp is refused too: every token issued before the stamp existed lacks one, and no
+    ///         person token issued since does. A Google User's token carries none and is not asked
+    ///         for one, since nothing here can change its credential.
+    ///     </para>
     /// </remarks>
-    private async Task<string?> RefusalReasonAsync(Guid actorPublicId, int actorRole, bool subjectRight)
+    private async Task<string?> RefusalReasonAsync(IdentityUser actor, bool subjectRight)
     {
-        // Nullable so "no live person with this id" is distinguishable from a role value. No role is
-        // zero — Roles runs from 1 — but relying on that would be relying on an enum's numbering.
-        //
+        var actorPublicId = actor.Id;
+        var actorRole = actor.RoleId;
+
         // On a subject-rights action a restricted or suspended identity still counts, an anonymised
         // one never does: once NFR-20 has run there is no subject left to serve.
-        var personRole = await personReader.Query()
+        var stored = await personReader.Query()
             .Where(person => person.PublicId == actorPublicId &&
                              (subjectRight
                                  ? person.AnonymisedAt == null
                                  : !person.IsDeleted && person.ProcessingRestrictedAt == null))
-            .Select(person => (long?)person.RoleId)
+            .Select(person => new { person.RoleId, person.SecurityStamp })
             .FirstOrDefaultAsync();
 
-        if (personRole is not null)
+        if (stored is not null)
         {
-            return personRole == actorRole ? null : ActorRoleChanged;
+            if (actor.SecurityStamp != stored.SecurityStamp)
+            {
+                return ActorTokenRevoked;
+            }
+
+            return stored.RoleId == actorRole ? null : ActorRoleChanged;
         }
 
         var googleUserIsLive = await googleUserReader.Query()

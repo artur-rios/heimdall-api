@@ -138,6 +138,7 @@ master user's credentials. Open it and fill in at least:
 | `DB_USER` / `DB_PASSWORD` | The login from step 2 |
 | `DB_NAME` | `heimdall_local` |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
 
 `DB_HOST=host.docker.internal` is already correct for Docker Desktop. To generate the secret:
@@ -347,6 +348,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | That environment's login from step 2 |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`) — fortuna-api in the same environment is given the same value |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |
 | `MAILGUN_FROM` | The sender, e.g. `Heimdall <no-reply@example.com>` on the Mailgun domain — without it mail goes out from a bare `postmaster@` address |

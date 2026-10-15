@@ -231,9 +231,12 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     anonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,
     ///     403) is not a role the attribute can see — a Google-issued token names a
     ///     <c>GoogleUser</c>, not a <c>Person</c> — so the handler enforces it by resolving the caller
-    ///     against the <c>Person</c> table itself.
+    ///     against the <c>Person</c> table itself. The request carries the caller's
+    ///     <c>currentPassword</c> (FR-2F-18), so the action sits under the credential endpoints' rate
+    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do.
     /// </remarks>
     [HttpPost("2fa/enable")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<EnableTwoFactorAuthCommandOutput?>>> EnableTwoFactorAuth(
         [FromBody] EnableTwoFactorAuthCommand command)
     {

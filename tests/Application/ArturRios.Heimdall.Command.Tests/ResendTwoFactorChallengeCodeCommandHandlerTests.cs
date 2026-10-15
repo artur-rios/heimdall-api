@@ -77,7 +77,8 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         bool challengeValid = true,
         bool personDeleted = false,
         bool processingRestricted = false,
-        bool challengeRedeemed = false)
+        bool challengeRedeemed = false,
+        bool challengeStampStale = false)
     {
         var person = new Person
         {
@@ -113,7 +114,8 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         var validator = new Mock<ITwoFactorChallengeTokenValidator>();
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<string>()))
-            .ReturnsAsync(challengeValid ? new TwoFactorChallengePrincipal(person.PublicId, OutstandingChallenge) : null);
+            .ReturnsAsync(challengeValid ? new TwoFactorChallengePrincipal(
+                    person.PublicId, OutstandingChallenge, challengeStampStale ? Guid.NewGuid() : person.SecurityStamp) : null);
 
         return new Fixture(persons, twoFactorAuths, new RecordingEmailCodeIssuer(), validator, person);
     }
@@ -339,5 +341,19 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
             20, codesPerAuthentication * TwoFactorEmailCodeVerification.MaxFailedAttempts);
 
         await Task.CompletedTask;
+    }
+
+    [UnitFact]
+    public async Task GivenAChallengeIssuedBeforeACredentialChange_WhenResending_ThenNothingIsSentAndTheAnswerIsUnchanged()
+    {
+        // Given — FR-AU-11: the challenge's stamp is no longer the person's
+        var fixture = await FixtureAsync(challengeStampStale: true);
+
+        // When
+        var output = await fixture.ResendAsync();
+
+        // Then
+        Assert.Empty(fixture.EmailCodeIssuer.Reissues);
+        AssertIndistinguishable(output);
     }
 }

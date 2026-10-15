@@ -83,7 +83,8 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
     private Task<HttpOutput<DataOutput<EnableTwoFactorAuthCommandOutput?>?>> EnableAsync(
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = methods.ToList() });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
 
     [FunctionalFact]
     public async Task GivenAppAndEmailSelected_WhenPostEnable2fa_ThenPendingConfigurationIsCreatedForBoth()
@@ -279,5 +280,59 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         // Then — refused for the whole API, not just this endpoint (FR-AU-05)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
+    }
+
+    // FR-2F-18: the caller's current password is required. Adding a second factor requires proof of
+    // identity, as removing one does, and a bearer token alone is not that proof.
+
+    [FunctionalFact]
+    public async Task GivenNoPassword_WhenPostEnable2fa_ThenUnauthorizedAndNothingIsCreated()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("enable-no-password"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
+            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = ["App"] });
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Null(await ConfigurationForAsync(person));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAWrongPassword_WhenPostEnable2fa_ThenUnauthorizedAndNothingIsCreated()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("enable-wrong-password"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        // When
+        var response = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = ["App", "Email"], CurrentPassword = "not-the-password" });
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Null(await ConfigurationForAsync(person));
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheRightPassword_WhenPostEnable2fa_ThenSetupIsInitiated()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("enable-right-password"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        // When
+        var response = await EnableAsync("App");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(TwoFactorMessages.SetupInitiated, response.Body!.Messages);
+        Assert.NotNull(await ConfigurationForAsync(person));
     }
 }

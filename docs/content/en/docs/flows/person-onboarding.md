@@ -104,6 +104,16 @@ Note the asymmetry with UC-14: verifying an already-verified address answers **2
 to one answers **400**. Verification's job is done either way; a resend would mail a link that could
 do nothing when clicked.
 
+### An administrator resending it — UC-51
+
+A System Admin, or the owner of a User's scope, can ask for the link on the person's behalf with
+`POST /api/persons/{id}/verification-email`. It is UC-15's send — live links retired, a new one mailed
+to the person's own address — refused for a deleted or restricted person (409) or a verified address
+(400). At most one such email goes to a person per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five
+minutes by default), counting any verification email sent to the person in the window, including
+the one sent when the account was created; a request inside the window answers 429 and sends
+nothing. The check is best-effort: simultaneous requests for the same person can both pass it.
+
 ## Without mail credentials
 
 With Mailgun unconfigured, the API registers logging senders instead: each token is **written to the

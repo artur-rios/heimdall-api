@@ -123,4 +123,23 @@ public class CreateAdminCommandHandlerTests
         Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
         email.Verify(e => e.IssueAndSendAsync(It.IsAny<Person>()), Times.Never);
     }
+
+    [UnitFact]
+    public async Task GivenAPaddedEmail_WhenHandlingCreateAdmin_ThenTheTrimmedAddressIsStored()
+    {
+        // Given — sign-in and recovery match the stored address exactly (case aside)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var email = new Mock<IEmailVerificationService>();
+        var handler = new CreateAdminCommandHandler(ValidValidator().Object, persons, persons, email.Object);
+        var command = Command((int)Roles.ScopeAdmin);
+        var address = command.Email;
+        command.Email = $"  {address} ";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(address, (await persons.GetAllAsync()).Data!.Single().Email);
+    }
 }

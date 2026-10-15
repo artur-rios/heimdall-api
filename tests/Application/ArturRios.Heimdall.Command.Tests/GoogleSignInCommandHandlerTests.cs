@@ -394,7 +394,7 @@ public class GoogleSignInCommandHandlerTests
         googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
         var (issuer, issuerMock) = TokenIssuer();
         issuerMock
-            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User))
+            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User, null))
             .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
@@ -423,7 +423,7 @@ public class GoogleSignInCommandHandlerTests
         googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
         var (issuer, issuerMock) = TokenIssuer();
         issuerMock
-            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User))
+            .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User, null))
             .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
@@ -457,7 +457,7 @@ public class GoogleSignInCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.GoogleAuthenticationFailed, output.Errors);
-        issuerMock.Verify(i => i.IssueSubjectRightsOnlyAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
+        issuerMock.Verify(i => i.IssueSubjectRightsOnlyAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<Guid?>()), Times.Never);
     }
 
     [UnitFact]

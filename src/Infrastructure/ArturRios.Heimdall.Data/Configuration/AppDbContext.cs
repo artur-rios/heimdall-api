@@ -18,6 +18,7 @@ public class AppDbContext(
     public DbSet<Scope> Scopes { get; init; }
     public DbSet<Role> Roles { get; init; }
     public DbSet<Application> Applications { get; init; }
+    public DbSet<ApplicationCredential> ApplicationCredentials { get; init; }
     public DbSet<GoogleUser> GoogleUsers { get; init; }
     public DbSet<ScopeOwner> ScopeOwners { get; init; }
     public DbSet<ScopeUser> ScopeUsers { get; init; }
@@ -29,6 +30,7 @@ public class AppDbContext(
     public DbSet<TwoFactorEmailCode> TwoFactorEmailCodes { get; init; }
     public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes { get; init; }
     public DbSet<AuditLog> AuditLogs { get; init; }
+    public DbSet<ErasedSubject> ErasedSubjects { get; init; }
 
     /// <summary>
     ///     ASP.NET Core's Data Protection key ring, kept in the database rather than on a local
@@ -62,6 +64,7 @@ public class AppDbContext(
         modelBuilder.Entity<Scope>().Configure();
         modelBuilder.Entity<Role>().Configure();
         modelBuilder.Entity<Application>().Configure();
+        modelBuilder.Entity<ApplicationCredential>().Configure();
         modelBuilder.Entity<GoogleUser>().Configure();
         modelBuilder.Entity<ScopePermission>().Configure();
         modelBuilder.Entity<ScopeOwner>().Configure();
@@ -73,5 +76,6 @@ public class AppDbContext(
         modelBuilder.Entity<TwoFactorEmailCode>().Configure();
         modelBuilder.Entity<TwoFactorRecoveryCode>().Configure();
         modelBuilder.Entity<AuditLog>().Configure();
+        modelBuilder.Entity<ErasedSubject>().Configure();
     }
 }

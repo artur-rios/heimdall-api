@@ -76,17 +76,19 @@ Two consequences that are easy to miss:
 `APPLICATION` rows are out of scope: an application is a non-human identity representing another
 system. Its `OwnerId` names a person, but the row describes the system.
 
+`APPLICATION_CREDENTIAL` rows (UC-53) are out of scope for the same reason. Each holds an application reference, the SHA-256 of a random secret, and four instants (issued, expiring, revoked, last used). None of them relates to a person, and the audit entries of credential operations name the acting administrator as every audit entry does (§5.1 `AUDIT_LOG`).
+
 ## 5. Categories of personal data, purposes, and legal basis
 
 | Category | Fields | Purpose | LGPD basis | GDPR basis |
 | --- | --- | --- | --- | --- |
 | Identity | `Name`, `Email` | Identify the account and address it | Art. 7 V (execução de contrato) | Art. 6(1)(b) contract |
-| Authentication material | `PasswordHash`, `Salt`, `TwoFactorAuth.TotpSecretEncrypted`, recovery code hashes | Verify that the account holder is present | Art. 7 V, Art. 46 (segurança) | Art. 6(1)(b), Art. 32 |
+| Authentication material | `PasswordHash`, `Salt`, `SecurityStamp`, `TwoFactorAuth.TotpSecretEncrypted`, recovery code hashes | Verify that the account holder is present | Art. 7 V, Art. 46 (segurança) | Art. 6(1)(b), Art. 32 |
 | Third-party identifiers | `GoogleUser.GoogleId`, `ProfilePictureUrl` | Resolve a Google sign-in to a stored identity | Art. 7 V | Art. 6(1)(b) |
 | Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
 | Deletion and erasure state | `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honour erasure within the statutory deadline and show that it was honoured | Art. 7 II (obrigação legal) | Art. 6(1)(c) legal obligation |
 | Network | Client IP address: the rate limiter's partition key (in memory), and every request's entry in the application logs (12 months) | Bound anonymous request rates; detect and investigate attacks on accounts | Art. 7 IX, Art. 46 | Art. 6(1)(f), Art. 32 |
-| Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails | Art. 7 V | Art. 6(1)(b) |
+| Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails, and the notice of an email change to the previous address (FR-PE-15) | Art. 7 V | Art. 6(1)(b) |
 
 **Consent is not a basis anywhere in this table**, and that is deliberate. Every processing operation
 here is necessary to run an identity service the account holder is a party to, or is required of the
@@ -129,6 +131,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `IsDeleted` | Suspending an identity without destroying it |
 | `EmailVerified` | Whether the address has been proven reachable (FR-EV-01) |
 | `FailedLoginAttempts`, `LockedOutUntil` | Bounding credential guessing per account (FR-AU-09) |
+| `SecurityStamp` | Revoking the person's tokens when a credential changes (FR-AU-11). A random value with no meaning of its own, replaced on each change |
 | `RoleId`, `ScopeId` | Authorisation, and the per-scope uniqueness index FR-PE-09 needs |
 | `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |
 | `DeletedAt`, `DeletionKind`, `AnonymisedAt` | Measuring and enforcing the retention window (NFR-20) |
@@ -151,12 +154,42 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | Column | Purpose |
 | --- | --- |
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
-| `Action`, `TargetId`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution is cleared |
+| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept. A person target whose row was hard-deleted (UC-05, UC-10, UC-29) is cleared too, on the next pass and at any age: the id still names the person to anything holding a copy of the old row, so it stays personal data, and the hard delete tombstones it in `ERASED_SUBJECT` before the row goes so the pass and the trigger can tell it was a person's (#195). An id that resolves to nobody and was never tombstoned — a hard-deleted scope's, or a person's removed before tombstones existed — is kept |
+| `Action`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution and any person target are cleared |
+
+**Readable through the API by System Admins (UC-48).** `GET /api/audit-log` shows each entry as
+stored: an attribution or person target already cleared reads as `null` and is never reconstructed,
+whether by a join to `PERSON` or from neighbouring entries. The endpoint widens who can read the trail — from whoever
+can query the database to System Admins — without widening what it says about anyone. No column was
+added, so this table is unchanged.
 
 > **This table is why NFR-23's columns are here.** They were added after the table existed, and
 > `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
 > working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
 > deliberately: a scope is an organisation, not a person, so neither is personal data.
+
+### `ERASED_SUBJECT`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId`, `Kind`, `CreatedAt` | A short-lived processing record of a hard delete (#195): the removed person's or Google User's id, which of the two it was, and when. Held only so NFR-21 can clear the audit targets that still name the id — the hard delete's own entry among them — once no row is left to say the id was a person's. Removed by the first run of the same pass after its day of grace, once no entry names it. Nothing else about the person is kept, it is never read through the API, and the database accepts a row only for a person or Google User that exists when it is written (#195, R1) |
+
+### `PENDING_REGISTRATION`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId` | The administrative reference a scope's owners list and discard a registration by (UC-49, UC-50). Random, so it discloses nothing by itself; the registrant never sees it |
+| `ScopeId` | The scope the registrant asked to join — and so whose owners may see and discard the registration |
+| `Name`, `Email` | What the account will be created with once the address is confirmed; the address is also where the confirmation link goes |
+| `PasswordHash`, `Salt` | The password chosen at sign-up, so the account can be created with it and confirmation can require it (FR-SR-09). Never reversible to the password |
+| `TokenHash` | Recognising the mailed link without storing it (Threat Model TH-14) |
+| `ExpiresAt`, `CreatedAt` | Bounding how long the link works, and when the row is purged (Data Retention Schedule) |
+| `FailedAttempts` | Bounding guesses at the sign-up password through a leaked link (FR-SR-09, NFR-27) |
+
+A scope's owners and System Admins can read the id, name, address, creation and expiry times, the
+remaining guesses and whether it has expired through the API (UC-49) — the same name and address they
+would see in the scope's user list once the registration is confirmed. The hash, salt and token
+hash are never returned.
 
 ### Two decisions this review settled
 
@@ -186,7 +219,7 @@ weighed against the same test.
 | Recipient | What reaches them | Why |
 | --- | --- | --- |
 | **Mailgun** (Sinch) | Recipient email address, message body | Delivering verification, password reset and second-factor emails |
-| **Tenant scope organisations** | The identities within their own scope | They are the controller for those; see §3 |
+| **Tenant scope organisations** | The identities within their own scope, and the self-registrations awaiting confirmation in it (UC-49: name, address, timestamps, guesses left) | They are the controller for those; see §3 |
 | **Hosting provider** | Everything, at rest | Running the database and the API |
 
 The current sub-processor list is maintained in the

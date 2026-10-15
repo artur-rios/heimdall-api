@@ -2,6 +2,8 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -19,15 +21,25 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     thrown.
 /// </summary>
 /// <remarks>
-///     No self-deletion refusal, unlike <see cref="DeletePersonCommandHandler" /> (AF-09d) and
-///     <see cref="HardDeletePersonCommandHandler" /> (AF-10c). A Google User is always
-///     <c>User</c>-equivalent (FR-GO-04) and can never hold <c>SystemAdmin</c>, so the only actor who
-///     may call this endpoint can never be its target — there is no way to lock yourself out, and a
-///     guard against it would be a flow no document defines.
+///     <para>
+///         No self-deletion refusal, unlike <see cref="DeletePersonCommandHandler" /> (AF-09d) and
+///         <see cref="HardDeletePersonCommandHandler" /> (AF-10c). A Google User is always
+///         <c>User</c>-equivalent (FR-GO-04) and can never hold <c>SystemAdmin</c>, so the only actor
+///         who may call this endpoint can never be its target — there is no way to lock yourself out,
+///         and a guard against it would be a flow no document defines.
+///     </para>
+///     <para>
+///         Before the record is removed, its <c>PublicId</c> is tombstoned
+///         (<see cref="ErasedSubject" />, NFR-21, #195), so the audit entries that name it as their
+///         target — this hard delete's own among them — can still be cleared once nothing else says the
+///         id was a person's. Written first, a failed delete leaves a tombstone for a live row, which
+///         nothing acts on; and a retry writes it again without error.
+///     </para>
 /// </remarks>
 public class HardDeleteGoogleUserCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter)
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IErasedSubjects erasedSubjects)
     : ICommandHandlerAsync<HardDeleteGoogleUserCommand, HardDeleteGoogleUserCommandOutput>
 {
     public async Task<DataOutput<HardDeleteGoogleUserCommandOutput?>> HandleAsync(
@@ -50,7 +62,18 @@ public class HardDeleteGoogleUserCommandHandler(
             return output.WithError(GoogleUserMessages.GoogleUserNotFound);
         }
 
-        // UC-29 step 2: remove the record for good. No dependent is deleted first — a Google User can
+        // UC-29 step 2 (NFR-21, #195): the tombstone goes first, so the row is never gone without it.
+        await erasedSubjects.RecordAsync(
+        [
+            new ErasedSubject
+            {
+                Id = googleUser.PublicId,
+                Kind = (int)ErasedSubjectKinds.GoogleUser,
+                CreatedAt = DateTime.UtcNow
+            }
+        ]);
+
+        // UC-29 step 3: remove the record for good. No dependent is deleted first — a Google User can
         // own no application (FR-AP-03) and holds no password reset or email verification tokens,
         // since authentication is delegated to Google — so no foreign key can be violated and there
         // is no total to report, unlike the scope and person hard deletes.
@@ -61,7 +84,7 @@ public class HardDeleteGoogleUserCommandHandler(
             return output.WithErrors(delete.Errors);
         }
 
-        // UC-29 step 3.
+        // UC-29 step 4.
         return output
             .WithData(new HardDeleteGoogleUserCommandOutput { Id = googleUser.PublicId })
             .WithMessage(GoogleUserMessages.GoogleUserHardDeletedSuccessfully);

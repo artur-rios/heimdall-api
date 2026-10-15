@@ -27,6 +27,14 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         than the cap allows.
 ///     </para>
 ///     <para>
+///         <b>Writes beside a revocation.</b> An application credential is revoked by one request
+///         (UC-55) while another may be using it (UC-56). A whole-row save of either request's copy
+///         would write <c>revoked_at</c> back as that request read it, and silently undo or overwrite
+///         the revocation. So both the revocation and the use stamp are targeted, conditional writes
+///         here: the first revocation stands, and a use stamp only lands while the credential is
+///         still live.
+///     </para>
+///     <para>
 ///         Every method takes the entity the caller already holds and, when the write succeeds,
 ///         brings that instance's changed properties in line with what was written, so the caller
 ///         and anything it saves later see the same values the database does.
@@ -39,7 +47,17 @@ public interface IAtomicWrites
     ///     account is not locked out at <paramref name="now" /> and the counter is below
     ///     <paramref name="maxAttempts" />. <c>false</c> means no attempt may be made.
     /// </summary>
-    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now);
+    /// <remarks>
+    ///     The attempt that brings the counter to <paramref name="maxAttempts" /> also locks the
+    ///     account until <paramref name="lockedOutUntil" /> and resets the counter, in the same
+    ///     write. The lock therefore does not depend on the caller surviving to compare the
+    ///     password: a request that reserves the last attempt and then fails leaves an ordinary
+    ///     lock that expires on its own. A row already at or past the limit with no lockout date is
+    ///     admitted and locked the same way, so it cannot stay stuck. On success the instance's
+    ///     counter and lockout are set to match, from the value this request read, which under
+    ///     concurrent attempts can trail the stored count.
+    /// </remarks>
+    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil);
 
     /// <summary>
     ///     FR-SR-09: reserves one guess at the sign-up password of a pending registration, while it has
@@ -51,12 +69,6 @@ public interface IAtomicWrites
     ///     (to tell whether this was the last guess) must ask the database for it.
     /// </remarks>
     Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses);
-
-    /// <summary>
-    ///     FR-AU-09: after a wrong password, locks the account until <paramref name="lockedOutUntil" />
-    ///     and resets the counter — if, and only if, the counter has reached <paramref name="maxAttempts" />.
-    /// </summary>
-    Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil);
 
     /// <summary>FR-AU-09: after a correct password, clears the counter and any lockout.</summary>
     Task ClearLoginAttemptsAsync(Person person);
@@ -114,4 +126,31 @@ public interface IAtomicWrites
 
     /// <summary>UC-14: spends an email verification token that is unexpired at <paramref name="now" />. Once.</summary>
     Task<bool> TryConsumeEmailVerificationTokenAsync(EmailVerificationToken token, DateTime now);
+
+    /// <summary>
+    ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes
+    ///     no other column — while the credential is still live at <paramref name="now" />
+    ///     (<see cref="ApplicationCredential.LiveAt" />). <c>false</c> means it was revoked or expired
+    ///     after the caller read it, and no token may be issued from it.
+    /// </summary>
+    Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now);
+
+    /// <summary>
+    ///     UC-55: revokes a credential at <paramref name="revokedAt" />. Once: <c>false</c> means it was
+    ///     already revoked, possibly after the caller read it, and the first revocation's time stands
+    ///     (AF-55d).
+    /// </summary>
+    Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt);
+
+    /// <summary>
+    ///     FR-AU-11: gives the person a fresh <see cref="Person.SecurityStamp" />, writing no other
+    ///     column, so every token issued before this call is refused from the next request on.
+    /// </summary>
+    /// <remarks>
+    ///     Unconditional, unlike the writes above: any number of rotations may race and every one of
+    ///     them revokes the tokens issued before it. What has to be targeted is the write itself. A
+    ///     whole-row save of a copy read before the rotation would put the old stamp back and revive
+    ///     what it revoked, which is why the mapping never lets such a save write this column.
+    /// </remarks>
+    Task RotateSecurityStampAsync(Person person);
 }

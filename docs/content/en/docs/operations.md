@@ -29,6 +29,56 @@ Automatic migration on startup is convenient exactly until two instances start a
 deployment silently applies a migration nobody reviewed. An explicit step makes schema change a
 decision rather than a side effect.
 
+### Shared public ids — before `ProtectIdentityPublicIds` (#199)
+
+`ProtectIdentityPublicIds` and `ProtectEntityPublicIds` make `public_id` immutable on `person`,
+`google_user`, `scope`, `application`, `application_credential`, `scope_permission`, `role` and
+`pending_registration`, refuse a new row whose `public_id` another of those tables holds or a hard
+delete tombstoned, and refuse a new person or Google User whose id an audit entry names. They guard
+future writes only and do not look at what is already stored. The API only ever issues fresh random
+ids, so a duplicate can exist only if somebody wrote one by hand in SQL. To check for a hand-made
+duplicate, run both queries before migrating; each should return no rows.
+
+```sql
+-- 1. Any public_id that rows of two or more guarded tables hold.
+WITH ids (tbl, public_id) AS (
+    SELECT 'person', public_id FROM heimdall.person
+    UNION ALL SELECT 'google_user', public_id FROM heimdall.google_user
+    UNION ALL SELECT 'scope', public_id FROM heimdall.scope
+    UNION ALL SELECT 'application', public_id FROM heimdall.application
+    UNION ALL SELECT 'application_credential', public_id FROM heimdall.application_credential
+    UNION ALL SELECT 'scope_permission', public_id FROM heimdall.scope_permission
+    UNION ALL SELECT 'role', public_id FROM heimdall.role
+    UNION ALL SELECT 'pending_registration', public_id FROM heimdall.pending_registration
+)
+SELECT public_id, string_agg(tbl, ', ' ORDER BY tbl) AS held_by
+FROM ids
+GROUP BY public_id
+HAVING count(*) > 1;
+
+-- 2. Any person or Google User whose id audit entries named before the identity existed, so those
+--    entries were about something else. The minute absorbs clock skew between the API and the database.
+SELECT 'person' AS tbl, p.public_id, count(*) AS earlier_entries
+FROM heimdall.person p
+JOIN heimdall.audit_log a ON a.target_id = p.public_id
+WHERE a.created_at < p.created_at - interval '1 minute'
+GROUP BY p.public_id
+UNION ALL
+SELECT 'google_user', g.public_id, count(*)
+FROM heimdall.google_user g
+JOIN heimdall.audit_log a ON a.target_id = g.public_id
+WHERE a.created_at < g.created_at - interval '1 minute'
+GROUP BY g.public_id;
+```
+
+A row from either query is worth investigating before anything else: it is either a hand-made fix-up
+or somebody preparing to make audit entries clearable. No rows proves less than it seems. Query 1
+sees only rows that are there now. Query 2 trusts `created_at`, which an insert can set, so a
+backdated plant passes it. Neither sees a plant that has already run its course — target cleared,
+identity tombstoned and deleted — or a scope or other entity sitting on an id that `erased_subject`
+records. Once migrated, hand-written SQL that rewrites a `public_id` — a support fix-up, or a
+restore that remaps ids — fails with `restrict_violation`.
+
 ## Start-up sequence
 
 ```mermaid
@@ -173,12 +223,16 @@ Brute force is bounded in two independent places, because each covers what the o
 (an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
 `AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
 reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
-answer **429**. None of these requires a bearer token, so nothing else bounds how fast one caller
-can hit them, and each login attempt costs a full Argon2id verification (600 MB / 16 threads by the
-hashing library's defaults) — so memory exhaustion is realistic without it. The authenticated
-endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
-regeneration, and the erasure request — share the same limit: a bearer token is not the password,
-and without it whoever held one could test passwords or six-digit codes against them unthrottled.
+answer **429** with a `Retry-After` header (whole seconds) and the usual error envelope. None of these
+requires a bearer token, so nothing else bounds how fast one caller can hit them, and each login attempt
+costs a full Argon2id verification (600 MB / 16 threads by the hashing library's defaults) — so memory
+exhaustion is realistic without it. The authenticated
+endpoints that check a password or a second factor — 2FA enable, confirm, disable and recovery-code
+regeneration, the erasure request, and the person update (`PUT /api/persons/{id}`, which checks the
+password when a person changes their own email) — share the same limit: a bearer token is not the
+password, and without it whoever held one could test passwords or six-digit codes against them
+unthrottled. The person update is limited whether or not it checks a password, administrators'
+updates included.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -242,12 +296,15 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
 - A named address is counted in its own `caller:` namespace, apart from direct connections, so a key
   holder cannot spend the budget of a real caller by naming their address.
 - A leaked key lets its holder pick their own bucket, which only spreads credential guesses over
-  invented addresses; the per-account lockouts still count them. The same limiter also guards four
-  authenticated endpoints that have no per-account budget — `2fa/confirm`, `2fa/disable`,
-  `2fa/recovery-codes/regenerate` and `erasure-request` — so someone holding **both** a leaked key
+  invented addresses; the per-account lockouts still count them. The same limiter also guards six
+  authenticated endpoints that have no per-account budget — `2fa/enable`, `2fa/confirm`,
+  `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — so
+  someone holding **both** a leaked key
   and a stolen bearer token could spread guesses against those over invented addresses, bounded then
-  only by the password-hash gate. That is accepted residual risk, since it needs two independent
-  secrets (Threat Model Document, TB-1, TH-32).
+  only by the password-hash gate. A leaked key is not the only way to spread them: a token holder
+  with many source addresses, or any caller behind a proxy `HEIMDALL_TRUSTED_PROXIES` does not name,
+  needs none. Those endpoints have no per-account budget, so such guesses are bounded only per
+  address and by the gate (Threat Model Document, TH-32 and TH-36).
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25
@@ -316,14 +373,18 @@ record. Hard deletion (UC-10) remains available for callers that want the row go
 
 **The audit trail stops naming people on its own schedule.** A third pass clears the actor
 attribution from entries past their attribution period, and immediately from entries naming an
-identity that has been anonymised. The entry itself is never removed and never altered — what
-happened, when and how often all survive.
+identity that has been anonymised. On the same two grounds it clears an entry's target when that
+target is a person or Google User — a self-service command's own account, or the person an
+administrator acted on. Targets naming anything else are kept. The entry itself is never removed and
+what it says happened is never altered — what happened, when and how often all survive.
 
 The rule is enforced by a database trigger rather than by the pass, because this is the one table
-whose immutability is a security control. It permits the attribution to be set to null and nothing
-else: no deletion, no truncation, no change to any other column, and no reassignment to a different
-identity. A thirty-day floor stops somebody clearing their own attribution for something they did
-this week; it is an anti-tamper backstop, not the retention period, which is eighteen months.
+whose immutability is a security control. It permits the attribution, and a target naming a person,
+to be set to null and nothing else: no deletion, no truncation, no change to any other column, and no
+reassignment to a different value. A thirty-day floor stops somebody clearing their own attribution,
+or the person they acted on, for something they did this week; it is an anti-tamper backstop, not
+the retention period, which is eighteen months. A deployment upgrading to `AllowClearingAuditTarget`
+has its older person targets cleared over the next runs, one batch at a time.
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
@@ -645,6 +706,11 @@ a compromised key and the wrong response to a routine replacement.
 Every instance must carry the same pair, so roll the change out to all of them before step 3 — an
 instance that has already dropped the old secret will refuse tokens its neighbours still accept.
 
+Application tokens (UC-56) are signed with the same keys, so the same rotation covers them. Step 2
+waits out the longer of the two lifetimes, `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` and
+`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default), and a consumer that
+validates them offline must be given both keys for the same period.
+
 ## Environment variables at a glance
 
 | Variable | Required | Default |
@@ -652,13 +718,16 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `HEIMDALL_DATA_CONNECTIONSTRING` | ✅ | — |
 | `HEIMDALL_DATA_DATABASETYPE` | ✅ | — (`PostgreSql`) |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it) |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty |
+| `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
+| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | | `300`; `0` → no cooldown; outside 0–86400 → `300` |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
@@ -683,6 +752,21 @@ instance that has already dropped the old secret will refuse tokens its neighbou
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | | unset → tokens logged (fails start-up in Production) |
 | `MAILGUN_API_VERSION` | | `v3` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL` | | unset → the email carries the bare token |
+
+A present but unusable value of `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` is
+logged as a warning at start-up, naming the variable, the rejected value and the default applied; an
+absent one is just the default and logs nothing.
+
+Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated with zero clock skew,
+so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep
+instance clocks synchronised (NTP).
+
+The administrator-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, UC-51/UC-52) is derived from
+the issued token rows (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:
+if `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` is `0` and a token lifetime is shorter than the cooldown, an expired
+token from inside the window may already have been purged, and the cooldown can undercount. And the cooldown
+is best-effort: simultaneous requests for the same person can both pass it.
 
 `Environments/.env` in the Web API project is a **tracked template** listing every variable; real
 values live in per-environment files that are gitignored.

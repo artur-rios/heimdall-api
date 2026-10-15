@@ -131,6 +131,9 @@ graph LR
 | FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
+| FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
+| FR-PE-14 | A person changing their own email shall prove they are the account holder: the request shall carry their current password (`currentPassword`) and, when their two-factor authentication is active, a current second factor (`twoFactorCode`: an authenticator-app or email code, or an unused recovery code, which is spent; since no endpoint sends an email code to a signed-in caller, a person whose only method is Email uses a recovery code). A missing or wrong password, or a missing or wrong second factor when one is required, shall be refused with `401 Unauthorized` and the messages UC-39 gives for the same failures, before the new address is checked for uniqueness, and nothing shall change. The password is verified through the password-hash gate (TH-03), and the endpoint is under the credential endpoints' rate limit (NFR-18). An administrator changing another person's email presents no credential of that person, and a change that leaves the email as it is asks for none. The email counts as changed unless the trimmed values are equal ordinally, so a change of case is a change, and a changed address is stored trimmed | High |
+| FR-PE-15 | On every change of a person's email, whoever made it, the system shall send a notice to the previous address saying that the account's email was changed and that, if the person did not make the change, they should contact an administrator. The notice shall contain neither the new address nor any link. A failed delivery shall be logged and shall not fail the update | High |
 
 ### 3.3 Role Assignment
 
@@ -157,6 +160,7 @@ graph LR
 | FR-AU-08 | Upon successful authentication, the system shall fold into the token the distinct `Name`s of the non-logically-deleted `ScopePermission`s of the acting scope(s) whose `IncludeAsJwtClaim` flag is set: the scope a `User` belongs to for a `User`; the union over the scopes a `ScopeAdmin` owns for a `ScopeAdmin`; none for a `SystemAdmin`, who carries no scope. Logically deleted scopes and permissions are excluded, so a deleted resource is never claimed | Medium |
 | FR-AU-09 | The system shall count consecutive failed password attempts per person and, on reaching ten, refuse authentication for that person for fifteen minutes regardless of the password supplied. A successful authentication shall reset the count. The refusal shall be indistinguishable from any other authentication failure — the same message as FR-AU-05 through FR-AU-07, and the same cost, so a lockout is not detectable by response time | High |
 | FR-AU-10 | The system shall verify a submitted password against a hash on every authentication attempt, including one for an address that belongs to nobody, so that the uniform rejection of FR-AU-05 through FR-AU-07 and FR-AU-09 is uniform in elapsed time as well as in message | High |
+| FR-AU-11 | Every token issued to a person — the full authentication token, the two-factor challenge token and the subject-rights-only token — shall carry the person's current security stamp, a random value stored on the person, as the `sst` claim. The stamp shall be replaced when the person's password is reset (UC-13), their email is changed by anyone (UC-08), two-factor authentication is activated (UC-37) or disabled (UC-39), or their recovery codes are regenerated (UC-40), and the replacement shall be a write of that column alone, so no concurrent save can restore the old value. A person token whose stamp is missing or is not the person's current one shall be refused on every endpoint with `401 Unauthorized` and "This token has been revoked. Sign in again."; a challenge token so outdated shall be refused by UC-38 as AF-38a and ignored by UC-46 as AF-46a. The token that made the change is revoked with the rest. A Google User's token carries no stamp and is not checked for one | High |
 
 ### 3.5 Password Recovery
 
@@ -166,6 +170,8 @@ graph LR
 | FR-PR-02 | The system shall generate a time-limited password reset token and send it via email. The request shall be answered before the person is looked up and the token issued and sent, so the response is the same in content and in time whether or not the address is registered (AF-12a) | High |
 | FR-PR-03 | The system shall allow the person to set a new password using a valid reset token | High |
 | FR-PR-04 | Expired or already-used reset tokens shall be rejected | High |
+| FR-PR-05 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a password-reset link sent to the person's own stored address. Eligibility shall be FR-PR-02's: a person whose processing is restricted, who is logically deleted, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused, with the reason. No token or password shall be returned, logged or accepted | Medium |
+| FR-PR-06 | At most one password-reset email per person shall be sent through FR-PR-05 within a configurable cooldown (5 minutes by default, `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`), counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.6 Email Verification
 
@@ -176,6 +182,8 @@ graph LR
 | FR-EV-03 | The system shall mark the person's email as verified upon receiving a valid verification token | High |
 | FR-EV-04 | The system shall allow re-sending the verification email | Medium |
 | FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
+| FR-EV-06 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a fresh verification link sent to the person's own stored address, retiring their live links as FR-EV-04 does. A person whose processing is restricted, who is logically deleted, or whose address is already verified shall be refused. No token shall be returned, logged or accepted | Medium |
+| FR-EV-07 | At most one verification email per person shall be sent through FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 
 ### 3.7 Application Management
 
@@ -190,6 +198,13 @@ graph LR
 | FR-AP-07 | The system shall allow **logical deletion** of an application by setting `IsDeleted = true` | High |
 | FR-AP-08 | The system shall allow **hard deletion** of an application, permanently removing the record | High |
 | FR-AP-09 | Logically deleted applications shall not appear in default query results unless explicitly requested | Medium |
+| FR-AP-10 | The system shall let a System Admin, or a Scope Admin who owns an application and its scope, issue the application a credential: a random secret shown once and stored only as its SHA-256, optionally with an expiry | High |
+| FR-AP-11 | An application shall hold at most **two** live credentials (not revoked, not expired), so a new secret can be deployed before the old one is revoked | High |
+| FR-AP-12 | The same actors shall be able to list an application's credentials — never the secret or its hash — and revoke any one of them | High |
+| FR-AP-13 | The system shall exchange a live credential for an application token: HMAC-SHA256 with the person tokens' keys, a distinct audience, a lifetime of 10 minutes by default, and the claims `tokenKind = application`, `id`, `scopeId`, `credentialId` and `name`, with no role | High |
+| FR-AP-14 | Every refused exchange shall answer the same `401` with the same message, revealing nothing about which applications, scopes or credentials exist | High |
+| FR-AP-15 | The system shall let a consumer check an application token live, confirming the application, its scope and the issuing credential are still live | High |
+| FR-AP-16 | Revoking or expiring a credential, or deleting the application or its scope, shall make every token issued from it fail the live check at once | High |
 
 ### 3.8 Google Sign-In
 
@@ -229,6 +244,8 @@ graph LR
 | FR-SR-08 | Pending registrations shall expire with the email-verification token lifetime and be purged with the other single-use tokens | High |
 | FR-SR-09 | Confirming a self-registration shall require the password chosen at sign-up; a missing or wrong password shall not consume the pending registration, and after 10 wrong passwords the pending registration is discarded; each guess is charged before it is compared (NFR-27), so parallel guesses cannot exceed the 10 | High |
 | FR-SR-10 | A scope may override the verification and password-reset link bases for its Users: when `EmailVerificationUrl` or `PasswordResetUrl` is set, the sign-up confirmation, verification and password-reset emails sent to that scope's Users link there instead of to `HEIMDALL_EMAIL_VERIFICATION_URL` / `HEIMDALL_PASSWORD_RESET_URL`; an unset one, and every email to an administrator (who has no scope), uses the global setting. Only System Admins and existing owners of the scope may set them, through their own endpoint rather than the scope update, which would otherwise erase them; each must be an absolute `http` or `https` URL of at most 2048 characters | Medium |
+| FR-SR-11 | The system shall allow System Admins and the scope's owners to list a scope's pending self-registrations, paginated and newest first, each with its identifier, name, address, creation and expiry times, the wrong confirmation passwords it may still take (never below zero), and whether it has expired — whether or not the scope is still open to self-registration. The password hash, salt and token hash shall never be returned | Medium |
+| FR-SR-12 | The system shall allow System Admins and the scope's owners to discard one of a scope's pending self-registrations, removing it so that its link stops working. A registration of another scope shall be answered exactly as a missing one. The discard shall be audited with the registration as target | Medium |
 
 ### 3.9 Scope Permission Management
 
@@ -265,6 +282,14 @@ graph LR
 | FR-2F-15 | The system shall allow an authenticated person to read their own two-factor authentication state: whether it is active, which methods are configured, and how many issued recovery codes remain unused. A person with no configuration shall be answered successfully with every flag false and a zero count, since never having enabled it is an ordinary state rather than a fault. A Google User shall be refused, as under FR-2F-01. No secret is returned — never the TOTP secret, never a recovery code | High |
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
+| FR-2F-18 | Initiating two-factor setup (UC-36) shall require the caller's current password (`currentPassword`). A missing or wrong password shall be refused with `401 Unauthorized` and "The current password is incorrect.", and nothing shall be created or sent. The password is verified through the password-hash gate, and the endpoint is under the credential endpoints' rate limit. Confirming setup (UC-37) is unchanged | High |
+
+### 3.11 Audit Trail
+
+| ID | Requirement | Priority |
+| ---- | ------------ | ---------- |
+| FR-AT-01 | The system shall allow a `SystemAdmin` to list the audit trail, paginated and newest first (ties broken by write order), optionally filtered by an inclusive range of when entries were recorded (UTC), by the actor's identifier, by the exact action name, by the affected entity's identifier, and by whether the operation succeeded. Filters combine with AND. No other role may read the trail, and reading it is not itself audited | High |
+| FR-AT-02 | The audit-trail listing shall show each entry as stored — its identifier, when it was recorded, actor and role, action, target, outcome and canonical failure reason. An actor or target that is absent or has been cleared (NFR-21) shall be reported as null and never reconstructed from other data | High |
 
 ---
 
@@ -275,9 +300,9 @@ graph LR
 Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`) has two identifiers:
 
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
-- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
+- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). It is immutable, enforced by trigger, on every table listed above and on `APPLICATION_CREDENTIAL` and `PENDING_REGISTRATION`, no new row of those tables may take a `PublicId` that another of them holds, and a new `PERSON` or `GOOGLE_USER` row may not take one that an audit entry names (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
 
-`PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN` and `PENDING_REGISTRATION` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02 (for `PENDING_REGISTRATION`, the mailed token, of which only the hash is stored). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -340,6 +365,7 @@ erDiagram
         string Email "Email address (unique among a scope's Users; unique among Admins system-wide)"
         bytes PasswordHash "Hashed password, stored as a byte array"
         bytes Salt "Random salt used to hash the password, stored as a byte array"
+        guid SecurityStamp "Carried by every token issued to the person; replaced on a credential change"
         bool IsDeleted "Logical deletion flag"
         bool EmailVerified "Email verification status"
         bigint RoleId FK "Associated role (internal Id)"
@@ -375,6 +401,7 @@ erDiagram
 
     PENDING_REGISTRATION {
         bigint Id PK "Internal auto-increment identifier, never exposed"
+        guid PublicId "Administrative reference for listing and discarding (FR-SR-11, FR-SR-12); the registrant's reference is the token"
         bigint ScopeId FK "Scope registered into (internal Id)"
         string Name "Name the registrant gave"
         string Email "Address awaiting confirmation"
@@ -438,11 +465,12 @@ erDiagram
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row, or one an audit entry names, when inserted (#199) |
 | Name | String | Required, max 200 characters |
 | Email | String | Required, valid email format. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
 | PasswordHash | Byte array | Required, stores the hash computed from the password and `Salt` |
 | Salt | Byte array | Required, randomly generated per person, used to hash the password |
+| SecurityStamp | GUID | Required, random, generated on creation (`gen_random_uuid()` for rows inserted without one). Carried by every token issued to the person and replaced, by a write of this column alone, on a password reset, an email change, a two-factor activation or removal, or a recovery-code regeneration, which revokes every earlier token (FR-AU-11). Never written by a whole-row save |
 | IsDeleted | Boolean | Default: `false` |
 | EmailVerified | Boolean | Default: `false` |
 | RoleId | BigInt | Foreign key to Role.Id (internal), required |
@@ -460,7 +488,7 @@ A person has no `ScopeId` column. Its relationship to scopes is derived from its
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
 | Name | String | Required, unique — `User`, `ScopeAdmin`, or `SystemAdmin` |
 | Description | String | Optional, human-readable explanation of the role's purpose and permissions |
 
@@ -469,7 +497,7 @@ A person has no `ScopeId` column. Its relationship to scopes is derived from its
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
 | Name | String | Required, max 200 characters |
 | IsDeleted | Boolean | Default: `false` |
 | ScopeId | BigInt | Foreign key to Scope.Id (internal), required |
@@ -500,7 +528,7 @@ A scope may have many rows (one or more owners); a person may have many rows (a 
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row, or one an audit entry names, when inserted (#199) |
 | GoogleId | String | Required, from Google's `sub` claim; unique within the scope |
 | Name | String | From Google's `name` claim, max 200 characters |
 | Email | String | Required, from Google's `email` claim; unique within the scope, considered jointly with `User` persons' emails in that scope |
@@ -518,7 +546,7 @@ A scope may have many rows (one or more owners); a person may have many rows (a 
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
 | Name | String | Required, max 200 characters |
 | Description | String | Optional, max 500 characters |
 | IncludeAsJwtClaim | Boolean | Default: `false`; controls whether `Name` is added as a JWT claim at issue (FR-SP-03, FR-AU-08) |
@@ -585,6 +613,8 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/email-links` | Set, or with null or empty clear, the scope's verification and password-reset link bases (FR-SR-10) | SystemAdmin, existing Owner |
+| GET | `/api/scopes/{id}/pending-registrations` | List the scope's self-registrations awaiting confirmation (FR-SR-11) | SystemAdmin, existing Owner |
+| DELETE | `/api/scopes/{id}/pending-registrations/{registrationId}` | Discard a pending self-registration; its link stops working (FR-SR-12) | SystemAdmin, existing Owner |
 
 ### 5.2 Person Endpoints
 
@@ -594,9 +624,13 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/scopes/{scopeId}/persons` | Create a `User` person within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/scopes/{scopeId}/persons` | List Users within a scope | ScopeAdmin (owner)+ |
 | GET | `/api/persons/{id}` | Get person by ID | Authenticated |
-| PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
+| GET | `/api/persons/scope-admins` | List the persons who may own a scope (FR-PE-12) | SystemAdmin, ScopeAdmin |
+| GET | `/api/persons/system-admins` | List the `SystemAdmin` persons (FR-PE-13) | SystemAdmin |
+| PUT | `/api/persons/{id}` | Update a person; an own email change also needs the current password, and the second factor when active (FR-PE-14) | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
+| POST | `/api/persons/{id}/verification-email` | Send a fresh verification link to the person's own address (FR-EV-06, FR-EV-07) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
+| POST | `/api/persons/{id}/password-reset` | Send a password-reset link to the person's own address (FR-PR-05, FR-PR-06) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
 
 ### 5.3 Application Endpoints
 
@@ -608,6 +642,11 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{scopeId}/applications/{id}` | Update an application | SystemAdmin / ScopeAdmin (owner of the application) |
 | DELETE | `/api/scopes/{scopeId}/applications/{id}` | Logically delete an application | SystemAdmin / ScopeAdmin (owner of the application) |
 | DELETE | `/api/scopes/{scopeId}/applications/{id}/hard` | Hard delete an application | SystemAdmin |
+| POST | `/api/scopes/{scopeId}/applications/{id}/credentials` | Issue a credential; the secret is returned once | SystemAdmin / ScopeAdmin (owner of the application) |
+| GET | `/api/scopes/{scopeId}/applications/{id}/credentials` | List the application's credentials | SystemAdmin / ScopeAdmin (owner of the application) |
+| DELETE | `/api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}` | Revoke a credential | SystemAdmin / ScopeAdmin (owner of the application) |
+| POST | `/api/applications/token` | Exchange a credential for an application token | No (the secret authenticates) |
+| GET | `/api/applications/self` | Check an application token live | Application token (validated by the endpoint) |
 
 ### 5.4 Authentication Endpoints
 
@@ -619,7 +658,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/verify-email` | Verify email with token; a token that names a pending self-registration confirms it and also takes the optional `password` chosen at sign-up (FR-SR-09) | No |
 | POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-09) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
-| POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
+| POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both; needs the current password (FR-2F-18) | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
 | POST | `/api/auth/2fa/verify` | Exchange a challenge token plus a code or recovery code for a full authentication token | No (holds a challenge token) |
 | POST | `/api/auth/2fa/challenge/resend` | Reissue the email code for an outstanding challenge, inside its existing window | No (holds a challenge token) |
@@ -648,6 +687,12 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}` | Logically delete a scope permission | SystemAdmin / ScopeAdmin (owner of the scope) |
 | DELETE | `/api/scopes/{scopeId}/permissions/{id}/hard` | Hard delete a scope permission | SystemAdmin |
 
+### 5.7 Audit Trail Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+| -------- | ---------- | ------------- | --------------- |
+| GET | `/api/audit-log` | List the audit trail, newest first, filtered by `from`/`to`, `actorId`, `action`, `targetId`, `succeeded` (FR-AT-01, FR-AT-02) | SystemAdmin |
+
 ---
 
 ## 6. Non-Functional Requirements
@@ -667,7 +712,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
 | NFR-08 | Data Integrity | Hard deletion of a scope must cascade to its `SCOPE_USER`/`SCOPE_OWNER` rows, its Users, and its Applications |
 | NFR-09 | Logging | Every attempted write shall produce one audit entry, whether it succeeded or was refused, recording the acting identity, the operation, the affected entity where one was resolved, the outcome, and — on a refusal — the reason. The reason is drawn from the application's own messages, never from caller-supplied input |
-| NFR-10 | Validation | All inputs shall be validated before processing |
+| NFR-10 | Validation | All inputs shall be validated before processing. An input that cannot be bound — a body that is not JSON, or a value of the wrong type in the body or query string — is refused with `400 Bad Request` and the message "The request is malformed.", before the action runs. Authentication and role checks come first, so an unauthenticated caller still receives `401` and a caller of the wrong role `403`; refusals that depend on data, made in a handler, come after |
 | NFR-11 | Data Integrity | Hard deletion of a person must cascade to the applications they own |
 | NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected |
 | NFR-13 | Security | Google ID tokens must be verified (signature, issuer `accounts.google.com`/`https://accounts.google.com`, audience matching the configured OAuth client ID, and expiration) before their claims are trusted |
@@ -678,7 +723,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-18 | Performance | An endpoint that verifies a password is bounded by the cost of the password hash, not by NFR-05, and that cost is deliberate: it is what makes an offline attack on a stolen hash expensive. Every outcome shall pay it, including a rejection for an address that belongs to nobody (FR-AU-10). On the reference configuration this measures **347–491 ms at the median and 534–582 ms at the slowest**, the spread being idle versus contended (§6.1). Concurrency moves it much further: the ten logins a minute the rate limiter admits from one IP are released together and measured **2.8 seconds** each (§6.3.1), because each is a 600 MB / 16-thread derivation competing with nine others. The figure moves with the hashing parameters, the hardware and the load, and is republished rather than held constant |
 | NFR-19 | Data Protection | Personal data shall be kept in identifiable form only as long as its purpose requires (GDPR Art. 5(1)(e), LGPD Art. 15). Every table holding personal data shall carry a stated retention period, published in the [Data Retention Schedule Document](Data%20Retention%20Schedule%20Document.md) together with the reason for it, and each period the API enforces itself shall be enforced by a scheduled pass rather than by hand. A single-use token — password reset, email verification, two-factor email code — shall be removed once it is past its expiry by the configured grace period, and never before: the grace period is what keeps UC-13's `TokenExpired` and `TokenAlreadyUsed` answers truthful. A period the schedule states but nothing enforces shall be marked as such, so the document never claims a guarantee the code does not make |
 | NFR-20 | Data Protection | A logically deleted identity shall reach a terminal state. Once the retention window its deletion kind carries has elapsed ([Data Retention Schedule](Data%20Retention%20Schedule%20Document.md) §4), the record shall retain no value identifying a natural person — name, address, credential material and behavioural counters, and for a Google User the Google subject identifier and profile picture — and the material its dependents hold, the single-use tokens and the two-factor configuration, shall be removed with it. Every foreign key shall still resolve (NFR-07) and no `SCOPE_OWNER` row shall change, so NFR-12 is undisturbed. The record is anonymised in place rather than removed, because removing it is what breaks NFR-07; hard deletion (UC-10) remains available for callers that want the row gone |
-| NFR-21 | Data Protection | An audit entry shall stop naming the identity that produced it once its attribution period has elapsed, or immediately once that identity has been anonymised (NFR-20), whichever comes first. Clearing the attribution is the only change `AUDIT_LOG` shall ever permit: every other column stays immutable, the attribution may be set to null but never to another identity, no row may be deleted or truncated, and the rule shall be enforced by the database rather than by the application. The resulting guarantee is that an action can never be denied, and who took it can never be reassigned — only forgotten |
+| NFR-21 | Data Protection | An audit entry shall stop naming the identity that produced it once its attribution period has elapsed, or immediately once that identity has been anonymised (NFR-20), whichever comes first. An entry whose target is a person or Google User shall stop naming that target on the same two grounds — the period has elapsed, or the target has been anonymised — and an entry whose target was hard-deleted shall stop naming it on the next pass, at any age: each hard delete shall first record the removed id as a tombstone, and a target whose id is tombstoned and resolves to no person or Google User row any more is due. A tombstone shall hold only the id, its kind and when it was written, and shall be removed once it is older than one day and no audit entry names it. Clearing the attribution and clearing a person target are the only changes `AUDIT_LOG` shall ever permit: every other column stays immutable, the attribution and the target may be set to null but never to another value, a target naming anything other than a person or Google User — on record, or tombstoned and gone — may not be cleared, no row may be deleted or truncated, and the rule shall be enforced by the database rather than by the application. The resulting guarantee is that an action can never be denied, and who took it, or which person it was taken on, can never be reassigned — only forgotten |
 | NFR-22 | Data Protection | Application log files shall be removed once they are older than the configured retention period, and no log statement shall write an email address. Where a line needs to refer to an address so an operator can correlate, it shall write a stable non-reversible reference to it instead. The two halves are ordered: the redaction lands no later than the retention limit, since bounding the files without redacting them would give identifiable data a longer life than it had before |
 | NFR-23 | Data Protection | Every identity shall record, at creation, the lawful basis its data is processed on and the version of the privacy notice then in force (GDPR Art. 5(2) and 30(1)(c), LGPD Art. 8 §2). A scope may declare the basis for the identities within it, since the tenant is usually their controller; where it declares none, contract performance applies. Consent shall not be selectable while no withdrawal path exists, and identities predating this requirement shall be marked as unrecorded rather than backfilled with a guess |
 | NFR-24 | Data Protection | A data subject may have processing of their identity restricted (GDPR Art. 18, LGPD Art. 18 III–IV) — suspended without anything being deleted — on one of Art. 18(1)'s four grounds. Restriction and logical deletion shall be independent states: neither implies the other, and a restricted record shall be preserved exactly as it stands rather than entering NFR-20's anonymisation window. While restricted, the identity shall not authenticate for anything but its subject's own rights, shall receive no email but a second-factor code its subject asks for when signing in, and shall be withheld from tenant-facing listings, while remaining reachable by its own subject's export and by a System Admin. Signing in (UC-11, UC-25, UC-38) shall issue it a subject-rights-only token instead of a full one, so the subject can always reach their rights, however long ago their last token expired. That token, and any token the identity already holds, shall be refused everywhere except where the subject exercises their own rights — export (UC-41), erasure (UC-42), restriction (UC-44) and lifting their own restriction (UC-45); a subject-rights-only token shall stay so confined after the restriction is lifted, and a restricted System Admin, or one holding such a token, shall not lift anybody else's. A restriction imposed at the subject's request shall not be lifted by anyone else until the subject has been informed (Art. 18(3)). The subject's own erasure request (UC-42) shall lift their restriction as their own lift would; a restriction imposed after the request shall hold it |
@@ -962,15 +1007,22 @@ block-beta
 | Login | ✅ | ✅ | ✅ | ✅ |
 | Password Recovery | ✅ | ✅ | ✅ | ✅ |
 | Email Verification | ✅ | ✅ | ✅ | ❌ |
+| Send a Verification Email on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
+| Send a Password Reset on a Person's Behalf | ✅ | ✅ (Users of owned scope) | ❌ | ❌ |
 | Create Application | ✅ | ✅ (owned scope, self as owner) | ❌ | ❌ |
 | Read Application | ✅ (any scope) | ✅ (owned application) | ❌ | ❌ |
 | Update Application | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (logical) | ✅ | ✅ (owned application) | ❌ | ❌ |
 | Delete Application (hard) | ✅ | ❌ | ❌ | ❌ |
+| Issue/List/Revoke Application Credentials | ✅ | ✅ (owned application) | ❌ | ❌ |
+| Obtain an Application Token | — | — | — | ✅ (with a live secret) |
+| Check an Application Token | — | — | — | ✅ (with an application token) |
 | Enable/Disable Google Sign-In | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Enable/Disable Self-Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Set Scope Email Links | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Register a Password User | ✅ | ✅ | ✅ | ✅ |
+| List Pending Registrations | ✅ | ✅ (owned scope) | ❌ | ❌ |
+| Discard a Pending Registration | ✅ | ✅ (owned scope) | ❌ | ❌ |
 | Google Sign-Up / Sign-In | N/A | N/A | N/A | ✅ (unauthenticated call) |
 | Google Sign-Out | N/A | N/A | ✅ (self, as a Google User) | ❌ |
 | Read Google User | ✅ | ✅ (owned scope) | ✅ (self) | ❌ |
@@ -988,6 +1040,7 @@ block-beta
 | Restrict Processing of Own Identity | ✅ (self) | ✅ (self) | ✅ (self, person or Google User) | ❌ |
 | Lift a Restriction | ✅ (self, or anyone) | ✅ (self only) | ✅ (self only) | ❌ |
 | List Outstanding Erasure Requests | ✅ | ❌ | ❌ | ❌ |
+| List the Audit Trail | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -1068,16 +1121,17 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-12 |
-| Application CRUD | FR-AP-01 through FR-AP-09 |
+| Person CRUD | FR-PE-01 through FR-PE-13 |
+| Application CRUD and authentication | FR-AP-01 through FR-AP-16 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-10 |
-| Password Recovery | FR-PR-01 through FR-PR-04 |
-| Email Verification | FR-EV-01 through FR-EV-05 |
+| Password Recovery | FR-PR-01 through FR-PR-06 |
+| Email Verification | FR-EV-01 through FR-EV-07 |
 | Google Sign-In | FR-GO-01 through FR-GO-19 |
-| Self-Registration | FR-SR-01 through FR-SR-10 |
+| Self-Registration | FR-SR-01 through FR-SR-12 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-15 |
+| Audit Trail | FR-AT-01 through FR-AT-02 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
 | Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

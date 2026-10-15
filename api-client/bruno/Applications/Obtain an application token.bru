@@ -1,0 +1,35 @@
+meta {
+  name: Obtain an application token
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{host}}/api/applications/token
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "applicationId": "{{applicationId}}",
+    "scopeId": "{{scopeId}}",
+    "secret": "{{applicationSecret}}"
+  }
+}
+
+script:post-response {
+  if (res.body.data && res.body.data.token) {
+    bru.setEnvVar("applicationToken", res.body.data.token);
+  }
+}
+
+docs {
+  UC-56. Anonymous. Every refusal is the same 401.
+
+  The post-response script stores the token as applicationToken. Rate-limited like every anonymous endpoint here.
+}

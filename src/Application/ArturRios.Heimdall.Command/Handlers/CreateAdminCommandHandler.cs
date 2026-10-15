@@ -39,8 +39,13 @@ public class CreateAdminCommandHandler(
         }
 
         // AF-06a: admin emails are unique system-wide, compared case-insensitively (LOWER() in SQL).
+        // Trimmed first, here and where it is stored: sign-in and recovery match the stored address
+        // exactly, case aside, so surrounding whitespace would make it unreachable.
+        var address = command.Email.Trim();
+        var email = address.ToLower();
+
         var emailTaken = await personReader.Query().AnyAsync(person =>
-            !person.IsDeleted && person.Email.ToLower() == command.Email.ToLower() &&
+            !person.IsDeleted && person.Email.ToLower() == email &&
             (person.RoleId == (long)Roles.SystemAdmin || person.RoleId == (long)Roles.ScopeAdmin));
 
         if (emailTaken)
@@ -54,7 +59,7 @@ public class CreateAdminCommandHandler(
         var newPerson = new Person
         {
             Name = command.Name,
-            Email = command.Email,
+            Email = address,
             PasswordHash = passwordHash,
             Salt = salt,
             RoleId = command.Role

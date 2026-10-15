@@ -97,7 +97,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
 
     /// <summary>Reads the claims out of an issued token, to assert on what FR-AU-04 requires.</summary>
     private static IdentityUser ClaimsOf(string token) =>
-        (IdentityUser)new IdentityUserMapper().FromClaims(TokenClaimsReader.Read(token)!)!;
+        (IdentityUser)new IdentityUserMapper(TestTokens.Audiences).FromClaims(TokenClaimsReader.Read(token)!)!;
 
     [FunctionalFact]
     public async Task GivenUserWithScopeIdAndCorrectPassword_WhenPostLogin_ThenTokenCarriesPersonAndScope()
@@ -422,6 +422,108 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         }
 
         // Then — and the endpoint works again once the gate drains, so saturation is not a latch
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheHashGateShedsTheTenthAttempt_WhenPostLogin_ThenTheAccountIsLockedAndUnlocksByItself()
+    {
+        // Given nine failures, seeded rather than sent: the nine that matter here are the count, not
+        // nine hashes
+        var email = UniqueEmail("shed-tenth");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using (var seed = db.CreateContext())
+        {
+            await seed.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedLoginAttempts, 9));
+        }
+
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var original = PasswordHashGate.Shared;
+        var saturated = new PasswordHashGate(1, TimeSpan.FromMilliseconds(100));
+
+        PasswordHashGate.Shared = saturated;
+
+        var holder = saturated.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        try
+        {
+            await holding.Task;
+
+            // When the tenth attempt reserves its slot and the gate sheds it
+            var response = await LoginAsync(email);
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+
+            PasswordHashGate.Shared = original;
+        }
+
+        // Then the row is locked for the usual period, with the counter folded into the lock
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+            Assert.NotNull(stored.LockedOutUntil);
+            Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
+            Assert.Equal(0, stored.FailedLoginAttempts);
+        }
+
+        // Then — the correct password is refused while the lock holds
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email)).StatusCode);
+
+        // Then — and once it has expired, the correct password signs in
+        await using (var context = db.CreateContext())
+        {
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.LockedOutUntil, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARowStuckAtTheLimitWithNoLock_WhenPostLogin_ThenItIsLockedAndUnlocksByItself()
+    {
+        // Given a row left at the limit with no lockout date, as an older instance or a lowered limit can
+        var email = UniqueEmail("stuck");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using (var seed = db.CreateContext())
+        {
+            await seed.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedLoginAttempts, 10));
+        }
+
+        // When an attempt is made
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email, "Wr0ng-Password!")).StatusCode);
+
+        // Then the reservation locks the row and resets the counter
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+            Assert.NotNull(stored.LockedOutUntil);
+            Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
+            Assert.Equal(0, stored.FailedLoginAttempts);
+
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.LockedOutUntil, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        // Then — and after the lock expires, the correct password signs in
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
     }
 

@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -9,7 +10,9 @@ namespace ArturRios.Heimdall.Command.Tests;
 // The gate is what stands between a caller and unbounded memory demand — 600 MB per derivation, and
 // the rate limiter is per IP and per instance, so it bounds one address rather than the aggregate.
 //
-// Every test builds its own gate and never touches PasswordHashGate.Shared. That is not tidiness:
+// Every test but one builds its own gate and leaves PasswordHashGate.Shared alone; the exception swaps
+// Shared while it configures it from the environment, so this class is in a non-parallel collection
+// and no other test sees the temporary gate. The reason for the rule is not tidiness:
 // when the gate was a static with a reconfigurable semaphore, these tests narrowed the bound to one
 // and unrelated handler tests running in parallel were refused by it, while callers already inside
 // released permits into a semaphore that had since been replaced. An instance per test has neither
@@ -19,6 +22,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // is the counting and the refusal; running Argon2id to demonstrate arithmetic would spend gigabytes
 // and tie the suite's duration to the hashing parameters. One test at the end does pay for a real
 // derivation, because everything above it would pass against a gate that ran nothing at all.
+[Collection(PasswordHashGateCollection.Name)]
 public class PasswordHashGateTests
 {
     private static PasswordHashGate Gate(int maxConcurrent, int maxWaitMilliseconds = 5_000) =>
@@ -30,8 +34,38 @@ public class PasswordHashGateTests
         // Asserted as numbers rather than against themselves: the value is a memory budget — four
         // derivations at 600 MB is about 2.4 GB — so raising it is a decision about how much RAM the
         // process may commit to hashing, and should have to change this line to happen.
-        Assert.Equal(4, PasswordHashGate.DefaultMaxConcurrent);
-        Assert.Equal(TimeSpan.FromSeconds(10), PasswordHashGate.DefaultMaxWait);
+        var fresh = new PasswordHashGate(PasswordHashGate.DefaultMaxConcurrent, PasswordHashGate.DefaultMaxWait);
+
+        Assert.Equal(4, fresh.MaxConcurrent);
+        Assert.Equal(TimeSpan.FromSeconds(10), fresh.MaxWait);
+    }
+
+    [UnitFact]
+    public async Task GivenEveryPermitHeld_WhenTheWaitExpires_ThenTheMessageNamesTheGateAndTheWait()
+    {
+        // The message is internal — the filter answers 503 with its own canonical text — so it is
+        // what a failing test or a log line shows. "Saturated" alone does not say which bound, or
+        // how long the caller stood in it.
+        var gate = new PasswordHashGate(1, TimeSpan.FromSeconds(2));
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var holder = gate.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        await holding.Task;
+
+        var exception = await Assert.ThrowsAsync<PasswordHashGateSaturatedException>(
+            () => gate.RunAsync(() => Task.CompletedTask));
+
+        release.SetResult();
+        await holder;
+
+        Assert.Equal("The password-hash gate stayed full for 2 s.", exception.Message);
     }
 
     [UnitFact]

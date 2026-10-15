@@ -124,8 +124,10 @@ brute-force defence, which harms subjects more.
 | **Severity** | Medium · **Likelihood** High (it is inherent) · **Residual** Low |
 
 Controls: attribution cleared at 18 months, or immediately on erasure (NFR-21), enforced by a
-database trigger the application cannot talk its way around. Once cleared the entry relates to no
-identifiable person.
+database trigger the application cannot talk its way around. A target naming a person or Google User
+is cleared on the same grounds (#184), so an entry about a person — their own self-service command,
+or an administrator's action on them — stops naming them too. Once both are cleared the entry relates
+to no identifiable person.
 
 *Consequence recorded rather than discovered: an active person's entries are pseudonymised at 18
 months while they are still active, capping how far back a current account can be investigated. That

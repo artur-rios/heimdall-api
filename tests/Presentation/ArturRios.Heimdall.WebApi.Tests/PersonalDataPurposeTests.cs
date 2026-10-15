@@ -21,9 +21,13 @@ public class PersonalDataPurposeTests
     /// <summary>
     ///     The entities holding data about an identifiable person. `Application` is deliberately
     ///     absent: it is a non-human identity, and its `OwnerId` names a person but the row
-    ///     describes the system.
+    ///     describes the system. `PendingRegistration` is here because it holds a registrant's name,
+    ///     address and password hash before any account exists. `ErasedSubject` is here because its
+    ///     key is a removed person's `PublicId`, the very id the audit trail is cleared of (#195);
+    ///     the key itself is skipped like every `Id`, so its record names it as `PublicId`.
     /// </summary>
-    private static readonly Type[] PersonalDataEntities = [typeof(Person), typeof(GoogleUser), typeof(AuditLog)];
+    private static readonly Type[] PersonalDataEntities =
+        [typeof(Person), typeof(GoogleUser), typeof(AuditLog), typeof(PendingRegistration), typeof(ErasedSubject)];
 
     /// <summary>
     ///     Navigation properties and the internal key. The record covers what is stored about a

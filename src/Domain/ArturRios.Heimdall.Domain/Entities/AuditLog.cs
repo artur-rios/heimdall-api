@@ -10,12 +10,13 @@ namespace ArturRios.Heimdall.Domain.Entities;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Append-only, with exactly one exception.</b> Database triggers refuse every
+///         <b>Append-only, with exactly two exceptions.</b> Database triggers refuse every
 ///         <c>DELETE</c> and <c>TRUNCATE</c>, and refuse any <c>UPDATE</c> other than clearing
-///         <see cref="ActorPersonId" /> and <see cref="ActorRole" /> — which may be set to
+///         <see cref="ActorPersonId" /> and <see cref="ActorRole" />, or clearing a
+///         <see cref="TargetId" /> that names a person or Google User. Each may be set to
 ///         <c>null</c>, never to somebody else, and only once due (NFR-21). The resulting guarantee
-///         is precise: an action can never be denied, and who took it can never be reassigned — only
-///         forgotten, on schedule or on erasure.
+///         is precise: an action can never be denied, and who took it or whom it was taken on can
+///         never be reassigned — only forgotten, on schedule or on erasure.
 ///     </para>
 ///     <para>
 ///         That exception exists because the trail holds personal data. An indefinitely retained,
@@ -35,9 +36,9 @@ public class AuditLog : Entity<long>
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         This is the one column on this entity that may change after creation, and it may only
-    ///         ever change to <c>null</c>. Everything else is immutable, and the row can never be
-    ///         deleted — see the remarks on the class.
+    ///         This and <see cref="TargetId" /> are the columns on this entity that may change after
+    ///         creation, and they may only ever change to <c>null</c>. Everything else is immutable,
+    ///         and the row can never be deleted — see the remarks on the class.
     ///     </para>
     ///     <para>
     ///         Two grounds make a clearing due: the entry is past the configured attribution period,
@@ -57,7 +58,18 @@ public class AuditLog : Entity<long>
     [MaxLength(200)]
     public string Action { get; set; } = string.Empty;
 
-    /// <summary>Best-effort public identifier of the entity the write affected; <c>null</c> if none could be resolved.</summary>
+    /// <summary>
+    ///     Best-effort public identifier of the entity the write affected; <c>null</c> if none could be
+    ///     resolved, and <c>null</c> again once a person target has been cleared (NFR-21).
+    /// </summary>
+    /// <remarks>
+    ///     When this names a person or Google User the entry is personal data about them, whoever
+    ///     acted, so it is cleared on the actor's two grounds: past the attribution period, or once
+    ///     that identity is anonymised. It names one still after a hard delete, which tombstones the
+    ///     id first (<see cref="ErasedSubject" />, #195), so a tombstoned id with no row left is
+    ///     cleared too, at any age. A target naming anything else is not personal data and never
+    ///     changes. The database enforces all of it.
+    /// </remarks>
     public Guid? TargetId { get; set; }
 
     /// <summary>

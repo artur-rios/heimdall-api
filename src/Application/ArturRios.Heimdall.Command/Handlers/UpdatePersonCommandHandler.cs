@@ -1,8 +1,10 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -19,15 +21,39 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     when the address changes (AF-08b). All failures are returned as errors on the output rather
 ///     than thrown.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Why an own email change needs the password.</b> An address change requires proof of
+///         identity, because recovery follows the address, and a bearer token is not proof that the
+///         account holder is present. So a caller changing their own address presents their
+///         current password, and their second factor when it is active (FR-PE-14), checked as UC-39
+///         checks them and answered with UC-39's refusals (AF-08h, AF-08i). Both are checked before
+///         anything that depends on the new address, so a caller without them cannot even learn
+///         whether it is taken. An administrator changing someone else's address presents nothing of
+///         theirs: the administrator's own authorisation covers it, as it always has.
+///     </para>
+///     <para>
+///         <b>What follows any email change.</b> Whoever made it, the person's security stamp is
+///         replaced, which revokes every token they hold (FR-AU-11), and the previous address is told
+///         (FR-PE-15) — so a change its owner did not make does not go unnoticed.
+///     </para>
+/// </remarks>
 public class UpdatePersonCommandHandler(
     IValidator<UpdatePersonCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
-    IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter)
+    IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter,
+    IAtomicWrites atomicWrites,
+    IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
+    ITwoFactorFactorVerifier factorVerifier,
+    IEmailChangeNoticeSender emailChangeNoticeSender)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
+    /// <summary>The length of an authenticator-app or email code, which is all digits; a recovery code is not.</summary>
+    private const int CodeLength = 6;
+
     public async Task<DataOutput<UpdatePersonCommandOutput?>> HandleAsync(UpdatePersonCommand command, CancellationToken cancellationToken = default)
     {
         var output = DataOutput<UpdatePersonCommandOutput?>.New;
@@ -73,7 +99,31 @@ public class UpdatePersonCommandHandler(
         }
 
         // UC-08 step 4: an email change re-checks uniqueness and clears the verification flag.
-        var emailChanged = !string.Equals(person.Email, command.Email, StringComparison.OrdinalIgnoreCase);
+        //
+        // Detected ordinally, on the trimmed values as stored, and nothing else decides it: this one
+        // flag gates re-authentication, the verification flag, the stamp rotation, the notice and the
+        // token retirement below. A case-insensitive comparison folds distinct characters together
+        // (final and medial sigma, for one), and two such addresses can name different mailboxes.
+        // Read ordinally, a change of case is a change too, which asks for the password and sends a
+        // notice: it fails closed.
+        var emailChanged = !string.Equals(person.Email.Trim(), command.Email.Trim(), StringComparison.Ordinal);
+
+        // What is written when it did change: trimmed, because sign-in and recovery match the stored
+        // address exactly, case aside, and a padded copy would no longer be found. When it did not,
+        // the stored value is left exactly as it is.
+        var newEmail = emailChanged ? command.Email.Trim() : person.Email;
+
+        // UC-08 step 4 (FR-PE-14, AF-08h, AF-08i): changing your own address needs your password, and
+        // your second factor when it is active. Before the uniqueness check, so without them a caller
+        // learns nothing about the new address either.
+        var reauthentication = emailChanged && command.ActingPersonId == person.PublicId
+            ? await ReauthenticateAsync(command, person)
+            : Reauthentication.NotRequired;
+
+        if (reauthentication.Error is not null)
+        {
+            return output.WithError(reauthentication.Error);
+        }
 
         // A role change re-checks it too, even on an unchanged address (FR-PE-09). The namespace the
         // address has to be unique in is chosen by the role, so promoting a User to System Admin
@@ -86,6 +136,17 @@ public class UpdatePersonCommandHandler(
         {
             return output.WithError(PersonMessages.EmailAlreadyExists);
         }
+
+        // The second factor is spent only now, once nothing else can refuse the request — and by a
+        // write only one request can win, as everywhere a code is accepted.
+        var spending = await SpendFactorAsync(reauthentication.Verification);
+
+        if (spending is not null)
+        {
+            return output.WithError(spending);
+        }
+
+        var previousEmail = person.Email;
 
         if (emailChanged)
         {
@@ -102,9 +163,19 @@ public class UpdatePersonCommandHandler(
             person.ScopeOwnerships.Clear();
         }
 
+        // FR-AU-11: the address is what account recovery is sent to, so a new one is a credential
+        // change and revokes every token the person holds — whoever makes the change, and when they
+        // make it themselves, the token making it too. Before the save, in its own targeted write: if
+        // the save then fails, the cost is one extra sign-in, where the other order could leave a
+        // changed address with its old sessions live.
+        if (emailChanged)
+        {
+            await atomicWrites.RotateSecurityStampAsync(person);
+        }
+
         // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it).
         person.Name = command.Name;
-        person.Email = command.Email;
+        person.Email = newEmail;
         person.UpdatedAt = DateTime.UtcNow;
 
         var update = await personWriter.UpdateAsync(person);
@@ -114,13 +185,27 @@ public class UpdatePersonCommandHandler(
             return output.WithErrors(update.Errors);
         }
 
-        // UC-08 step 4, continued: a verification token is proof of control of the address it was
-        // mailed to, and that is no longer the person's address. Left live, one mailed to the old
-        // address would mark the new one verified through UC-14 without anybody having read
-        // anything sent to it — undoing the reset just made.
+        // FR-AU-11 again, once the new address is saved: a sign-in between the first rotation and
+        // the save read the first new stamp beside the old address, and its token must not outlive
+        // the change. The first rotation is what makes a failed save safe; this one closes that gap.
         if (emailChanged)
         {
-            var retirement = await RetireVerificationTokensAsync(person.Id);
+            await atomicWrites.RotateSecurityStampAsync(person);
+        }
+
+        if (emailChanged)
+        {
+            // FR-PE-15: the previous address is told. Only that address is handed over, so the
+            // notice cannot disclose the new one; a failed delivery is the sender's to log, and does
+            // not fail an update that has already been made.
+            await emailChangeNoticeSender.SendAsync(previousEmail);
+
+            // UC-08 step 4, continued: a verification token is proof of control of the address it
+            // was mailed to, and that is no longer the person's address. Left live, one mailed to the
+            // old address would mark the new one verified through UC-14 without anybody having read
+            // anything sent to it — undoing the reset just made.
+            var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
+                verificationTokenWriter, verificationTokenWriter, person.Id, DateTime.UtcNow);
 
             if (retirement is not null)
             {
@@ -146,33 +231,89 @@ public class UpdatePersonCommandHandler(
     }
 
     /// <summary>
-    ///     UC-08 step 3. A System Admin may update any person; any actor may update their own record;
-    ///     a Scope Admin may update a <c>User</c> belonging to a scope they own. Everything else is
-    ///     denied.
+    ///     The outcome of re-authenticating a caller who changes their own email (FR-PE-14).
     /// </summary>
-    private async Task<IEnumerable<string>?> RetireVerificationTokensAsync(long personId)
+    /// <param name="Error">The canonical refusal, or <c>null</c> when the caller proved who they are.</param>
+    /// <param name="Verification">
+    ///     The second factor that matched, still to be spent, or <c>null</c> when none was required.
+    /// </param>
+    private sealed record Reauthentication(string? Error, TwoFactorFactorVerificationResult? Verification)
     {
-        var now = DateTime.UtcNow;
+        public static readonly Reauthentication NotRequired = new(null, null);
 
-        var live = await verificationTokenWriter.Query()
-            .Where(x => x.PersonId == personId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
+        public static Reauthentication Refused(string error) => new(error, null);
+    }
 
-        foreach (var outstanding in live)
+    /// <summary>
+    ///     FR-PE-14: the current password, through <see cref="PasswordHashGate" /> as every password
+    ///     check is (Threat Model TH-03), then — when the person's two-factor authentication is
+    ///     active — a current second factor, through the same <see cref="ITwoFactorFactorVerifier" />
+    ///     UC-38, UC-39 and UC-40 use. The refusals are UC-39's own (AF-39b, AF-39c), and like them
+    ///     count nothing against the account: the rate limit on the endpoint and the hash gate bound
+    ///     the guessing, as they do for UC-39 and UC-42.
+    /// </summary>
+    /// <remarks>
+    ///     One field carries the second factor, so its shape decides how it is checked: six digits are
+    ///     an authenticator-app or email code, anything else a recovery code, which is never all
+    ///     digits (<c>XXXX-XXXX</c>). A missing one is checked as a code and so refused like a wrong one.
+    /// </remarks>
+    private async Task<Reauthentication> ReauthenticateAsync(UpdatePersonCommand command, Person person)
+    {
+        // AF-08h: missing or wrong alike.
+        if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
+            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
         {
-            outstanding.Used = true;
+            return Reauthentication.Refused(TwoFactorMessages.PasswordMismatch);
+        }
 
-            var retirement = await verificationTokenWriter.UpdateAsync(outstanding);
+        var twoFactorAuth = await twoFactorReader.Query()
+            .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
 
-            if (!retirement.Success)
-            {
-                return retirement.Errors;
-            }
+        if (twoFactorAuth is null)
+        {
+            return Reauthentication.NotRequired;
+        }
+
+        var factor = command.TwoFactorCode?.Trim();
+        var isCode = factor is null || (factor.Length == CodeLength && factor.All(char.IsAsciiDigit));
+
+        var verification = await factorVerifier.VerifyAsync(
+            twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
+
+        // AF-08i.
+        return verification.Matched
+            ? new Reauthentication(null, verification)
+            : Reauthentication.Refused(TwoFactorMessages.FactorInvalid);
+    }
+
+    /// <summary>
+    ///     Spends the email code or recovery code that re-authenticated the caller, exactly as UC-40
+    ///     spends the one that authorised it. An app code needs nothing more: the verifier already
+    ///     recorded its time step (FR-2F-14). Returns the refusal when another request spent the code
+    ///     first, or <c>null</c>.
+    /// </summary>
+    private async Task<string?> SpendFactorAsync(TwoFactorFactorVerificationResult? verification)
+    {
+        if (verification?.ConsumedEmailCode is { } emailCode &&
+            !await atomicWrites.TryConsumeEmailCodeAsync(emailCode))
+        {
+            return TwoFactorMessages.FactorInvalid;
+        }
+
+        if (verification?.ConsumedRecoveryCode is { } recoveryCode &&
+            !await atomicWrites.TryConsumeRecoveryCodeAsync(recoveryCode, DateTime.UtcNow))
+        {
+            return TwoFactorMessages.FactorInvalid;
         }
 
         return null;
     }
 
+    /// <summary>
+    ///     UC-08 step 3. A System Admin may update any person; any actor may update their own record;
+    ///     a Scope Admin may update a <c>User</c> belonging to a scope they own. Everything else is
+    ///     denied.
+    /// </summary>
     private async Task<bool> MayUpdateAsync(UpdatePersonCommand command, Person person)
     {
         if (command.ActingRole == (int)Roles.SystemAdmin || command.ActingPersonId == person.PublicId)
@@ -270,7 +411,7 @@ public class UpdatePersonCommandHandler(
     /// </summary>
     private async Task<bool> EmailTakenAsync(UpdatePersonCommand command, Person person, long targetRoleId)
     {
-        var email = command.Email.ToLower();
+        var email = command.Email.Trim().ToLower();
 
         if (targetRoleId == (long)Roles.User && person.ScopeMembership is not null)
         {

@@ -100,7 +100,10 @@ public static class TwoFactorMessages
     /// </summary>
     public const string NotActive = "Two-factor authentication is not active for this account.";
 
-    /// <summary>AF-39b: the submitted password does not match the caller's current password.</summary>
+    /// <summary>
+    ///     AF-39b: the submitted password does not match the caller's current password. Also AF-36e
+    ///     (FR-2F-18) and UC-08's AF-08h (FR-PE-14), where a missing password is answered the same way.
+    /// </summary>
     public const string PasswordMismatch = "The current password is incorrect.";
 
     /// <summary>

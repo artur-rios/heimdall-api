@@ -38,7 +38,7 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one |
 | `POST /google` | Anonymous | UC-25 — Google sign-up/sign-in against a scope |
 | `POST /google/sign-out` | Authenticated (Google User) | UC-26 — end a Google session |
-| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup |
+| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise) |
 | `POST /2fa/confirm` | Authenticated (self) | UC-37 — confirm setup, receive recovery codes |
 | `POST /2fa/verify` | Anonymous | UC-38 — redeem the challenge token with a second factor |
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |
@@ -53,8 +53,9 @@ Two rules apply everywhere and are not repeated per row:
 Every **anonymous** endpoint here is rate-limited to **10 requests per minute per IP**. Each of them
 checks a credential, and none is protected by a token — see
 [Operations](../operations/#rate-limiting) for why that matters and what the limit does not replace.
-The authenticated endpoints that check a password or a second factor — `2fa/confirm`,
-`2fa/disable`, `2fa/recovery-codes/regenerate` and `erasure-request` — share the same limit.
+The authenticated endpoints that check a password or a second factor — `2fa/enable`, `2fa/confirm`,
+`2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /persons/{id}` — share the
+same limit.
 
 The 2FA endpoints never name a person: the subject is always the caller, read from the bearer token,
 so a caller can only ever act on their own configuration.
@@ -82,6 +83,8 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications) |
 | `DELETE /{id}/hard` | System Admin | UC-05 — hard delete (also purges permissions and join rows) |
 | `PUT /{id}/google-signin` | System Admin + Scope Admin | UC-24 — turn Google Sign-In on or off |
+| `GET /{id}/pending-registrations` | System Admin + Scope Admin | UC-49 — the self-registrations awaiting confirmation, newest first: name, address, expiry, guesses left; never the hash, salt or token |
+| `DELETE /{id}/pending-registrations/{registrationId}` | System Admin + Scope Admin | UC-50 — discard one; its link then answers "Invalid token" and the registrant may sign up again |
 
 ## Persons — `/api`
 
@@ -96,9 +99,12 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
 | `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list who may own a scope (Scope Admins, plus System Admins for a System Admin caller) for an owner picker; optionally excludes a scope's current owners |
-| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role |
+| `GET /persons/system-admins` | System Admin | UC-07 read e — list the System Admins: who else holds full access |
+| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role. Changing your **own** email needs `currentPassword`, and `twoFactorCode` when your 2FA is active (`401` otherwise); any email change revokes the person's tokens and notifies the previous address |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
+| `POST /persons/{id}/verification-email` | System Admin + Scope Admin | UC-51 — mail a fresh verification link to the person's own address; a Scope Admin only for Users of scopes they own; 429 within the cooldown |
+| `POST /persons/{id}/password-reset` | System Admin + Scope Admin | UC-52 — mail a password-reset link to the person's own address, with UC-12's eligibility; 429 within the cooldown |
 | `DELETE /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-22 — remove an owner (rejected if it would be the last one) |
 
 ## Applications — `/api/scopes/{scopeId}/applications`
@@ -114,6 +120,27 @@ even after the restriction is lifted, when the subject signs in again for a full
 
 An application's owner must be a **`ScopeAdmin` or `SystemAdmin` who owns that scope** — a `User` may never own one
 (**FR-AP-03**).
+
+### Application credentials — `/api/scopes/{scopeId}/applications/{id}/credentials`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `POST /` | System Admin + Scope Admin | UC-53 — issue a credential; the secret is in this response only; 409 with two live credentials already |
+| `GET /` | System Admin + Scope Admin | UC-54 — list the application's credentials, newest first; never a secret or hash |
+| `DELETE /{credentialId}` | System Admin + Scope Admin | UC-55 — revoke a credential; tokens issued from it fail the next live check |
+
+A Scope Admin may manage the credentials only of an application they own, in a scope they still own,
+the rule `GET`/`PUT /{id}` apply (**FR-AP-12**).
+
+### Application tokens — `/api/applications`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `POST /token` | Anonymous (the secret authenticates) | UC-56 — exchange a credential's secret for an application token; every refusal is one `401` |
+| `GET /self` | Anonymous (validates its own bearer token) | UC-57 — check an application token live; one `401` for every refusal |
+
+The [Application authentication](../flows/application-authentication/) guide is the page for the
+service consuming these tokens.
 
 ## Scope permissions — `/api/scopes/{scopeId}/permissions`
 
@@ -146,6 +173,16 @@ grants. The listing admits none of them.
 
 Both deletions take the scope's `PublicId` in the path and refuse a Google User reached through the
 wrong scope.
+
+## Audit trail — `/api/audit-log`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `GET /api/audit-log` | System Admin | UC-48 — the audit trail, newest first; filter by `from`/`to` (UTC, inclusive), `actorId`, `action`, `targetId`, `succeeded` |
+
+An entry is shown as stored: an actor the retention pass has cleared reads as `null`, so filtering by
+`actorId` cannot find it. `action` is the command's type name, matched exactly (`CreateScopeCommand`).
+A Scope Admin is refused — the trail has no scope column to divide it by.
 
 ## Health check — `/api/healthcheck`
 
@@ -191,6 +228,22 @@ branch. Same message, same status, everywhere it is returned.
 
 List endpoints accept pagination and filter parameters, all validated before the query runs
 (**NFR-10**), and most accept `includeDeleted=true` to see logically deleted rows.
+
+## Malformed requests
+
+A request that cannot be bound — a body that is not JSON, or a value of the wrong type in the body or
+query string (`?succeeded=maybe`, `{"name": 123}`) — answers `400` with the error
+`The request is malformed.`, on every endpoint (**NFR-10**). The answer is a `DataOutput` envelope even
+on list endpoints. Authentication and role checks come first, so a caller without a valid token still
+receives `401`, and one of the wrong role `403`; refusals that depend on data, made in a handler, come
+after the `400`.
+
+A query parameter that is not nullable no longer falls back to its default when it is empty or
+unparseable: `?pageNumber=`, `?pageNumber=abc`, `?pageSize=`, `?includeDeleted=` and `?includeDeleted=1`
+are all `400`. A nullable one sent empty (`?succeeded=`) still binds to null and is ignored. A missing
+required field is not a binding failure: it keeps the field's own message from the validator.
+
+Of the endpoints that take a body, only `POST …/credentials` accepts an empty one, meaning "no expiry".
 
 ## Errors that are deliberately vague
 

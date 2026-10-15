@@ -60,8 +60,10 @@ public class CreateUserCommandHandler(
         }
 
         // AF-06a: a User's email must be unique among the scope's Users, compared case-insensitively
-        // (LOWER() in SQL).
-        var email = command.Email.ToLower();
+        // (LOWER() in SQL). Trimmed first, here and where it is stored: sign-in and recovery match the
+        // stored address exactly, case aside, so surrounding whitespace would make it unreachable.
+        var address = command.Email.Trim();
+        var email = address.ToLower();
 
         var emailTaken = await personReader.Query().AnyAsync(person =>
             !person.IsDeleted && person.Email.ToLower() == email &&
@@ -91,7 +93,7 @@ public class CreateUserCommandHandler(
         var newPerson = new Person
         {
             Name = command.Name,
-            Email = command.Email,
+            Email = address,
             PasswordHash = passwordHash,
             Salt = salt,
             RoleId = (long)Roles.User,

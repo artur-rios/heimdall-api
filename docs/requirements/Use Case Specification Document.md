@@ -321,10 +321,11 @@ sequenceDiagram
 
 1. System Admin sends a hard delete request.
 2. The system locates the scope.
-3. The system permanently deletes all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope.
-4. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
-5. The system permanently deletes the scope record.
-6. The system returns success, including the count of scope permissions removed.
+3. The system records a tombstone in `ERASED_SUBJECT` for each User and Google User it is about to remove — their `PublicId`, which kind, and when — before anything is deleted, so the audit entries naming them can still be cleared once their rows are gone (NFR-21, #195). Scope Admins are not removed and get none; nor does the scope.
+4. The system permanently deletes all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope.
+5. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
+6. The system permanently deletes the scope record.
+7. The system returns success, including the count of scope permissions removed.
 
 **Alternative Flows:**
 
@@ -457,7 +458,7 @@ sequenceDiagram
 | **ID** | UC-07 |
 | **Name** | View Person |
 | **Actors** | System Admin, Scope Admin, User |
-| **Description** | Retrieve a person's details or list persons. There are four distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the owners of a scope, via `GET /api/scopes/{scopeId}/owners`; or (d) the persons who may own a scope, via `GET /api/persons/scope-admins` |
+| **Description** | Retrieve a person's details or list persons. There are five distinct reads: (a) a single person by ID, via `GET /api/persons/{id}`; (b) the `User` persons of a scope, via `GET /api/scopes/{scopeId}/persons`; (c) the owners of a scope, via `GET /api/scopes/{scopeId}/owners`; (d) the persons who may own a scope, via `GET /api/persons/scope-admins`; or (e) the system's System Admins, via `GET /api/persons/system-admins` |
 | **Preconditions** | Actor is authenticated; for reads (b) and (c), the target scope exists and is not logically deleted; for read (d), the scope named for exclusion — if any — exists and is not logically deleted |
 | **Postconditions** | Person information is returned, never including `PasswordHash` or `Salt` |
 
@@ -491,6 +492,11 @@ sequenceDiagram
 2. If a scope was named for exclusion, the system verifies it exists, is not logically deleted, and that the actor may manage it: a System Admin always may; a Scope Admin must own it.
 3. The system returns every `ScopeAdmin` person that is not logically deleted — and, for a System Admin caller, every such `SystemAdmin` person too — less the named scope's current owners if one was named, projected to the person's identifier, name, and email only.
 
+**Main Flow (read e — list the system's System Admins):**
+
+1. A System Admin requests the system's `SystemAdmin` persons, optionally filtering by name or email and paging the result (FR-PE-13).
+2. The system returns every `SystemAdmin` person that is not logically deleted and whose processing is not restricted, ordered by name, projected to the person's identifier, name, and email only.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
@@ -510,6 +516,16 @@ sequenceDiagram
 > scope's owners from a list reveals them by comparison, so only an actor entitled to manage that
 > scope may ask for it.
 
+> **On read e being System Admin only.** Read d already offers System Admins to a System Admin
+> caller, but mixed with the Scope Admins and with no role to tell them apart, because it answers a
+> different question — who may own a scope. Read e answers who else holds full access to the
+> deployment. Its only actor is the System Admin, and the endpoint's
+> `[RoleRequirement(SystemAdmin)]` settles that: a `ScopeAdmin` or `User` is refused with `403`
+> before the handler runs, and an unauthenticated caller with `401`. No data-dependent rule is left,
+> which is why read e adds no alternative flow — the same reasoning UC-35 and UC-43 follow. A Scope
+> Admin is excluded because a System Admin's address is not tenant-facing, the reason read d
+> withholds System Admins from them too.
+
 ---
 
 ### UC-08: Update Person
@@ -521,22 +537,44 @@ sequenceDiagram
 | **Actors** | System Admin, Scope Admin, User |
 | **Description** | Modify person's name, email, or role |
 | **Preconditions** | Actor is authenticated; person exists and is not logically deleted |
-| **Postconditions** | Person record is updated |
+| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11) and the previous address has been sent a notice (FR-PE-15) |
 
 **Main Flow:**
 
 1. Actor sends an update request to `PUT /api/persons/{id}` with the person ID and new values. `Name`
-   and `Email` are replaced; `RoleId` is optional and, when omitted, leaves the role unchanged.
+   and `Email` are replaced; `RoleId` is optional and, when omitted, leaves the role unchanged. An
+   actor changing their **own** email also sends `currentPassword`, and `twoFactorCode` when their
+   two-factor authentication is active (step 4).
 2. The system validates the input.
 3. The system checks authorization, allowing the update when any of the following holds:
    - The actor is a System Admin — they may update any person, including `RoleId`.
    - The actor **is** the person being updated — every actor may update their own name and email.
    - The actor is a Scope Admin and the person is a `User` of a scope the actor owns — name and email
      only; a Scope Admin may never change `RoleId`.
-4. If email changes, the system checks uniqueness per FR-PE-09 — among the scope's `User`s for a
-   `User`, among all `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the
-   person will hold after this update — and resets `EmailVerified = false`. No verification email is sent —
-   issuing a fresh token is UC-14 / UC-15's responsibility.
+4. If email changes — compared exactly, after trimming, so a change of case is a change too:
+   - When the actor **is** the person being updated, the system first re-authenticates them
+     (FR-PE-14): `currentPassword` must match their password, checked as UC-39 checks it (AF-08h), and
+     when their two-factor authentication is active, `twoFactorCode` must be a current authenticator-app
+     or email code or an unused recovery code, checked as UC-38 checks it (AF-08i). A recovery code is
+     spent, as everywhere. No endpoint sends an email code to a signed-in caller, so a person whose only
+     method is Email uses a recovery code here. This happens before the uniqueness check, so a caller without them learns
+     nothing about the new address. An administrator changing someone else's email presents no
+     credential of that person: their own authorisation (step 3) covers it. A change of name alone asks
+     for nothing.
+   - The system checks uniqueness per FR-PE-09 — among the scope's `User`s for a `User`, among all
+     `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
+     after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
+     fresh token is UC-14 / UC-15's responsibility.
+   - Just before the update is saved, the system replaces the person's security stamp, which revokes
+     every token they hold (FR-AU-11) — whoever made the change — and replaces it once more after the
+     save. The first replacement means a save that fails costs one extra sign-in rather than leaving
+     old sessions live; the second ends any session opened while the save was in flight. The new
+     address is stored trimmed; an address that differs only by surrounding whitespace is no change and
+     is not written. An actor who changed their own email is answered `200 OK`, but the token that made
+     the request is revoked with the rest: the client signs in again, with the new address.
+   - The system sends a notice to the **previous** address (FR-PE-15): the account's email was changed,
+     and if that was not the person, they should contact an administrator. The notice names neither the
+     new address nor any link. A failed delivery is logged and does not fail the update.
 5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
    and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
    association (FR-PE-10). Any other target role is refused: making someone a `ScopeAdmin` requires
@@ -546,6 +584,12 @@ sequenceDiagram
 6. The system applies updates and sets `UpdatedAt`.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
 
+> **On re-authenticating an email change.** An address change requires proof of identity, because
+> account recovery follows the address and a bearer token is not proof that the account holder is
+> present. An own email change therefore asks for what UC-39 and UC-42 ask for. The previous address
+> is told, so a change its owner did not make does not go unnoticed, and the stamp rotation ends the
+> sessions opened before it.
+>
 > **On FR-RO-05.** FR-RO-05 states that Scope Admins may assign the `User` role to persons within
 > their scope. That is satisfied by UC-06 path (a), where a Scope Admin creates a person in a scope
 > they own with `RoleId = User`. UC-08 keeps role changes System-Admin-only, per step 3 and AF-08c.
@@ -561,6 +605,8 @@ sequenceDiagram
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
+| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is changed |
+| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The code or recovery code is missing, incorrect, or already used." (UC-39's AF-39c). Nothing is changed |
 
 ---
 
@@ -627,11 +673,12 @@ sequenceDiagram
 2. The system loads the person **in any deletion state** — a logically deleted person is exactly what a
    cleanup pass starts from, so soft deletion must not block a hard one.
 3. If the person owns any scope, the system verifies that every scope they own has at least one other owner.
-4. The system permanently deletes all tokens (password reset, email verification) associated with the person.
-5. The system permanently deletes any applications owned by the person.
-6. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
-7. The system permanently deletes the person record.
-8. The system returns success, reporting how many applications and tokens went with the person.
+4. The system records a tombstone for the person in `ERASED_SUBJECT` — their `PublicId`, that it was a person, and when — before anything is deleted, so the audit entries naming them, this hard delete's own among them, can still be cleared once the row is gone (NFR-21, #195). A retry records it again without error.
+5. The system permanently deletes all tokens (password reset, email verification) associated with the person.
+6. The system permanently deletes any applications owned by the person.
+7. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
+8. The system permanently deletes the person record.
+9. The system returns success, reporting how many applications and tokens went with the person.
 
 **Alternative Flows:**
 
@@ -714,7 +761,7 @@ sequenceDiagram
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
    If processing of the person is restricted (NFR-24), steps 4 and 5 do not apply and the login ends in AF-11i instead.
-6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
+6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. Every token issued to a person — this one, AF-11g's challenge token and AF-11i's subject-rights-only token — also carries the person's current security stamp, and is refused on every later request once the stamp has been replaced by a credential change (FR-AU-11). If the person does have active two-factor authentication, go to AF-11g instead.
 
 **Alternative Flows:**
 
@@ -727,7 +774,7 @@ sequenceDiagram
 | AF-11e | Scope Admin's owned scopes are all logically deleted | Return `401 Unauthorized` |
 | AF-11f | Email missing or malformed, or password missing | Return `400 Bad Request` |
 | AF-11g | Person has active two-factor authentication (FR-2F-07) | Return `200 OK` with a short-lived challenge token and the available second-factor methods, instead of the full authentication token; if the Email method is enabled, also send a fresh email code (FR-2F-08). See UC-38 for how the login is completed |
-| AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09) | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
+| AF-11h | The person's account is locked out after ten consecutive failed password attempts (FR-AU-09); the tenth attempt locks the account when it is counted, and a correct password on that tenth attempt still signs in and clears the lock | Return `401 Unauthorized`, the same answer and the same message as AF-11a through AF-11e |
 | AF-11i | The password checks out and processing of the person is restricted (NFR-24, UC-44), whether or not they are logically deleted | Return `200 OK` with a **subject-rights-only token** and `processingRestricted: true`, instead of the full token. The token names the person and their role and claims no scope; it is accepted only by UC-41, UC-42, UC-44 and UC-45, and every other endpoint answers it `403 Forbidden`. A person with active two-factor authentication gets AF-11g's challenge first, and UC-38 ends the same way |
 
 > **On the lockout.** AF-11h joins the collapse deliberately. Answering it distinctly would tell an
@@ -822,15 +869,20 @@ requests; a person who receives nothing asks again, as for any email that does n
 | **Actors** | Anonymous |
 | **Description** | Set a new password using a valid reset token |
 | **Preconditions** | A valid, non-expired reset token exists |
-| **Postconditions** | Person's password is updated; the token is marked as used |
+| **Postconditions** | Person's password is updated; the token is marked as used; every token the person held is revoked (FR-AU-11) |
 
 **Main Flow:**
 
 1. Caller provides the reset token and a new password.
 2. The system validates the token (exists, not expired, not used).
-3. The system generates a new random `Salt`, hashes the new password using it, and updates the person's `PasswordHash` and `Salt`.
-4. The system marks the token as used.
-5. The system returns success.
+3. The system generates a new random `Salt` and hashes the new password using it.
+4. The system marks the token as used, replaces the person's security stamp, which revokes every token
+   issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike — then
+   saves the new `PasswordHash` and `Salt`, and replaces the stamp once more. The first replacement
+   means a save that fails leaves no old session live; the second ends any session opened with the old
+   password while the save was in flight.
+5. The system returns success. The person signs in again with the new password; a session opened with
+   the old one, by them or by anybody else, ends at its next request.
 
 **Alternative Flows:**
 
@@ -1065,7 +1117,7 @@ sequenceDiagram
 | **Actors** | System Admin |
 | **Description** | Permanently remove an application record from the database |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role; application exists |
-| **Postconditions** | Application record is permanently removed |
+| **Postconditions** | Application record is permanently removed, and with it, by cascade, every credential issued to it (UC-53), live, revoked or expired |
 
 **Main Flow:**
 
@@ -1422,8 +1474,9 @@ sequenceDiagram
 **Main Flow:**
 
 1. System Admin sends a hard delete request.
-2. The system permanently deletes the Google User record.
-3. The system returns success.
+2. The system records a tombstone for the Google User in `ERASED_SUBJECT` — their `PublicId`, that it was a Google User, and when — before the record is deleted, so the audit entries naming them, this hard delete's own among them, can still be cleared once the row is gone (NFR-21, #195). A retry records it again without error.
+3. The system permanently deletes the Google User record.
+4. The system returns success.
 
 **Alternative Flows:**
 
@@ -1623,7 +1676,8 @@ sequenceDiagram
     participant DB as Database
     participant ES as Email Service
 
-    P->>API: POST /api/auth/2fa/enable { methods: ["App", "Email"] }
+    P->>API: POST /api/auth/2fa/enable { methods: ["App", "Email"], currentPassword }
+    API->>API: Verify currentPassword against PasswordHash/Salt
     API->>DB: Find or create TWO_FACTOR_AUTH row for the person (IsActive = false)
     API->>API: If App selected, generate TOTP secret and encrypt it
     API->>DB: Store encrypted secret, AppEnabled = true
@@ -1632,8 +1686,8 @@ sequenceDiagram
     API-->>P: 200 OK { otpAuthUri?, emailCodeSent? }
 ```
 
-1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both.
-2. The system confirms the caller has no already-active two-factor configuration, then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both, and their `currentPassword` (FR-2F-18).
+2. The system confirms the caller has no already-active two-factor configuration and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
 3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
@@ -1652,7 +1706,12 @@ sequenceDiagram
 | AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
 | AF-36b | Caller is not a person eligible for two-factor authentication — a Google User, or a token naming no live person (either operation) | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
+| AF-36e | `currentPassword` missing or wrong (FR-2F-18) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
+
+> **On requiring the password.** Adding a second factor requires proof of identity, as removing one
+> does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
+> is not proof that the account holder is present.
 
 ---
 
@@ -1665,7 +1724,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Prove control of every method selected in UC-36 to activate two-factor authentication and receive the one-time set of recovery codes |
 | **Preconditions** | A pending (`IsActive = false`) `TWO_FACTOR_AUTH` row exists for the person, from UC-36 |
-| **Postconditions** | `TWO_FACTOR_AUTH.IsActive` is `true`; exactly ten recovery codes exist, hashed, and were returned to the caller in plaintext this one time |
+| **Postconditions** | `TWO_FACTOR_AUTH.IsActive` is `true`; exactly ten recovery codes exist, hashed, and were returned to the caller in plaintext this one time; every token the person held is revoked, the one that confirmed included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1687,9 +1746,12 @@ sequenceDiagram
 
 1. Caller sends `POST /api/auth/2fa/confirm` with a code for every method they selected in UC-36 (an `appCode` if `AppEnabled`, an `emailCode` if `EmailEnabled` — both, if both).
 2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
-3. Only once every required code checks out, the system sets `IsActive = true`.
+3. Only once every required code checks out, the system replaces the person's security stamp, which
+   revokes every token issued before the second factor was required, the caller's own included
+   (FR-AU-11).
 4. The system generates ten random recovery codes, hashes each, and stores the hashes.
-5. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40).
+5. The system sets `IsActive = true`.
+6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
 
 **Alternative Flows:**
 
@@ -1742,7 +1804,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
+| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), issued before the person's last credential change, so its security stamp is no longer theirs (FR-AU-11), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
 | AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
@@ -1762,7 +1824,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Turn off two-factor authentication for the caller's own account |
 | **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
-| **Postconditions** | The person's `TWO_FACTOR_AUTH` row and all of its recovery codes are permanently removed |
+| **Postconditions** | The person's `TWO_FACTOR_AUTH` row and all of its recovery codes are permanently removed; every token the person held is revoked, the caller's own included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1783,8 +1845,10 @@ sequenceDiagram
 1. Caller sends their current password together with a valid second factor — an app/email code or a recovery code.
 2. The system verifies the password, exactly as UC-11 does.
 3. The system verifies the second factor, exactly as UC-38 does.
-4. Only when both check out, the system deletes the `TWO_FACTOR_AUTH` row, which cascades to its recovery codes.
-5. The system returns success. Two-factor authentication no longer applies to the next login.
+4. Only when both check out, the system replaces the person's security stamp, revoking every token
+   issued while the factor stood (FR-AU-11), then deletes the `TWO_FACTOR_AUTH` row, which cascades to
+   its recovery codes.
+5. The system returns success. The token that made the request is revoked with the rest, so the client signs in again; two-factor authentication no longer applies to that login.
 
 **Alternative Flows:**
 
@@ -1807,7 +1871,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Invalidate the caller's current recovery codes and issue a fresh set of ten |
 | **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
-| **Postconditions** | The previous ten recovery codes no longer validate; ten new ones exist, hashed, and were returned to the caller in plaintext this one time |
+| **Postconditions** | The previous ten recovery codes no longer validate; ten new ones exist, hashed, and were returned to the caller in plaintext this one time; every token the person held is revoked, the caller's own included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1828,9 +1892,12 @@ sequenceDiagram
 
 1. Caller sends a valid second factor — an app/email code, or one of their remaining recovery codes.
 2. The system verifies it, exactly as UC-38 does.
-3. The system deletes every existing recovery code row for the person, including any still unused.
-4. The system generates ten new codes, hashes each, and stores them.
-5. The system returns the ten new codes in plaintext — the only response that will ever contain them.
+3. The system replaces the person's security stamp, revoking every token issued before (FR-AU-11): the
+   codes are usually replaced because the old set may be known to somebody else, and so may a session
+   opened with one.
+4. The system generates ten new codes, hashes each, and stores them, then deletes every earlier
+   recovery code row for the person, including any still unused.
+5. The system returns the ten new codes in plaintext — the only response that will ever contain them. The client keeps them, then signs in again.
 
 **Alternative Flows:**
 
@@ -1885,7 +1952,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10) | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10), or issued before the person's last credential change (FR-AU-11) | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46b | The challenge names a person who no longer exists, is anonymised, or is logically deleted and not under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent. A restricted person's code is sent: they asked for it to finish signing in for their own rights (UC-11 AF-11i), which is the consent Art. 18(2) asks for |
 | AF-46c | The person has no active two-factor configuration, or has one without the email method — an authenticator-app holder has no code to resend | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46d | The challenge has already authorized its maximum reissues (FR-2F-13) | Return `200 OK`, identical to the main flow. Nothing is sent |
@@ -2136,6 +2203,497 @@ sequenceDiagram
 
 ---
 
+### UC-48: List the Audit Trail
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-48 |
+| **Name** | List the Audit Trail |
+| **Actors** | System Admin |
+| **Description** | Read the audit trail (NFR-09) through the API via `GET /api/audit-log`, newest first, filtered by when an entry was recorded, by actor, action, target and outcome |
+| **Preconditions** | Actor is authenticated as a System Admin |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor SA as System Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    SA->>API: GET /api/audit-log?from&to&actorId&action&targetId&succeeded&pageNumber&pageSize
+    API->>API: Validate the filters and the page
+    API->>DB: Read the matching AUDIT_LOG rows, newest first
+    API-->>SA: 200 OK — a page of entries
+```
+
+1. A System Admin requests the audit trail, optionally filtering by an inclusive range of when entries were recorded (`from`, `to`, UTC; a value without an offset is read as UTC), by the actor's identifier, by the exact action (the command's type name, e.g. `CreateScopeCommand`), by the affected entity's identifier, and by outcome (`succeeded`), and paging the result (FR-AT-01). Filters combine with AND; an empty `action` is no filter.
+2. The system validates the request: the range must not run backwards, the action must fit its column (200 characters), and the page must be within NFR-10's bounds.
+3. The system returns the matching entries newest first, ties broken by the order they were written, each with its identifier, when it was recorded, the actor and their role, the action, the target, whether it succeeded and, for a refusal, the canonical reason (FR-AT-02).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-48a | A filter or the page is invalid — the range ends before it starts, the action is longer than 200 characters, or the page is out of bounds | `400 Bad Request` — "The end of the date range must not be earlier than its start." or the pagination message |
+| AF-48b | The caller is not a System Admin | `403 Forbidden`; an anonymous caller gets `401 Unauthorized` |
+| AF-48c | No entry matches | `200 OK` with an empty page |
+
+> **On cleared actors.** The listing shows each entry as stored and never reconstructs a cleared
+> actor — no join to `PERSON`, no inference from other entries (NFR-09, NFR-21, Data Retention
+> Schedule §7.1). An entry whose attribution period is over, or whose actor has been anonymised,
+> reads `actorId: null`, and filtering by `actorId` cannot find it. The same holds for targets: an
+> entry whose target was a person or Google User has that target cleared on the same two grounds and
+> reads `targetId: null`, so filtering by `targetId` cannot find it either. So does an entry whose
+> target was hard-deleted (UC-05, UC-10, UC-29) — the hard delete's own entry included — on the pass
+> after the delete, at any age, because the hard delete tombstoned the id first (#195). Targets
+> naming anything else — a scope, an application, a credential, a permission — are kept and stay
+> filterable, as is the id of a person hard-deleted before tombstones existed, which nothing
+> recorded.
+>
+> **On Scope Admins.** `AUDIT_LOG` has no scope column, and an old entry's target may since have been
+> deleted or anonymised, so the trail cannot be divided by scope reliably. The listing is therefore
+> System Admins' only.
+
+---
+
+### UC-49: List Pending Registrations
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-49 |
+| **Name** | List Pending Registrations |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | List the self-registrations (UC-47) of a scope that are awaiting confirmation, via `GET /api/scopes/{id}/pending-registrations` |
+| **Preconditions** | Actor is authenticated; the scope exists and is not logically deleted |
+| **Postconditions** | None; the use case reads |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: GET /api/scopes/{id}/pending-registrations?pageNumber&pageSize
+    API->>DB: Find the live scope
+    API->>DB: Confirm the actor may manage it
+    API->>DB: Read the scope's PENDING_REGISTRATION rows, newest first
+    API-->>A: 200 OK — a page of registrations
+```
+
+1. A System Admin or a Scope Admin requests a scope's pending registrations, paging the result (FR-SR-11).
+2. The system confirms the scope exists and is not logically deleted.
+3. The system confirms the actor may manage the scope: a System Admin always may; a Scope Admin must own it.
+4. The system returns the scope's pending registrations, newest first, each with its identifier, name, address, when it was stored and expires, how many wrong confirmation passwords it may still take (never below zero), and whether it has already expired. Whether the scope is still open to self-registration does not matter. The password hash, salt and token hash are never returned.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-49a | The scope is not found or is logically deleted | `404 Not Found` — "Scope not found." |
+| AF-49b | The actor is neither a System Admin nor an owner of the scope | `403 Forbidden` — "You are not an owner of the target scope."; a `User` is refused `403` by the role gate, an anonymous caller `401` |
+| AF-49c | Nothing is pending | `200 OK` with an empty page |
+
+> **On anti-enumeration.** FR-SR-06's guarantee is about the anonymous `POST /api/auth/register`,
+> which still answers free and taken addresses alike. This listing is authenticated and limited to
+> the scope's owners, who would see the same name and address in their user list once the
+> registration is confirmed, and a taken address never produces a pending row — so it reveals
+> nothing about existing accounts.
+
+---
+
+### UC-50: Discard a Pending Registration
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-50 |
+| **Name** | Discard a Pending Registration |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Remove one of a scope's pending self-registrations, so its link stops working, via `DELETE /api/scopes/{id}/pending-registrations/{registrationId}` |
+| **Preconditions** | Actor is authenticated; the scope exists and is not logically deleted; the registration belongs to it |
+| **Postconditions** | The registration no longer exists; following its link answers as for any unknown token; the discard is audited with the registration as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: DELETE /api/scopes/{id}/pending-registrations/{registrationId}
+    API->>DB: Find the live scope, confirm the actor may manage it
+    API->>DB: Find the registration within that scope
+    API->>DB: Delete it
+    API->>DB: Write the audit entry (target: the registration)
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks to discard a scope's pending registration, by the identifier UC-49 returned (FR-SR-12).
+2. The system confirms the scope exists, is not logically deleted, and that the actor may manage it.
+3. The system finds the registration among that scope's.
+4. The system deletes it, records the discard in the audit trail with the registration as target (NFR-09), and answers with its identifier. Following its link now behaves as for any unknown token (UC-14 AF-14c); the registrant may sign up again.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-50a | The scope is not found or is logically deleted | `404 Not Found` — "Scope not found." |
+| AF-50b | The actor is neither a System Admin nor an owner of the scope | `403 Forbidden` — "You are not an owner of the target scope."; a `User` `403`, an anonymous caller `401` |
+| AF-50c | No registration with that identifier belongs to the scope — it never existed, belongs to another scope, or was confirmed or purged a moment earlier | `404 Not Found` — "Pending registration not found." Nothing is removed |
+
+---
+
+### UC-51: Send a Verification Email on a Person's Behalf
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-51 |
+| **Name** | Send a Verification Email on a Person's Behalf |
+| **Actors** | System Admin, Scope Admin, Email Service |
+| **Description** | An administrator has a fresh verification link mailed to a person's own address, via `POST /api/persons/{id}/verification-email` |
+| **Preconditions** | Actor is authenticated; the person exists; a Scope Admin acts only on a `User` of a scope they own |
+| **Postconditions** | The person's live verification links are retired and a new one is mailed to their stored address; the request is audited with the person as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+    participant M as Email Service
+
+    A->>API: POST /api/persons/{id}/verification-email
+    API->>DB: Find the person, confirm the actor may act on them
+    API->>API: Refuse if restricted, deleted or already verified
+    API->>DB: Any verification token issued within the cooldown?
+    API->>DB: Retire live verification tokens, write a new one
+    API->>M: Send the link to the person's stored address
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks for a verification email for a person, by the person's identifier; there is no body (FR-EV-06).
+2. The system finds the person and confirms the actor may act on them: a System Admin on anyone; a Scope Admin only on a `User` of a scope they own.
+3. The system refuses a person whose processing is restricted (NFR-24), who is logically deleted, or whose address is already verified.
+4. The system refuses if a verification email went to this person within the cooldown — any verification token issued for them in that window, by anyone, used or not (FR-EV-07).
+5. As UC-15 does, the system retires the person's live verification tokens, issues a new one and mails its link to the person's stored address, using the scope's verification URL when it has one.
+6. The system answers with a fixed message; the token is never returned, logged or accepted.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-51a | No person has that identifier (including a Google User's identifier) | `404 Not Found` — "Person not found." |
+| AF-51b | The actor may not act on this person — a Scope Admin aiming at anyone but a `User` of a scope they own | `403 Forbidden` — "You are not allowed to send email to this person."; a `User` is refused `403` by the role gate, an anonymous caller `401` |
+| AF-51c | The person's processing is restricted, or they are logically deleted | `409 Conflict` — "Processing of this person's data is restricted, so no email was sent." or "This person is deleted, so no email was sent." |
+| AF-51d | The address is already verified | `400 Bad Request` — "Email already verified." |
+| AF-51e | A verification email went to this person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, 5 minutes by default) | `429 Too Many Requests` — "An email of this kind was sent to this person recently. Try again in a few minutes." Nothing is sent |
+
+> **Best effort.** The cooldown is read from the issued token rows, not held under a lock, so
+> simultaneous requests for the same person can both pass it.
+>
+> **On delivery.** `200` means the email was handed to the sender. A delivery failure is logged and
+> swallowed, as for every email this API sends.
+
+---
+
+### UC-52: Send a Password Reset on a Person's Behalf
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-52 |
+| **Name** | Send a Password Reset on a Person's Behalf |
+| **Actors** | System Admin, Scope Admin, Email Service |
+| **Description** | An administrator has a password-reset link mailed to a person's own address, via `POST /api/persons/{id}/password-reset` |
+| **Preconditions** | Actor is authenticated; the person exists and could sign in (UC-12's eligibility); a Scope Admin acts only on a `User` of a scope they own |
+| **Postconditions** | A new reset token exists for the person and its link was mailed to their stored address; the request is audited with the person as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+    participant M as Email Service
+
+    A->>API: POST /api/persons/{id}/password-reset
+    API->>DB: Find the person, confirm the actor may act on them
+    API->>API: Apply UC-12's eligibility
+    API->>DB: Any reset token issued within the cooldown?
+    API->>DB: Write a reset token
+    API->>M: Send the link to the person's stored address
+    API-->>A: 200 OK
+```
+
+1. A System Admin or a Scope Admin asks for a password reset for a person, by the person's identifier; there is no body (FR-PR-05).
+2. The system finds the person and confirms the actor may act on them, as UC-51.
+3. The system applies UC-12's eligibility, shared with it: the person's processing must not be restricted, the person must not be logically deleted, and the account must be able to sign in — a `User`'s scope live, a `ScopeAdmin` owning at least one live scope.
+4. The system refuses if a reset email went to this person within the cooldown — any reset token issued for them in that window, by anyone, used or not (FR-PR-06).
+5. The system issues a reset token and mails its link to the person's stored address, using the scope's reset URL when it has one. Unlike UC-12 the work is not queued: the caller is authenticated and is owed a real answer. Earlier live reset links are left as UC-12 leaves them.
+6. The system answers with a fixed message; neither a token nor a password is returned, logged or accepted.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-52a | No person has that identifier | `404 Not Found` — "Person not found." |
+| AF-52b | The actor may not act on this person | `403 Forbidden` — "You are not allowed to send email to this person."; a `User` `403`, an anonymous caller `401` |
+| AF-52c | The person's processing is restricted, or they are logically deleted | `409 Conflict` — the restricted or deleted message of AF-51c |
+| AF-52d | The account cannot sign in — a `User` whose scope is logically deleted, or a `ScopeAdmin` with no live scope | `409 Conflict` — "This person's account cannot sign in, so no password reset was sent." |
+| AF-52e | A reset email went to this person within the cooldown | `429 Too Many Requests` — "An email of this kind was sent to this person recently. Try again in a few minutes." Nothing is sent |
+
+
+> **Best effort.** As for UC-51, simultaneous requests for the same person can both pass the cooldown.
+
+---
+
+### UC-53: Issue an Application Credential
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-53 |
+| **Name** | Issue an Application Credential |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Give a registered application a secret it can exchange for a token (UC-56), via `POST /api/scopes/{scopeId}/applications/{id}/credentials`. The body is optional and carries only `expiresAt` |
+| **Preconditions** | Actor is authenticated as a System Admin, or as a Scope Admin who owns the application and still owns its scope (UC-17 AF-17b); the application is live and sits in the addressed, live scope; it holds fewer than two live credentials |
+| **Postconditions** | A credential exists whose SHA-256 hash alone is stored; the secret was returned once and is held nowhere; the issue is audited with the credential as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: POST /api/scopes/{scopeId}/applications/{id}/credentials (expiresAt?)
+    API->>API: Validate the expiry
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>API: Generate a secret, hash it
+    API->>DB: Lock the application's row, count live credentials, insert if fewer than two
+    API-->>A: 201 Created — id, secret, createdAt, expiresAt
+```
+
+1. A System Admin or a Scope Admin asks for a credential for an application, optionally with an expiry (`expiresAt`) (FR-AP-10).
+2. The system validates the expiry: it must be in the future, and a value without an offset (what a `datetime-local` input produces) is read as UTC.
+3. The system resolves the application in the addressed scope; it must be live, and so must the scope.
+4. The system checks the actor may manage the application: a System Admin always may; a Scope Admin only if they own the application and still own its scope (FR-AP-12).
+5. The system generates a secret (`hds_` plus 32 random bytes, base64url, 47 characters) and stores only its SHA-256, under a lock on the application's row, provided fewer than two live credentials exist (FR-AP-11). Two administrators issuing at the same moment cannot leave three live secrets.
+6. The system answers `201 Created` with the credential's `id`, the `secret`, `createdAt` and `expiresAt`. The audit entry names the credential as target and never holds the secret (NFR-09).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-53a | No live application with that id in the addressed, live scope (also a logically deleted application, or one in another scope) | `404 Not Found` — "Application not found." |
+| AF-53b | A Scope Admin who does not own the application, or no longer owns its scope | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-53c | `expiresAt` is not in the future, or the body cannot be read (not JSON, or an `expiresAt` that is not a date-time) | `400 Bad Request` — "The expiry must be in the future." or, for a body that cannot be read, "The request is malformed." (answered before the use case runs, NFR-10); never a credential without expiry |
+| AF-53d | The application already holds two live credentials | `409 Conflict` — "This application already has two live credentials. Revoke one before issuing another." |
+
+> **Why two.** A secret is rotated without downtime by issuing the second, deploying it to the
+> consumer, and only then revoking the first (FR-AP-11). A third would only let spent secrets pile
+> up unrevoked. A credential that has expired or been revoked does not count towards the two.
+>
+> **Why the secret is never shown again.** Heimdall keeps the hash alone, so neither the database,
+> a backup nor a log can leak it, and no later call can return it. A lost secret is replaced, not
+> recovered: issue another and revoke the lost one. The `hds_` prefix lets a secret scanner
+> recognise a leak (TH-33).
+
+---
+
+### UC-54: List an Application's Credentials
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-54 |
+| **Name** | List an Application's Credentials |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Read an application's credentials, newest first, via `GET /api/scopes/{scopeId}/applications/{id}/credentials`. Each carries `id`, `createdAt`, `expiresAt`, `revokedAt`, `lastUsedAt` and `live`; never the secret or its hash |
+| **Preconditions** | As UC-53: the actor may manage the application, which is live in a live scope |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: GET /api/scopes/{scopeId}/applications/{id}/credentials
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>DB: Read the application's credentials, newest first
+    API-->>A: 200 OK — the credentials
+```
+
+1. A System Admin or a Scope Admin asks for an application's credentials (FR-AP-12).
+2. The system resolves the application and checks the actor may manage it, exactly as UC-53 does, not-found before authorization.
+3. The system answers `200 OK` with every credential, newest first, each with whether it is live now (not revoked, and not expired). The list is not paginated: at most two credentials are live, and spent ones are purged (Data Retention Schedule §5).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-54a | As AF-53a | `404 Not Found` — "Application not found." |
+| AF-54b | As AF-53b | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-54c | The application has no credentials | `200 OK` with an empty list |
+
+---
+
+### UC-55: Revoke an Application Credential
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-55 |
+| **Name** | Revoke an Application Credential |
+| **Actors** | System Admin, Scope Admin |
+| **Description** | Withdraw one credential via `DELETE /api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}` |
+| **Preconditions** | As UC-53: the actor may manage the application, which is live in a live scope; the credential belongs to the application and is not yet revoked |
+| **Postconditions** | The credential's `RevokedAt` is set. UC-56 refuses its secret, and UC-57 refuses every token already issued from it. The revocation is audited with the credential as target |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor A as System Admin / Scope Admin
+    participant API as Heimdall API
+    participant DB as Database
+
+    A->>API: DELETE /api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}
+    API->>DB: Find the live application in the live scope
+    API->>API: Confirm the actor may manage it
+    API->>DB: Find the credential on this application
+    API->>DB: Set RevokedAt
+    API-->>A: 200 OK — id, revokedAt
+```
+
+1. A System Admin or a Scope Admin asks to revoke a credential of an application (FR-AP-12).
+2. The system resolves the application and checks the actor may manage it, as UC-53 does.
+3. The system finds the credential on that application; one that belongs to another application is not found.
+4. The system sets `RevokedAt` and answers `200 OK` with the credential's `id` and `revokedAt` (FR-AP-16, NFR-09).
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-55a | As AF-53a | `404 Not Found` — "Application not found." |
+| AF-55b | As AF-53b | `403 Forbidden` — "You are not allowed to manage this application's credentials."; a `User` `403`, an anonymous caller `401` |
+| AF-55c | No credential with that id on this application | `404 Not Found` — "Application credential not found." |
+| AF-55d | The credential is already revoked | `409 Conflict` — "This application credential is already revoked." |
+
+> **Expired credentials.** A credential that has expired may still be revoked: it is stored until the
+> retention purge, and revoking it only records the decision.
+>
+> **Revocation is immediate.** It does not wait for the tokens already issued from the credential
+> to expire; they fail UC-57's live check at once (FR-AP-16).
+
+---
+
+### UC-56: Obtain an Application Token
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-56 |
+| **Name** | Obtain an Application Token |
+| **Actors** | Application (anonymous; the secret authenticates) |
+| **Description** | Exchange a live credential's secret for an application token via `POST /api/applications/token`, with the body `applicationId`, `scopeId` and `secret` |
+| **Preconditions** | The credential is live (not revoked, not expired), belongs to the application, the application is live, and sits in the given live scope |
+| **Postconditions** | A token has been issued; the credential's `LastUsedAt` is stamped; the issue is audited with no actor and the application as target. The token is not stored |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant API as Heimdall API
+    participant DB as Database
+
+    App->>API: POST /api/applications/token (applicationId, scopeId, secret)
+    API->>API: Validate the fields
+    API->>DB: Find a live credential by the hash of the trimmed secret
+    API->>API: Confirm credential, application and scope match and are live
+    API->>API: Sign a token under the application audience
+    API->>DB: Stamp LastUsedAt, write the audit entry
+    API-->>App: 200 OK — token, expiresAt
+```
+
+1. The application sends its `applicationId`, the `scopeId` and the `secret`.
+2. The system validates their shape: each field is present and the secret is at most 100 characters.
+3. The system trims the secret (a secret read from a file often carries a trailing newline), hashes it and looks the hash up among live credentials.
+4. The system confirms the credential belongs to that application, the application to that scope, and that the application and scope are live.
+5. The system issues a token signed like person tokens (HMAC-SHA256, the same keys) but under `HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, valid for `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (default 600), with the claims `tokenKind`, `id`, `scopeId`, `credentialId` and `name` and no role (FR-AP-13).
+6. The system stamps the credential's `LastUsedAt`, audits the issue (no actor; the application as target), and answers `200 OK` with `id`, `token` and `expiresAt`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-56a | A field is missing, the secret is over 100 characters, or the body cannot be read (not JSON, or an id that is not a GUID) | `400 Bad Request` — the field's message ("Application id is required.", "Scope id is required.", "Secret is required.", "Secret must be at most 100 characters.") or, for a body that cannot be read, "The request is malformed." (answered before the use case runs, NFR-10) |
+| AF-56b | Anything else is wrong: an unknown, revoked or expired secret; another application's secret; the application or scope deleted; the wrong scope | `401 Unauthorized` — "The application credentials were not accepted.", always the same |
+
+> **One refusal.** As for UC-11, every refusal of the exchange is the same `401` with the same
+> message, whatever failed, so the endpoint reveals nothing about which applications, scopes or
+> credentials exist (FR-AP-14). Only a malformed request is told apart, and it learns nothing about
+> any credential.
+>
+> **Rate limit.** The endpoint shares the `AuthAnonymous` limit with person sign-in, per client
+> address; TH-32's trusted-caller key applies to it as to them.
+
+---
+
+### UC-57: Check an Application Token
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-57 |
+| **Name** | Check an Application Token |
+| **Actors** | Consumer service, holding the application's token |
+| **Description** | Confirm, live, that an application token is valid and that the application, its scope and the credential it came from are all still live, via `GET /api/applications/self` with `Authorization: Bearer <token>` |
+| **Preconditions** | A token obtained through UC-56, still within its lifetime |
+| **Postconditions** | None; the use case reads, and the read itself is not audited |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    participant C as Consumer service
+    participant API as Heimdall API
+    participant DB as Database
+
+    C->>API: GET /api/applications/self (Authorization: Bearer token)
+    API->>API: Validate the token
+    API->>DB: Is the credential live, the application and scope live and matching?
+    API-->>C: 200 OK — applicationId, name, scopeId, credentialId, expiresAt
+```
+
+1. The system validates the token: signature against the current and previous keys, HS256 only, the issuer (when one is configured), the application audience, the lifetime with zero clock skew, and `tokenKind = application`.
+2. The system confirms the credential named in the token is live, and that the application and scope it names are live and match the token (FR-AP-15).
+3. The system answers `200 OK` with `applicationId`, `name`, `scopeId`, `credentialId` and `expiresAt`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-57a | No or malformed token; wrong signature, issuer, audience or kind; expired; the application, scope or credential no longer live; or the scope not the token's | `401 Unauthorized` — "The application token was not accepted.", always the same |
+
+> **Revocation policy (FR-AP-16).** Revoking or expiring a credential, or deleting the application
+> or its scope, takes effect at the next check for every token already issued. A token's `exp` is
+> fixed at issue, so a consumer validating it offline alone would accept it for up to its whole
+> lifetime after its credential expires or is revoked. Only this check reflects that at once, which
+> is why consumers re-check here before every sensitive release.
+>
+> **Clock skew.** Tokens are validated with zero skew. Instances whose clocks differ can refuse a
+> freshly issued token for the length of the drift; keep them synchronised (NTP).
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2146,13 +2704,13 @@ sequenceDiagram
 | UC-04: Logical Delete Scope | FR-SC-05, FR-SC-07 |
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
-| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12 |
-| UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
-| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-2F-07, NFR-27 |
+| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
-| UC-13: Reset Password | FR-PR-03, FR-PR-04, NFR-27 |
+| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-AU-11, NFR-27 |
 | UC-14: Email Verification | FR-EV-03, NFR-27 |
 | UC-15: Resend Verification Email | FR-EV-04 |
 | UC-16: Create Application | FR-AP-01, FR-AP-02, FR-AP-03 |
@@ -2174,13 +2732,23 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
-| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15 |
-| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, NFR-27 |
-| UC-39: Disable Two-Factor Authentication | FR-2F-11 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
-| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, NFR-27 |
+| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, NFR-27 |
+| UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
+| UC-49: List Pending Registrations | FR-SR-11 |
+| UC-50: Discard a Pending Registration | FR-SR-12, NFR-09 |
+| UC-51: Send a Verification Email on a Person's Behalf | FR-EV-06, FR-EV-07, NFR-24 |
+| UC-52: Send a Password Reset on a Person's Behalf | FR-PR-05, FR-PR-06, NFR-24 |
+| UC-53: Issue an Application Credential | FR-AP-10, FR-AP-11, FR-AP-12, NFR-09 |
+| UC-54: List an Application's Credentials | FR-AP-12 |
+| UC-55: Revoke an Application Credential | FR-AP-12, FR-AP-16, NFR-09 |
+| UC-56: Obtain an Application Token | FR-AP-13, FR-AP-14, NFR-09 |
+| UC-57: Check an Application Token | FR-AP-15, FR-AP-16 |
 
 ---
 

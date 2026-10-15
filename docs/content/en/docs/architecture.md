@@ -259,14 +259,18 @@ is issued and reads them when one is validated, so the two cannot drift. Every c
 **A challenge token is inert everywhere but one endpoint.** `MfaPendingGuardFilter` is registered
 globally and rejects any request whose identity carries `MfaPending` with a 401 (**FR-2F-10**,
 **NFR-17**). The second-factor endpoint itself is unaffected because it is `[AllowAnonymous]` and
-takes the challenge token as a *body field*, never as a bearer credential.
+takes the challenge token as a *body field*, never as a bearer credential. The token also carries an
+audience of its own, `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.2fa-challenge`, so a consumer that pins the
+person audience refuses it, and `IdentityUserMapper` reads `mfaPending` only under that audience.
 
 **A subject-rights-only token is confined to four actions.** A restricted identity that signs in
-(**NFR-24**, UC-11 AF-11i, UC-25 AF-25e) is issued a token carrying the `subjectRightsOnly` claim and
-no scope. `SubjectRightsOnlyGuardFilter`, registered globally after the challenge-token guard, answers
-it `403` on every action not marked `[DataSubjectRight]` — on its claims alone, before the liveness
-check's read. The liveness check would refuse it there too while the restriction stands; the guard
-keeps it confined after the restriction is lifted, so a lift never turns it into a full token.
+(**NFR-24**, UC-11 AF-11i, UC-25 AF-25e) is issued a token carrying the `subjectRightsOnly` claim
+and no scope, under its own audience, `HEIMDALL_AUTH_TOKEN_AUDIENCE` + `.subject-rights`, which
+consumers pinning the person audience refuse. `SubjectRightsOnlyGuardFilter`, registered globally
+after the challenge-token guard, answers it `403` on every action not marked `[DataSubjectRight]` —
+on its claims alone, before the liveness check's read. The liveness check would refuse it there too
+while the restriction stands; the guard keeps it confined after the restriction is lifted, so a lift
+never turns it into a full token.
 
 ## Authorization
 

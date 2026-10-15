@@ -92,7 +92,8 @@ public class GoogleSignInCommandHandler(
         // Nothing is refreshed from the ID token first: that would be processing the record.
         else if (googleUser.ProcessingRestrictedAt is not null)
         {
-            var rightsOnly = await tokenIssuer.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User);
+            var rightsOnly = await tokenIssuer.IssueSubjectRightsOnlyAsync(
+                googleUser.PublicId, (int)Roles.User, securityStamp: null);
 
             return output
                 .WithData(new GoogleSignInCommandOutput
@@ -120,13 +121,15 @@ public class GoogleSignInCommandHandler(
         // UC-25 step 8 (FR-GO-04): the token claims the Google User's PublicId, the User role — a
         // Google account is never a ScopeAdmin or SystemAdmin — and the one scope it belongs to.
         // Internal bigint Ids never reach a token (NFR-15), and OwnedScopeIds is empty because
-        // ownership is a ScopeAdmin concept.
+        // ownership is a ScopeAdmin concept. No security stamp (FR-AU-11): a Google User has no
+        // credential here that could change, so there is nothing for one to revoke on.
         var token = await tokenIssuer.IssueAsync(new AuthTokenSubject(
             googleUser.PublicId,
             string.IsNullOrWhiteSpace(googleUser.Name) ? googleUser.Email : googleUser.Name,
             (int)Roles.User,
             scope.PublicId,
-            []));
+            [],
+            SecurityStamp: null));
 
         return output
             .WithData(new GoogleSignInCommandOutput

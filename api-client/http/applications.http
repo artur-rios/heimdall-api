@@ -52,3 +52,48 @@ Authorization: Bearer {{token}}
 ### Hard delete an application (UC-20) — System Admin.
 DELETE {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/hard
 Authorization: Bearer {{token}}
+
+### Issue a credential (UC-53) — System Admin or the Scope Admin who owns the application.
+# The secret is in this response only. Store it now.
+POST {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/credentials
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "expiresAt": "2030-01-01T00:00:00Z"
+}
+
+> {%
+    if (response.body.data && response.body.data.id) {
+        client.global.set("credentialId", response.body.data.id);
+        client.global.set("applicationSecret", response.body.data.secret);
+    }
+%}
+
+### List the application's credentials (UC-54).
+GET {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/credentials
+Authorization: Bearer {{token}}
+
+### Obtain an application token (UC-56) — anonymous; the secret authenticates.
+POST {{host}}/api/applications/token
+Content-Type: application/json
+
+{
+  "applicationId": "{{applicationId}}",
+  "scopeId": "{{scopeId}}",
+  "secret": "{{applicationSecret}}"
+}
+
+> {%
+    if (response.body.data && response.body.data.token) {
+        client.global.set("applicationToken", response.body.data.token);
+    }
+%}
+
+### Check the application token live (UC-57).
+GET {{host}}/api/applications/self
+Authorization: Bearer {{applicationToken}}
+
+### Revoke the credential (UC-55). The token above then fails the live check.
+DELETE {{host}}/api/scopes/{{scopeId}}/applications/{{applicationId}}/credentials/{{credentialId}}
+Authorization: Bearer {{token}}

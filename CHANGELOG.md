@@ -7,6 +7,173 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-15
+
+### Added
+
+- UC-53 to UC-57 (#178): a registered application can authenticate to Heimdall as itself. A System Admin, or the
+  Scope Admin who owns the application and its scope, issues it up to two live credentials
+  (`POST /api/scopes/{scopeId}/applications/{id}/credentials`), lists them (`GET` the same path) and revokes one
+  (`DELETE …/credentials/{credentialId}`). The secret (`hds_…`) is returned once and only its SHA-256 is stored;
+  a third live credential is refused with `409`. The application exchanges a secret for a ten-minute token
+  (`POST /api/applications/token`, anonymous and rate-limited, every refusal the same `401`), and a consumer
+  re-checks that token live with `GET /api/applications/self`, which refuses it as soon as its credential is
+  revoked or expired or its application or scope is deleted. Application tokens carry their own audience and no
+  role, and Heimdall's own endpoints refuse them. A new migration, `AddApplicationCredential`, adds the
+  `application_credential` table; the retention purge removes spent credentials. **Operators:** new variables
+  `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` (required) and `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS`
+  (default `600`); see the consumer guide, "Application authentication".
+- UC-51 and UC-52: an administrator can have a verification link (`POST /api/persons/{id}/verification-email`) or
+  a password-reset link (`POST /api/persons/{id}/password-reset`) mailed to a person's own address — a System
+  Admin for anyone, a Scope Admin for Users of scopes they own. No token is ever returned. Deleted or restricted
+  persons are refused (`409`), as are a verified address (`400`) and, for a reset, an account that could not sign
+  in (`409`, UC-12's rule, now shared). At most one email of each kind per person per cooldown: a repeat answers
+  `429`. The cooldown is best-effort. **Operators:** the new optional `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`
+  sets it (default `300`, `0` turns it off; unusable values fall back to `300`); `docker-compose.yml` passes it
+  through.
+- UC-49 and UC-50: a scope's owners and System Admins can list the self-registrations awaiting confirmation
+  (`GET /api/scopes/{id}/pending-registrations` — name, address, expiry, guesses left, never the password hash
+  or token) and discard one (`DELETE /api/scopes/{id}/pending-registrations/{registrationId}`), after which its
+  link answers "Invalid token". Discards are audited. A new migration, `AddPendingRegistrationPublicId`, gives
+  each pending registration a random public id, backfilling existing rows.
+- `GET /api/persons/system-admins` lists the deployment's System Admins (UC-07 read e, FR-PE-13), so one can
+  see who else holds full access. System Admin only; a Scope Admin or User is answered `403`. Paginated, with
+  optional case-insensitive `name` and `email` filters, ordered by name, and projected to `id`, `name` and
+  `email`, as `GET /api/persons/scope-admins` is. Logically deleted and restricted (NFR-24) administrators are
+  not listed.
+- UC-48: `GET /api/audit-log` lists the audit trail for System Admins, newest first, filterable by when an entry
+  was recorded (`from`/`to`, UTC, inclusive), `actorId`, `action` (the command's type name, matched exactly),
+  `targetId` and `succeeded`. An actor the retention pass has cleared reads as `null` and is never reconstructed.
+  A new migration, `AddAuditLogTargetIndex`, indexes `audit_log.target_id` so filtering by target does not scan
+  the table.
+
+### Changed
+
+- 2FA challenge tokens and subject-rights-only tokens now carry their own audience (`HEIMDALL_AUTH_TOKEN_AUDIENCE`
+  plus `.2fa-challenge` and `.subject-rights`, respectively); consumers that pin the person audience reject them.
+  Full authentication tokens keep `HEIMDALL_AUTH_TOKEN_AUDIENCE`, and Heimdall accepts a challenge or
+  subject-rights-only token only under its own audience. Clients that pass the challenge token back to
+  `POST /api/auth/2fa/verify` unread need no change. **Operators:** no new variable; start-up logs the three
+  audiences, and now refuses a `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` equal to either derived audience. Challenge
+  and subject-rights-only tokens issued before the upgrade are refused once, so those users sign in again; full
+  tokens are unaffected. During a rolling deploy, instances not yet upgraded still issue the old tokens, which
+  upgraded instances refuse, and the separation holds only once every instance is upgraded. Consumers that don't
+  validate the audience should start doing so, pinned to `HEIMDALL_AUTH_TOKEN_AUDIENCE` exactly; see the consumer
+  guide, "Login: audiences".
+- A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
+  `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
+  at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
+  falls back to its default (`3600`) when zero, negative or not finite, where it was used as written, and the
+  lifetime settings now parse with the invariant culture rather than the host's.
+- A request turned away by the `AuthAnonymous` rate limit (`429`) now carries a `Retry-After` header, in whole
+  seconds, and the usual error envelope with the message "Too many requests.", instead of an empty body.
+- Contributors: the `dotnet-ef` tool in `.config/dotnet-tools.json` is now pinned to the version of
+  `Microsoft.EntityFrameworkCore`, and `scripts/vulnerabilities.py` fails when the two drift apart.
+- **Upgrading:** `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` is now **required** and must differ from
+  `HEIMDALL_AUTH_TOKEN_AUDIENCE`; the API refuses to start otherwise. `docker-compose.yml` defaults it to
+  `heimdall-applications` and the `docker/*.env.example` templates preset that value, so a Compose deployment keeps
+  starting. The Web API's `Environments/.env` holds only a placeholder; any other deployment must set it.
+  Application tokens are validated with zero clock skew, so keep instance clocks synchronised (NTP).
+- The audit retention pass (NFR-21) now also clears an entry's `TargetId` when it names a person or Google User,
+  on the same two grounds as the actor: the entry is past the attribution period, or that identity has been
+  anonymised (#184). A self-service entry, or an administrator's action on a person, therefore stops naming that
+  person once its attribution is cleared. Targets naming a scope, an application, a credential or a permission are
+  kept. A new migration, `AllowClearingAuditTarget`, replaces the append-only `UPDATE` trigger with
+  `audit_log_attribution_clear_only()`, which permits exactly this one more change — a person target set to
+  `NULL` once due, never to another value — and also makes the row `id` immutable. `GET /api/audit-log` reads a
+  cleared target as `targetId: null`, and filtering by `targetId` no longer finds it. **Operators:** no setting
+  changes. Existing entries already past the period are cleaned over the next scheduled runs, a batch
+  (`HEIMDALL_RETENTION_PURGE_BATCH_SIZE`) at a time, and the run's log line now reports both counts.
+- The audit retention pass (NFR-21) now also clears the target of a person or Google User who was hard-deleted
+  (UC-10, UC-29, and the members UC-05 removes), including the hard delete's own entry, on its next run and at any
+  age (#195). Before, a removed person's id stayed in the trail for good, because with the row gone the trigger could
+  not tell it had named a person. Each hard delete now first writes a tombstone — the id, whether it was a person or
+  a Google User, and when — to a new `erased_subject` table (migration `AddErasedSubject`); a retried delete writes
+  it again without error. A trigger on that table accepts a row only for a person or Google User that still exists,
+  so a tombstone cannot be planted to make any other target clearable. A target whose id is tombstoned and no longer
+  resolves to a row is due, and a new migration, `AllowClearingErasedSubjectTarget`, lets the
+  `audit_log_attribution_clear_only()` trigger accept exactly that clearing; nothing else it permits changes. The
+  pass removes a tombstone once it is a day old and no entry names it, and its output and log line now report how
+  many it removed. **Operators:** no setting changes. **Targets orphaned before this change are not recoverable:**
+  the ids of persons and Google Users hard-deleted earlier were never tombstoned, so nothing records that they named
+  a person, and they stay in the trail as recorded. Clearing them would need a list of those ids from outside the
+  database; this release does not attempt it.
+- `PUT /api/persons/{id}` and `POST /api/auth/2fa/enable` are now under the `AuthAnonymous` rate limit (10
+  requests a minute per client address, `429` with `Retry-After` beyond it), like the other endpoints that check a
+  password. The person update is limited whether or not it checks one, administrators' updates included.
+  **Operators:** no setting changes; a deployment behind a proxy needs `HEIMDALL_TRUSTED_PROXIES` set, as for
+  login, or every caller shares one budget.
+
+### Fixed
+
+- A sign-in attempt cut short at the lockout threshold now locks the account for the usual period instead of
+  leaving it unable to sign in. An account already left at the limit without a lock is handled normally again by
+  its next sign-in attempt, which locks it for the usual period, or clears it if the password is right. A new data
+  migration, `ReleaseStuckLoginLockouts`, also resets such accounts.
+- The Command tests no longer fail intermittently on password-hash gate timeouts under load (#196): the test
+  assembly installs a gate with the production permit count and a two-minute wait, and the saturation
+  exception's message now names the gate and how long it waited. Production behaviour and responses are
+  unchanged.
+- A request that cannot be bound now answers `400` with "The request is malformed." on every endpoint (#186),
+  instead of running the action with a missing or default argument: a body that is not JSON was a `500`, and a
+  query filter of the wrong type (`?succeeded=maybe`, `?actorId=not-a-guid`) was dropped and answered `200`
+  unfiltered. A global `MalformedRequestFilter` replaces the two per-action guards added in #178; it runs after
+  authentication and role checks, so an unauthenticated caller still receives `401`. A non-nullable query
+  parameter sent empty or unparseable (`?pageNumber=`, `?pageNumber=abc`, `?includeDeleted=1`) is now a `400`
+  rather than its default; a missing required field keeps its validator message.
+
+### Security
+
+- A `public_id` can no longer be rewritten, or borrowed from another entity (#199). The audit trail's retention rules
+  (#184, #195) read a person's or Google User's id as proof that an audit target names a person, so a row given a
+  scope's, an application's or a credential's id, then anonymised or tombstoned, made targets that never named a
+  person clearable. Two new migrations add triggers to `person`, `google_user`, `scope`, `application`,
+  `application_credential`, `scope_permission`, `role` and `pending_registration`. `ProtectIdentityPublicIds` creates
+  `public_id_is_immutable()`, which refuses any `UPDATE` that changes `public_id`, and `public_id_is_unused()`, which
+  refuses an `INSERT` whose `public_id` a row of any other of those tables holds, soft-deleted or not, or a hard
+  delete tombstoned, and, for a person or Google User, one that an audit entry names, so a hard-deleted entity's id
+  cannot be taken over while the trail still names it; it binds both to the identity tables. `ProtectEntityPublicIds`
+  binds both to the other six, so `public_id` is immutable on every table the check trusts, which closes the
+  rename-then-reuse path, and the check runs whichever table is written second. Every other column stays writable,
+  and the API only ever creates fresh ids and never changes one, so no request behaves differently. **Operators:** no
+  setting changes. The triggers guard future writes only; the migrations do not look for a duplicate already stored,
+  which could exist only if somebody wrote one by hand in SQL. Operations, "Shared public ids", gives two queries to
+  run before migrating; each should return no rows. Once migrated, hand-written SQL that rewrites a `public_id`, such
+  as a support fix-up or a restore that remaps ids, fails with `restrict_violation`.
+- Person tokens are now revoked when a credential changes. Every person token (full, 2FA challenge and
+  subject-rights-only) carries the person's security stamp in a new `sst` claim, and a token whose stamp is missing
+  or out of date is refused on every endpoint with `401` and "This token has been revoked. Sign in again." The stamp
+  is replaced by a password reset, an email change (by the person or by an administrator), confirming or disabling
+  two-factor authentication, and regenerating recovery codes; the token that made the change is revoked with the
+  rest. `POST /api/auth/2fa/verify` refuses a challenge issued before such a change as an invalid challenge. A new
+  migration, `AddPersonSecurityStamp`, adds `person.security_stamp`, filled with a fresh value per row; only a
+  targeted write replaces it, so a concurrent whole-row save cannot restore an old one. Google User tokens are
+  unchanged. **Operators:** tokens issued before the upgrade carry no stamp and are refused, so everyone signs in
+  once more after deploying; during a rolling deploy, tokens issued by instances not yet upgraded are refused by
+  upgraded ones until every instance is upgraded. The migration rewrites the `person` table (its default is
+  evaluated per row) under an exclusive lock, which blocks sign-ins and every other read or write of the table
+  until it finishes; on a large table, plan for that lock time. Consumers that validate person tokens offline
+  do not see the stamp, so a revoked token stays valid at them until it expires. Revocation and the
+  re-authentication below hold only once every instance runs this version: until then, an instance not yet
+  upgraded still accepts revoked tokens and own email changes without a password.
+- Changing your own email through `PUT /api/persons/{id}` now requires `currentPassword`, and `twoFactorCode` (an
+  authenticator-app or email code, or a recovery code, which is spent) when your two-factor authentication is
+  active. No endpoint sends an email code to a signed-in caller, so a person whose only method is Email uses a
+  recovery code. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
+  wrong second factor `401` with "The code or recovery code is missing, incorrect, or already used.", before the
+  new address is checked, and nothing changes. An administrator changing someone else's email, and anyone changing
+  only their name, send neither. The email counts as changed unless it matches exactly after trimming, so a change
+  of case alone also asks for the password, revokes tokens, sends the notice and resets `emailVerified`. Starting
+  two-factor setup (`POST /api/auth/2fa/enable`) now requires `currentPassword` too, refused the same way. Any
+  email change also sends a notice to the previous address, which names neither the new address nor a link; a
+  failed delivery is logged and does not fail the update. Addresses are now stored trimmed, on creation and on
+  update; an update that differs from the stored address only by surrounding whitespace is no change.
+  **Clients:** send `currentPassword` (and `twoFactorCode` when 2FA is active) for an own email change, and
+  `currentPassword` to enable 2FA; after an own email change, a password reset, confirming or disabling 2FA, or
+  regenerating recovery codes, sign in again. **Operators:** release the heimdall-ui version that sends
+  `currentPassword` together with this API, or before it; an older UI gets `401` on 2FA enable and on an own email
+  change.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added
@@ -215,7 +382,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/artur-rios/heimdall-api/compare/v1.1.1...v1.2.0

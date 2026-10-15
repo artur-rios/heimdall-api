@@ -215,7 +215,8 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         var enable = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = ["App"] });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = ["App"], CurrentPassword = Password });
         var uri = enable.Body!.Data!.OtpAuthUri!;
         var secret = uri[(uri.IndexOf("secret=", StringComparison.Ordinal) + "secret=".Length)..].Split('&')[0];
         var appCode = new Totp(Base32Encoding.ToBytes(secret)).ComputeTotp();

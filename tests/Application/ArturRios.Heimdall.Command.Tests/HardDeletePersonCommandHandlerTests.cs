@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -12,7 +13,8 @@ namespace ArturRios.Heimdall.Command.Tests;
 // Unit tests for HardDeletePersonCommandHandler (UC-10). Cover the main flow with and without
 // dependents, on an already logically deleted person, and on a co-owned ScopeAdmin; AF-10a (not
 // found), AF-10b (the NFR-12 last-owner guard, including the already-deleted target of Decision 4),
-// and AF-10c (self-deletion).
+// and AF-10c (self-deletion). Also the tombstone (#195): written for exactly the person removed,
+// before anything is removed, never on a refusal, and harmlessly again on a retry.
 //
 // The [RoleRequirement] gate that keeps a ScopeAdmin and a User out of the endpoint is a Presentation
 // concern and is asserted in PersonControllerHardDeleteTests (Testing Specification §6.4). So is the
@@ -24,20 +26,23 @@ public class HardDeletePersonCommandHandlerTests
         AsyncFakeRepository<Person, long> Persons,
         AsyncFakeRepository<Application, long> Applications,
         AsyncFakeRepository<PasswordResetToken, long> PasswordResetTokens,
-        AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens)
+        AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
+        InMemoryErasedSubjects ErasedSubjects)
     {
         public HardDeletePersonCommandHandler Handler() => new(
             Persons, Persons,
             Applications, Applications,
             PasswordResetTokens, PasswordResetTokens,
-            EmailVerificationTokens, EmailVerificationTokens);
+            EmailVerificationTokens, EmailVerificationTokens,
+            ErasedSubjects);
     }
 
     private static Fakes EmptyFakes() => new(
         new AsyncFakeRepository<Person, long>(),
         new AsyncFakeRepository<Application, long>(),
         new AsyncFakeRepository<PasswordResetToken, long>(),
-        new AsyncFakeRepository<EmailVerificationToken, long>());
+        new AsyncFakeRepository<EmailVerificationToken, long>(),
+        new InMemoryErasedSubjects());
 
     private static Scope Scope(long id) => new() { Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}" };
 
@@ -240,6 +245,7 @@ public class HardDeletePersonCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.PersonNotFound, output.Errors);
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
     }
 
     [UnitFact]
@@ -260,6 +266,7 @@ public class HardDeletePersonCommandHandlerTests
         Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
         Assert.Equal(2, (await fakes.Persons.GetAllAsync()).Data!.Count());
         Assert.Single((await fakes.Applications.GetAllAsync()).Data!);
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
     }
 
     [UnitFact]
@@ -314,5 +321,61 @@ public class HardDeletePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.CannotDeleteSelf, output.Errors);
         Assert.Single((await fakes.Persons.GetAllAsync()).Data!);
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
+    }
+
+    [UnitFact]
+    public async Task GivenAPerson_WhenHandlingHardDeletePerson_ThenTheirIdIsTombstonedBeforeAnythingIsRemoved()
+    {
+        // Given a User with an application, watched at the moment the tombstone is written
+        var fakes = EmptyFakes();
+        var target = await SeedUserAsync(fakes, Scope(1));
+        await SeedApplicationAsync(fakes, target);
+        var personPresent = false;
+        var applicationPresent = false;
+        fakes = fakes with
+        {
+            ErasedSubjects = new InMemoryErasedSubjects(_ =>
+            {
+                personPresent = fakes.Persons.Query().Any(p => p.PublicId == target.PublicId);
+                applicationPresent = fakes.Applications.Query().Any(a => a.OwnerId == target.Id);
+            })
+        };
+        var before = DateTime.UtcNow;
+
+        // When
+        var output = await fakes.Handler().HandleAsync(CommandFor(target));
+
+        // Then — one tombstone, for exactly the person removed, written while nothing was gone yet
+        Assert.True(output.Success);
+        var tombstone = Assert.Single(fakes.ErasedSubjects.Recorded);
+        Assert.Equal(target.PublicId, tombstone.Id);
+        Assert.Equal((int)ErasedSubjectKinds.Person, tombstone.Kind);
+        Assert.InRange(tombstone.CreatedAt, before, DateTime.UtcNow);
+        Assert.Equal(1, fakes.ErasedSubjects.Calls);
+        Assert.True(personPresent);
+        Assert.True(applicationPresent);
+        Assert.Empty((await fakes.Persons.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
+    public async Task GivenATombstoneFromAFailedAttempt_WhenHandlingHardDeletePersonAgain_ThenItSucceedsWithOneTombstone()
+    {
+        // Given a person still on record whose earlier hard delete wrote its tombstone and then failed
+        var fakes = EmptyFakes();
+        var bystander = await SeedUserAsync(fakes, Scope(1));
+        var target = await SeedUserAsync(fakes, Scope(1));
+        var earlier = DateTime.UtcNow.AddDays(-3);
+        fakes.ErasedSubjects.Seed(target.PublicId, (int)ErasedSubjectKinds.Person, earlier);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(CommandFor(target));
+
+        // Then — the retry is not an error, still one row for the id, its grace counted from now
+        Assert.True(output.Success);
+        var tombstone = Assert.Single(fakes.ErasedSubjects.Recorded);
+        Assert.Equal(target.PublicId, tombstone.Id);
+        Assert.True(tombstone.CreatedAt > earlier.AddDays(1));
+        Assert.Equal(bystander.PublicId, Assert.Single((await fakes.Persons.GetAllAsync()).Data!).PublicId);
     }
 }

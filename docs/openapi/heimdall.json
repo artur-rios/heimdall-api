@@ -394,7 +394,7 @@
         "tags": [
           "Application"
         ],
-        "summary": "Permanently (hard) deletes an application, removing the record from the database (UC-20,\nFR-AP-08). Restricted to System Admins: a Scope Admin may logically delete an application\nthey own (UC-19), but never purge it, so the attribute settles authorization on its own and\nthe handler applies no further rule. The handler resolves the application inside the\naddressed scope in any deletion state and reports AF-20a when it does not exist — which\nincludes a repeated call, as the removal leaves nothing to find. Nothing cascades: the\napplication's scope and owner are untouched.",
+        "summary": "Permanently (hard) deletes an application, removing the record from the database (UC-20,\nFR-AP-08). Restricted to System Admins: a Scope Admin may logically delete an application\nthey own (UC-19), but never purge it, so the attribute settles authorization on its own and\nthe handler applies no further rule. The handler resolves the application inside the\naddressed scope in any deletion state and reports AF-20a when it does not exist — which\nincludes a repeated call, as the removal leaves nothing to find. The application's\ncredentials (UC-53) go with it, by cascade; its scope and owner are untouched.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Application_HardDelete",
         "parameters": [
@@ -434,6 +434,413 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteApplicationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scopes/{scopeId}/applications/{id}/credentials": {
+      "post": {
+        "tags": [
+          "ApplicationCredential"
+        ],
+        "summary": "Issues a credential (UC-53). The body is optional and carries only `expiresAt`. The\nanswer is the only place the secret ever appears; Heimdall keeps its hash alone.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ApplicationCredential_Issue",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationCredentialCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "ApplicationCredential"
+        ],
+        "summary": "Lists the application's credentials, newest first, with whether each is live (UC-54).\nNever a secret or a hash.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ApplicationCredential_List",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCredentialListOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCredentialListOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCredentialListOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scopes/{scopeId}/applications/{id}/credentials/{credentialId}": {
+      "delete": {
+        "tags": [
+          "ApplicationCredential"
+        ],
+        "summary": "Revokes one credential (UC-55). Its secret stops being exchanged at once, and every token\nalready issued from it fails the next live re-check (UC-57).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ApplicationCredential_Revoke",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/applications/token": {
+      "post": {
+        "tags": [
+          "ApplicationToken"
+        ],
+        "summary": "Exchanges an application's secret for a token valid for ten minutes by default (UC-56).\nEvery refusal is the same 401, so the endpoint reveals nothing about which applications,\nscopes or credentials exist. Rate-limited per client address like the person sign-in.",
+        "description": "**Anonymous** — no bearer token required.",
+        "operationId": "ApplicationToken_IssueToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApplicationTokenCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
+    "/api/applications/self": {
+      "get": {
+        "tags": [
+          "ApplicationToken"
+        ],
+        "summary": "Checks an application token live (UC-57), presented as `Authorization: Bearer …`.\nAnswers the application, its scope and the credential when the token is valid and all\nthree are still live; otherwise one 401. Anonymous to the middleware, which accepts only\nperson tokens: the handler validates the token itself.",
+        "description": "**Anonymous** — no bearer token required.",
+        "operationId": "ApplicationToken_Self",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
+    "/api/audit-log": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "Lists the audit trail (UC-48, FR-AT-01/02), newest first. System Admin only. Every filter is\noptional and they combine: `from`/`to` bound when an entry was recorded (UTC,\ninclusive), `actorId` and `targetId` are public ids, `action` is the exact\ncommand type name (e.g. `CreateScopeCommand`), and `succeeded=false` lists only\nrefusals.",
+        "description": "Entries are shown as stored. An actor the retention pass has cleared (NFR-21) is\n`null` and is never reconstructed, so filtering by `actorId` cannot find entries\nwhose attribution has been cleared. A Scope Admin is refused: the trail has no scope\ncolumn, and an old entry's target may be gone, so it cannot be divided by scope reliably.\nReading the trail is not itself audited.\n\n**Requires role:** System Admin.",
+        "operationId": "Audit_List",
+        "parameters": [
+          {
+            "name": "From",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "To",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "ActorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "TargetId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Succeeded",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
                 }
               }
             }
@@ -850,7 +1257,7 @@
           "Auth"
         ],
         "summary": "Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),\nselecting an authenticator-app method, an email method, or both. Setup stays inactive until\nconfirmed by UC-37. The person acted on is always the caller themselves — read from the\nbearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResendVerification.",
-        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself. The request carries the caller's\n`currentPassword` (FR-2F-18), so the action sits under the credential endpoints' rate\nlimit, as `2fa/confirm` and `2fa/disable` do.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_EnableTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -2509,7 +2916,7 @@
           "Person"
         ],
         "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\nany authenticated actor because a User may update their own record; the per-actor rule and\nthe role-change restriction (AF-08c) are enforced by the handler.",
-        "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14), so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18), as every\npassword-verifying endpoint does.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_Update",
         "parameters": [
           {
@@ -2801,6 +3208,189 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/persons/system-admins": {
+      "get": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Lists the system's `SystemAdmin` persons (UC-07 read e, FR-PE-13), projected to\nidentifier, name, and email: who else holds full access to the deployment. System Admin\nonly.",
+        "description": "A Scope Admin is deliberately excluded: a System Admin's address is not tenant-facing,\nwhich is also why `GET /api/persons/scope-admins` offers System Admins only to a\nSystem Admin caller.\n\n**Requires role:** System Admin.",
+        "operationId": "Person_ListSystemAdmins",
+        "parameters": [
+          {
+            "name": "Name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Email",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/persons/{id}/verification-email": {
+      "post": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Has a fresh verification link mailed to a person's own address (UC-51, FR-EV-06): outstanding\nlinks are retired first, as UC-15 does, and the link uses the scope's verification URL. A\nSystem Admin may ask for any person; a Scope Admin only for a `User` of a scope they own\n(AF-51b). No body; the token is never returned.",
+        "description": "Refused when the person is deleted or restricted (409, AF-51c) or already verified (400,\nAF-51d), and with 429 when an email of this kind went to them within the cooldown,\n`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default, AF-51e). 200 means\nthe email was handed to the sender.\n\n**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Person_SendVerificationEmail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/persons/{id}/password-reset": {
+      "post": {
+        "tags": [
+          "Person"
+        ],
+        "summary": "Has a password-reset link mailed to a person's own address (UC-52, FR-PR-05). A System Admin\nmay ask for any person; a Scope Admin only for a `User` of a scope they own (AF-52b). No\nbody; neither a token nor a password is accepted or returned.",
+        "description": "Eligibility is UC-12's: refused (409) when the person is deleted or restricted (AF-52c) or\ntheir account could not sign in — a User whose scope is deleted, a Scope Admin with no live\nscope (AF-52d). 429 when a reset went to them within the cooldown (AF-52e). Unlike UC-12 the\nsend is not queued: the caller is authenticated and owed a real answer. 200 means the email\nwas handed to the sender.\n\n**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Person_SendPasswordReset",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
                 }
               }
             }
@@ -3409,6 +3999,139 @@
         ]
       }
     },
+    "/api/scopes/{id}/pending-registrations": {
+      "get": {
+        "tags": [
+          "Scope"
+        ],
+        "summary": "Lists the scope's self-registrations awaiting confirmation (UC-49, FR-SR-11), newest first:\neach one's id, name, address, when it was stored and expires, how many wrong passwords it\nmay still take, and whether it has already expired. Never the password hash, salt or token.\nThe attribute keeps a `User` out; whether the acting Scope Admin owns the scope\n(AF-49b) and whether the scope is live (AF-49a) are the handler's.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Scope_ListPendingRegistrations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingRegistrationOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingRegistrationOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingRegistrationOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scopes/{id}/pending-registrations/{registrationId}": {
+      "delete": {
+        "tags": [
+          "Scope"
+        ],
+        "summary": "Discards one of the scope's self-registrations awaiting confirmation (UC-50, FR-SR-12). Its\nlink stops working — following it answers as for any unknown token — and the registrant may\nsign up again. Same actors as the listing; a registration of another scope answers 404 exactly\nlike a missing one (AF-50c).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "Scope_DiscardPendingRegistration",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "registrationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes/{scopeId}/permissions": {
       "post": {
         "tags": [
@@ -3890,6 +4613,82 @@
         },
         "additionalProperties": false
       },
+      "ApplicationCredentialListOutput": {
+        "type": "object",
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationCredentialOutput"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationCredentialListOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationCredentialListOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationCredentialOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "live": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "ApplicationOutput": {
         "type": "object",
         "properties": {
@@ -3983,6 +4782,155 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApplicationOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTokenCheckOutput": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "credentialId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTokenCheckOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationTokenCheckOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditLogEntryOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "actorRole": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditLogEntryOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntryOutput"
             },
             "nullable": true
           },
@@ -5097,6 +6045,47 @@
         },
         "additionalProperties": false
       },
+      "DiscardPendingRegistrationCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiscardPendingRegistrationCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "EnableTwoFactorAuthCommand": {
         "type": "object",
         "properties": {
@@ -5105,6 +6094,10 @@
             "items": {
               "type": "string"
             },
+            "nullable": true
+          },
+          "currentPassword": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -5739,6 +6732,138 @@
         },
         "additionalProperties": false
       },
+      "IssueApplicationCredentialCommand": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationCredentialCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationCredentialCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationTokenCommand": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "secret": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationTokenCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssueApplicationTokenCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/IssueApplicationTokenCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "LiftProcessingRestrictionCommand": {
         "type": "object",
         "properties": {
@@ -5930,6 +7055,91 @@
           },
           "data": {
             "$ref": "#/components/schemas/PasswordRecoveryCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PendingRegistrationOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attemptsLeft": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "expired": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PendingRegistrationOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingRegistrationOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -6700,6 +7910,51 @@
         },
         "additionalProperties": false
       },
+      "RevokeApplicationCredentialCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeApplicationCredentialCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "ScopeOutput": {
         "type": "object",
         "properties": {
@@ -6958,6 +8213,88 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonPasswordResetCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonPasswordResetCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonVerificationEmailCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendPersonVerificationEmailCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutput"
           }
         },
         "additionalProperties": false
@@ -7416,6 +8753,14 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "currentPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "twoFactorCode": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -7816,6 +9161,15 @@
   "tags": [
     {
       "name": "Application"
+    },
+    {
+      "name": "ApplicationCredential"
+    },
+    {
+      "name": "ApplicationToken"
+    },
+    {
+      "name": "Audit"
     },
     {
       "name": "Auth"
