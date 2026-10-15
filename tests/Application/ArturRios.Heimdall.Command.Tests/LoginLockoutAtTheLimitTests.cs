@@ -168,4 +168,29 @@ public class LoginLockoutAtTheLimitTests
         Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
         Assert.Equal(0, stored.FailedLoginAttempts);
     }
+
+    [UnitFact]
+    public async Task GivenARowStuckAtTheLimitWithNoLock_WhenHandlingLogin_ThenItIsLockedAndUnlocksByItself()
+    {
+        // Given a row an older instance or a lowered limit left at the limit with no lockout date
+        var person = AdminAt(10);
+        var persons = new AsyncFakeRepository<Person, long>();
+        await persons.CreateAsync(person);
+        var handler = HandlerFor(persons);
+
+        // When a wrong password is tried
+        var output = await handler.HandleAsync(Command("wrong-password"));
+
+        // Then the reservation locks it and resets the counter
+        Assert.False(output.Success);
+        Assert.NotNull(person.LockedOutUntil);
+        Assert.True(person.LockedOutUntil > DateTime.UtcNow);
+        Assert.Equal(0, person.FailedLoginAttempts);
+
+        // Then — and once the lock has expired, the correct password signs in
+        person.LockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
+
+        Assert.True((await handler.HandleAsync(Command())).Success);
+        Assert.Null(person.LockedOutUntil);
+    }
 }

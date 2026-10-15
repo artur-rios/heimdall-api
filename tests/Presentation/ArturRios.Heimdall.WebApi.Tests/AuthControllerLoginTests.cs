@@ -495,6 +495,39 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     }
 
     [FunctionalFact]
+    public async Task GivenARowStuckAtTheLimitWithNoLock_WhenPostLogin_ThenItIsLockedAndUnlocksByItself()
+    {
+        // Given a row left at the limit with no lockout date, as an older instance or a lowered limit can
+        var email = UniqueEmail("stuck");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using (var seed = db.CreateContext())
+        {
+            await seed.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedLoginAttempts, 10));
+        }
+
+        // When an attempt is made
+        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email, "Wr0ng-Password!")).StatusCode);
+
+        // Then the reservation locks the row and resets the counter
+        await using (var context = db.CreateContext())
+        {
+            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+            Assert.NotNull(stored.LockedOutUntil);
+            Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
+            Assert.Equal(0, stored.FailedLoginAttempts);
+
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.LockedOutUntil, DateTime.UtcNow.AddMinutes(-1)));
+        }
+
+        // Then — and after the lock expires, the correct password signs in
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
     public async Task GivenAnAddressFreedByADeletedAdmin_WhenItsNewHolderLogsIn_ThenTheyAreAuthenticated()
     {
         // FR-PE-09 keeps addresses unique among live persons only, so a deleted admin awaiting

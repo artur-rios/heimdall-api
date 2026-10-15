@@ -34,10 +34,14 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         // One statement, so the attempt that reaches the limit is also the one that locks: every
         // right-hand side reads the row as it was before the update. A request that dies after this
         // returns — shed by the hash gate, or cut off by a database fault — has still left a lock that
-        // expires, and not a counter at the limit that nothing could ever reset.
+        // expires, and not a counter at the limit that nothing could ever reset. A row already at or
+        // past the limit with no lockout date (left by an older instance, or by a lowered limit) is
+        // admitted too: the same >= test locks it and resets the counter, so it heals itself.
         var reserved = await context.Persons
-            .Where(x => x.Id == person.Id && x.FailedLoginAttempts < maxAttempts &&
-                        (x.LockedOutUntil == null || x.LockedOutUntil <= now))
+            .Where(x => x.Id == person.Id &&
+                        ((x.FailedLoginAttempts < maxAttempts &&
+                          (x.LockedOutUntil == null || x.LockedOutUntil <= now)) ||
+                         (x.FailedLoginAttempts >= maxAttempts && x.LockedOutUntil == null)))
             .ExecuteUpdateAsync(set => set
                 .SetProperty(x => x.LockedOutUntil,
                     x => x.FailedLoginAttempts + 1 >= maxAttempts ? lockedOutUntil : x.LockedOutUntil)

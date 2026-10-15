@@ -32,7 +32,9 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     public Task<bool> TryReserveLoginAttemptAsync(
         Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil)
     {
-        if (person.FailedLoginAttempts >= maxAttempts || person.LockedOutUntil > now)
+        var stuck = person.FailedLoginAttempts >= maxAttempts && person.LockedOutUntil is null;
+
+        if (!stuck && (person.FailedLoginAttempts >= maxAttempts || person.LockedOutUntil > now))
         {
             return Task.FromResult(false);
         }

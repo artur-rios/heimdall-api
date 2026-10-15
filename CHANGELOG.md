@@ -96,9 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - A sign-in attempt cut short at the lockout threshold now locks the account for the usual period instead of
-  leaving it unable to sign in. The attempt that reaches the limit sets the lock when it is counted, so the lock
-  no longer depends on that request finishing. A new data migration, `ReleaseStuckLoginLockouts`, resets the
-  counter on accounts already left at the limit without a lock.
+  leaving it unable to sign in. Accounts already left at the limit without a lock are released by their next sign-in
+  attempt and by a new data migration, `ReleaseStuckLoginLockouts`.
 - The Command tests no longer fail intermittently on password-hash gate timeouts under load (#196): the test
   assembly installs a gate with the production permit count and a two-minute wait, and the saturation
   exception's message now names the gate and how long it waited. Production behaviour and responses are
