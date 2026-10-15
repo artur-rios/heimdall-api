@@ -133,6 +133,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `FailedLoginAttempts`, `LockedOutUntil` | Bounding credential guessing per account (FR-AU-09) |
 | `FailedSecondFactorAttempts`, `SecondFactorLockedOutUntil`, `SecondFactorLockouts` | Bounding second-factor guessing at sign-in per account, across challenges (FR-AU-12). Cleared by a successful second factor and by anonymisation (NFR-20) |
 | `FailedReauthenticationAttempts`, `ReauthenticationWindowStartedAt`, `ReauthenticationPausedUntil` | Bounding password and code guessing under a bearer token per account (FR-AU-13). Cleared by a successful re-authentication and by anonymisation (NFR-20) |
+| `AccountEmailsSent`, `AccountEmailWindowEndsAt`, `AccountEmailLastSentAt` | Bounding the account emails the person's own requests can have sent — a verification link asked for again, a two-factor setup code, the notice an own email change sends to the previous address — to one per cooldown and five a day (FR-PE-16), so an account cannot be used to flood an address. Returned in the data export; cleared by anonymisation (NFR-20) |
 | `SecurityStamp` | Revoking the person's tokens when a credential changes (FR-AU-11). A random value with no meaning of its own, replaced on each change |
 | `RoleId`, `ScopeId` | Authorisation, and the per-scope uniqueness index FR-PE-09 needs |
 | `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |
@@ -203,6 +204,13 @@ hash are never returned.
 The row is written when a notice is sent, which is to say when someone registered with an address that
 already holds an account; it records that much about the holder and nothing else. It is never read
 through the API.
+
+It is linked to no person or Google User — the digest is of an address, which several accounts in
+different scopes may share — so erasure, anonymisation and a hard delete do not reach it, and the data
+export (UC-41) does not include it: there is no account to attach it to, and finding it would mean
+hashing the subject's address to look it up, which is processing the row exists to avoid. What bounds
+it instead is its retention: it lasts at most the one-day window plus the grace period, and is then
+purged whether or not anyone asked.
 
 ### Two decisions this review settled
 

@@ -92,6 +92,16 @@ public class Startup : WebApiStartup
     public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
 
     /// <summary>
+    ///     Rate-limiting policy name for the endpoints that create a person with a password — each of
+    ///     which derives an Argon2id hash — partitioned by the acting person rather than by address
+    ///     (see <see cref="AddAccountCreationRateLimiting" />).
+    /// </summary>
+    public const string AccountCreationRateLimitPolicy = "AccountCreation";
+
+    /// <summary>Requests per minute one actor may make to the account-creation endpoints.</summary>
+    public const int AccountCreationPermitLimit = 30;
+
+    /// <summary>
     ///     Length, in seconds, of the <c>AuthAnonymous</c> fixed window. One value for the limiter's
     ///     <c>Window</c> and for the <c>Retry-After</c> a rejection falls back to, so the two cannot
     ///     drift apart.
@@ -851,6 +861,39 @@ public class Startup : WebApiStartup
             variable, rejectedValue, defaultSeconds);
     }
 
+    /// <summary>
+    ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
+    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) per acting
+    ///     person: <see cref="AccountCreationPermitLimit" /> a minute. Each derives an Argon2id hash
+    ///     through <c>PasswordHashGate</c>, and each needs only an administrator's token, so without a
+    ///     bound one account, from one address, could keep the gate full and starve every sign-in
+    ///     (Threat Model TH-03).
+    /// </summary>
+    /// <remarks>
+    ///     Partitioned by the actor, not the address, because the threat is one account and the
+    ///     legitimate use is one administrator at a time: thirty a minute is more than anyone creates by
+    ///     hand. The limiter runs after authentication, so the actor is known; a request without one is
+    ///     refused by authentication before the action, and is counted by address meanwhile.
+    /// </remarks>
+    private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
+    {
+        options.AddPolicy(AccountCreationRateLimitPolicy, httpContext =>
+        {
+            var actor = httpContext.GetUser<IdentityUser>();
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: actor is null
+                    ? AuthRateLimitPartition.KeyFor(httpContext, callers)
+                    : $"actor:{actor.Id}",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = AccountCreationPermitLimit,
+                    Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
+                    QueueLimit = 0
+                });
+        });
+    }
+
     private void AddAuthEndpointRateLimiting()
     {
         // Throws on a key too short to be a secret, so a misconfigured deployment stops here.
@@ -894,6 +937,8 @@ public class Startup : WebApiStartup
                         Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
                         QueueLimit = 0
                     }));
+
+            AddAccountCreationRateLimiting(options, callers);
         });
     }
 

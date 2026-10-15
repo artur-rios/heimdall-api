@@ -49,7 +49,8 @@ public class UpdatePersonCommandHandler(
     IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     ITwoFactorFactorVerifier factorVerifier,
-    IEmailChangeNoticeSender emailChangeNoticeSender)
+    IEmailChangeNoticeSender emailChangeNoticeSender,
+    AdminEmailOptions emailOptions)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
     /// <summary>The length of an authenticator-app or email code, which is all digits; a recovery code is not.</summary>
@@ -136,6 +137,19 @@ public class UpdatePersonCommandHandler(
             await EmailTakenAsync(command, person, roleChange.TargetRoleId))
         {
             return output.WithError(PersonMessages.EmailAlreadyExists);
+        }
+
+        // FR-PE-16 (AF-08j): an own change mails the previous address (FR-PE-15), so it is charged to
+        // the person's account-email budget — after the password and factor were accepted, so a token
+        // without them cannot spend it, and before the factor is spent or anything is written, so a
+        // refusal costs no code and changes nothing. Switching an address back and forth therefore
+        // mails the address it leaves at most the budget's day. An administrator's change is not
+        // charged: it is their authority, not the person's own request.
+        if (emailChanged && command.ActingPersonId == person.PublicId &&
+            AccountEmailBudget.RefusalOf(
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions)) is { } mailRefusal)
+        {
+            return output.WithError(mailRefusal);
         }
 
         // The second factor is spent only now, once nothing else can refuse the request — and by a

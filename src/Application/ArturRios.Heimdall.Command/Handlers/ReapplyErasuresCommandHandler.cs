@@ -90,6 +90,7 @@ public class ReapplyErasuresCommandHandler(
             // The factor budgets, as the scheduled pass clears them: by their own targeted writes.
             await atomicWrites.ClearSecondFactorAttemptsAsync(person);
             await atomicWrites.ClearReauthenticationAttemptsAsync(person);
+            await atomicWrites.ClearAccountEmailsAsync(person);
 
             // Nothing blocks it any more; it is done — as the scheduled pass leaves it.
             person.ErasureBlockedReason = null;

@@ -33,9 +33,10 @@ public static class AuthMessageMap
             [AuthMessages.VerificationEmailSent] = HttpStatusCodes.Ok,
             // AF-15a — the address is already verified, so no link is worth sending.
             [AuthMessages.EmailAlreadyVerified] = HttpStatusCodes.BadRequest,
-            // AF-15b — a link went out within the per-person cooldown (FR-EV-07); the status UC-51's
-            // AF-51e answers with.
+            // AF-15b, AF-15c — the person's account-email budget refused the send (FR-PE-16): the
+            // cooldown, or the day's limit. The status UC-51's AF-51e answers with.
             [AuthMessages.EmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            [AuthMessages.AccountEmailLimitReached] = HttpStatusCodes.TooManyRequests,
             // UC-15 — the caller's own token names a person who no longer exists (ClaimsOnly outlives a
             // hard deletion). The same answer UC-07 AF-07a gives for the same fact.
             [AuthMessages.PersonNotFound] = HttpStatusCodes.NotFound,

@@ -172,6 +172,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             // (FR-AU-12, FR-AU-13): they are cleared by their own targeted writes.
             await atomicWrites.ClearSecondFactorAttemptsAsync(person);
             await atomicWrites.ClearReauthenticationAttemptsAsync(person);
+            await atomicWrites.ClearAccountEmailsAsync(person);
 
             // Nothing blocks it any more; it is done.
             person.ErasureBlockedReason = null;

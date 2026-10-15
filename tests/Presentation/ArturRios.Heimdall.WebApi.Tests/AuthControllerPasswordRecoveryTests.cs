@@ -191,23 +191,24 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     }
 
     [FunctionalFact]
-    public async Task GivenTwoRequests_WhenPostPasswordRecovery_ThenBothTokensAreStored()
+    public async Task GivenTwoRequestsInsideTheCooldown_WhenPostPasswordRecovery_ThenOneTokenIsStoredAndBothAreAnsweredAlike()
     {
-        // Given someone who asks twice — a lost first email, an impatient second click
+        // Given someone who asks twice — a lost first email, an impatient second click — or someone
+        // else asking again and again for the same address
         var email = UniqueEmail("admin");
         var person = await SeedPersonAsync(Roles.SystemAdmin, email);
 
         // When
-        await RecoverAsync(email);
-        var response = await RecoverAsync(email);
+        var first = await RecoverAsync(email);
+        var second = await RecoverAsync(email);
 
-        // Then both are live: UC-13 decides which tokens are valid, and nothing in UC-12 invalidates
-        // the earlier one, so the first email a person opens still works
-        AssertGenericSuccess(response);
+        // Then — AF-12b (FR-PR-07): one link per person per cooldown. Both are answered as any request
+        // is, and the first link, which outlives the cooldown, is the one that works
+        AssertGenericSuccess(first);
+        AssertGenericSuccess(second);
         await SettleAsync();
-        var tokens = await TokensForAsync(person);
-        Assert.Equal(2, tokens.Count);
-        Assert.NotEqual(tokens[0].TokenHash, tokens[1].TokenHash);
+        var token = Assert.Single(await TokensForAsync(person));
+        Assert.False(token.Used);
     }
 
     [FunctionalFact]

@@ -482,6 +482,9 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         person.FailedReauthenticationAttempts = 3;
         person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-5);
         person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(5);
+        person.AccountEmailsSent = 4;
+        person.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(5);
+        person.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
 
         var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
@@ -492,5 +495,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(0, person.FailedReauthenticationAttempts);
         Assert.Null(person.ReauthenticationWindowStartedAt);
         Assert.Null(person.ReauthenticationPausedUntil);
+        Assert.Equal(0, person.AccountEmailsSent);
+        Assert.Null(person.AccountEmailWindowEndsAt);
+        Assert.Null(person.AccountEmailLastSentAt);
     }
 }

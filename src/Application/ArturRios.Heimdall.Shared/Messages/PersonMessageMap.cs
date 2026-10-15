@@ -87,6 +87,9 @@ public static class PersonMessageMap
             [AuthMessages.EmailAlreadyVerified] = HttpStatusCodes.BadRequest,
             // AF-51e / AF-52e — the per-person cooldown is running (FR-EV-07, FR-PR-06).
             [PersonMessages.AccountEmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            // AF-08j — an own email change the person's account-email budget refused (FR-PE-16).
+            [AuthMessages.EmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            [AuthMessages.AccountEmailLimitReached] = HttpStatusCodes.TooManyRequests,
             // UC-52 main flow — the reset email was handed to the sender. AF-52a reuses PersonNotFound
             // (404); AF-52b, AF-52c and AF-52e share UC-51's entries above.
             [PersonMessages.PasswordResetSentToPerson] = HttpStatusCodes.Ok,

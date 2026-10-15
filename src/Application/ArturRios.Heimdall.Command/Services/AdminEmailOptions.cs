@@ -2,14 +2,13 @@ using System.Globalization;
 using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
-///     The per-person cooldown on account email (FR-EV-07, FR-PR-06, FR-2F-19): at most one email of
-///     each kind per person per <see cref="Cooldown" />, whoever asks. Read from
+///     The per-person cooldown on account email (FR-EV-07, FR-PR-06, FR-PR-07, FR-PE-16): at most one
+///     email of each kind per person per <see cref="Cooldown" />, whoever asks. Read from
 ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c>; five minutes by default.
 /// </summary>
 /// <remarks>
@@ -22,10 +21,10 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     </para>
 ///     <para>
 ///         It began as the administrators' cooldown (UC-51, UC-52) and keeps that variable name, so no
-///         deployment has to change its configuration. The self-service sends that a bearer token
-///         alone can repeat are under it too: a fresh verification link (UC-15, AF-15b) and a
-///         two-factor setup code (UC-36, AF-36f). Without it, a caller could loop either endpoint and
-///         mail an address once per request.
+///         deployment has to change its configuration. Anonymous password recovery (UC-12) asks it the
+///         same way. A person's own sends — a verification link again, a setup code, an email-change
+///         notice — use its <see cref="Cooldown" /> too, but through <see cref="AccountEmailBudget" />,
+///         a conditional write on the person row, because a bearer token can send a burst of them.
 ///     </para>
 ///     <para>
 ///         Values from 0 to 86400 seconds are accepted, and 0 switches the cooldown off. Anything
@@ -91,23 +90,5 @@ public class AdminEmailOptions
 
         return await tokenReader.Query()
             .AnyAsync(x => x.PersonId == personId && x.ExpiresAt > threshold, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Whether any email code (used, superseded or live) was issued for the two-factor configuration
-    ///     with internal id <paramref name="twoFactorAuthId" /> inside the cooldown window — the same
-    ///     question as <see cref="IsRunningAsync{TToken}" />, for the code UC-36 mails (AF-36f). A code
-    ///     belongs to a configuration rather than to a person, and one configuration to one person.
-    /// </summary>
-    public async Task<bool> IsRunningForEmailCodesAsync(
-        IAsyncReadOnlyRepository<TwoFactorEmailCode, long> codeReader,
-        long twoFactorAuthId,
-        DateTime now,
-        CancellationToken cancellationToken = default)
-    {
-        var threshold = CooldownThreshold(now, TwoFactorLifetimes.EmailCode);
-
-        return await codeReader.Query()
-            .AnyAsync(x => x.TwoFactorAuthId == twoFactorAuthId && x.ExpiresAt > threshold, cancellationToken);
     }
 }

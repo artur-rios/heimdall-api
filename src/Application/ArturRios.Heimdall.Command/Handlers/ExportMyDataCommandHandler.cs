@@ -141,7 +141,10 @@ public class ExportMyDataCommandHandler(
                 SecondFactorLockouts = person.SecondFactorLockouts,
                 FailedReauthenticationAttempts = person.FailedReauthenticationAttempts,
                 ReauthenticationWindowStartedAt = person.ReauthenticationWindowStartedAt,
-                ReauthenticationPausedUntil = person.ReauthenticationPausedUntil
+                ReauthenticationPausedUntil = person.ReauthenticationPausedUntil,
+                AccountEmailsSent = person.AccountEmailsSent,
+                AccountEmailWindowEndsAt = person.AccountEmailWindowEndsAt,
+                AccountEmailLastSentAt = person.AccountEmailLastSentAt
             },
             Processing = Processing(person.LegalBasis, person.PrivacyNoticeVersion, person.BasisRecordedAt),
             Erasure = new DataExportErasure

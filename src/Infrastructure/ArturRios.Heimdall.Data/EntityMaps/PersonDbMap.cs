@@ -92,6 +92,12 @@ internal static class PersonDbMap
         IgnoredAfterInsert(person.Property(x => x.ReauthenticationWindowStartedAt));
         IgnoredAfterInsert(person.Property(x => x.ReauthenticationPausedUntil));
 
+        // FR-PE-16: the account-email budget, for the same reason — a whole-row save of a copy read
+        // before a send was reserved would hand the day's allowance back.
+        IgnoredAfterInsert(person.Property(x => x.AccountEmailsSent));
+        IgnoredAfterInsert(person.Property(x => x.AccountEmailWindowEndsAt));
+        IgnoredAfterInsert(person.Property(x => x.AccountEmailLastSentAt));
+
         // Deliberately not a foreign key and not a navigation. It carries no relationship of its own
         // — SCOPE_USER is the relationship, and mapping this as a second one would give EF two ways
         // to describe the same association and two chances to disagree. It is a value the per-scope

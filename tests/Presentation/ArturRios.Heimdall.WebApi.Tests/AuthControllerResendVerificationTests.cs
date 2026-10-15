@@ -20,8 +20,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/resend-verification (UC-15, FR-EV-04): the main flow for each
-// of the three actors, AF-15a (400), AF-15b (429, a link was mailed within the per-person cooldown,
-// FR-EV-07), the credential endpoints' rate limit, the 401 an anonymous caller gets — the first
+// of the three actors, AF-15a (400), AF-15b (429, the person's own account email went out within the
+// cooldown, FR-PE-16), the credential endpoints' rate limit, the 401 an anonymous caller gets — the first
 // authorization flow any /api/auth endpoint has — and the 404 a token outliving its person gets.
 //
 // The token never appears in a response, so every test reads the email_verification_token rows back
@@ -365,18 +365,9 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         var created = await PersonByEmailAsync(email);
         var original = Assert.Single(await TokensForAsync(created));
 
-        // When the person asks for a new link at once, as themselves
+        // When the person asks for a new link, as themselves — at once: the link UC-06 sent is the
+        // administrator's mail, not charged to the person's own budget (FR-PE-16)
         Reauthorize(TestTokens.For(created.PublicId, (int)Roles.ScopeAdmin));
-
-        var early = await ResendAsync();
-
-        // Then — AF-15b: UC-06's mail went out inside the cooldown, so nothing is sent or retired
-        Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
-        Assert.Contains(AuthMessages.EmailSentRecently, early.Body!.Errors);
-        Assert.False(Assert.Single(await TokensForAsync(created)).Used);
-
-        // When they ask again once the cooldown has passed
-        await AgeTokensAsync(created, TimeSpan.FromMinutes(6));
 
         var response = await ResendAsync();
 
@@ -466,19 +457,6 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         return document.RootElement.TryGetProperty("errors", out var errors)
             ? errors.EnumerateArray().Select(error => error.GetString()).FirstOrDefault()
             : null;
-    }
-
-    /// <summary>
-    ///     Moves every verification token of the person back in time by <paramref name="age" />, as if
-    ///     it had been issued that much earlier: the cooldown reads a token's issue time from its expiry.
-    /// </summary>
-    private async Task AgeTokensAsync(Person person, TimeSpan age)
-    {
-        await using var context = db.CreateContext();
-
-        await context.EmailVerificationTokens
-            .Where(token => token.PersonId == person.Id)
-            .ExecuteUpdateAsync(set => set.SetProperty(token => token.ExpiresAt, token => token.ExpiresAt - age));
     }
 
     private async Task<Person> PersonByEmailAsync(string email)

@@ -156,6 +156,26 @@ public class Person : Entity<long>
     public DateTime? ReauthenticationPausedUntil { get; set; }
 
     /// <summary>
+    ///     Account emails the person's own requests have had sent in the window ending at
+    ///     <see cref="AccountEmailWindowEndsAt" /> (FR-PE-16): verification links they asked for again,
+    ///     two-factor setup codes, and the notice an own email change sends to the previous address.
+    ///     Written only by the targeted write that reserves a send, like the factor budgets.
+    /// </summary>
+    public int AccountEmailsSent { get; set; }
+
+    /// <summary>
+    ///     When the current one-day window of <see cref="AccountEmailsSent" /> ends, or <c>null</c>
+    ///     before the first send. The first send after it ends opens a new window.
+    /// </summary>
+    public DateTime? AccountEmailWindowEndsAt { get; set; }
+
+    /// <summary>
+    ///     When the last of those sends was reserved, which the per-person cooldown is measured from
+    ///     (FR-PE-16), or <c>null</c> before the first.
+    /// </summary>
+    public DateTime? AccountEmailLastSentAt { get; set; }
+
+    /// <summary>
     ///     A random value every token issued to this person carries, and must still carry when it is
     ///     presented (FR-AU-11). Replaced whenever a credential changes — the password, the email, or
     ///     the second factor — which revokes every token issued before the change.

@@ -148,13 +148,21 @@ public static class AuthMessages
     public const string EmailAlreadyVerified = "Email already verified.";
 
     /// <summary>
-    ///     AF-15b and AF-36f: an email of the kind asked for — a verification link, or a two-factor
-    ///     setup code — went to the caller within the per-person cooldown (FR-EV-07, FR-2F-19), so
-    ///     nothing was sent. The self-service wording of <see cref="PersonMessages.AccountEmailSentRecently" />,
-    ///     with the same status.
+    ///     AF-15b, AF-36f and AF-08j: the person's own requests had an account email sent within the
+    ///     cooldown (FR-PE-16) — a verification link, a two-factor setup code, or an email-change
+    ///     notice — so nothing was sent and, for an email change, nothing changed. The self-service
+    ///     wording of <see cref="PersonMessages.AccountEmailSentRecently" />, with the same status.
     /// </summary>
     public const string EmailSentRecently =
         "An email of this kind was sent to you recently. Try again in a few minutes.";
+
+    /// <summary>
+    ///     AF-15c, AF-36g and AF-08j: the person's own requests have already had the day's account
+    ///     emails sent (FR-PE-16), so nothing was sent and, for an email change, nothing changed.
+    ///     The same status as <see cref="EmailSentRecently" />, with a wait measured in hours.
+    /// </summary>
+    public const string AccountEmailLimitReached =
+        "You have reached today's limit for account emails. Try again tomorrow.";
 
     /// <summary>
     ///     UC-15: the bearer token names a person who no longer exists. Reachable because

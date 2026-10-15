@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -10,8 +11,9 @@ using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
-// Unit tests for ResendVerificationEmailCommandHandler (UC-15). Cover the main flow, AF-15a, AF-15b
-// (the per-person cooldown, FR-EV-07) and the three decisions the use case leaves open: every
+// Unit tests for ResendVerificationEmailCommandHandler (UC-15). Cover the main flow, AF-15a, AF-15b and
+// AF-15c (the person's account-email budget, FR-PE-16) and the three decisions the use case leaves
+// open: every
 // outstanding live token is retired before a new one is issued, a bearer token naming no existing
 // person answers "person not found", and a logically deleted person is still served.
 //
@@ -34,8 +36,8 @@ public class ResendVerificationEmailCommandHandlerTests
         Person Person)
     {
         public ResendVerificationEmailCommandHandler Handler(TimeSpan? cooldown = null) =>
-            new(Persons, Tokens, Tokens, EmailVerification.Object, VerificationOptions,
-                new AdminEmailOptions { Cooldown = cooldown ?? Cooldown });
+            new(Persons, Tokens, Tokens, EmailVerification.Object,
+                new AdminEmailOptions { Cooldown = cooldown ?? Cooldown }, InMemoryAtomicWrites.Instance);
 
         /// <summary>The command the controller would build for this fixture's person.</summary>
         public ResendVerificationEmailCommand Command() => new()
@@ -267,18 +269,16 @@ public class ResendVerificationEmailCommandHandlerTests
             service => service.IssueAndSendAsync(fixture.Person), Times.Once);
     }
 
-    // AF-15b (FR-EV-07): one verification email per person per cooldown, whoever asked for it — the
-    // question UC-51 asks, asked the same way. A token's issue time is its expiry minus the lifetime.
-
-    private static DateTime IssuedAgo(TimeSpan age) => Now + VerificationOptions.TokenLifetime - age;
+    // AF-15b and AF-15c (FR-PE-16): the resend is charged to the person's account-email budget — one
+    // per cooldown, five a day — reserved before anything is retired or sent.
 
     [UnitFact]
-    public async Task GivenALinkMailedInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenRefusedAndNothingRetiredOrSent()
+    public async Task GivenASendReservedInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenRefusedAndNothingRetiredOrSent()
     {
-        // Given a link issued a minute ago
+        // Given the person's own requests had an account email sent a minute ago
         var fixture = await FixtureAsync();
-        var recent = await TokenForAsync(
-            fixture.Tokens, fixture.Person, "recent-token", IssuedAgo(TimeSpan.FromMinutes(1)));
+        fixture.Person.AccountEmailLastSentAt = Now.AddMinutes(-1);
+        var live = await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
@@ -286,54 +286,68 @@ public class ResendVerificationEmailCommandHandlerTests
         // Then — refused, and the link the person already has still works
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
-        Assert.False(recent.Used);
+        Assert.False(live.Used);
         fixture.EmailVerification.Verify(
             service => service.IssueAndSendAsync(It.IsAny<Person>()), Times.Never);
     }
 
     [UnitFact]
-    public async Task GivenASpentLinkMailedInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenStillRefused()
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenHandlingResendVerificationEmail_ThenRefusedWithTheDailyLimit()
     {
-        // Given — a used or superseded link was still a mail sent, so it counts as UC-51 counts it
+        // Given five sends in a window that is still open, the last well outside the cooldown
         var fixture = await FixtureAsync();
-        await TokenForAsync(
-            fixture.Tokens, fixture.Person, "spent-token", IssuedAgo(TimeSpan.FromMinutes(2)), used: true);
+        fixture.Person.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        fixture.Person.AccountEmailWindowEndsAt = Now.AddHours(10);
+        fixture.Person.AccountEmailLastSentAt = Now.AddHours(-2);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
 
         // Then
-        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.Contains(AuthMessages.AccountEmailLimitReached, output.Errors);
         fixture.EmailVerification.Verify(
             service => service.IssueAndSendAsync(It.IsAny<Person>()), Times.Never);
     }
 
     [UnitFact]
-    public async Task GivenTheLastLinkWasMailedBeforeTheCooldown_WhenHandlingResendVerificationEmail_ThenANewOneIsSent()
+    public async Task GivenASpentWindowThatHasEnded_WhenHandlingResendVerificationEmail_ThenSentAndANewWindowOpens()
     {
-        // Given a link issued six minutes ago, outside a five-minute cooldown
+        // Given
         var fixture = await FixtureAsync();
-        var older = await TokenForAsync(
-            fixture.Tokens, fixture.Person, "older-token", IssuedAgo(TimeSpan.FromMinutes(6)));
+        fixture.Person.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        fixture.Person.AccountEmailWindowEndsAt = Now.AddMinutes(-1);
+        fixture.Person.AccountEmailLastSentAt = Now.AddDays(-1);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
 
         // Then
         Assert.True(output.Success);
-        Assert.True(older.Used);
-        fixture.EmailVerification.Verify(
-            service => service.IssueAndSendAsync(fixture.Person), Times.Once);
+        Assert.Equal(1, fixture.Person.AccountEmailsSent);
+        Assert.True(fixture.Person.AccountEmailWindowEndsAt > Now.AddHours(23));
     }
 
     [UnitFact]
-    public async Task GivenAnotherPersonWasMailedInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenTheCallerIsServed()
+    public async Task GivenAResendIsSent_WhenHandlingResendVerificationEmail_ThenItIsChargedToTheBudget()
     {
-        // Given — the cooldown is per person
+        // Given
         var fixture = await FixtureAsync();
-        var other = new Person { Email = "other@test.local", RoleId = (long)Roles.SystemAdmin };
-        await fixture.Persons.CreateAsync(other);
-        await TokenForAsync(fixture.Tokens, other, "their-token", IssuedAgo(TimeSpan.FromMinutes(1)));
+
+        // When
+        await fixture.Handler().HandleAsync(fixture.Command());
+
+        // Then
+        Assert.Equal(1, fixture.Person.AccountEmailsSent);
+        Assert.NotNull(fixture.Person.AccountEmailLastSentAt);
+    }
+
+    [UnitFact]
+    public async Task GivenALinkAnAdministratorJustMailed_WhenHandlingResendVerificationEmail_ThenThePersonMayStillAskOnce()
+    {
+        // Given a link issued a minute ago by UC-06 or UC-51 — administrator mail is not charged to the
+        // person's own budget, and the person's first resend is
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "admin-token", Now + VerificationOptions.TokenLifetime - TimeSpan.FromMinutes(1));
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
@@ -343,11 +357,11 @@ public class ResendVerificationEmailCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenTheCooldownIsSwitchedOff_WhenHandlingResendVerificationEmail_ThenALinkMailedAMomentAgoDoesNotStopIt()
+    public async Task GivenTheCooldownIsSwitchedOff_WhenHandlingResendVerificationEmail_ThenASendAMomentAgoDoesNotStopIt()
     {
-        // Given HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS=0
+        // Given HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS=0; the daily cap still applies
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "recent-token", IssuedAgo(TimeSpan.Zero));
+        fixture.Person.AccountEmailLastSentAt = Now;
 
         // When
         var output = await fixture.Handler(TimeSpan.Zero).HandleAsync(fixture.Command());
@@ -357,18 +371,17 @@ public class ResendVerificationEmailCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAVerifiedPersonMailedInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenAF15aAnswersFirst()
+    public async Task GivenAVerifiedPersonWithASpentBudget_WhenHandlingResendVerificationEmail_ThenAF15aAnswersAndNothingIsCharged()
     {
         // Given — AF-15a is the more useful answer: waiting would not help
         var fixture = await FixtureAsync(emailVerified: true);
-        await TokenForAsync(
-            fixture.Tokens, fixture.Person, "recent-token", IssuedAgo(TimeSpan.FromMinutes(1)));
+        fixture.Person.AccountEmailLastSentAt = Now.AddMinutes(-1);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
 
         // Then
         Assert.Contains(AuthMessages.EmailAlreadyVerified, output.Errors);
-        Assert.DoesNotContain(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.Equal(0, fixture.Person.AccountEmailsSent);
     }
 }

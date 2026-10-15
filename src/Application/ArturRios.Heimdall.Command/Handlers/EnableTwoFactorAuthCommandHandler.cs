@@ -16,8 +16,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="EnableTwoFactorAuthCommand" /> (UC-36, FR-2F-01…FR-2F-03): validates input
 ///     (AF-36c), confirms the caller is a live person eligible to opt in (AF-36b), refuses a caller
-///     whose configuration is already active (AF-36a), refuses an Email selection while a setup code
-///     mailed within the cooldown is recent (AF-36f), verifies their current password (AF-36e,
+///     whose configuration is already active (AF-36a), refuses an Email selection the person's
+///     account-email budget would refuse (AF-36f, AF-36g), verifies their current password (AF-36e,
 ///     FR-2F-18), then creates or overwrites (AF-36d) a pending
 ///     <see cref="TwoFactorAuth" /> row for the method(s) selected — generating and encrypting a TOTP
 ///     secret for the App method, and issuing a fresh 6-digit email code for the Email method.
@@ -46,12 +46,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         paused budget, is refused with the one message every re-authentication shares.
 ///     </para>
 ///     <para>
-///         Selecting the Email method mails a code, so it is under the per-person account-email
-///         cooldown (<see cref="AdminEmailOptions" />): a code issued for the configuration inside the
-///         window refuses the request (AF-36f), whatever else was selected with it. It is a state
-///         refusal, so it comes before the password as AF-36a does, and a request that could not send
-///         costs neither an Argon2id derivation nor a re-authentication charge. App alone mails
-///         nothing and is never held back by it.
+///         Selecting the Email method mails a code, so it is charged to the person's account-email
+///         budget (<see cref="AccountEmailBudget" />, FR-2F-19), whatever else was selected with it.
+///         The budget is read before the password, as AF-36a is, so a request that could not send costs
+///         neither an Argon2id derivation nor a re-authentication charge (AF-36f, AF-36g); the send is
+///         reserved — atomically, so a burst gets one — only once the password has checked out, so a
+///         token without the password cannot spend the owner's day. App alone mails nothing and is
+///         never held back by it.
 ///     </para>
 /// </remarks>
 public class EnableTwoFactorAuthCommandHandler(
@@ -59,7 +60,6 @@ public class EnableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
-    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITotpSecretProtector totpSecretProtector,
     IAtomicWrites atomicWrites,
@@ -104,14 +104,11 @@ public class EnableTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.AlreadyActive);
         }
 
-        // AF-36f (FR-2F-19): a setup code went to the address within the cooldown, and Email would
-        // mail another. Best-effort, as AF-15b is: simultaneous requests can both pass it, within
-        // the credential endpoints' rate limit.
-        if (wantsEmail && existing is not null &&
-            await emailOptions.IsRunningForEmailCodesAsync(
-                emailCodeReader, existing.Id, DateTime.UtcNow, cancellationToken))
+        // AF-36f, AF-36g (FR-2F-19): Email would mail a code the budget would refuse. Read from the
+        // row already loaded, so it costs nothing; the reservation below is what decides.
+        if (wantsEmail && AccountEmailBudget.RefusalOf(AccountEmailBudget.Peek(person, emailOptions)) is { } early)
         {
-            return output.WithError(AuthMessages.EmailSentRecently);
+            return output.WithError(early);
         }
 
         // AF-36e (FR-2F-18): the current password, missing or wrong alike, through the gate every
@@ -132,6 +129,14 @@ public class EnableTwoFactorAuthCommandHandler(
         }
 
         await ReauthenticationBudget.ClearAsync(atomicWrites, person);
+
+        // FR-2F-19: the password checked out, so the send is reserved now, by one conditional write —
+        // of a burst that all passed the read above, exactly what the budget has left goes through.
+        if (wantsEmail && AccountEmailBudget.RefusalOf(
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions)) is { } refusal)
+        {
+            return output.WithError(refusal);
+        }
 
         // UC-36 step 2: create a pending row, or reuse the existing not-yet-confirmed one (AF-36d).
         var twoFactorAuth = existing;

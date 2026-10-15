@@ -589,6 +589,18 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<DateTime?>("AccountEmailLastSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("account_email_last_sent_at");
+
+                    b.Property<DateTime?>("AccountEmailWindowEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("account_email_window_ends_at");
+
+                    b.Property<int>("AccountEmailsSent")
+                        .HasColumnType("integer")
+                        .HasColumnName("account_emails_sent");
+
                     b.Property<DateTime?>("AnonymisedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("anonymised_at");

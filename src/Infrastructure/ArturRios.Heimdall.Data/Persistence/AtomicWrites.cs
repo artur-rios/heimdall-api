@@ -209,6 +209,67 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return reserved;
     }
 
+    public async Task<AccountEmailReservation> TryReserveAccountEmailAsync(
+        Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt)
+    {
+        // One statement, every right-hand side reading the row as it was. Admitted only out of the
+        // cooldown and under the window's count; an ended (or never opened) window starts again at
+        // this send. Concurrent reservations queue on the row lock and re-read it, so a burst gets
+        // exactly what is left — one inside a cooldown, at most the cap with none.
+        var reserved = await context.Persons
+            .Where(x => x.Id == person.Id &&
+                        (x.AccountEmailLastSentAt == null || x.AccountEmailLastSentAt <= lastSentBefore) &&
+                        (x.AccountEmailWindowEndsAt == null || x.AccountEmailWindowEndsAt <= now ||
+                         x.AccountEmailsSent < maxPerWindow))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.AccountEmailsSent,
+                    x => x.AccountEmailWindowEndsAt == null || x.AccountEmailWindowEndsAt <= now
+                        ? 1
+                        : x.AccountEmailsSent + 1)
+                .SetProperty(x => x.AccountEmailWindowEndsAt,
+                    x => x.AccountEmailWindowEndsAt == null || x.AccountEmailWindowEndsAt <= now
+                        ? (DateTime?)windowEndsAt
+                        : x.AccountEmailWindowEndsAt)
+                .SetProperty(x => x.AccountEmailLastSentAt, (DateTime?)now)) == 1;
+
+        if (reserved)
+        {
+            var windowOpen = person.AccountEmailWindowEndsAt > now;
+
+            Accept(person, x => x.AccountEmailsSent, windowOpen ? person.AccountEmailsSent + 1 : 1);
+            Accept(person, x => x.AccountEmailWindowEndsAt, windowOpen ? person.AccountEmailWindowEndsAt : windowEndsAt);
+            Accept(person, x => x.AccountEmailLastSentAt, now);
+
+            return AccountEmailReservation.Reserved;
+        }
+
+        // Refused: read the row as it now is, only to say which bound refused it. The daily one is
+        // the more useful answer when both do, since waiting out the cooldown would not help.
+        var stored = await context.Persons
+            .AsNoTracking()
+            .Where(x => x.Id == person.Id)
+            .Select(x => new { x.AccountEmailsSent, x.AccountEmailWindowEndsAt })
+            .SingleAsync();
+
+        return stored.AccountEmailWindowEndsAt > now && stored.AccountEmailsSent >= maxPerWindow
+            ? AccountEmailReservation.DailyLimitReached
+            : AccountEmailReservation.CoolingDown;
+    }
+
+    public async Task ClearAccountEmailsAsync(Person person)
+    {
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.AccountEmailsSent, 0)
+                .SetProperty(x => x.AccountEmailWindowEndsAt, (DateTime?)null)
+                .SetProperty(x => x.AccountEmailLastSentAt, (DateTime?)null));
+
+        Accept(person, x => x.AccountEmailsSent, 0);
+        Accept(person, x => x.AccountEmailWindowEndsAt, null);
+        Accept(person, x => x.AccountEmailLastSentAt, null);
+    }
+
     public async Task ClearReauthenticationAttemptsAsync(Person person)
     {
         await context.Persons

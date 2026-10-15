@@ -136,6 +136,30 @@ public interface IAtomicWrites
     Task ClearReauthenticationAttemptsAsync(Person person);
 
     /// <summary>
+    ///     FR-PE-16: reserves one account email the person's own request would send — while none was
+    ///     reserved after <paramref name="lastSentBefore" /> (the cooldown) and fewer than
+    ///     <paramref name="maxPerWindow" /> were in a window still open at <paramref name="now" />.
+    /// </summary>
+    /// <param name="person">The account the email is charged to.</param>
+    /// <param name="maxPerWindow">The sends one window admits.</param>
+    /// <param name="now">The time the window is compared against, and the send is stamped with.</param>
+    /// <param name="lastSentBefore">
+    ///     The latest the previous send may have been reserved and still be out of the cooldown:
+    ///     <paramref name="now" /> minus the cooldown.
+    /// </param>
+    /// <param name="windowEndsAt">When the window this send opens ends, if it opens one.</param>
+    /// <remarks>
+    ///     A send in an ended window, or the first ever, opens a new window with itself as the first
+    ///     send. On success the instance's three columns are set to what was written. A refusal reads
+    ///     the row back only to say which bound refused it; when both do, the daily one is reported.
+    /// </remarks>
+    Task<AccountEmailReservation> TryReserveAccountEmailAsync(
+        Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt);
+
+    /// <summary>FR-PE-16: clears the account-email budget — how anonymisation clears it (NFR-20).</summary>
+    Task ClearAccountEmailsAsync(Person person);
+
+    /// <summary>
     ///     FR-2F-10: makes <paramref name="challengeId" /> the configuration's one outstanding
     ///     challenge, with all of its reissues (FR-2F-16) and guesses available.
     /// </summary>

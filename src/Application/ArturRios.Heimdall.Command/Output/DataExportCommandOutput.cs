@@ -151,6 +151,15 @@ public class DataExportSecurity
 
     /// <summary>When re-authentication is paused until, if it is or was (FR-AU-13).</summary>
     public DateTime? ReauthenticationPausedUntil { get; set; }
+
+    /// <summary>Account emails the person's own requests had sent in the current window (FR-PE-16).</summary>
+    public int AccountEmailsSent { get; set; }
+
+    /// <summary>When the current account-email window ends, if one was opened (FR-PE-16).</summary>
+    public DateTime? AccountEmailWindowEndsAt { get; set; }
+
+    /// <summary>When the last of those account emails was sent, which the cooldown counts from (FR-PE-16).</summary>
+    public DateTime? AccountEmailLastSentAt { get; set; }
 }
 
 /// <summary>The lawful basis and the notice the subject was shown.</summary>

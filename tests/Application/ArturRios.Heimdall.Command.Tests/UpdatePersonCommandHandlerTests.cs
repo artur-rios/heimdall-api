@@ -162,7 +162,8 @@ public class UpdatePersonCommandHandlerTests
         bool ownershipAllowed = true,
         AsyncFakeRepository<GoogleUser, long>? googleUsers = null,
         AsyncFakeRepository<EmailVerificationToken, long>? verificationTokens = null,
-        TwoFactorState? twoFactor = null)
+        TwoFactorState? twoFactor = null,
+        TimeSpan? cooldown = null)
     {
         twoFactor ??= new TwoFactorState();
 
@@ -176,7 +177,8 @@ public class UpdatePersonCommandHandlerTests
             InMemoryAtomicWrites.Instance,
             twoFactor.Configurations,
             twoFactor.Verifier(),
-            twoFactor.NoticeSender());
+            twoFactor.NoticeSender(),
+            new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) });
     }
 
     /// <summary>
@@ -1128,7 +1130,7 @@ public class UpdatePersonCommandHandlerTests
             PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
             Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
             InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender());
+            twoFactor.NoticeSender(), new AdminEmailOptions());
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -1244,5 +1246,155 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
         Assert.Equal(1, emailCode.FailedAttempts);
+    }
+
+    // FR-PE-16 (AF-08j): an own email change mails the previous address (FR-PE-15), so it is charged to
+    // the person's account-email budget — one per cooldown, five a day — once the password and factor
+    // check out, and before the factor is spent or anything is written. Switching an address back and
+    // forth therefore mails the address it leaves at most five times a day.
+
+    [UnitFact]
+    public async Task GivenAnOwnEmailChangeInsideTheCooldown_WhenHandlingUpdate_ThenRefusedAndNothingChangesOrIsSent()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        target.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        var original = target.Email;
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.Equal(original, target.Email);
+        Assert.Empty(twoFactor.NoticesSentTo);
+    }
+
+    [UnitFact]
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenChangingOwnEmail_ThenRefusedWithTheDailyLimit()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        target.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        target.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(10);
+        target.AccountEmailLastSentAt = DateTime.UtcNow.AddHours(-2);
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Contains(AuthMessages.AccountEmailLimitReached, output.Errors);
+        Assert.NotEqual("moved@test.local", target.Email);
+    }
+
+    [UnitFact]
+    public async Task GivenAnAddressSwitchedBackAndForth_WhenChangingOwnEmailRepeatedly_ThenTheLeftAddressIsMailedAtMostFiveTimes()
+    {
+        // Given no cooldown, so only the daily cap bounds it — the victim's address and the attacker's
+        var target = User(10, Scope(1));
+        var victim = target.Email;
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor, cooldown: TimeSpan.Zero);
+
+        // When the address is switched ten times
+        var refusals = new List<string>();
+
+        for (var change = 0; change < 10; change++)
+        {
+            var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+            command.Email = change % 2 == 0 ? "attacker@test.local" : victim;
+            refusals.AddRange((await handler.HandleAsync(command)).Errors);
+        }
+
+        // Then — five changes and five notices in all, then the daily limit; the address stays where
+        // the fifth change left it, so the victim is mailed only for the changes that left it
+        Assert.Equal(AccountEmailBudget.MaxPerDay, twoFactor.NoticesSentTo.Count);
+        Assert.True(twoFactor.NoticesSentTo.Count(x => x == victim) <= AccountEmailBudget.MaxPerDay);
+        Assert.NotEmpty(refusals);
+        Assert.All(refusals, refusal => Assert.Equal(AuthMessages.AccountEmailLimitReached, refusal));
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenChangingOwnEmail_ThenTheAccountEmailBudgetIsNotCharged()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+        command.CurrentPassword = "not-the-password";
+
+        // When
+        await handler.HandleAsync(command);
+
+        // Then
+        Assert.Equal(0, target.AccountEmailsSent);
+    }
+
+    [UnitFact]
+    public async Task GivenASpentDayAndAValidRecoveryCode_WhenChangingOwnEmail_ThenTheCodeIsNotSpent()
+    {
+        // Given — the budget is reserved before the factor is spent, so a refusal costs no code
+        var target = User(10, Scope(1));
+        target.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        var recoveryCode = await twoFactor.ActivateAsync(target);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+        command.TwoFactorCode = recoveryCode;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.False(Assert.Single(twoFactor.RecoveryCodes.Query().ToList()).Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOwnEmailChange_WhenItSucceeds_ThenOneSendIsChargedToTheBudget()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(1, target.AccountEmailsSent);
+    }
+
+    [UnitFact]
+    public async Task GivenAnAdministratorChangesTheEmailOfAPersonWithASpentDay_WhenHandlingUpdate_ThenItIsUpdatedAndNothingIsCharged()
+    {
+        // Given — an administrator's change is their authority, not the person's own request
+        var target = User(10, Scope(1));
+        target.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        target.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(10);
+        target.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(AccountEmailBudget.MaxPerDay, target.AccountEmailsSent);
     }
 }

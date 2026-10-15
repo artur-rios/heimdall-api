@@ -151,12 +151,14 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     enforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's
     ///     idempotent success, since a link mailed to a verified address could do nothing when clicked.
     ///     A token naming a person who no longer exists answers 404: it was validated, but there is no
-    ///     address left to send to. A link already mailed to the person within the account-email
-    ///     cooldown (<c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c>, five minutes by default) answers
-    ///     429 "An email of this kind was sent to you recently. Try again in a few minutes." and sends
-    ///     nothing (AF-15b) — the link UC-06, UC-51 or an earlier resend mailed counts. The endpoint is
-    ///     also under the credential endpoints' rate limit, whose 429 is "Too many requests." with a
-    ///     <c>Retry-After</c> header.
+    ///     address left to send to. The send is charged to the person's account-email budget, shared
+    ///     with a two-factor setup code and an own email change: one per
+    ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c> (five minutes by default) and five a day.
+    ///     Inside the cooldown it answers 429 "An email of this kind was sent to you recently. Try
+    ///     again in a few minutes." (AF-15b); once the day is spent, 429 "You have reached today's
+    ///     limit for account emails. Try again tomorrow." (AF-15c). Nothing is sent either way. The
+    ///     endpoint is also under the credential endpoints' rate limit, whose 429 is "Too many
+    ///     requests." with a <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("resend-verification")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -239,10 +241,12 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>GoogleUser</c>, not a <c>Person</c> — so the handler enforces it by resolving the caller
     ///     against the <c>Person</c> table itself. The request carries the caller's
     ///     <c>currentPassword</c> (FR-2F-18), so the action sits under the credential endpoints' rate
-    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> while a setup
-    ///     code mailed within the account-email cooldown is recent answers 429 "An email of this kind
-    ///     was sent to you recently. Try again in a few minutes." and sends nothing (AF-36f); it is
-    ///     checked before the password. Selecting <c>App</c> alone is never held back by it. A missing
+    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> mails a code,
+    ///     charged to the account-email budget the verification resend uses: 429 "An email of this
+    ///     kind was sent to you recently. Try again in a few minutes." inside the cooldown (AF-36f),
+    ///     429 "You have reached today's limit for account emails. Try again tomorrow." once the day is
+    ///     spent (AF-36g); it is checked before the password and charged only after it. Selecting
+    ///     <c>App</c> alone is never held back by it. A missing
     ///     or wrong password answers 401 "The password or code is incorrect.", and is charged to the
     ///     account's re-authentication budget (FR-AU-13): five failures within fifteen minutes pause
     ///     the check for fifteen minutes, with the same answer.

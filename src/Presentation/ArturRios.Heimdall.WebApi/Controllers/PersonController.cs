@@ -22,7 +22,12 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     Creates a <c>ScopeAdmin</c> or <c>SystemAdmin</c> person with no scope (UC-06 path b).
     ///     Restricted to System Admins (AF-06c).
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
+    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    /// </remarks>
     [HttpPost("persons")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateAdmin(
         [FromBody] CreateAdminCommand command)
@@ -37,7 +42,12 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     Creates a <c>User</c> within a scope (UC-06 path a). A System Admin or an owner of the scope
     ///     may call it; the ownership check (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
+    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/persons")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateUser(
         Guid scopeId, [FromBody] CreateUserCommand command)
@@ -56,7 +66,12 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     c, FR-SC-12). A System Admin or an owner of the scope may call it; the ownership check
     ///     (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
+    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
@@ -123,7 +138,11 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
     ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
     ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
-    ///     password-verifying endpoint does.
+    ///     password-verifying endpoint does. An own email change mails the previous address, so it is
+    ///     charged to the person's account-email budget once the credentials are accepted: 429 "An
+    ///     email of this kind was sent to you recently. Try again in a few minutes." inside the
+    ///     cooldown, 429 "You have reached today's limit for account emails. Try again tomorrow." once
+    ///     the day is spent (AF-08j); nothing changes then, and the second factor is not spent.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

@@ -129,6 +129,37 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         return Task.CompletedTask;
     }
 
+    public Task<AccountEmailReservation> TryReserveAccountEmailAsync(
+        Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt)
+    {
+        var windowOpen = person.AccountEmailWindowEndsAt > now;
+
+        if (windowOpen && person.AccountEmailsSent >= maxPerWindow)
+        {
+            return Task.FromResult(AccountEmailReservation.DailyLimitReached);
+        }
+
+        if (person.AccountEmailLastSentAt > lastSentBefore)
+        {
+            return Task.FromResult(AccountEmailReservation.CoolingDown);
+        }
+
+        person.AccountEmailsSent = windowOpen ? person.AccountEmailsSent + 1 : 1;
+        person.AccountEmailWindowEndsAt = windowOpen ? person.AccountEmailWindowEndsAt : windowEndsAt;
+        person.AccountEmailLastSentAt = now;
+
+        return Task.FromResult(AccountEmailReservation.Reserved);
+    }
+
+    public Task ClearAccountEmailsAsync(Person person)
+    {
+        person.AccountEmailsSent = 0;
+        person.AccountEmailWindowEndsAt = null;
+        person.AccountEmailLastSentAt = null;
+
+        return Task.CompletedTask;
+    }
+
     public Task StartChallengeAsync(TwoFactorAuth configuration, Guid challengeId)
     {
         configuration.ChallengeId = challengeId;
