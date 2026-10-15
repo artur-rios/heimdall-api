@@ -6,7 +6,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Unit tests for ApplicationTokenOptions (UC-56, TH-35): the application audience is required and
 // must differ from the person audience — the separation is what stops a consumer that pins the
 // person audience from taking an application token for a person — and the lifetime defaults to ten
-// minutes. Start-up refuses a missing or equal audience instead of running without the separation.
+// minutes. Start-up refuses a missing audience, or one equal to the person audience or to either
+// audience derived from it, instead of running without the separation.
 public class ApplicationTokenOptionsTests
 {
     [UnitFact]
@@ -76,6 +77,25 @@ public class ApplicationTokenOptionsTests
         // Then
         Assert.Contains(ApplicationTokenOptions.AudienceVariable, error.Message);
         Assert.Contains("HEIMDALL_AUTH_TOKEN_AUDIENCE", error.Message);
+    }
+
+    [UnitTheory]
+    [InlineData("heimdall.2fa-challenge")]
+    [InlineData("heimdall.subject-rights")]
+    [InlineData(" heimdall.2fa-challenge/ ")]
+    public void GivenTheAudienceOfAChallengeOrSubjectRightsToken_WhenParsed_ThenStartUpIsRefused(string audience)
+    {
+        // Given — an application audience equal to one derived from the person audience: a consumer
+        // checking only the application audience would take a challenge or a restricted identity's
+        // token for an application's (TH-35)
+
+        // When
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ApplicationTokenOptions.Parse(audience, null, "heimdall"));
+
+        // Then
+        Assert.Contains(ApplicationTokenOptions.AudienceVariable, error.Message);
+        Assert.Contains(audience.Trim().TrimEnd('/'), error.Message);
     }
 
     [UnitTheory]

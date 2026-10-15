@@ -8,6 +8,7 @@ using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -44,8 +45,8 @@ public class PersonTokenAudienceTests
         Assert.Single(new JwtSecurityTokenHandler().ReadJwtToken(token).Audiences);
 
     /// <summary>What a consumer such as fortuna-api checks: signature, issuer, the person audience, lifetime.</summary>
-    private static void ValidateAsAConsumer(string token) =>
-        new JwtSecurityTokenHandler().ValidateToken(token, new TokenValidationParameters
+    private static TokenValidationParameters ConsumerParameters() =>
+        new()
         {
             ValidIssuer = Issuer,
             ValidateIssuer = true,
@@ -55,7 +56,18 @@ public class PersonTokenAudienceTests
             ValidateIssuerSigningKey = true,
             ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             ValidateLifetime = true
-        }, out _);
+        };
+
+    /// <summary>A consumer validating with <see cref="JwtSecurityTokenHandler" />.</summary>
+    private static void ValidateAsAConsumer(string token) =>
+        new JwtSecurityTokenHandler().ValidateToken(token, ConsumerParameters(), out _);
+
+    /// <summary>
+    ///     A consumer validating with <see cref="JsonWebTokenHandler" />, which ASP.NET Core's
+    ///     <c>AddJwtBearer</c> uses by default — fortuna-api's runtime path.
+    /// </summary>
+    private static Task<TokenValidationResult> ValidateAsAJwtBearerConsumerAsync(string token) =>
+        new JsonWebTokenHandler().ValidateTokenAsync(token, ConsumerParameters());
 
     [UnitFact]
     public async Task GivenAChallenge_WhenIssued_ThenItCarriesTheChallengeAudience()
@@ -118,6 +130,41 @@ public class PersonTokenAudienceTests
 
         // Then
         Assert.Null(exception);
+    }
+
+    [UnitFact]
+    public async Task GivenAJwtBearerConsumerPinningThePersonAudience_WhenValidatingChallengeAndRightsTokens_ThenBothAudiencesAreRefused()
+    {
+        // Given — both tokens a password or a restricted identity obtains
+        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
+        var rightsOnly = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin);
+
+        // When
+        var results = new[]
+        {
+            await ValidateAsAJwtBearerConsumerAsync(challenge.Token),
+            await ValidateAsAJwtBearerConsumerAsync(rightsOnly.Token)
+        };
+
+        // Then — refused for the audience, as the other handler refuses them
+        Assert.All(results, result =>
+        {
+            Assert.False(result.IsValid);
+            Assert.IsType<SecurityTokenInvalidAudienceException>(result.Exception);
+        });
+    }
+
+    [UnitFact]
+    public async Task GivenAJwtBearerConsumerPinningThePersonAudience_WhenValidatingAFullToken_ThenItIsAccepted()
+    {
+        // Given
+        var token = await AuthIssuer().IssueAsync(SystemAdmin());
+
+        // When
+        var result = await ValidateAsAJwtBearerConsumerAsync(token.Token);
+
+        // Then
+        Assert.True(result.IsValid, result.Exception?.Message);
     }
 
     [UnitFact]

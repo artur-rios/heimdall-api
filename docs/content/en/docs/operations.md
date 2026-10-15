@@ -712,7 +712,7 @@ validates them offline must be given both keys for the same period.
 | `HEIMDALL_DATA_CONNECTIONSTRING` | ✅ | — |
 | `HEIMDALL_DATA_DATABASETYPE` | ✅ | — (`PostgreSql`) |
 | `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — |
-| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE`) |
+| `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it) |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |

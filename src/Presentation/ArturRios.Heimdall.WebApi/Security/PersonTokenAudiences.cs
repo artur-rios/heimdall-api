@@ -21,8 +21,11 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     <para>
 ///         <b>Why derived rather than configured.</b> Unlike <see cref="ApplicationTokenOptions" />, no
 ///         variable is read: a suffix on the person audience is distinct from it and from the other
-///         suffix whatever the person audience is, so there is nothing an operator could set equal,
-///         and nothing new to set. The suffixes are fixed so a consumer can name the audiences too.
+///         suffix whatever the person audience is, so the three person audiences can never be set
+///         equal, and there is nothing new to set. The application audience is configured, though,
+///         and could be; <see cref="ApplicationTokenOptions.Parse" /> refuses it equal to either
+///         derived audience at start-up. The suffixes are fixed so a consumer can name the audiences
+///         too.
 ///     </para>
 ///     <para>
 ///         <b>Inside Heimdall.</b> The bearer-token middleware checks no audience, so
