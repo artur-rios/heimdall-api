@@ -88,7 +88,7 @@ system. Its `OwnerId` names a person, but the row describes the system.
 | Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
 | Deletion and erasure state | `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honour erasure within the statutory deadline and show that it was honoured | Art. 7 II (obrigação legal) | Art. 6(1)(c) legal obligation |
 | Network | Client IP address: the rate limiter's partition key (in memory), and every request's entry in the application logs (12 months) | Bound anonymous request rates; detect and investigate attacks on accounts | Art. 7 IX, Art. 46 | Art. 6(1)(f), Art. 32 |
-| Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails | Art. 7 V | Art. 6(1)(b) |
+| Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails, and the notice of an email change to the previous address (FR-PE-15) | Art. 7 V | Art. 6(1)(b) |
 
 **Consent is not a basis anywhere in this table**, and that is deliberate. Every processing operation
 here is necessary to run an identity service the account holder is a party to, or is required of the

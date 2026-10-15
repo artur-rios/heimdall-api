@@ -227,9 +227,12 @@ answer **429** with a `Retry-After` header (whole seconds) and the usual error e
 requires a bearer token, so nothing else bounds how fast one caller can hit them, and each login attempt
 costs a full Argon2id verification (600 MB / 16 threads by the hashing library's defaults) — so memory
 exhaustion is realistic without it. The authenticated
-endpoints that check a password or a second factor — 2FA confirm, disable and recovery-code
-regeneration, and the erasure request — share the same limit: a bearer token is not the password,
-and without it whoever held one could test passwords or six-digit codes against them unthrottled.
+endpoints that check a password or a second factor — 2FA enable, confirm, disable and recovery-code
+regeneration, the erasure request, and the person update (`PUT /api/persons/{id}`, which checks the
+password when a person changes their own email) — share the same limit: a bearer token is not the
+password, and without it whoever held one could test passwords or six-digit codes against them
+unthrottled. The person update is limited whether or not it checks a password, administrators'
+updates included.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -293,9 +296,10 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
 - A named address is counted in its own `caller:` namespace, apart from direct connections, so a key
   holder cannot spend the budget of a real caller by naming their address.
 - A leaked key lets its holder pick their own bucket, which only spreads credential guesses over
-  invented addresses; the per-account lockouts still count them. The same limiter also guards four
-  authenticated endpoints that have no per-account budget — `2fa/confirm`, `2fa/disable`,
-  `2fa/recovery-codes/regenerate` and `erasure-request` — so someone holding **both** a leaked key
+  invented addresses; the per-account lockouts still count them. The same limiter also guards six
+  authenticated endpoints that have no per-account budget — `2fa/enable`, `2fa/confirm`,
+  `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — so
+  someone holding **both** a leaked key
   and a stolen bearer token could spread guesses against those over invented addresses, bounded then
   only by the password-hash gate. That is accepted residual risk, since it needs two independent
   secrets (Threat Model Document, TB-1, TH-32).

@@ -96,6 +96,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the ids of persons and Google Users hard-deleted earlier were never tombstoned, so nothing records that they named
   a person, and they stay in the trail as recorded. Clearing them would need a list of those ids from outside the
   database; this release does not attempt it.
+- `PUT /api/persons/{id}` and `POST /api/auth/2fa/enable` are now under the `AuthAnonymous` rate limit (10
+  requests a minute per client address, `429` with `Retry-After` beyond it), like the other endpoints that check a
+  password. The person update is limited whether or not it checks one, administrators' updates included.
+  **Operators:** no setting changes; a deployment behind a proxy needs `HEIMDALL_TRUSTED_PROXIES` set, as for
+  login, or every caller shares one budget.
 
 ### Fixed
 
@@ -132,6 +137,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   which could exist only if somebody wrote one by hand in SQL. Operations, "Shared public ids", gives two queries to
   run before migrating; each should return no rows. Once migrated, hand-written SQL that rewrites a `public_id`, such
   as a support fix-up or a restore that remaps ids, fails with `restrict_violation`.
+- Person tokens are now revoked when a credential changes. Every person token (full, 2FA challenge and
+  subject-rights-only) carries the person's security stamp in a new `sst` claim, and a token whose stamp is missing
+  or out of date is refused on every endpoint with `401` and "This token has been revoked. Sign in again." The stamp
+  is replaced by a password reset, an email change (by the person or by an administrator), confirming or disabling
+  two-factor authentication, and regenerating recovery codes; the token that made the change is revoked with the
+  rest. `POST /api/auth/2fa/verify` refuses a challenge issued before such a change as an invalid challenge. A new
+  migration, `AddPersonSecurityStamp`, adds `person.security_stamp`, filled with a fresh value per row; only a
+  targeted write replaces it, so a concurrent whole-row save cannot restore an old one. Google User tokens are
+  unchanged. **Operators:** tokens issued before the upgrade carry no stamp and are refused, so everyone signs in
+  once more after deploying; during a rolling deploy, tokens issued by instances not yet upgraded are refused by
+  upgraded ones until every instance is upgraded.
+- Changing your own email through `PUT /api/persons/{id}` now requires `currentPassword`, and `twoFactorCode` (an
+  authenticator-app or email code, or a recovery code, which is spent) when your two-factor authentication is
+  active. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
+  wrong second factor `401` with "The code or recovery code is missing, incorrect, or already used.", before the
+  new address is checked, and nothing changes. An administrator changing someone else's email, and anyone changing
+  only their name, send neither. Starting two-factor setup (`POST /api/auth/2fa/enable`) now requires
+  `currentPassword` too, refused the same way. Any email change also sends a notice to the previous address, which
+  names neither the new address nor a link; a failed delivery is logged and does not fail the update.
+  **Clients:** send `currentPassword` (and `twoFactorCode` when 2FA is active) for an own email change, and
+  `currentPassword` to enable 2FA; after an own email change, a password reset, confirming or disabling 2FA, or
+  regenerating recovery codes, sign in again.
 
 ## [1.4.0] - 2026-10-13
 

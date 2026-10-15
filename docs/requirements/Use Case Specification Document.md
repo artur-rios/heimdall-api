@@ -537,22 +537,40 @@ sequenceDiagram
 | **Actors** | System Admin, Scope Admin, User |
 | **Description** | Modify person's name, email, or role |
 | **Preconditions** | Actor is authenticated; person exists and is not logically deleted |
-| **Postconditions** | Person record is updated |
+| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11) and the previous address has been sent a notice (FR-PE-15) |
 
 **Main Flow:**
 
 1. Actor sends an update request to `PUT /api/persons/{id}` with the person ID and new values. `Name`
-   and `Email` are replaced; `RoleId` is optional and, when omitted, leaves the role unchanged.
+   and `Email` are replaced; `RoleId` is optional and, when omitted, leaves the role unchanged. An
+   actor changing their **own** email also sends `currentPassword`, and `twoFactorCode` when their
+   two-factor authentication is active (step 4).
 2. The system validates the input.
 3. The system checks authorization, allowing the update when any of the following holds:
    - The actor is a System Admin — they may update any person, including `RoleId`.
    - The actor **is** the person being updated — every actor may update their own name and email.
    - The actor is a Scope Admin and the person is a `User` of a scope the actor owns — name and email
      only; a Scope Admin may never change `RoleId`.
-4. If email changes, the system checks uniqueness per FR-PE-09 — among the scope's `User`s for a
-   `User`, among all `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the
-   person will hold after this update — and resets `EmailVerified = false`. No verification email is sent —
-   issuing a fresh token is UC-14 / UC-15's responsibility.
+4. If email changes:
+   - When the actor **is** the person being updated, the system first re-authenticates them
+     (FR-PE-14): `currentPassword` must match their password, checked as UC-39 checks it (AF-08h), and
+     when their two-factor authentication is active, `twoFactorCode` must be a current authenticator-app
+     or email code or an unused recovery code, checked as UC-38 checks it (AF-08i). A recovery code is
+     spent, as everywhere. This happens before the uniqueness check, so a caller without them learns
+     nothing about the new address. An administrator changing someone else's email presents no
+     credential of that person: their own authorisation (step 3) covers it. A change of name alone asks
+     for nothing.
+   - The system checks uniqueness per FR-PE-09 — among the scope's `User`s for a `User`, among all
+     `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
+     after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
+     fresh token is UC-14 / UC-15's responsibility.
+   - Once the update is saved, the system replaces the person's security stamp, which revokes every
+     token they hold (FR-AU-11) — whoever made the change. An actor who changed their own email is
+     answered `200 OK`, but the token that made the request is revoked with the rest: the client signs
+     in again, with the new address.
+   - The system sends a notice to the **previous** address (FR-PE-15): the account's email was changed,
+     and if that was not the person, they should contact an administrator. The notice names neither the
+     new address nor any link. A failed delivery is logged and does not fail the update.
 5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
    and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
    association (FR-PE-10). Any other target role is refused: making someone a `ScopeAdmin` requires
@@ -562,6 +580,13 @@ sequenceDiagram
 6. The system applies updates and sets `UpdatedAt`.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
 
+> **On re-authenticating an email change.** The address is where account recovery is sent, so whoever
+> can change it can take the account: change it, ask UC-12 for a reset link, and set a password. A
+> bearer token alone is not proof that its holder is the person — it can be left open on a shared
+> machine or lifted from a log — so an own email change asks for what UC-39 and UC-42 ask for. The
+> previous address is told, so a change its owner did not make does not go unnoticed, and the stamp
+> rotation ends every session the change was made from.
+>
 > **On FR-RO-05.** FR-RO-05 states that Scope Admins may assign the `User` role to persons within
 > their scope. That is satisfied by UC-06 path (a), where a Scope Admin creates a person in a scope
 > they own with `RoleId = User`. UC-08 keeps role changes System-Admin-only, per step 3 and AF-08c.
@@ -577,6 +602,8 @@ sequenceDiagram
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
+| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is changed |
+| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The code or recovery code is missing, incorrect, or already used." (UC-39's AF-39c). Nothing is changed |
 
 ---
 
@@ -731,7 +758,7 @@ sequenceDiagram
 4. The system confirms the person is not logically deleted.
 5. For a `User`, the system confirms their scope is not logically deleted. For a `ScopeAdmin`, the system confirms at least one owned scope is not logically deleted.
    If processing of the person is restricted (NFR-24), steps 4 and 5 do not apply and the login ends in AF-11i instead.
-6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. If the person does have active two-factor authentication, go to AF-11g instead.
+6. If the person does not have active two-factor authentication (`TWO_FACTOR_AUTH.IsActive`), the system generates and returns the full authentication token containing the person's `PublicId`, display name and role, plus: the scope's `PublicId` for a `User`; the list of owned scopes' `PublicId`s for a `ScopeAdmin` — only those not logically deleted; no scope claim for a `SystemAdmin`. The response also reports when the token expires. Every token issued to a person — this one, AF-11g's challenge token and AF-11i's subject-rights-only token — also carries the person's current security stamp, and is refused on every later request once the stamp has been replaced by a credential change (FR-AU-11). If the person does have active two-factor authentication, go to AF-11g instead.
 
 **Alternative Flows:**
 
@@ -839,15 +866,17 @@ requests; a person who receives nothing asks again, as for any email that does n
 | **Actors** | Anonymous |
 | **Description** | Set a new password using a valid reset token |
 | **Preconditions** | A valid, non-expired reset token exists |
-| **Postconditions** | Person's password is updated; the token is marked as used |
+| **Postconditions** | Person's password is updated; the token is marked as used; every token the person held is revoked (FR-AU-11) |
 
 **Main Flow:**
 
 1. Caller provides the reset token and a new password.
 2. The system validates the token (exists, not expired, not used).
 3. The system generates a new random `Salt`, hashes the new password using it, and updates the person's `PasswordHash` and `Salt`.
-4. The system marks the token as used.
-5. The system returns success.
+4. The system marks the token as used, and replaces the person's security stamp, which revokes every
+   token issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike.
+5. The system returns success. The person signs in again with the new password; a session opened with
+   the old one, by them or by anybody else, ends at its next request.
 
 **Alternative Flows:**
 
@@ -1641,7 +1670,8 @@ sequenceDiagram
     participant DB as Database
     participant ES as Email Service
 
-    P->>API: POST /api/auth/2fa/enable { methods: ["App", "Email"] }
+    P->>API: POST /api/auth/2fa/enable { methods: ["App", "Email"], currentPassword }
+    API->>API: Verify currentPassword against PasswordHash/Salt
     API->>DB: Find or create TWO_FACTOR_AUTH row for the person (IsActive = false)
     API->>API: If App selected, generate TOTP secret and encrypt it
     API->>DB: Store encrypted secret, AppEnabled = true
@@ -1650,8 +1680,8 @@ sequenceDiagram
     API-->>P: 200 OK { otpAuthUri?, emailCodeSent? }
 ```
 
-1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both.
-2. The system confirms the caller has no already-active two-factor configuration, then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both, and their `currentPassword` (FR-2F-18).
+2. The system confirms the caller has no already-active two-factor configuration and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
 3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
@@ -1670,7 +1700,13 @@ sequenceDiagram
 | AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
 | AF-36b | Caller is not a person eligible for two-factor authentication — a Google User, or a token naming no live person (either operation) | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
+| AF-36e | `currentPassword` missing or wrong (FR-2F-18) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
+
+> **On requiring the password.** The method chosen here is what UC-38 will demand at every later
+> login. Chosen by somebody holding only a bearer token — an authenticator they control, with the
+> recovery codes UC-37 returns to them — it would lock the person out of their own account. The
+> password is what UC-39 asks for to remove a factor, so it is asked for to add one.
 
 ---
 
@@ -1683,7 +1719,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Prove control of every method selected in UC-36 to activate two-factor authentication and receive the one-time set of recovery codes |
 | **Preconditions** | A pending (`IsActive = false`) `TWO_FACTOR_AUTH` row exists for the person, from UC-36 |
-| **Postconditions** | `TWO_FACTOR_AUTH.IsActive` is `true`; exactly ten recovery codes exist, hashed, and were returned to the caller in plaintext this one time |
+| **Postconditions** | `TWO_FACTOR_AUTH.IsActive` is `true`; exactly ten recovery codes exist, hashed, and were returned to the caller in plaintext this one time; every token the person held is revoked, the one that confirmed included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1707,7 +1743,8 @@ sequenceDiagram
 2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
 3. Only once every required code checks out, the system sets `IsActive = true`.
 4. The system generates ten random recovery codes, hashes each, and stores the hashes.
-5. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40).
+5. The system replaces the person's security stamp, which revokes every token issued before the second factor was required, the caller's own included (FR-AU-11).
+6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
 
 **Alternative Flows:**
 
@@ -1760,7 +1797,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
+| AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), issued before the person's last credential change, so its security stamp is no longer theirs (FR-AU-11), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
 | AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
@@ -1780,7 +1817,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Turn off two-factor authentication for the caller's own account |
 | **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
-| **Postconditions** | The person's `TWO_FACTOR_AUTH` row and all of its recovery codes are permanently removed |
+| **Postconditions** | The person's `TWO_FACTOR_AUTH` row and all of its recovery codes are permanently removed; every token the person held is revoked, the caller's own included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1801,8 +1838,8 @@ sequenceDiagram
 1. Caller sends their current password together with a valid second factor — an app/email code or a recovery code.
 2. The system verifies the password, exactly as UC-11 does.
 3. The system verifies the second factor, exactly as UC-38 does.
-4. Only when both check out, the system deletes the `TWO_FACTOR_AUTH` row, which cascades to its recovery codes.
-5. The system returns success. Two-factor authentication no longer applies to the next login.
+4. Only when both check out, the system deletes the `TWO_FACTOR_AUTH` row, which cascades to its recovery codes, and replaces the person's security stamp, revoking every token issued while the factor stood (FR-AU-11).
+5. The system returns success. The token that made the request is revoked with the rest, so the client signs in again; two-factor authentication no longer applies to that login.
 
 **Alternative Flows:**
 
@@ -1825,7 +1862,7 @@ sequenceDiagram
 | **Actors** | User, Scope Admin, System Admin |
 | **Description** | Invalidate the caller's current recovery codes and issue a fresh set of ten |
 | **Preconditions** | Actor is authenticated; `TWO_FACTOR_AUTH.IsActive = true` for the person |
-| **Postconditions** | The previous ten recovery codes no longer validate; ten new ones exist, hashed, and were returned to the caller in plaintext this one time |
+| **Postconditions** | The previous ten recovery codes no longer validate; ten new ones exist, hashed, and were returned to the caller in plaintext this one time; every token the person held is revoked, the caller's own included (FR-AU-11) |
 
 **Main Flow:**
 
@@ -1847,8 +1884,8 @@ sequenceDiagram
 1. Caller sends a valid second factor — an app/email code, or one of their remaining recovery codes.
 2. The system verifies it, exactly as UC-38 does.
 3. The system deletes every existing recovery code row for the person, including any still unused.
-4. The system generates ten new codes, hashes each, and stores them.
-5. The system returns the ten new codes in plaintext — the only response that will ever contain them.
+4. The system generates ten new codes, hashes each, and stores them, then replaces the person's security stamp, revoking every token issued before (FR-AU-11): the codes are usually replaced because the old set may be known to somebody else, and so may a session opened with one.
+5. The system returns the ten new codes in plaintext — the only response that will ever contain them. The client keeps them, then signs in again.
 
 **Alternative Flows:**
 
@@ -1903,7 +1940,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10) | Return `200 OK`, identical to the main flow. Nothing is sent |
+| AF-46a | Challenge token missing, malformed, unsigned by this API, expired, or not carrying the MFA-pending claim — or no longer the person's outstanding challenge, because it was redeemed or a newer login replaced it (FR-2F-10), or issued before the person's last credential change (FR-AU-11) | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46b | The challenge names a person who no longer exists, is anonymised, or is logically deleted and not under a restriction on processing (NFR-24) | Return `200 OK`, identical to the main flow. Nothing is sent. A restricted person's code is sent: they asked for it to finish signing in for their own rights (UC-11 AF-11i), which is the consent Art. 18(2) asks for |
 | AF-46c | The person has no active two-factor configuration, or has one without the email method — an authenticator-app holder has no code to resend | Return `200 OK`, identical to the main flow. Nothing is sent |
 | AF-46d | The challenge has already authorized its maximum reissues (FR-2F-13) | Return `200 OK`, identical to the main flow. Nothing is sent |
@@ -2656,12 +2693,12 @@ sequenceDiagram
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
 | UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
-| UC-08: Update Person | FR-PE-05, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
-| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-2F-07, NFR-27 |
+| UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
-| UC-13: Reset Password | FR-PR-03, FR-PR-04, NFR-27 |
+| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-AU-11, NFR-27 |
 | UC-14: Email Verification | FR-EV-03, NFR-27 |
 | UC-15: Resend Verification Email | FR-EV-04 |
 | UC-16: Create Application | FR-AP-01, FR-AP-02, FR-AP-03 |
@@ -2683,11 +2720,11 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
-| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15 |
-| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, NFR-27 |
-| UC-39: Disable Two-Factor Authentication | FR-2F-11 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12, NFR-27 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, NFR-27 |
+| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |

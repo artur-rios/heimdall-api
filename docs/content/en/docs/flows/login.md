@@ -128,9 +128,34 @@ Claims are written by `IdentityUserMapper`, the same class that reads them back 
 | `scopePermissions` | Anyone acting within a scope that has flagged permissions ([details](../scope-permission-claims/)) |
 | `mfaPending` | **Challenge tokens only** |
 | `subjectRightsOnly` | **Subject-rights-only tokens only** — a restricted identity's (**NFR-24**) |
+| `sst` | Every **person** token — full, challenge and subject-rights-only — the person's security stamp (**FR-AU-11**). Not on a Google User's token |
 
 The claims are omitted rather than emitted empty, so a token never suggests a scope association the
-person does not have. Every value is a `PublicId` — an internal id never reaches a token (**NFR-15**).
+person does not have. Every value is a `PublicId` — an internal id never reaches a token (**NFR-15**),
+except `sst`, a random value that means nothing outside Heimdall.
+
+### Revocation: when a token stops working
+
+A person token is refused, with `401` and "This token has been revoked. Sign in again.", from the
+first request after any of these, whoever made the change and whichever token made it:
+
+| Event | Use case |
+| --- | --- |
+| Password reset | UC-13 |
+| Email change, by the person or an administrator | UC-08 |
+| Two-factor authentication confirmed | UC-37 |
+| Two-factor authentication disabled | UC-39 |
+| Recovery codes regenerated | UC-40 |
+
+Each replaces the person's security stamp, and `ActorLivenessFilter`, which already reads the
+person's row on every request, refuses a token whose `sst` is missing or no longer matches. The
+request that made the change still succeeds, but its token is revoked with the rest, so a client
+signs in again after it. A token issued before this mechanism existed carries no `sst` and is refused
+the same way. A 2FA challenge token outdated by such a change is refused at
+`POST /api/auth/2fa/verify` as an invalid challenge.
+
+Consumers validating person tokens offline do not see a revocation: they still accept the token
+until it expires. Heimdall itself refuses it.
 
 ### Audiences: what a consumer must pin
 
