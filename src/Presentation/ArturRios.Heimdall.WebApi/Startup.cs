@@ -227,6 +227,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IAtomicWrites, AtomicWrites>();
         // UC-53's two-live-credentials limit, held under a row lock so concurrent issues cannot pass it.
         Builder.Services.AddScoped<IApplicationCredentialSlots, ApplicationCredentialSlots>();
+        // NFR-21 (#195): the tombstones a hard delete writes first, idempotently, as one upsert.
+        Builder.Services.AddScoped<IErasedSubjects, ErasedSubjects>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();

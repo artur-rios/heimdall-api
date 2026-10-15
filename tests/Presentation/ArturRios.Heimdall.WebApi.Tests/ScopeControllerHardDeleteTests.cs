@@ -127,6 +127,16 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
         Assert.False(await context.ScopeUsers.AsNoTracking().AnyAsync(x => x.ScopeId == scope.Id));
         // The owner (ScopeAdmin) person record itself is NOT removed.
         Assert.True(await context.Persons.AsNoTracking().AnyAsync(x => x.Id == owner.Id));
+
+        // Then — each removed member was tombstoned (NFR-21, #195); the owner and the scope were not
+        var tombstones = await context.ErasedSubjects.AsNoTracking()
+            .Where(x => x.Id == user1.PublicId || x.Id == user2.PublicId || x.Id == googleUser.PublicId
+                        || x.Id == owner.PublicId || x.Id == scope.PublicId)
+            .ToDictionaryAsync(x => x.Id);
+        Assert.Equal(3, tombstones.Count);
+        Assert.Equal((int)ErasedSubjectKinds.Person, tombstones[user1.PublicId].Kind);
+        Assert.Equal((int)ErasedSubjectKinds.Person, tombstones[user2.PublicId].Kind);
+        Assert.Equal((int)ErasedSubjectKinds.GoogleUser, tombstones[googleUser.PublicId].Kind);
     }
 
     [FunctionalFact]

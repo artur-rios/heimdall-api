@@ -153,7 +153,7 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | Column | Purpose |
 | --- | --- |
 | `ActorPersonId`, `ActorRole` | Attributing an action, for as long as NFR-21 permits and no longer |
-| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept. A person target whose row was hard-deleted (UC-10) no longer resolves to anyone, so it is not personal data; the trail keeps it and the trigger will not clear it |
+| `TargetId` | What the action was taken on. When that is a person or Google User — their own account for a self-service command, or the person an administrator acted on — the entry is personal data about them whoever acted, so NFR-21 clears it on the same schedule as the actor: past the attribution period, or as soon as that identity is anonymised (#184). Any other target (a scope, an application, a credential, a permission) names no person and is kept. A person target whose row was hard-deleted (UC-05, UC-10, UC-29) is cleared too, on the next pass and at any age: the id still names the person to anything holding a copy of the old row, so it stays personal data, and the hard delete tombstones it in `ERASED_SUBJECT` before the row goes so the pass and the trigger can tell it was a person's (#195). An id that resolves to nobody and was never tombstoned — a hard-deleted scope's, or a person's removed before tombstones existed — is kept |
 | `Action`, `Succeeded`, `FailureReason`, `CreatedAt`, `PublicId` | What happened. Not personal data once the attribution and any person target are cleared |
 
 **Readable through the API by System Admins (UC-48).** `GET /api/audit-log` shows each entry as
@@ -166,6 +166,12 @@ added, so this table is unchanged.
 > `PersonalDataPurposeTests` failed the build until each was given a purpose — which is the control
 > working rather than a formality. `SCOPE.DefaultLegalBasis` and `SCOPE.PrivacyNoticeUri` are absent
 > deliberately: a scope is an organisation, not a person, so neither is personal data.
+
+### `ERASED_SUBJECT`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId`, `Kind`, `CreatedAt` | A short-lived processing record of a hard delete (#195): the removed person's or Google User's id, which of the two it was, and when. Held only so NFR-21 can clear the audit targets that still name the id — the hard delete's own entry among them — once no row is left to say the id was a person's. Removed by the first run of the same pass after its day of grace, once no entry names it. Nothing else about the person is kept, it is never read through the API, and the database accepts a row only for a person or Google User that exists when it is written (#195, R1) |
 
 ### `PENDING_REGISTRATION`
 

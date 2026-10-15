@@ -182,7 +182,7 @@ one asks is what that reader can do with what they find.
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code | Stored as a SHA-256 hash, single-use (NFR-16) — spent by a conditional write, so two simultaneous requests cannot both redeem it (NFR-27) | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
-| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User once due (NFR-21) | Test | Low — but see below on DDL and §6.1 |
+| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User — on record, or tombstoned by a hard delete and gone — once due (NFR-21); a trigger on `ERASED_SUBJECT` accepts a tombstone only for a person or Google User that exists, so no target that is not a person's can be made clearable | Test | Low — but see below on DDL and §6.1 |
 
 **TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
 `EmailVerificationService` both used to write the token they had just generated straight into the
@@ -235,9 +235,10 @@ simply Low.
 ### 6.1 The writes the trail now permits, and why it is still Low
 
 NFR-21 narrowed the rule. `AUDIT_LOG` no longer refuses every `UPDATE`: it permits the actor
-attribution to be cleared and, since #184, a target that names a person or Google User, and nothing
-else. That is a real reduction in what the triggers guarantee, and it is recorded here rather than
-left for a reader to discover in a migration.
+attribution to be cleared and, since #184, a target that names a person or Google User — since #195
+also one whose row was hard-deleted, recognised by its tombstone — and nothing else. That is a real
+reduction in what the triggers guarantee, and it is recorded here rather than left for a reader to
+discover in a migration.
 
 **Why it was necessary.** `actor_person_id` holds a person's `PublicId`. An indefinitely retained,
 unalterable row naming somebody who has exercised their right to erasure is personal data processed
@@ -252,21 +253,48 @@ entry with its actor cleared could still name the person it was about.
 being set to `NULL` rather than to another value, and each clearing is due — the entry is older than
 thirty days, or the identity it names has been anonymised. A target may be cleared only when it is
 the `PublicId` of a `PERSON` or `GOOGLE_USER` row; one naming a scope, an application, a credential
-or a permission, or nobody at all, stays immutable. `DELETE` and `TRUNCATE` remain refused outright,
-per statement.
+or a permission, or nobody at all, stays immutable. The one exception (#195) is an id that no row
+has any more but that `ERASED_SUBJECT` records as a hard-deleted person's or Google User's: that
+target may be cleared at any age, as an anonymised person's may. `DELETE` and `TRUNCATE` remain
+refused outright, per statement.
+
+**The tombstone table is guarded too (#195, R1).** A row in `ERASED_SUBJECT` is what makes a target
+with no row clearable, so a table anyone could write to would have reopened what the triggers close:
+insert a live scope's id, then clear every target naming it, with the planted row removed by the
+retention pass a day later. A `BEFORE INSERT OR UPDATE` trigger on the table therefore refuses any
+row whose `public_id` is not, at that moment, a `PERSON` or `GOOGLE_USER` row's. Every legitimate
+write passes, because a hard delete writes its tombstones before deleting, and so does the retry's
+upsert, which only happens while the row survives. Checking `UPDATE` as well stops a legitimate
+tombstone being rewritten to another id afterwards.
 
 **What an attacker gains.** Somebody holding the application's database credentials can clear an
 attribution or a person target older than thirty days, or one of any age naming an identity they
 have first managed to anonymise. They cannot remove an entry, alter what it says, reassign its actor
-or its target to somebody else, clear a target that is not a person, or clear their own attribution,
-or the person they acted on, for something they did this week. Anonymising an identity is itself
-an audited write, and doing it to their own account destroys their access.
+or its target to somebody else, clear a target that is not a person's, or clear their own
+attribution, or the person they acted on, for something they did this week. Anonymising an identity
+through the API is itself an audited write, and doing it to their own account destroys their access.
+
+The tombstone ground adds one path, and the guard bounds it, stated plainly. The same credentials
+can tombstone a person or Google User that exists and then delete their row with plain SQL, which
+the API would have audited and SQL does not; after that, the targets naming them clear at any age.
+That is the power they already had — delete a person outright, or anonymise them first and clear the
+same targets — exercised on the same people, and it is destructive and visible, since the person is
+gone. What the guard stops is tombstoning an id that is not a person's, so two statements no longer
+make a target naming a scope, an application or a credential clearable, as they would have without
+it. It is not airtight, and the limit is stated plainly. `public_id` on the identity tables is not
+immutable, so an actor willing to give a person or Google User row another entity's `public_id` — by
+rewriting an existing row, or just as well by inserting a new one — passes the check with it. That
+is not new with #195: the same row, with `anonymised_at` set, already made the target clearable
+under #184's rule. The guard therefore restores the protection to its level before #195, no further.
+The remaining gap is that `public_id` on `PERSON` and `GOOGLE_USER` can be set to any value, which
+no trigger yet prevents; closing it is a follow-up for the owner, not part of this change.
 
 **Residual risk: Low, unchanged.** The property this threat is about — that an action cannot be
 denied — is intact. What became time-limited is attribution, which is what storage limitation
 requires of it, and the person an action was taken on is forgotten on the same terms.
 `AuditActorClearingTests` and `AuditTargetClearingTests` pin every case against real PostgreSQL,
-each refusal by its own reason.
+each refusal by its own reason, the tombstone cases included; `ErasedSubjectsTests` pins the
+tombstone table's guard.
 
 ## 7. TB-4 — The API to Google
 
@@ -421,7 +449,7 @@ this document has been worth.
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
-| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target — see §6.1 |
+| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists — see §6.1 |
 | TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 |
 | TH-35 | Finding: Heimdall's middleware validates signature and lifetime only, not the audience (`ArturRios.Jwt` `IsTokenValidAsync`), so an application token, signed with the person tokens' keys, would pass it | Response: `IdentityUserMapper` refuses any token carrying `tokenKind`; a functional test pins an application token's `401` on a person endpoint |
 

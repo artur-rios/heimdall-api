@@ -30,6 +30,7 @@ public class AppDbContext(
     public DbSet<TwoFactorEmailCode> TwoFactorEmailCodes { get; init; }
     public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes { get; init; }
     public DbSet<AuditLog> AuditLogs { get; init; }
+    public DbSet<ErasedSubject> ErasedSubjects { get; init; }
 
     /// <summary>
     ///     ASP.NET Core's Data Protection key ring, kept in the database rather than on a local
@@ -75,5 +76,6 @@ public class AppDbContext(
         modelBuilder.Entity<TwoFactorEmailCode>().Configure();
         modelBuilder.Entity<TwoFactorRecoveryCode>().Configure();
         modelBuilder.Entity<AuditLog>().Configure();
+        modelBuilder.Entity<ErasedSubject>().Configure();
     }
 }
