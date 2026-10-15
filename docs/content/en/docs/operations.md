@@ -29,6 +29,56 @@ Automatic migration on startup is convenient exactly until two instances start a
 deployment silently applies a migration nobody reviewed. An explicit step makes schema change a
 decision rather than a side effect.
 
+### Shared public ids — before `ProtectIdentityPublicIds` (#199)
+
+`ProtectIdentityPublicIds` and `ProtectEntityPublicIds` make `public_id` immutable on `person`,
+`google_user`, `scope`, `application`, `application_credential`, `scope_permission`, `role` and
+`pending_registration`, refuse a new row whose `public_id` another of those tables holds or a hard
+delete tombstoned, and refuse a new person or Google User whose id an audit entry names. They guard
+future writes only and do not look at what is already stored. The API only ever issues fresh random
+ids, so a duplicate can exist only if somebody wrote one by hand in SQL. To check for a hand-made
+duplicate, run both queries before migrating; each should return no rows.
+
+```sql
+-- 1. Any public_id that rows of two or more guarded tables hold.
+WITH ids (tbl, public_id) AS (
+    SELECT 'person', public_id FROM heimdall.person
+    UNION ALL SELECT 'google_user', public_id FROM heimdall.google_user
+    UNION ALL SELECT 'scope', public_id FROM heimdall.scope
+    UNION ALL SELECT 'application', public_id FROM heimdall.application
+    UNION ALL SELECT 'application_credential', public_id FROM heimdall.application_credential
+    UNION ALL SELECT 'scope_permission', public_id FROM heimdall.scope_permission
+    UNION ALL SELECT 'role', public_id FROM heimdall.role
+    UNION ALL SELECT 'pending_registration', public_id FROM heimdall.pending_registration
+)
+SELECT public_id, string_agg(tbl, ', ' ORDER BY tbl) AS held_by
+FROM ids
+GROUP BY public_id
+HAVING count(*) > 1;
+
+-- 2. Any person or Google User whose id audit entries named before the identity existed, so those
+--    entries were about something else. The minute absorbs clock skew between the API and the database.
+SELECT 'person' AS tbl, p.public_id, count(*) AS earlier_entries
+FROM heimdall.person p
+JOIN heimdall.audit_log a ON a.target_id = p.public_id
+WHERE a.created_at < p.created_at - interval '1 minute'
+GROUP BY p.public_id
+UNION ALL
+SELECT 'google_user', g.public_id, count(*)
+FROM heimdall.google_user g
+JOIN heimdall.audit_log a ON a.target_id = g.public_id
+WHERE a.created_at < g.created_at - interval '1 minute'
+GROUP BY g.public_id;
+```
+
+A row from either query is worth investigating before anything else: it is either a hand-made fix-up
+or somebody preparing to make audit entries clearable. No rows proves less than it seems. Query 1
+sees only rows that are there now. Query 2 trusts `created_at`, which an insert can set, so a
+backdated plant passes it. Neither sees a plant that has already run its course — target cleared,
+identity tombstoned and deleted — or a scope or other entity sitting on an id that `erased_subject`
+records. Once migrated, hand-written SQL that rewrites a `public_id` — a support fix-up, or a
+restore that remaps ids — fails with `restrict_violation`.
+
 ## Start-up sequence
 
 ```mermaid
