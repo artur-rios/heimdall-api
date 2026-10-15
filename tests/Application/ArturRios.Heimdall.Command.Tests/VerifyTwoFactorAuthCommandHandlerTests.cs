@@ -25,10 +25,13 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     private const string EmailCode = "123456";
 
     /// <summary>A validator that resolves a fixed principal, or none at all (AF-38a).</summary>
-    private sealed class StubChallengeTokenValidator(Guid? personId, Guid challengeId) : ITwoFactorChallengeTokenValidator
+    private sealed class StubChallengeTokenValidator(Guid? personId, Guid challengeId, Guid? securityStamp)
+        : ITwoFactorChallengeTokenValidator
     {
         public Task<TwoFactorChallengePrincipal?> ValidateAsync(string? token) =>
-            Task.FromResult(personId is null ? null : new TwoFactorChallengePrincipal(personId.Value, challengeId));
+            Task.FromResult(personId is null
+                ? null
+                : new TwoFactorChallengePrincipal(personId.Value, challengeId, securityStamp));
     }
 
     /// <summary>The challenge every seeded configuration has outstanding, and every stub token names.</summary>
@@ -40,6 +43,8 @@ public class VerifyTwoFactorAuthCommandHandlerTests
 
         public (Guid SubjectId, int RoleId)? RightsOnlySubject { get; private set; }
 
+        public Guid? RightsOnlyStamp { get; private set; }
+
         public Task<AuthToken> IssueAsync(AuthTokenSubject subject)
         {
             Subject = subject;
@@ -47,9 +52,10 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 new AuthToken("full-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
 
-        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId, Guid? securityStamp)
         {
             RightsOnlySubject = (subjectId, roleId);
+            RightsOnlyStamp = securityStamp;
             return Task.FromResult(
                 new AuthToken("rights-only-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
@@ -64,13 +70,23 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         RecordingIssuer TokenIssuer,
         Person Person)
     {
-        public VerifyTwoFactorAuthCommandHandler Handler(Guid? challengePersonId, Guid? challengeId = null) =>
+        /// <param name="challengePersonId">The person the challenge names; the fixture's own when <c>null</c>.</param>
+        /// <param name="challengeId">The challenge it names; the outstanding one when <c>null</c>.</param>
+        /// <param name="securityStamp">
+        ///     The stamp it carries (FR-AU-11); the person's current one when omitted, as a challenge
+        ///     issued since their last credential change carries.
+        /// </param>
+        public VerifyTwoFactorAuthCommandHandler Handler(
+            Guid? challengePersonId, Guid? challengeId = null, Guid? securityStamp = null) =>
             new(
                 Persons,
                 TwoFactorAuths,
                 InMemoryAtomicWrites.Instance,
                 new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()),
-                new StubChallengeTokenValidator(challengePersonId ?? Person.PublicId, challengeId ?? OutstandingChallenge),
+                new StubChallengeTokenValidator(
+                    challengePersonId ?? Person.PublicId,
+                    challengeId ?? OutstandingChallenge,
+                    securityStamp ?? Person.SecurityStamp),
                 new PersonAuthTokenService(TokenIssuer));
 
         public VerifyTwoFactorAuthCommandHandler HandlerForInvalidToken() =>
@@ -79,7 +95,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 TwoFactorAuths,
                 InMemoryAtomicWrites.Instance,
                 new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()),
-                new StubChallengeTokenValidator(null, OutstandingChallenge),
+                new StubChallengeTokenValidator(null, OutstandingChallenge, null),
                 new PersonAuthTokenService(TokenIssuer));
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
@@ -330,7 +346,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
             });
         var handler = new VerifyTwoFactorAuthCommandHandler(
             fixture.Persons, fixture.TwoFactorAuths, InMemoryAtomicWrites.Instance, verifier.Object,
-            new StubChallengeTokenValidator(fixture.Person.PublicId, OutstandingChallenge),
+            new StubChallengeTokenValidator(fixture.Person.PublicId, OutstandingChallenge, fixture.Person.SecurityStamp),
             new PersonAuthTokenService(fixture.TokenIssuer));
 
         // When
@@ -621,5 +637,81 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+    }
+
+    // FR-AU-11: the challenge carries the stamp it was issued under, and is honoured only while that
+    // is still the person's; the token it is redeemed for carries the person's stamp too.
+
+    [UnitFact]
+    public async Task GivenAChallengeIssuedBeforeACredentialChange_WhenHandlingVerify_ThenReturnsChallengeTokenInvalidError()
+    {
+        // Given a challenge whose stamp the person no longer holds
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        var output = await fixture.Handler(null, securityStamp: Guid.NewGuid())
+            .HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+    }
+
+    [UnitFact]
+    public async Task GivenAChallengeWithNoStamp_WhenHandlingVerify_ThenReturnsChallengeTokenInvalidError()
+    {
+        // Given a challenge issued before the stamp existed
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        var handler = new VerifyTwoFactorAuthCommandHandler(
+            fixture.Persons,
+            fixture.TwoFactorAuths,
+            InMemoryAtomicWrites.Instance,
+            new TwoFactorFactorVerifier(
+                fixture.EmailCodes, InMemoryAtomicWrites.Instance, fixture.RecoveryCodes, fixture.TotpVerifier()),
+            new StubChallengeTokenValidator(fixture.Person.PublicId, OutstandingChallenge, null),
+            new PersonAuthTokenService(fixture.TokenIssuer));
+
+        // When
+        var output = await handler.HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.ChallengeTokenInvalid, output.Errors);
+        Assert.Null(fixture.TokenIssuer.Subject);
+    }
+
+    [UnitFact]
+    public async Task GivenValidAppCode_WhenHandlingVerify_ThenTheFullTokenCarriesThePersonsStamp()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(fixture.Person.SecurityStamp, fixture.TokenIssuer.Subject!.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedPerson_WhenHandlingVerify_ThenTheSubjectRightsTokenCarriesThePersonsStamp()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.ProcessingRestrictedAt = DateTime.UtcNow;
+
+        // When
+        var output = await fixture.Handler(null).HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(fixture.Person.SecurityStamp, fixture.TokenIssuer.RightsOnlyStamp);
     }
 }

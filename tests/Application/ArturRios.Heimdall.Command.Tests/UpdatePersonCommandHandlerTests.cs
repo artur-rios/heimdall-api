@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -88,7 +89,8 @@ public class UpdatePersonCommandHandlerTests
             googleUsers ?? new AsyncFakeRepository<GoogleUser, long>(),
             persons,
             Ownership(ownershipAllowed),
-            verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>());
+            verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
+            InMemoryAtomicWrites.Instance);
 
     private static UpdatePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -574,5 +576,61 @@ public class UpdatePersonCommandHandlerTests
         Assert.True(output.Success);
         Assert.Equal((int)Roles.User, output.Data!.Role);
         Assert.NotNull(target.ScopeMembership);
+    }
+
+    // FR-AU-11: a new address is a credential change, wherever it comes from; a new name is not.
+
+    [UnitFact]
+    public async Task GivenSystemAdminChangingAnotherPersonsEmail_WhenHandlingUpdate_ThenTheirSecurityStampIsReplaced()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var stamp = target.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotEqual(stamp, target.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenANameOnlyUpdate_WhenHandlingUpdate_ThenTheSecurityStampIsKept()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var stamp = target.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(stamp, target.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenTheSecurityStampIsKept()
+    {
+        // Given — the handler treats the address case-insensitively, so this is no change of address
+        var target = User(10, Scope(1), email: "user@test.local");
+        var stamp = target.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "USER@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(stamp, target.SecurityStamp);
     }
 }

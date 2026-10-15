@@ -58,9 +58,12 @@ public class JwtTwoFactorChallengeTokenIssuer(
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
 {
-    public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId)
+    public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId, Guid securityStamp)
     {
-        var identity = new IdentityUser(personId, roleId) { MfaPending = true, ChallengeId = challengeId };
+        var identity = new IdentityUser(personId, roleId)
+        {
+            MfaPending = true, ChallengeId = challengeId, SecurityStamp = securityStamp
+        };
 
         // TH-06: under its own audience, so a consumer pinning the person audience refuses it.
         var challengeConfiguration = configuration with
@@ -109,7 +112,7 @@ public class JwtTwoFactorChallengeTokenIssuer(
         // was already redeemed or has been superseded by a newer login. One without that claim
         // cannot be checked, and so is not accepted either.
         return mapper.FromClaims(claims) is IdentityUser { MfaPending: true, ChallengeId: { } challengeId } identity
-            ? new TwoFactorChallengePrincipal(identity.Id, challengeId)
+            ? new TwoFactorChallengePrincipal(identity.Id, challengeId, identity.SecurityStamp)
             : null;
     }
 }

@@ -332,4 +332,38 @@ public class ResetPasswordCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
     }
+
+    // FR-AU-11: the reset revokes every token issued before it.
+
+    [UnitFact]
+    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheSecurityStampIsReplaced()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "stamp-token");
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("stamp-token"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotEqual(stamp, fixture.Person.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenExpiredToken_WhenHandlingResetPassword_ThenTheSecurityStampIsKept()
+    {
+        // Given — a refused reset changes no credential, so it revokes nothing
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", expiresAt: Now.AddMinutes(-1));
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("stale-token"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
 }

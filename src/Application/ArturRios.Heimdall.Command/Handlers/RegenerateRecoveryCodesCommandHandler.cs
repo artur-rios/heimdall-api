@@ -133,6 +133,11 @@ public class RegenerateRecoveryCodesCommandHandler(
             }
         }
 
+        // FR-AU-11: a new set of recovery codes is a new second factor, and revokes every token issued
+        // before it, the caller's own included — the codes are usually regenerated because the old
+        // set may be known to someone else.
+        await atomicWrites.RotateSecurityStampAsync(person);
+
         return output
             .WithData(new RegenerateRecoveryCodesCommandOutput { RecoveryCodes = recoveryCodes })
             .WithMessage(TwoFactorMessages.RecoveryCodesRegenerated);

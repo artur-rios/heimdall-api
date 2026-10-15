@@ -136,7 +136,10 @@ public class ResendTwoFactorChallengeCodeCommandHandler(
                                            person.AnonymisedAt == null &&
                                            (!person.IsDeleted || person.ProcessingRestrictedAt != null));
 
-        if (person is null)
+        // FR-AU-11: a challenge issued before the person's last credential change is as dead here as
+        // at UC-38, which would refuse it — so a code sent for it could never be used. It is AF-46a's
+        // absence of work, like any other challenge that does not validate.
+        if (person is null || principal.SecurityStamp != person.SecurityStamp)
         {
             return null;
         }

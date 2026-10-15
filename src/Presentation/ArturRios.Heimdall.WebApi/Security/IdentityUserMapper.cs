@@ -56,6 +56,12 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
     /// </summary>
     public const string SubjectRightsOnlyClaim = "subjectRightsOnly";
 
+    /// <summary>
+    ///     The claim carrying the person's security stamp at issuance (FR-AU-11). Present on every
+    ///     person token; omitted on a Google User's, which has no stamp.
+    /// </summary>
+    public const string SecurityStampClaim = "sst";
+
     private const char OwnedScopeIdsSeparator = ',';
 
     public Dictionary<string, string> ToClaims(IAuthenticatedUser user)
@@ -117,6 +123,12 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
             claims[SubjectRightsOnlyClaim] = "true";
         }
 
+        // FR-AU-11: omitted rather than emitted empty when there is no stamp, like the scope claims.
+        if (identityUser.SecurityStamp is not null)
+        {
+            claims[SecurityStampClaim] = identityUser.SecurityStamp.Value.ToString();
+        }
+
         return claims;
     }
 
@@ -158,7 +170,12 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
                 : null,
             SubjectRightsOnly = claims.TryGetValue(SubjectRightsOnlyClaim, out var rawSubjectRightsOnly) &&
                                 bool.TryParse(rawSubjectRightsOnly, out var parsedSubjectRightsOnly) &&
-                                parsedSubjectRightsOnly
+                                parsedSubjectRightsOnly,
+            // An unreadable stamp is read as none. That is not a softer outcome: ActorLivenessFilter
+            // refuses a person token without one.
+            SecurityStamp = TryReadGuid(claims, SecurityStampClaim, out var securityStamp)
+                ? securityStamp
+                : null
         };
 
         return AudienceAgrees(claims, identity) ? identity : null;

@@ -110,6 +110,19 @@ public class Person : Entity<long>
     /// </summary>
     public DateTime? LockedOutUntil { get; set; }
 
+    /// <summary>
+    ///     A random value every token issued to this person carries, and must still carry when it is
+    ///     presented (FR-AU-11). Replaced whenever a credential changes — the password, the email, or
+    ///     the second factor — which revokes every token issued before the change.
+    /// </summary>
+    /// <remarks>
+    ///     Replaced only through <c>IAtomicWrites.RotateSecurityStampAsync</c>, and never written by a
+    ///     whole-row save: the mapping ignores it after insert. A save of a copy read before a
+    ///     rotation would otherwise write the old stamp back, and with it every token the rotation
+    ///     revoked.
+    /// </remarks>
+    public Guid SecurityStamp { get; set; } = Guid.NewGuid();
+
     /// <summary>Foreign key to the associated <c>Role</c> (internal Id). Required.</summary>
     public long RoleId { get; set; }
 

@@ -38,7 +38,8 @@ public class DisableTwoFactorAuthCommandHandlerTests
                 Persons,
                 TwoFactorAuths,
                 TwoFactorAuths,
-                new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()));
+                new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()),
+                InMemoryAtomicWrites.Instance);
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
         // it enforces (a code cannot be presented twice) is part of what these tests exercise.
@@ -301,5 +302,39 @@ public class DisableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+    }
+
+    // FR-AU-11: disabling the second factor revokes every token issued before it.
+
+    [UnitFact]
+    public async Task GivenValidPasswordAndCode_WhenHandlingDisable_ThenTheSecurityStampIsReplaced()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotEqual(stamp, fixture.Person.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenWrongPassword_WhenHandlingDisable_ThenTheSecurityStampIsKept()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(password: "wrong-password", code: CurrentTotpCode()));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
     }
 }

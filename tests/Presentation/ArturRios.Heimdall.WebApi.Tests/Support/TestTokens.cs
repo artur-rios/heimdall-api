@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
+using Npgsql;
 
 namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
@@ -19,12 +20,20 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 ///     tests that only exercise a role gate from having to seed anyone themselves. Tests whose
 ///     behaviour depends on <em>who</em> the caller is must seed that person and pass their
 ///     <c>PublicId</c> to <see cref="For" />.
+///     <para>
+///         The filter also refuses a person token whose security stamp is not the person's current
+///         one (FR-AU-11), so <see cref="For" /> and <see cref="ForMfaPending" /> read the stamp from
+///         the database as the issuers would: a token minted before a credential change carries the
+///         stamp it was minted with, and is refused after the change, exactly like a real one. A
+///         subject that is not a person — a Google User, or nobody — gets no stamp.
+///     </para>
 /// </remarks>
 public static class TestTokens
 {
     private const string SecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const string IssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string AudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
+    private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
 
     /// <summary>
     ///     Builds a bearer token for the stand-in person of the given role value (see <c>Roles</c>),
@@ -36,7 +45,7 @@ public static class TestTokens
     /// <summary>Builds a bearer token for a specific person's <c>PublicId</c> and role value.</summary>
     public static string For(
         Guid personId, int role, Guid? scopeId = null, params Guid[] ownedScopeIds) =>
-        Create(new IdentityUser(personId, role, scopeId, ownedScopeIds));
+        Create(new IdentityUser(personId, role, scopeId, ownedScopeIds) { SecurityStamp = StampOf(personId) });
 
     /// <summary>
     ///     Builds a UC-38 challenge-shaped bearer token — <c>MfaPending</c> set, no scope claims, the
@@ -60,7 +69,12 @@ public static class TestTokens
     public static string ForMfaPending(
         Guid personId, int role, TimeSpan? lifetime = null, Guid? challengeId = null) =>
         Create(
-            new IdentityUser(personId, role) { MfaPending = true, ChallengeId = challengeId ?? SeededChallengeId },
+            new IdentityUser(personId, role)
+            {
+                MfaPending = true,
+                ChallengeId = challengeId ?? SeededChallengeId,
+                SecurityStamp = StampOf(personId)
+            },
             lifetime,
             Audiences.TwoFactorChallenge);
 
@@ -84,6 +98,30 @@ public static class TestTokens
     ///     own configuration, so sharing it lets no test redeem another's challenge.
     /// </summary>
     public static readonly Guid SeededChallengeId = Guid.Parse("6f1c2a52-0d4e-4c1b-9a51-2f5e8b3c7d10");
+
+    /// <summary>
+    ///     The person's current security stamp (FR-AU-11), or <c>null</c> when no person has this
+    ///     <c>PublicId</c> or no database has been published yet — the stamp a token issued now would
+    ///     carry.
+    /// </summary>
+    public static Guid? StampOf(Guid personId)
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return null;
+        }
+
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+
+        using var command = new NpgsqlCommand(
+            "SELECT security_stamp FROM heimdall.person WHERE public_id = @id", connection);
+        command.Parameters.AddWithValue("id", personId);
+
+        return command.ExecuteScalar() as Guid?;
+    }
 
     private static string Create(IdentityUser user, TimeSpan? lifetime = null, string? audience = null)
     {

@@ -253,7 +253,8 @@ public class LoginCommandHandler(
             }
         }
 
-        var challenge = await challengeTokenIssuer.IssueAsync(person.PublicId, (int)person.RoleId, challengeId);
+        var challenge = await challengeTokenIssuer.IssueAsync(
+            person.PublicId, (int)person.RoleId, challengeId, person.SecurityStamp);
 
         var methods = new List<string>();
 

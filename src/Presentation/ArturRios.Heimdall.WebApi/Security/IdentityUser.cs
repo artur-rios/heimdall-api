@@ -65,4 +65,12 @@ public sealed record IdentityUser(
     ///     <see cref="DataSubjectRightAttribute" />.
     /// </summary>
     public bool SubjectRightsOnly { get; init; }
+
+    /// <summary>
+    ///     The person's <c>SecurityStamp</c> when the token was issued (FR-AU-11), carried by every
+    ///     person token — full, challenge and subject-rights-only — and <c>null</c> on a Google User's,
+    ///     which has no credential of its own here to rotate. <see cref="ActorLivenessFilter" />
+    ///     refuses a person token whose stamp is missing or no longer the person's.
+    /// </summary>
+    public Guid? SecurityStamp { get; init; }
 }

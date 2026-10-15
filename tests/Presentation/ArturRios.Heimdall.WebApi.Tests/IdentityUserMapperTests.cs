@@ -358,4 +358,55 @@ public class IdentityUserMapperTests
         // Then
         Assert.Null(restored);
     }
+
+    // FR-AU-11: the security stamp travels on every person token kind, and is absent when there is none.
+
+    [UnitFact]
+    public void GivenAPersonWithAStamp_WhenRoundTrippingEachTokenKind_ThenTheStampIsPreserved()
+    {
+        // Given the three person token kinds, each under its own audience
+        var stamp = Guid.NewGuid();
+        var full = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin) { SecurityStamp = stamp };
+        var challenge = full with { MfaPending = true, ChallengeId = Guid.NewGuid() };
+        var rightsOnly = full with { SubjectRightsOnly = true };
+
+        // When
+        var restoredFull = (IdentityUser)Mapper.FromClaims(IssuedUnder(PersonAudience, full))!;
+        var restoredChallenge = (IdentityUser)Mapper.FromClaims(IssuedUnder(ChallengeAudience, challenge))!;
+        var restoredRightsOnly = (IdentityUser)Mapper.FromClaims(IssuedUnder(SubjectRightsAudience, rightsOnly))!;
+
+        // Then
+        Assert.Equal(stamp.ToString(), Mapper.ToClaims(full)[IdentityUserMapper.SecurityStampClaim]);
+        Assert.Equal(stamp, restoredFull.SecurityStamp);
+        Assert.Equal(stamp, restoredChallenge.SecurityStamp);
+        Assert.Equal(stamp, restoredRightsOnly.SecurityStamp);
+    }
+
+    [UnitFact]
+    public void GivenAnIdentityWithNoStamp_WhenWritingClaims_ThenNoStampClaimIsEmitted()
+    {
+        // Given a Google User's identity, which has no stamp
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), []);
+
+        // When
+        var claims = Mapper.ToClaims(user);
+
+        // Then
+        Assert.False(claims.ContainsKey(IdentityUserMapper.SecurityStampClaim));
+        Assert.Null(((IdentityUser)Mapper.FromClaims(claims)!).SecurityStamp);
+    }
+
+    [UnitFact]
+    public void GivenAnUnreadableStamp_WhenReadingClaims_ThenTheIdentityHasNoStamp()
+    {
+        // Given — read as none, which the liveness filter then refuses on a person token
+        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
+        claims[IdentityUserMapper.SecurityStampClaim] = "not-a-guid";
+
+        // When
+        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+
+        // Then
+        Assert.Null(restored.SecurityStamp);
+    }
 }

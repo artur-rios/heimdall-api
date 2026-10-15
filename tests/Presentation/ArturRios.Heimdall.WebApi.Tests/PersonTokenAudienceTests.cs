@@ -73,7 +73,7 @@ public class PersonTokenAudienceTests
     public async Task GivenAChallenge_WhenIssued_ThenItCarriesTheChallengeAudience()
     {
         // Given / When
-        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
+        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid(), Guid.NewGuid());
 
         // Then — the person audience with the fixed suffix a consumer can name
         Assert.Equal("heimdall-unit.2fa-challenge", AudienceOf(challenge.Token));
@@ -83,7 +83,7 @@ public class PersonTokenAudienceTests
     public async Task GivenARestrictedSubject_WhenIssuingItsToken_ThenItCarriesTheSubjectRightsAudience()
     {
         // Given / When
-        var token = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin);
+        var token = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
 
         // Then
         Assert.Equal("heimdall-unit.subject-rights", AudienceOf(token.Token));
@@ -103,7 +103,7 @@ public class PersonTokenAudienceTests
     public async Task GivenAConsumerPinningThePersonAudience_WhenValidatingAChallenge_ThenTheAudienceIsRefused()
     {
         // Given — what UC-11 hands anyone holding the password of a 2FA-gated account
-        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
+        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid(), Guid.NewGuid());
 
         // When / Then — refused for its audience alone, by a consumer that knows no mfaPending claim
         Assert.Throws<SecurityTokenInvalidAudienceException>(() => ValidateAsAConsumer(challenge.Token));
@@ -113,7 +113,7 @@ public class PersonTokenAudienceTests
     public async Task GivenAConsumerPinningThePersonAudience_WhenValidatingASubjectRightsToken_ThenTheAudienceIsRefused()
     {
         // Given — what UC-11 hands a restricted identity (NFR-24)
-        var token = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin);
+        var token = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
 
         // When / Then
         Assert.Throws<SecurityTokenInvalidAudienceException>(() => ValidateAsAConsumer(token.Token));
@@ -136,8 +136,8 @@ public class PersonTokenAudienceTests
     public async Task GivenAJwtBearerConsumerPinningThePersonAudience_WhenValidatingChallengeAndRightsTokens_ThenBothAudiencesAreRefused()
     {
         // Given — both tokens a password or a restricted identity obtains
-        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
-        var rightsOnly = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin);
+        var challenge = await ChallengeIssuer().IssueAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid(), Guid.NewGuid());
+        var rightsOnly = await AuthIssuer().IssueSubjectRightsOnlyAsync(Guid.NewGuid(), (int)Roles.SystemAdmin, Guid.NewGuid());
 
         // When
         var results = new[]
@@ -173,14 +173,15 @@ public class PersonTokenAudienceTests
         // Given
         var personId = Guid.NewGuid();
         var challengeId = Guid.NewGuid();
+        var securityStamp = Guid.NewGuid();
         var issuer = ChallengeIssuer();
-        var challenge = await issuer.IssueAsync(personId, (int)Roles.SystemAdmin, challengeId);
+        var challenge = await issuer.IssueAsync(personId, (int)Roles.SystemAdmin, challengeId, securityStamp);
 
         // When
         var principal = await issuer.ValidateAsync(challenge.Token);
 
-        // Then
-        Assert.Equal(new TwoFactorChallengePrincipal(personId, challengeId), principal);
+        // Then — the stamp comes back too, for UC-38 to hold against the person's (FR-AU-11)
+        Assert.Equal(new TwoFactorChallengePrincipal(personId, challengeId, securityStamp), principal);
     }
 
     [UnitFact]

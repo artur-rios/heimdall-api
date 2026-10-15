@@ -14,12 +14,17 @@ namespace ArturRios.Heimdall.Command.Services;
 /// <param name="OwnedScopeIds">
 ///     The <c>PublicId</c>s of the non-deleted scopes a <c>ScopeAdmin</c> owns; empty otherwise.
 /// </param>
+/// <param name="SecurityStamp">
+///     The person's current <c>SecurityStamp</c>, which the token carries so a later credential
+///     change revokes it (FR-AU-11); <c>null</c> for a Google User, who has none.
+/// </param>
 public record AuthTokenSubject(
     Guid PersonId,
     string DisplayName,
     int RoleId,
     Guid? ScopeId,
-    IReadOnlyCollection<Guid> OwnedScopeIds);
+    IReadOnlyCollection<Guid> OwnedScopeIds,
+    Guid? SecurityStamp = null);
 
 /// <summary>An issued authentication token and the moment it stops being valid.</summary>
 /// <param name="Token">The signed token.</param>
@@ -47,6 +52,9 @@ public interface IAuthTokenIssuer
     /// </summary>
     /// <param name="subjectId">The restricted identity's <c>PublicId</c>.</param>
     /// <param name="roleId">Its role value (see <c>Roles</c>); a Google User's is always <c>User</c>.</param>
+    /// <param name="securityStamp">
+    ///     A person's current <c>SecurityStamp</c> (FR-AU-11); <c>null</c> for a Google User.
+    /// </param>
     /// <returns>The signed token and its expiry.</returns>
-    Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId);
+    Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId, Guid? securityStamp);
 }

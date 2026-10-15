@@ -69,7 +69,7 @@ public class LoginLockoutAtTheLimitTests
         public Task<AuthToken> IssueAsync(AuthTokenSubject subject) =>
             Task.FromResult(new AuthToken("issued-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId) =>
+        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId, Guid? securityStamp) =>
             Task.FromResult(new AuthToken("rights-only-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
     }
 

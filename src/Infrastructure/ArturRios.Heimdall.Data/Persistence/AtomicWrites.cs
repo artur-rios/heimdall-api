@@ -289,6 +289,17 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return revoked;
     }
 
+    public async Task RotateSecurityStampAsync(Person person)
+    {
+        var stamp = Guid.NewGuid();
+
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.SecurityStamp, stamp));
+
+        Accept(person, x => x.SecurityStamp, stamp);
+    }
+
     /// <summary>
     ///     Brings the caller's instance in line with a write the change tracker did not see: the new
     ///     value becomes both current and original, so the property is not saved again later.

@@ -92,7 +92,8 @@ public class GoogleSignInCommandHandler(
         // Nothing is refreshed from the ID token first: that would be processing the record.
         else if (googleUser.ProcessingRestrictedAt is not null)
         {
-            var rightsOnly = await tokenIssuer.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User);
+            var rightsOnly = await tokenIssuer.IssueSubjectRightsOnlyAsync(
+                googleUser.PublicId, (int)Roles.User, securityStamp: null);
 
             return output
                 .WithData(new GoogleSignInCommandOutput

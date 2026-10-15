@@ -42,7 +42,8 @@ public class JwtAuthTokenIssuer(
             subject.PersonId, subject.RoleId, subject.ScopeId, subject.OwnedScopeIds)
         {
             DisplayName = subject.DisplayName,
-            ScopePermissionClaims = permissionClaims
+            ScopePermissionClaims = permissionClaims,
+            SecurityStamp = subject.SecurityStamp
         };
 
         var tokenConfiguration = configuration with { Claims = mapper.ToClaims(user) };
@@ -52,12 +53,13 @@ public class JwtAuthTokenIssuer(
             DateTime.UtcNow.AddSeconds(configuration.ExpirationInSeconds));
     }
 
-    public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+    public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId, Guid? securityStamp)
     {
         // Built from the subject and role alone: the token admits nothing a scope, an ownership or
         // a permission would matter to, so it claims none — and no display name, since it is not
-        // a token any downstream service should provision a profile from.
-        var user = new IdentityUser(subjectId, roleId) { SubjectRightsOnly = true };
+        // a token any downstream service should provision a profile from. The stamp it does carry,
+        // so a credential change revokes it like any other person token (FR-AU-11).
+        var user = new IdentityUser(subjectId, roleId) { SubjectRightsOnly = true, SecurityStamp = securityStamp };
 
         var tokenConfiguration = configuration with
         {

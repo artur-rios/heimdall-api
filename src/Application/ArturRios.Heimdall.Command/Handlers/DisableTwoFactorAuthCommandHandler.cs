@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -35,7 +36,8 @@ public class DisableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
-    ITwoFactorFactorVerifier factorVerifier)
+    ITwoFactorFactorVerifier factorVerifier,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<DisableTwoFactorAuthCommand, DisableTwoFactorAuthCommandOutput>
 {
     public async Task<DataOutput<DisableTwoFactorAuthCommandOutput?>> HandleAsync(
@@ -84,6 +86,10 @@ public class DisableTwoFactorAuthCommandHandler(
         {
             return output.WithErrors(deletion.Errors);
         }
+
+        // FR-AU-11: removing a credential revokes every token issued while it stood, the caller's own
+        // included, so the account's sessions after this point are only ones signed in without it.
+        await atomicWrites.RotateSecurityStampAsync(person);
 
         return output
             .WithData(new DisableTwoFactorAuthCommandOutput { Disabled = true })

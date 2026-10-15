@@ -222,4 +222,11 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         return Task.FromResult(true);
     }
+
+    public Task RotateSecurityStampAsync(Person person)
+    {
+        person.SecurityStamp = Guid.NewGuid();
+
+        return Task.CompletedTask;
+    }
 }

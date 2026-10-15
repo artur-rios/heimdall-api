@@ -172,6 +172,10 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
         // than the replay guard. See PostgresFixture.ForgetLastTotpStepAsync.
         await db.ForgetLastTotpStepAsync(person.PublicId);
 
+        // Confirming revoked every earlier token, the one that confirmed it included (FR-AU-11). A
+        // real client signs in again here, so the test does too.
+        Authorize(TestTokens.For(person.PublicId, (int)person.RoleId));
+
         return secret;
     }
 

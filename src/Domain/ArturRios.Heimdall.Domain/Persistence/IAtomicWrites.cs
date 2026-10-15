@@ -140,4 +140,16 @@ public interface IAtomicWrites
     ///     (AF-55d).
     /// </summary>
     Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt);
+
+    /// <summary>
+    ///     FR-AU-11: gives the person a fresh <see cref="Person.SecurityStamp" />, writing no other
+    ///     column, so every token issued before this call is refused from the next request on.
+    /// </summary>
+    /// <remarks>
+    ///     Unconditional, unlike the writes above: any number of rotations may race and every one of
+    ///     them revokes the tokens issued before it. What has to be targeted is the write itself. A
+    ///     whole-row save of a copy read before the rotation would put the old stamp back and revive
+    ///     what it revoked, which is why the mapping never lets such a save write this column.
+    /// </remarks>
+    Task RotateSecurityStampAsync(Person person);
 }

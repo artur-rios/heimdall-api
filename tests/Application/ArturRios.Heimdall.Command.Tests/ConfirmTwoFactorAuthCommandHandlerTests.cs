@@ -392,4 +392,38 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         Assert.Contains(TwoFactorMessages.AlreadyActive, output.Errors);
         Assert.Empty(fixture.RecoveryCodes.Query().ToList());
     }
+
+    // FR-AU-11: activating a second factor revokes every token issued before it.
+
+    [UnitFact]
+    public async Task GivenValidAppCode_WhenHandlingConfirm_ThenTheSecurityStampIsReplaced()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotEqual(stamp, fixture.Person.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenWrongAppCode_WhenHandlingConfirm_ThenTheSecurityStampIsKept()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("000000"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
 }

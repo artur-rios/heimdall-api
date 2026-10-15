@@ -140,6 +140,11 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithErrors(activation.Errors);
         }
 
+        // FR-AU-11: every token issued before the second factor was required is revoked — including
+        // the one that confirmed it, so the caller signs in again, this time through UC-38. A token
+        // that predates the factor proves only the password, which is what the factor guards against.
+        await atomicWrites.RotateSecurityStampAsync(person!);
+
         return output
             .WithData(new ConfirmTwoFactorAuthCommandOutput { Enabled = true, RecoveryCodes = recoveryCodes })
             .WithMessage(TwoFactorMessages.SetupConfirmed);

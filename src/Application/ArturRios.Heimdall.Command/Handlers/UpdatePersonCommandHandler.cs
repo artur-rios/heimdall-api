@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -26,7 +27,8 @@ public class UpdatePersonCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
-    IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter)
+    IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
     public async Task<DataOutput<UpdatePersonCommandOutput?>> HandleAsync(UpdatePersonCommand command, CancellationToken cancellationToken = default)
@@ -128,6 +130,11 @@ public class UpdatePersonCommandHandler(
             {
                 return output.WithErrors(retirement);
             }
+
+            // FR-AU-11: the address is what account recovery is sent to, so a new one is a
+            // credential change and revokes every token the person holds — whoever made the change.
+            // When they made it themselves, that includes the token that made it.
+            await atomicWrites.RotateSecurityStampAsync(person);
         }
 
         // UC-08 step 7: return the updated person.
