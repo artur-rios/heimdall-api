@@ -62,17 +62,16 @@ public class DisableTwoFactorAuthCommandHandler(
         var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
 
         // UC-39 step 2 (AF-39b): the same check LoginCommandHandler makes.
-        if (!await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
-        {
-            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
-        }
+        var passwordMatches =
+            await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt);
 
-        // UC-39 step 3 (AF-39c): the same second-factor check UC-38 makes, answered as AF-39b is. The
-        // matched row (if any) never needs marking used here — the whole configuration, recovery
-        // codes included, is about to be removed regardless of which factor matched.
+        // UC-39 step 3 (AF-39c): the same second-factor check UC-38 makes, answered as AF-39b is — and
+        // made whatever the password, so a wrong password takes as long to refuse as a wrong factor
+        // does. The matched row (if any) never needs marking used here — the whole configuration,
+        // recovery codes included, is about to be removed regardless of which factor matched.
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
-        if (!verification.Matched || !admitted)
+        if (!passwordMatches || !verification.Matched || !admitted)
         {
             return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }

@@ -63,7 +63,8 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     public Task<bool> TryReserveSecondFactorAttemptAsync(
         Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil)
     {
-        var stuck = person.FailedSecondFactorAttempts >= maxAttempts && person.SecondFactorLockedOutUntil is null;
+        var stuck = person.FailedSecondFactorAttempts >= maxAttempts &&
+                    (person.SecondFactorLockedOutUntil is null || person.SecondFactorLockedOutUntil <= now);
 
         if (!stuck && (person.FailedSecondFactorAttempts >= maxAttempts || person.SecondFactorLockedOutUntil > now))
         {

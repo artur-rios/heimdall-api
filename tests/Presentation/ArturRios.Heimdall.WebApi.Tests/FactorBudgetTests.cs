@@ -472,4 +472,95 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
         AssertCloseTo(now.AddMinutes(15), stored.ReauthenticationPausedUntil);
         Assert.Equal("Saved later", stored.Name);
     }
+
+    // A refused charge is a write too, and a row past the limit heals
+
+    /// <summary>
+    ///     The row's <c>xmin</c>: the transaction that last wrote it. It moves only when a write
+    ///     reaches the row, which is what a refused charge must do to cost what an admitted one does.
+    /// </summary>
+    private async Task<long> RowVersionAsync(Person person)
+    {
+        await using var context = db.CreateContext();
+
+        return await context.Database
+            .SqlQuery<long>($"SELECT xmin::text::bigint AS \"Value\" FROM heimdall.person WHERE id = {person.Id}")
+            .SingleAsync();
+    }
+
+    [FunctionalFact]
+    public async Task GivenALockedSecondFactor_WhenAReservationIsRefused_ThenTheRowIsStillWrittenAndUnchanged()
+    {
+        // Given
+        var lockedUntil = DateTime.UtcNow.AddMinutes(10);
+        var person = await SeedPersonAsync("budget-refused-write", p => p.SecondFactorLockedOutUntil = lockedUntil);
+        var version = await RowVersionAsync(person);
+        var now = DateTime.UtcNow;
+
+        // When
+        await using var context = db.CreateContext();
+        var current = await context.Persons.SingleAsync(x => x.Id == person.Id);
+        var reserved = await new AtomicWrites(context).TryReserveSecondFactorAttemptAsync(
+            current, SecondFactorLockout.MaxFailedAttempts, now, SecondFactorLockout.LockoutEndsFrom(now));
+
+        // Then
+        Assert.False(reserved);
+        Assert.NotEqual(version, await RowVersionAsync(person));
+
+        var stored = await ReloadAsync(person);
+        Assert.Equal(0, stored.FailedSecondFactorAttempts);
+        AssertCloseTo(lockedUntil, stored.SecondFactorLockedOutUntil);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPausedBudget_WhenAReservationIsRefused_ThenTheRowIsStillWrittenAndUnchanged()
+    {
+        // Given
+        var pausedUntil = DateTime.UtcNow.AddMinutes(10);
+        var person = await SeedPersonAsync("reauth-refused-write", p => p.ReauthenticationPausedUntil = pausedUntil);
+        var version = await RowVersionAsync(person);
+        var now = DateTime.UtcNow;
+
+        // When
+        await using var context = db.CreateContext();
+        var current = await context.Persons.SingleAsync(x => x.Id == person.Id);
+        var reserved = await new AtomicWrites(context).TryReserveReauthenticationAsync(
+            current, ReauthenticationBudget.MaxFailures, now, now - ReauthenticationBudget.Window,
+            now + ReauthenticationBudget.Pause);
+
+        // Then
+        Assert.False(reserved);
+        Assert.NotEqual(version, await RowVersionAsync(person));
+
+        var stored = await ReloadAsync(person);
+        Assert.Equal(0, stored.FailedReauthenticationAttempts);
+        AssertCloseTo(pausedUntil, stored.ReauthenticationPausedUntil);
+    }
+
+    [FunctionalFact]
+    public async Task GivenACountPastTheLimitWithAnExpiredLock_WhenAReservationIsMade_ThenItIsAdmittedAndLocks()
+    {
+        // Given a row left past the limit — by a lowered limit, say — whose lock has run out
+        var person = await SeedPersonAsync("budget-heal-expired", p =>
+        {
+            p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts + 2;
+            p.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
+            p.SecondFactorLockouts = 1;
+        });
+        var now = DateTime.UtcNow;
+
+        // When
+        await using var context = db.CreateContext();
+        var current = await context.Persons.SingleAsync(x => x.Id == person.Id);
+        var reserved = await new AtomicWrites(context).TryReserveSecondFactorAttemptAsync(
+            current, SecondFactorLockout.MaxFailedAttempts, now, SecondFactorLockout.LockoutEndsFrom(now));
+
+        // Then it heals: admitted, locked for the next length, and the count starts again
+        Assert.True(reserved);
+
+        var stored = await ReloadAsync(person);
+        Assert.Equal(0, stored.FailedSecondFactorAttempts);
+        Assert.Equal(2, stored.SecondFactorLockouts);
+        AssertCloseTo(now.AddMinutes(30), stored.SecondFactorLockedOutUntil);
+    }
 }

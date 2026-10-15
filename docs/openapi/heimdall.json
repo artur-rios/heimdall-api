@@ -1257,7 +1257,7 @@
           "Auth"
         ],
         "summary": "Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),\nselecting an authenticator-app method, an email method, or both. Setup stays inactive until\nconfirmed by UC-37. The person acted on is always the caller themselves — read from the\nbearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResendVerification.",
-        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself. The request carries the caller's\n`currentPassword` (FR-2F-18), so the action sits under the credential endpoints' rate\nlimit, as `2fa/confirm` and `2fa/disable` do. Selecting `Email` while a setup\ncode mailed within the account-email cooldown is recent answers 429 \"An email of this kind\nwas sent to you recently. Try again in a few minutes.\" and sends nothing (AF-36f); it is\nchecked before the password. Selecting `App` alone is never held back by it.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself. The request carries the caller's\n`currentPassword` (FR-2F-18), so the action sits under the credential endpoints' rate\nlimit, as `2fa/confirm` and `2fa/disable` do. Selecting `Email` while a setup\ncode mailed within the account-email cooldown is recent answers 429 \"An email of this kind\nwas sent to you recently. Try again in a few minutes.\" and sends nothing (AF-36f); it is\nchecked before the password. Selecting `App` alone is never held back by it. A missing\nor wrong password answers 401 \"The password or code is incorrect.\", and is charged to the\naccount's re-authentication budget (FR-AU-13): five failures within fifteen minutes pause\nthe check for fifteen minutes, with the same answer.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_EnableTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -1316,7 +1316,7 @@
           "Auth"
         ],
         "summary": "Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving\ncontrol of every method selected in UC-36 — an `appCode` if `AppEnabled`, an\n`emailCode` if `EmailEnabled`, both if both. On success, activates the\nconfiguration and returns ten recovery codes in plaintext, exactly once. The person acted on\nis always the caller themselves — read from the bearer token, the same as\nM:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand).",
-        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\nthe authorization matrix grants confirmation to all three person roles and withholds it from\nanonymous callers, which authentication alone already enforces. AF-37a's 404 covers both \"no\nsetup was ever initiated\" and \"the caller is a Google User\" alike — a Google-issued token\nnames a `GoogleUser`, never a row this lookup could find.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No `RoleRequirement`, for the same reason M:ArturRios.Heimdall.WebApi.Controllers.AuthController.EnableTwoFactorAuth(ArturRios.Heimdall.Command.Input.EnableTwoFactorAuthCommand) has none:\nthe authorization matrix grants confirmation to all three person roles and withholds it from\nanonymous callers, which authentication alone already enforces. AF-37a's 404 covers both \"no\nsetup was ever initiated\" and \"the caller is a Google User\" alike — a Google-issued token\nnames a `GoogleUser`, never a row this lookup could find. A missing or wrong code for\neither method (AF-37b, AF-37c) answers 401 \"The password or code is incorrect.\", whichever\nit was, and is charged to the account's re-authentication budget (FR-AU-13), whose pause\nanswers the same.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_ConfirmTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -5670,6 +5670,33 @@
             "format": "int32"
           },
           "lockedOutUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "failedSecondFactorAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "secondFactorLockedOutUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "secondFactorLockouts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedReauthenticationAttempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reauthenticationWindowStartedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reauthenticationPausedUntil": {
             "type": "string",
             "format": "date-time",
             "nullable": true

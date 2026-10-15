@@ -96,7 +96,9 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         ArgumentOutOfRangeException.ThrowIfZero(lockedOutUntil.Count, nameof(lockedOutUntil));
 
         // The login reservation's shape, for the same reasons: the reservation that reaches the limit
-        // is the one that locks, and a row stuck at the limit with no lock heals itself. What differs
+        // is the one that locks, and a row at or past the limit with no live lock — none at all, or
+        // one that has run out, as a lowered limit would leave — is admitted and locked, so it heals
+        // itself rather than being refused for good. What differs
         // is the lock's length, which depends on how many locks came before — so it is chosen by the
         // stored lockout count, inside the same statement, rather than from the count this request
         // read: two requests that both read "one lock so far" cannot both set the second lock's end.
@@ -104,7 +106,8 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             .Where(x => x.Id == person.Id &&
                         ((x.FailedSecondFactorAttempts < maxAttempts &&
                           (x.SecondFactorLockedOutUntil == null || x.SecondFactorLockedOutUntil <= now)) ||
-                         (x.FailedSecondFactorAttempts >= maxAttempts && x.SecondFactorLockedOutUntil == null)))
+                         (x.FailedSecondFactorAttempts >= maxAttempts &&
+                          (x.SecondFactorLockedOutUntil == null || x.SecondFactorLockedOutUntil <= now))))
             .ExecuteUpdateAsync(set => set
                 .SetProperty(x => x.SecondFactorLockedOutUntil, SecondFactorLockEnd(maxAttempts, lockedOutUntil))
                 .SetProperty(x => x.SecondFactorLockouts,
@@ -125,6 +128,10 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             }
 
             Accept(person, x => x.FailedSecondFactorAttempts, reachedLimit ? 0 : person.FailedSecondFactorAttempts + 1);
+        }
+        else
+        {
+            await TouchAsync(person);
         }
 
         return reserved;
@@ -193,6 +200,10 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             Accept(person, x => x.ReauthenticationWindowStartedAt,
                 paused ? null : windowOpen ? person.ReauthenticationWindowStartedAt : now);
             Accept(person, x => x.FailedReauthenticationAttempts, paused ? 0 : failures);
+        }
+        else
+        {
+            await TouchAsync(person);
         }
 
         return reserved;
@@ -422,6 +433,21 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 
         Accept(person, x => x.SecurityStamp, stamp);
     }
+
+    /// <summary>
+    ///     Writes the person's row without changing it, after a factor reservation was refused.
+    /// </summary>
+    /// <remarks>
+    ///     A refused reservation's <c>UPDATE</c> matches no row, so PostgreSQL assigns it no transaction
+    ///     and flushes no commit, and it answers measurably sooner than an admitted one. That would
+    ///     tell a caller the second factor is locked, or re-authentication paused, without a word of
+    ///     the answer differing (FR-AU-12, FR-AU-13). Setting a column to itself writes a new row
+    ///     version and commits like the admitted write does; what remains is one more round trip.
+    /// </remarks>
+    private Task TouchAsync(Person person) =>
+        context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedSecondFactorAttempts, x => x.FailedSecondFactorAttempts));
 
     /// <summary>
     ///     The value <see cref="TryReserveSecondFactorAttemptAsync" /> writes to the lock: unchanged,

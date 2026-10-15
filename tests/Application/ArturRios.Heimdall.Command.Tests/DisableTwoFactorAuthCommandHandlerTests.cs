@@ -417,4 +417,21 @@ public class DisableTwoFactorAuthCommandHandlerTests
         Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
         Assert.Null(fixture.Person.ReauthenticationWindowStartedAt);
     }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenDisabling_ThenTheFactorIsStillChecked()
+    {
+        // Given — the factor check runs whatever the password, so a wrong password does not answer
+        // sooner than a right one with a wrong factor
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(password: "wrong-password", code: "000000"));
+
+        // Then the email code's own budget saw the guess, as it does after a right password
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Equal(1, emailCode.FailedAttempts);
+    }
 }

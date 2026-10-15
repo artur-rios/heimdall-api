@@ -133,6 +133,24 @@ public class DataExportSecurity
 
     /// <summary>When the account is locked out until, if it is.</summary>
     public DateTime? LockedOutUntil { get; set; }
+
+    /// <summary>Failed second factors at sign-in since the last successful one (FR-AU-12).</summary>
+    public int FailedSecondFactorAttempts { get; set; }
+
+    /// <summary>When second-factor verification is locked until, if it is or was (FR-AU-12).</summary>
+    public DateTime? SecondFactorLockedOutUntil { get; set; }
+
+    /// <summary>Second-factor locks since the last successful second factor, which set the next one's length.</summary>
+    public int SecondFactorLockouts { get; set; }
+
+    /// <summary>Failed re-authentications in the current window (FR-AU-13).</summary>
+    public int FailedReauthenticationAttempts { get; set; }
+
+    /// <summary>When the current re-authentication window began, if one is open (FR-AU-13).</summary>
+    public DateTime? ReauthenticationWindowStartedAt { get; set; }
+
+    /// <summary>When re-authentication is paused until, if it is or was (FR-AU-13).</summary>
+    public DateTime? ReauthenticationPausedUntil { get; set; }
 }
 
 /// <summary>The lawful basis and the notice the subject was shown.</summary>

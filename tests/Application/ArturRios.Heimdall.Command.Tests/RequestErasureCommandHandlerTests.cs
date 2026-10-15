@@ -503,4 +503,33 @@ public class RequestErasureCommandHandlerTests
         Assert.NotNull(person.ReauthenticationPausedUntil);
         Assert.Equal(0, person.FailedLoginAttempts);
     }
+
+    [UnitFact]
+    public async Task GivenAPersonPresentingNoCredential_WhenRequestingErasure_ThenTheSharedRefusalIsChargedToTheBudget()
+    {
+        // A missing password is a wrong one: refused as every re-authentication is, and counted
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId, password: null));
+
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Equal(1, person.FailedReauthenticationAttempts);
+        Assert.False(person.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAGoogleUserPresentingNoCredential_WhenRequestingErasure_ThenTheCredentialIsNotAccepted()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+
+        var output = await Handler(persons, googleUsers, Payload())
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: null));
+
+        Assert.Equal([ErasureMessages.CredentialNotAccepted], output.Errors);
+        Assert.False(googleUser.IsDeleted);
+    }
 }

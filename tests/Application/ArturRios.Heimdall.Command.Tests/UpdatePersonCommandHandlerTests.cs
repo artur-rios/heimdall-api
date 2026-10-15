@@ -1213,4 +1213,36 @@ public class UpdatePersonCommandHandlerTests
         Assert.Equal(0, target.FailedLoginAttempts);
         Assert.Equal(0, target.FailedSecondFactorAttempts);
     }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenChangingTheOwnEmailWithTwoFactorActive_ThenTheFactorIsStillChecked()
+    {
+        // Given an active configuration with the Email method and a live code
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        await twoFactor.ActivateAsync(target);
+        var configuration = twoFactor.Configurations.Query().Single();
+        configuration.EmailEnabled = true;
+        var emailCode = new TwoFactorEmailCode
+        {
+            TwoFactorAuthId = configuration.Id,
+            CodeHash = Hash.EncodeWithRandomSalt("123456", out var salt),
+            Salt = salt,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10)
+        };
+        await twoFactor.EmailCodes.CreateAsync(emailCode);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+        command.CurrentPassword = "not-the-password";
+        command.TwoFactorCode = "000000";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Equal(1, emailCode.FailedAttempts);
+    }
 }

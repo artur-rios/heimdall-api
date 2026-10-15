@@ -264,12 +264,11 @@ public class UpdatePersonCommandHandler(
         // compared, and refuses whatever the result.
         var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
 
-        // AF-08h: missing or wrong alike.
-        if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
-            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
-        {
-            return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
-        }
+        // AF-08h: missing or wrong alike. Decided below, once the factor has been checked too, so a
+        // wrong password takes as long to refuse as a wrong factor does.
+        var passwordMatches = !string.IsNullOrWhiteSpace(command.CurrentPassword) &&
+                              await PasswordHashGate.Shared.TextMatchesAsync(
+                                  command.CurrentPassword, person.PasswordHash, person.Salt);
 
         var twoFactorAuth = await twoFactorReader.Query()
             .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
@@ -283,15 +282,10 @@ public class UpdatePersonCommandHandler(
 
             verification = await factorVerifier.VerifyAsync(
                 twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
-
-            // AF-08i, answered as AF-08h is.
-            if (!verification.Matched)
-            {
-                return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
-            }
         }
 
-        if (!admitted)
+        // AF-08h and AF-08i, answered alike, and the pause with them.
+        if (!passwordMatches || verification is { Matched: false } || !admitted)
         {
             return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
         }

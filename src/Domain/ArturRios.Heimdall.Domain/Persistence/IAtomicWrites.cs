@@ -93,7 +93,8 @@ public interface IAtomicWrites
     ///     to <paramref name="maxAttempts" /> locks in the same write — choosing the end by the
     ///     stored lockout count, which it then increments — and resets the counter, so the lock does
     ///     not depend on the caller surviving to compare the factor. A row at or past the limit with
-    ///     no lock is admitted and locked the same way.
+    ///     no live lock — none, or one that has run out — is admitted and locked the same way. A
+    ///     refused reservation still writes the row, unchanged, so it costs what an admitted one does.
     /// </remarks>
     Task<bool> TryReserveSecondFactorAttemptAsync(
         Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil);
@@ -122,7 +123,8 @@ public interface IAtomicWrites
     ///     The reservation counts as a failure until <see cref="ClearReauthenticationAttemptsAsync" />
     ///     says otherwise. The one that brings the window's count to <paramref name="maxFailures" />
     ///     pauses re-authentication until <paramref name="pausedUntil" /> and closes the window, in the
-    ///     same write. Nothing here touches the login lockout or the second-factor budget.
+    ///     same write. Nothing here touches the login lockout or the second-factor budget. A refused
+    ///     reservation still writes the row, unchanged, so it costs what an admitted one does.
     /// </remarks>
     Task<bool> TryReserveReauthenticationAsync(
         Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil);

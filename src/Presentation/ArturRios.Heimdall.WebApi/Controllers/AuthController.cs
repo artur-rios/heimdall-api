@@ -242,7 +242,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> while a setup
     ///     code mailed within the account-email cooldown is recent answers 429 "An email of this kind
     ///     was sent to you recently. Try again in a few minutes." and sends nothing (AF-36f); it is
-    ///     checked before the password. Selecting <c>App</c> alone is never held back by it.
+    ///     checked before the password. Selecting <c>App</c> alone is never held back by it. A missing
+    ///     or wrong password answers 401 "The password or code is incorrect.", and is charged to the
+    ///     account's re-authentication budget (FR-AU-13): five failures within fifteen minutes pause
+    ///     the check for fifteen minutes, with the same answer.
     /// </remarks>
     [HttpPost("2fa/enable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -270,7 +273,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     the authorization matrix grants confirmation to all three person roles and withholds it from
     ///     anonymous callers, which authentication alone already enforces. AF-37a's 404 covers both "no
     ///     setup was ever initiated" and "the caller is a Google User" alike — a Google-issued token
-    ///     names a <c>GoogleUser</c>, never a row this lookup could find.
+    ///     names a <c>GoogleUser</c>, never a row this lookup could find. A missing or wrong code for
+    ///     either method (AF-37b, AF-37c) answers 401 "The password or code is incorrect.", whichever
+    ///     it was, and is charged to the account's re-authentication budget (FR-AU-13), whose pause
+    ///     answers the same.
     /// </remarks>
     [HttpPost("2fa/confirm")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
