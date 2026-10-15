@@ -605,8 +605,8 @@ sequenceDiagram
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
-| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is changed |
-| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The code or recovery code is missing, incorrect, or already used." (UC-39's AF-39c). Nothing is changed |
+| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
+| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
 
 ---
 
@@ -1706,7 +1706,7 @@ sequenceDiagram
 | AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
 | AF-36b | Caller is not a person eligible for two-factor authentication — a Google User, or a token naming no live person (either operation) | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
-| AF-36e | `currentPassword` missing or wrong (FR-2F-18) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is created or sent |
+| AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
@@ -1758,8 +1758,8 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-37a | No pending setup exists for the person | Return `404 Not Found` |
-| AF-37b | `appCode` missing or incorrect, when `AppEnabled` | Return `400 Bad Request` |
-| AF-37c | `emailCode` missing, incorrect, expired, already used, or retired after five wrong guesses (FR-2F-13), when `EmailEnabled` | Return `400 Bad Request` |
+| AF-37b | `appCode` missing or incorrect, when `AppEnabled` — or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
+| AF-37c | `emailCode` missing, incorrect, expired, already used, or retired after five wrong guesses (FR-2F-13), when `EmailEnabled` | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-37b. The code is not spent |
 | AF-37d | Setup is already active (repeated confirm) | Return `409 Conflict` |
 
 > **On requiring every selected method's code.** If both `App` and `Email` were chosen in UC-36, both codes are required in the same confirmation request. Confirming with only one channel would activate a method whose configuration was never actually exercised — for the app, that a QR code was scanned into a real authenticator; for email, that the address reliably receives mail — leaving a silently broken second factor discovered only at the next login.
@@ -1796,7 +1796,7 @@ sequenceDiagram
 
 1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
 2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token. The token must also still name the person's outstanding challenge: redeeming a challenge spends it, and a newer login replaces it, so a challenge is redeemable once (FR-2F-10).
-3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13).
+3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13). Every guess is also charged to the person, across challenges, and a correct password does not reset that count: the tenth failure locks the second factor, for fifteen minutes and twice as long at each repeat, up to a day, and only a second factor that checks out resets it (FR-AU-12).
 4. If a recovery code was used, the system marks it consumed — it cannot be used again.
 5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success. A person whose processing is restricted (NFR-24) — including one restricted after the challenge was issued — gets UC-11's AF-11i subject-rights-only token instead, and AF-38d's scope check does not apply to them.
 
@@ -1805,7 +1805,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), issued before the person's last credential change, so its security stamp is no longer theirs (FR-AU-11), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
-| AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
+| AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) — or the person's second factor is locked (FR-AU-12), whatever the code | Return `401 Unauthorized`. A locked second factor answers exactly as a wrong code does, and spends nothing |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
 
@@ -1855,8 +1855,8 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-39a | Two-factor authentication is not active for the person | Return `404 Not Found` |
-| AF-39b | Password mismatch | Return `401 Unauthorized` |
-| AF-39c | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+| AF-39b | Password mismatch, or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
+| AF-39c | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-39b, so it does not say which of the two was wrong |
 
 > **On requiring both factors to disable.** Password alone is not enough: an attacker holding only a stolen session or a leaked password should not be able to strip two-factor protection off an account they don't fully control. Requiring the second factor too makes disabling exactly as hard as a login.
 
@@ -1904,7 +1904,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-40a | Two-factor authentication is not active for the person | Return `404 Not Found` |
-| AF-40b | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+| AF-40b | Second factor invalid (per AF-38b/AF-38c), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
 
 > **On invalidating the whole set.** Regeneration replaces all ten codes at once rather than topping up the used ones back to ten: a partial refill would leave old, already-distributed codes valid alongside new ones, defeating the point of rotating them.
 
@@ -2092,7 +2092,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | --- | --- | --- |
-| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account | `CredentialNotAccepted` (401). Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
+| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
@@ -2705,7 +2705,7 @@ sequenceDiagram
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
 | UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
-| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
 | UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
@@ -2732,11 +2732,11 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
-| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18 |
-| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, NFR-27 |
-| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, NFR-27 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18, FR-AU-13 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11, FR-AU-13 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, FR-AU-12, NFR-27 |
+| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11, FR-AU-13 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, FR-AU-13, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |

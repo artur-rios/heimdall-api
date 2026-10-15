@@ -85,7 +85,7 @@ system. Its `OwnerId` names a person, but the row describes the system.
 | Identity | `Name`, `Email` | Identify the account and address it | Art. 7 V (execução de contrato) | Art. 6(1)(b) contract |
 | Authentication material | `PasswordHash`, `Salt`, `SecurityStamp`, `TwoFactorAuth.TotpSecretEncrypted`, recovery code hashes | Verify that the account holder is present | Art. 7 V, Art. 46 (segurança) | Art. 6(1)(b), Art. 32 |
 | Third-party identifiers | `GoogleUser.GoogleId`, `ProfilePictureUrl` | Resolve a Google sign-in to a stored identity | Art. 7 V | Art. 6(1)(b) |
-| Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
+| Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, the second-factor and re-authentication budgets, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
 | Deletion and erasure state | `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honour erasure within the statutory deadline and show that it was honoured | Art. 7 II (obrigação legal) | Art. 6(1)(c) legal obligation |
 | Network | Client IP address: the rate limiter's partition key (in memory), and every request's entry in the application logs (12 months) | Bound anonymous request rates; detect and investigate attacks on accounts | Art. 7 IX, Art. 46 | Art. 6(1)(f), Art. 32 |
 | Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails, and the notice of an email change to the previous address (FR-PE-15) | Art. 7 V | Art. 6(1)(b) |
@@ -131,6 +131,8 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `IsDeleted` | Suspending an identity without destroying it |
 | `EmailVerified` | Whether the address has been proven reachable (FR-EV-01) |
 | `FailedLoginAttempts`, `LockedOutUntil` | Bounding credential guessing per account (FR-AU-09) |
+| `FailedSecondFactorAttempts`, `SecondFactorLockedOutUntil`, `SecondFactorLockouts` | Bounding second-factor guessing at sign-in per account, across challenges (FR-AU-12). Cleared by a successful second factor and by anonymisation (NFR-20) |
+| `FailedReauthenticationAttempts`, `ReauthenticationWindowStartedAt`, `ReauthenticationPausedUntil` | Bounding password and code guessing under a bearer token per account (FR-AU-13). Cleared by a successful re-authentication and by anonymisation (NFR-20) |
 | `SecurityStamp` | Revoking the person's tokens when a credential changes (FR-AU-11). A random value with no meaning of its own, replaced on each change |
 | `RoleId`, `ScopeId` | Authorisation, and the per-scope uniqueness index FR-PE-09 needs |
 | `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |

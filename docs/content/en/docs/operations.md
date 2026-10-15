@@ -244,6 +244,8 @@ defeats the limiter with:
 | 2FA app code | Single use | `TWO_FACTOR_AUTH.last_totp_time_step_used` records the accepted time step, so an observed code cannot be replayed within the ±1-step verification window (RFC 6238 §5.2). |
 | 2FA challenge (UC-38) | Single redemption | `TWO_FACTOR_AUTH.challenge_id` holds the one outstanding challenge, which the challenge token names. Redeeming it clears it and a newer login replaces it, so a challenge token is refused once spent (FR-2F-10). |
 | 2FA challenge guesses (UC-38) | 5 guesses with an app code or a recovery code per challenge | The challenge is cleared, so its token is refused and guessing again costs a fresh login (FR-2F-17). `TWO_FACTOR_AUTH.challenge_attempts` counts; a new login resets it. An email-only configuration is bounded by its code's budget instead. |
+| Second factor at sign-in (UC-38) | 10 failures per account, across every challenge | Second-factor verification is locked for 15 minutes, twice as long at each repeat, up to 24 hours (FR-AU-12). `PERSON.failed_second_factor_attempts` counts, `PERSON.second_factor_locked_out_until` holds the lock and `PERSON.second_factor_lockouts` the repeats. A correct password resets none of them; a successful second factor resets all three. While locked, every code is refused with the ordinary "factor invalid" answer. |
+| Re-authentication under a token (UC-08, UC-36, UC-37, UC-39, UC-40, UC-42) | 5 failures within 15 minutes per account | These checks are paused for 15 minutes (FR-AU-13). `PERSON.failed_reauthentication_attempts` counts within the window that `PERSON.reauthentication_window_started_at` opened, and `PERSON.reauthentication_paused_until` holds the pause; a success clears them. Wrong password, wrong code and pause all answer 401 "The password or code is incorrect.". Never charged to the login lockout or the second-factor budget, so a stolen token cannot lock the owner out of signing in. |
 
 Every budget, and every single-use item — recovery codes, reset and verification tokens, the
 challenge, the TOTP step — is charged or spent by **one conditional `UPDATE`** whose `WHERE` clause
@@ -296,15 +298,11 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
 - A named address is counted in its own `caller:` namespace, apart from direct connections, so a key
   holder cannot spend the budget of a real caller by naming their address.
 - A leaked key lets its holder pick their own bucket, which only spreads credential guesses over
-  invented addresses; the per-account lockouts still count them. The same limiter also guards six
-  authenticated endpoints that have no per-account budget — `2fa/enable`, `2fa/confirm`,
-  `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — so
-  someone holding **both** a leaked key
-  and a stolen bearer token could spread guesses against those over invented addresses, bounded then
-  only by the password-hash gate. A leaked key is not the only way to spread them: a token holder
-  with many source addresses, or any caller behind a proxy `HEIMDALL_TRUSTED_PROXIES` does not name,
-  needs none. Those endpoints have no per-account budget, so such guesses are bounded only per
-  address and by the gate (Threat Model Document, TH-32 and TH-36).
+  invented addresses; the per-account budgets still count them. That includes the six authenticated
+  endpoints the same limiter guards — `2fa/enable`, `2fa/confirm`, `2fa/disable`,
+  `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — which share the
+  re-authentication budget above, whatever addresses the guesses come from (Threat Model Document,
+  TH-32 and TH-36).
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25

@@ -23,7 +23,7 @@ body:json {
 docs {
   UC-37. Authenticated.
 
-  Prove control of every method selected when enabling: appCode if App was selected, emailCode if Email was, both if both. Answers ten recovery codes in plaintext, exactly once — they are not retrievable afterwards.
+  Prove control of every method selected when enabling: appCode if App was selected, emailCode if Email was, both if both. A missing or wrong code answers 401 "The password or code is incorrect.". Answers ten recovery codes in plaintext, exactly once — they are not retrievable afterwards.
 
   Revokes every token the person holds, this one included: keep the codes, then sign in again (now through 2fa/verify).
 }

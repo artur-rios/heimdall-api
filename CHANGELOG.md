@@ -7,6 +7,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- Second-factor failures at sign-in are now counted per account, across every challenge (FR-AU-12). App codes, email
+  codes and recovery codes all count, a correct password no longer resets the count, and only a successful second
+  factor does. The tenth failure locks second-factor verification for 15 minutes, twice as long at each repeat, up to
+  24 hours; the repeat count resets after a successful second factor. While locked, `POST /api/auth/2fa/verify`
+  refuses every code, the right one included, with its usual `401` and "The code or recovery code is missing,
+  incorrect, or already used.", so a client sees nothing new.
+- Re-authentication under a bearer token has a per-account budget of its own (FR-AU-13): `POST /api/auth/2fa/enable`,
+  `2fa/confirm`, `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` (a person's password) and an own
+  email change through `PUT /api/persons/{id}`. Five failures within 15 minutes pause these checks for the account
+  for 15 minutes. The budget never touches the login lockout or the second-factor budget, so the owner can still
+  sign in. A wrong or missing password, a wrong, missing or used code, and a paused budget all answer `401` with one
+  message, "The password or code is incorrect.". **Clients:** this replaces "The current password is incorrect." and
+  "The code or recovery code is missing, incorrect, or already used." on those endpoints, and on `2fa/confirm` it
+  replaces the `400` answers "The authenticator app code is missing or incorrect." and "The email code is missing,
+  incorrect, expired, or already used." with the same `401`. A client that treats a `401` as the end of its session
+  must recognise the new message as a refused credential instead. A Google User's erasure request still answers
+  "The credential presented was not accepted.". A new migration, `AddFactorBudgets`, adds six columns to `person`,
+  all starting empty; only targeted writes change them, and anonymisation clears them. **Operators:** no setting
+  changes.
+
 ## [1.5.0] - 2026-10-15
 
 ### Added

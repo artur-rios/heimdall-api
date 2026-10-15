@@ -64,6 +64,7 @@ sequenceDiagram
     P->>AC: POST /api/auth/2fa/confirm {appCode?, emailCode?}
     AC->>CH: HandleAsync
     CH->>DB: SELECT pending row
+    CH->>DB: charge the re-authentication budget (FR-AU-13)
     CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
     CH->>DB: replace the person's security stamp
@@ -93,7 +94,8 @@ they replace, so a failure leaves the caller with the codes they already hold ra
 all.
 
 Confirmation requires proof of **every** method selected at setup: an `appCode` if `AppEnabled`, an
-`emailCode` if `EmailEnabled`, both if both.
+`emailCode` if `EmailEnabled`, both if both. A missing or wrong code answers `401` "The password or
+code is incorrect.", whichever it was, and is charged to the re-authentication budget below.
 
 ## Completing a gated login — UC-38
 
@@ -125,13 +127,15 @@ sequenceDiagram
             VH-->>C: 401 challenge invalid
         end
     end
+    VH->>DB: charge one failure to the account (FR-AU-12)
     VH->>FV: TOTP? live email code? unused recovery code?
-    alt none matches (AF-38b / AF-38c)
+    alt none matches, or the account's second factor is locked (AF-38b / AF-38c)
         FV-->>VH: no
         VH->>DB: at the fifth guess, clear the challenge
         VH-->>C: 401 factor invalid
     end
 
+    VH->>DB: clear the account's second-factor failures
     VH->>TS: TryBuildSubject(person)
     alt scope no longer eligible
         VH-->>C: 401 scope no longer eligible
@@ -170,6 +174,13 @@ row of its own to count on, so they are counted on the challenge (`challenge_att
 the challenge is cleared: its token is refused as AF-38a from then on, and further guessing costs a
 fresh password check. A login resets the count with the challenge.
 
+**The account allows ten failures, whatever the challenge** (**FR-AU-12**). Every guess — app code,
+email code or recovery code — is also counted on the person, and neither a new challenge nor a
+correct password resets that count; only a second factor that checks out does. The tenth failure
+locks second-factor verification for fifteen minutes, twice as long at each repeat, up to a day.
+While it is locked every code is refused, the right one included, with the same `factor invalid`
+answer, and the challenge's own five still run out as usual — so the lock does not show.
+
 **All of it holds when requests arrive together.** Redeeming the challenge, spending a code,
 accepting a TOTP step and charging a guess are each one conditional `UPDATE` (`IAtomicWrites`), and
 every guess is charged *before* it is compared. Of any number of simultaneous requests carrying the
@@ -193,6 +204,15 @@ else — exactly the case **FR-2F-10** wants blocked.
 Both require a valid second factor as well as authentication, and both reuse
 `ITwoFactorFactorVerifier`, so "match against TOTP, or the current email code, or an unused recovery
 code" is implemented in exactly one place.
+
+**Every check under a bearer token shares one budget and one answer** (**FR-AU-13**). Enabling,
+confirming and disabling two-factor authentication, regenerating recovery codes, an own email change
+and a person's erasure request are each charged to the account's re-authentication budget before
+anything is compared: five failures within fifteen minutes pause them for fifteen minutes. A wrong or
+missing password, a wrong, missing or used code, and a pause all answer `401` "The password or code
+is incorrect." — so disabling never says which of its two credentials was wrong. The budget is kept
+apart from the login lockout and the second-factor budget, so a stolen token cannot be used to lock
+its owner out of signing in.
 
 | | UC-39 disable | UC-40 regenerate |
 | --- | --- | --- |
