@@ -47,12 +47,12 @@ public class AuthRateLimitPartitionTests
     }
 
     [UnitFact]
-    public void GivenAValidKeyAndAnIPv6Address_WhenPartitioning_ThenItsSlash64IsTheKey()
+    public void GivenAValidKeyAndAnIPv6Address_WhenPartitioning_ThenItsSlash56IsTheKey()
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2:aaaa::1"), Callers());
 
-        Assert.Equal("caller:2001:db8:1:2::/64", key);
-        Assert.Equal(key, AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2:ffff:1:2:3"), Callers()));
+        Assert.Equal("caller:2001:db8:1::/56", key);
+        Assert.Equal(key, AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:ff:ffff:1:2:3"), Callers()));
     }
 
     [UnitFact]
@@ -88,7 +88,7 @@ public class AuthRateLimitPartitionTests
     }
 
     [UnitFact]
-    public void GivenANamedIPv6Address_WhenPartitioning_ThenItNeverSharesABucketWithADirectSlash64()
+    public void GivenANamedIPv6Address_WhenPartitioning_ThenItNeverSharesABucketWithADirectSlash56()
     {
         var direct = new DefaultHttpContext();
         direct.Connection.RemoteIpAddress = IPAddress.Parse("2001:db8:1:2::5");
@@ -96,7 +96,7 @@ public class AuthRateLimitPartitionTests
         var named = AuthRateLimitPartition.KeyFor(Context(KeyA, "2001:db8:1:2::5"), Callers());
         var directKey = AuthRateLimitPartition.KeyFor(direct, Callers());
 
-        Assert.Equal("2001:db8:1:2::/64", directKey);
+        Assert.Equal("2001:db8:1::/56", directKey);
         Assert.NotEqual(directKey, named);
     }
 

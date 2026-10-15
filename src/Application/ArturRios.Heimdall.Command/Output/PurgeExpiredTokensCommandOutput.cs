@@ -29,8 +29,11 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Revoked or expired application credentials removed (UC-55).</summary>
     public int ApplicationCredentialsPurged { get; set; }
 
-    /// <summary>Rows removed across all five tables.</summary>
+    /// <summary>Registration-attempt notice budgets whose window had ended removed (FR-SR-14).</summary>
+    public int AttemptNoticeBudgetsPurged { get; set; }
+
+    /// <summary>Rows removed across all six tables.</summary>
     public int TotalPurged =>
         PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +
-        PendingRegistrationsPurged + ApplicationCredentialsPurged;
+        PendingRegistrationsPurged + ApplicationCredentialsPurged + AttemptNoticeBudgetsPurged;
 }

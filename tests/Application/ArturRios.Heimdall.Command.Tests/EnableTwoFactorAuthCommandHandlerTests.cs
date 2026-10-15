@@ -50,9 +50,11 @@ public class EnableTwoFactorAuthCommandHandlerTests
                 // The real issuer over the fake repositories and the recording sender, so the
                 // assertions about what lands in EmailCodes — and about the address the code went
                 // to — keep testing the behaviour rather than the call.
+                EmailCodes,
                 new TwoFactorEmailCodeIssuer(EmailCodes, EmailCodes, EmailSender.Object),
                 Protector.Object,
-                InMemoryAtomicWrites.Instance);
+                InMemoryAtomicWrites.Instance,
+                new AdminEmailOptions { Cooldown = TimeSpan.FromMinutes(5) });
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {
@@ -323,7 +325,8 @@ public class EnableTwoFactorAuthCommandHandlerTests
     [UnitFact]
     public async Task GivenOutstandingEmailCode_WhenReinitiatingEmailSetup_ThenPriorCodeIsRetired()
     {
-        // Given — AF-36d resending the email code: only the freshest one should ever confirm
+        // Given — AF-36d resending the email code: only the freshest one should ever confirm. The
+        // code still lives four minutes, so it was mailed six minutes ago, outside the cooldown.
         var fixture = await FixtureAsync();
         var pending = new TwoFactorAuth
         {
@@ -335,7 +338,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
             TwoFactorAuthId = pending.Id,
             CodeHash = [1],
             Salt = [2],
-            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(4),
             Used = false
         };
         await fixture.EmailCodes.CreateAsync(outstanding);
@@ -474,5 +477,112 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.Null(fixture.Person.ReauthenticationPausedUntil);
         Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
+    }
+
+    // AF-36f (FR-2F-19): selecting the Email method mails a code, so it is under the per-person
+    // cooldown every account email is (FR-EV-07). A code's issue time is its expiry minus its ten
+    // minutes, as a token's is.
+
+    private static async Task<(TwoFactorAuth Pending, TwoFactorEmailCode Code)> PendingEmailSetupAsync(
+        Fixture fixture, TimeSpan mailedAgo)
+    {
+        var pending = new TwoFactorAuth { PersonId = fixture.Person.Id, IsActive = false, EmailEnabled = true };
+        await fixture.TwoFactorAuths.CreateAsync(pending);
+
+        var code = new TwoFactorEmailCode
+        {
+            TwoFactorAuthId = pending.Id,
+            CodeHash = [1],
+            Salt = [2],
+            ExpiresAt = DateTime.UtcNow + TimeSpan.FromMinutes(10) - mailedAgo,
+            Used = false
+        };
+        await fixture.EmailCodes.CreateAsync(code);
+
+        return (pending, code);
+    }
+
+    [UnitFact]
+    public async Task GivenACodeMailedInsideTheCooldown_WhenReinitiatingWithEmail_ThenRefusedAndNothingIsMailed()
+    {
+        // Given a setup code mailed a minute ago
+        var fixture = await FixtureAsync();
+        var (_, code) = await PendingEmailSetupAsync(fixture, TimeSpan.FromMinutes(1));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("Email"));
+
+        // Then — refused, the code already mailed still confirms, and no other was sent
+        Assert.False(output.Success);
+        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.False(code.Used);
+        Assert.Single(fixture.EmailCodes.Query().ToList());
+        fixture.EmailSender.Verify(
+            sender => sender.SendAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenACodeMailedInsideTheCooldown_WhenReinitiatingWithAWrongPassword_ThenTheBudgetIsNotCharged()
+    {
+        // Given — the cooldown is a state refusal, answered before the password is derived, as
+        // AF-36a is: a request that cannot send costs no Argon2id work and no re-authentication
+        var fixture = await FixtureAsync();
+        await PendingEmailSetupAsync(fixture, TimeSpan.FromMinutes(1));
+        var command = fixture.Command("Email");
+        command.CurrentPassword = "Wr0ng-Password-Here!";
+
+        // When
+        var output = await fixture.Handler().HandleAsync(command);
+
+        // Then
+        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
+    }
+
+    [UnitFact]
+    public async Task GivenACodeMailedInsideTheCooldown_WhenReinitiatingWithAppOnly_ThenSetupProceeds()
+    {
+        // Given — App alone mails nothing, so the cooldown has nothing to say about it
+        var fixture = await FixtureAsync();
+        await PendingEmailSetupAsync(fixture, TimeSpan.FromMinutes(1));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotNull(output.Data!.OtpAuthUri);
+    }
+
+    [UnitFact]
+    public async Task GivenACodeMailedInsideTheCooldown_WhenReinitiatingWithAppAndEmail_ThenRefused()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await PendingEmailSetupAsync(fixture, TimeSpan.FromMinutes(1));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("App", "Email"));
+
+        // Then — nothing of the re-initiation applies, App included
+        Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
+        Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).AppEnabled);
+    }
+
+    [UnitFact]
+    public async Task GivenTheLastCodeWasMailedBeforeTheCooldown_WhenReinitiatingWithEmail_ThenANewCodeIsMailed()
+    {
+        // Given a code mailed six minutes ago, outside a five-minute cooldown
+        var fixture = await FixtureAsync();
+        var (_, code) = await PendingEmailSetupAsync(fixture, TimeSpan.FromMinutes(6));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command("Email"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(code.Used);
+        fixture.EmailSender.Verify(
+            sender => sender.SendAsync(fixture.Person.Email, It.IsAny<string>()), Times.Once);
     }
 }

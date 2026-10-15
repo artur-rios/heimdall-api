@@ -48,6 +48,7 @@ own record is covered below.
 | Authentication material | `PERSON.password_hash`, `PERSON.salt`, `TWO_FACTOR_AUTH`, `TWO_FACTOR_RECOVERY_CODE` | Life of the account | A security measure under GDPR Art. 32; it lives and dies with the credential it protects. Removed by the cascades of NFR-11 and the `ON DELETE CASCADE` foreign keys | By deletion cascade |
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE`, `APPLICATION_CREDENTIAL` (revoked or expired) | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Pending registrations | `PENDING_REGISTRATION` — the registrant's name, email address, password hash and salt, before any account exists (UC-47) | Until the link is followed, when the row is removed, or until expiry **+ 7 days** (default, configurable) | The registrant asked for an account and has not yet proved the address is theirs. Nothing but the link's hash and the request itself is kept, and the row stops serving its purpose when the link is followed or expires; the grace period is §5's | ✅ Removed on confirmation or when a scope owner discards it (UC-50); scheduled purge otherwise (§6) |
+| Attempt-notice budgets | `ATTEMPT_NOTICE_BUDGET` — a SHA-256 digest of an address that was sent a registration-attempt notice, how many in the current day, and when that day ends (FR-SR-14) | Until the window ends **+ 7 days** (default, configurable) | Held only to cap the notices one address receives at three a day. An ended window counts nothing, so the row has no purpose left; the grace period is §5's, so it goes with the tokens | ✅ Scheduled purge (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
 | Hard-deletion tombstones | `ERASED_SUBJECT` — the `PublicId` of a hard-deleted person or Google User, which table it came from, and when (#195) | Until no audit entry names the id, and **at least 1 day** — §7.2 | Held only so the audit pass can clear the targets that still name a removed person once no row is left to say the id was a person's. The day covers the hard delete's own entry, written just after the row goes | ✅ Removed by the audit pass (§7.2) |
 | Application logs | Serilog file sink, including every request's client IP address | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
@@ -180,6 +181,10 @@ a condition of their own, below.
 
 **A live token is never at risk.** The cutoff is strictly in the past, so a token that has not yet
 expired cannot match however the grace period is configured.
+
+An attempt-notice budget (FR-SR-14) is not a token either. It purges once its window ended at or
+before `now - grace`: an ended window counts nothing, since the next notice to that address starts a
+new one, so the row is a digest of an address with no purpose left.
 
 An application credential (UC-53) is not a single-use token, but once it is revoked or has expired
 it can never be accepted again, so it is kept for the same grace as a spent token and then purged by

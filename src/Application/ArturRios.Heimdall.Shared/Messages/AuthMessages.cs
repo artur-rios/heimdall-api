@@ -142,11 +142,19 @@ public static class AuthMessages
 
     /// <summary>
     ///     AF-15a: the address is already verified, so there is nothing a new link could do when
-    ///     clicked. UC-15's only alternative flow, and the counterpart of UC-14's decision to verify an
-    ///     already-verified address idempotently — that is about spending a token, this is about asking
-    ///     for one.
+    ///     clicked. The counterpart of UC-14's decision to verify an already-verified address
+    ///     idempotently — that is about spending a token, this is about asking for one.
     /// </summary>
     public const string EmailAlreadyVerified = "Email already verified.";
+
+    /// <summary>
+    ///     AF-15b and AF-36f: an email of the kind asked for — a verification link, or a two-factor
+    ///     setup code — went to the caller within the per-person cooldown (FR-EV-07, FR-2F-19), so
+    ///     nothing was sent. The self-service wording of <see cref="PersonMessages.AccountEmailSentRecently" />,
+    ///     with the same status.
+    /// </summary>
+    public const string EmailSentRecently =
+        "An email of this kind was sent to you recently. Try again in a few minutes.";
 
     /// <summary>
     ///     UC-15: the bearer token names a person who no longer exists. Reachable because

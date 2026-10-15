@@ -19,6 +19,13 @@ public class PendingRegistration : Entity<long>
     public const int MaxConfirmationGuesses = 10;
 
     /// <summary>
+    ///     The live registrations one address may have in one scope at a time (FR-SR-13). Each is a
+    ///     confirmation mail to the address, so this bounds the mail registering can send it: a request
+    ///     beyond it creates and mails nothing, and answers exactly as any other does (AF-47b).
+    /// </summary>
+    public const int MaxLivePerAddress = 3;
+
+    /// <summary>
     ///     The administrative reference (UC-49, UC-50): how a scope's owners name this registration to
     ///     discard it. Random, so it discloses nothing about the registrant or how many registrations
     ///     exist. The registrant never sees it; their reference is still the mailed token.

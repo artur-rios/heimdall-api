@@ -12,8 +12,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="ResendVerificationEmailCommand" /> (UC-15): refuses an address that is
-///     already verified (AF-15a), retires every verification link the caller still holds, and has a
-///     fresh one issued and mailed (FR-EV-04).
+///     already verified (AF-15a) and a request inside the per-person cooldown (AF-15b, FR-EV-07),
+///     retires every verification link the caller still holds, and has a fresh one issued and mailed
+///     (FR-EV-04).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -29,8 +30,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         <see cref="DeletePersonCommand" /> does not.
 ///     </para>
 ///     <para>
-///         A person who has since been logically deleted is still served. UC-15 defines exactly one
-///         alternative flow, so a second refusal would be one this handler invented, and a verified
+///         The cooldown is <see cref="AdminEmailOptions" />'s, asked exactly as UC-51 asks it: any
+///         verification token issued for the person inside the window — by UC-06, UC-15 or UC-51,
+///         used or not — means a link went out recently. Without it, whoever holds a token could loop
+///         this endpoint and mail the account's address once per request; with it, one address gets
+///         at most one link per cooldown however the request is repeated.
+///     </para>
+///     <para>
+///         A person who has since been logically deleted is still served. UC-15 defines no
+///         alternative flow for it, so a refusal would be one this handler invented, and a verified
 ///         address grants nothing on its own — UC-11 refuses the login by AF-11c regardless. This
 ///         deliberately differs from UC-12, which withholds a reset link from a deleted person: UC-12
 ///         must answer identically either way for anti-enumeration reasons, so withholding costs it
@@ -41,7 +49,9 @@ public class ResendVerificationEmailCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
-    IEmailVerificationService emailVerification)
+    IEmailVerificationService emailVerification,
+    EmailVerificationOptions verificationOptions,
+    AdminEmailOptions emailOptions)
     : ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>
 {
     public async Task<DataOutput<ResendVerificationEmailCommandOutput?>> HandleAsync(
@@ -68,9 +78,20 @@ public class ResendVerificationEmailCommandHandler(
             return output.WithError(AuthMessages.EmailAlreadyVerified);
         }
 
+        // AF-15b (FR-EV-07): a link went out within the cooldown. Also before step 3, so the link the
+        // person already has keeps working. Best-effort as UC-51's is: two simultaneous requests can
+        // both pass it, and the credential endpoints' rate limit bounds how many can.
+        var now = DateTime.UtcNow;
+
+        if (await emailOptions.IsRunningAsync(
+                tokenReader, person.Id, verificationOptions.TokenLifetime, now, cancellationToken))
+        {
+            return output.WithError(AuthMessages.EmailSentRecently);
+        }
+
         // UC-15 step 3: retire every live link, so the new one is the only one that works.
         var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
-            tokenReader, tokenWriter, person.Id, DateTime.UtcNow);
+            tokenReader, tokenWriter, person.Id, now);
 
         if (retirement is not null)
         {

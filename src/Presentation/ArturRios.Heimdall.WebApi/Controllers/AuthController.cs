@@ -151,9 +151,15 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     enforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's
     ///     idempotent success, since a link mailed to a verified address could do nothing when clicked.
     ///     A token naming a person who no longer exists answers 404: it was validated, but there is no
-    ///     address left to send to.
+    ///     address left to send to. A link already mailed to the person within the account-email
+    ///     cooldown (<c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c>, five minutes by default) answers
+    ///     429 "An email of this kind was sent to you recently. Try again in a few minutes." and sends
+    ///     nothing (AF-15b) — the link UC-06, UC-51 or an earlier resend mailed counts. The endpoint is
+    ///     also under the credential endpoints' rate limit, whose 429 is "Too many requests." with a
+    ///     <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("resend-verification")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResendVerificationEmailCommandOutput?>>> ResendVerification()
     {
         var command = new ResendVerificationEmailCommand();
@@ -233,7 +239,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>GoogleUser</c>, not a <c>Person</c> — so the handler enforces it by resolving the caller
     ///     against the <c>Person</c> table itself. The request carries the caller's
     ///     <c>currentPassword</c> (FR-2F-18), so the action sits under the credential endpoints' rate
-    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do.
+    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> while a setup
+    ///     code mailed within the account-email cooldown is recent answers 429 "An email of this kind
+    ///     was sent to you recently. Try again in a few minutes." and sends nothing (AF-36f); it is
+    ///     checked before the password. Selecting <c>App</c> alone is never held back by it.
     /// </remarks>
     [HttpPost("2fa/enable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

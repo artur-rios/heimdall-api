@@ -4,25 +4,51 @@ using ArturRios.Util.Test.Attributes;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for the partition the credential-endpoint rate limiter counts a caller in. An IPv6
-// subscriber holds a whole /64, so counting per address would let one caller spread requests over
-// 2^64 partitions and never meet the limit.
+// subscriber holds at least a /64 and is routinely handed a /56, so counting per address — or per
+// /64 — would let one caller spread requests over many partitions and never meet the limit.
 public class RateLimitPartitionKeyTests
 {
     [UnitFact]
     public void GivenTwoAddressesInOneIPv6Slash64_WhenPartitioned_ThenTheyShareAPartition()
     {
+        // Given / When
         var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:aaaa::1"));
         var second = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:ffff:1:2:3"));
 
+        // Then
         Assert.Equal(first, second);
     }
 
     [UnitFact]
-    public void GivenAddressesInDifferentIPv6Slash64s_WhenPartitioned_ThenTheyDoNot()
+    public void GivenAddressesInDifferentSlash64sOfOneIPv6Slash56_WhenPartitioned_ThenTheyShareAPartition()
     {
-        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2::1"));
-        var second = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:3::1"));
+        // Given the first and the last /64 of one /56 — 256 partitions to one subscriber, if the
+        // limiter counted per /64
+        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:200::1"));
+        var last = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff:ffff:ffff:ffff:ffff"));
 
+        // Then
+        Assert.Equal(first, last);
+    }
+
+    [UnitFact]
+    public void GivenAnIPv6Address_WhenPartitioned_ThenTheKeyNamesItsSlash56()
+    {
+        // Given / When
+        var key = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ab:cd::1"));
+
+        // Then
+        Assert.Equal("2001:db8:1:200::/56", key);
+    }
+
+    [UnitFact]
+    public void GivenAddressesInDifferentIPv6Slash56s_WhenPartitioned_ThenTheyDoNot()
+    {
+        // Given neighbouring /56s, which are two subscribers
+        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff::1"));
+        var second = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:300::1"));
+
+        // Then
         Assert.NotEqual(first, second);
     }
 

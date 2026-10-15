@@ -16,7 +16,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="EnableTwoFactorAuthCommand" /> (UC-36, FR-2F-01…FR-2F-03): validates input
 ///     (AF-36c), confirms the caller is a live person eligible to opt in (AF-36b), refuses a caller
-///     whose configuration is already active (AF-36a), verifies their current password (AF-36e,
+///     whose configuration is already active (AF-36a), refuses an Email selection while a setup code
+///     mailed within the cooldown is recent (AF-36f), verifies their current password (AF-36e,
 ///     FR-2F-18), then creates or overwrites (AF-36d) a pending
 ///     <see cref="TwoFactorAuth" /> row for the method(s) selected — generating and encrypting a TOTP
 ///     secret for the App method, and issuing a fresh 6-digit email code for the Email method.
@@ -44,15 +45,25 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         (<see cref="ReauthenticationBudget" />, FR-AU-13), and a missing or wrong password, or a
 ///         paused budget, is refused with the one message every re-authentication shares.
 ///     </para>
+///     <para>
+///         Selecting the Email method mails a code, so it is under the per-person account-email
+///         cooldown (<see cref="AdminEmailOptions" />): a code issued for the configuration inside the
+///         window refuses the request (AF-36f), whatever else was selected with it. It is a state
+///         refusal, so it comes before the password as AF-36a does, and a request that could not send
+///         costs neither an Argon2id derivation nor a re-authentication charge. App alone mails
+///         nothing and is never held back by it.
+///     </para>
 /// </remarks>
 public class EnableTwoFactorAuthCommandHandler(
     IValidator<EnableTwoFactorAuthCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
+    IAsyncReadOnlyRepository<TwoFactorEmailCode, long> emailCodeReader,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITotpSecretProtector totpSecretProtector,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    AdminEmailOptions emailOptions)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
 {
     private const string Issuer = "Heimdall";
@@ -91,6 +102,16 @@ public class EnableTwoFactorAuthCommandHandler(
         if (existing is { IsActive: true })
         {
             return output.WithError(TwoFactorMessages.AlreadyActive);
+        }
+
+        // AF-36f (FR-2F-19): a setup code went to the address within the cooldown, and Email would
+        // mail another. Best-effort, as AF-15b is: simultaneous requests can both pass it, within
+        // the credential endpoints' rate limit.
+        if (wantsEmail && existing is not null &&
+            await emailOptions.IsRunningForEmailCodesAsync(
+                emailCodeReader, existing.Id, DateTime.UtcNow, cancellationToken))
+        {
+            return output.WithError(AuthMessages.EmailSentRecently);
         }
 
         // AF-36e (FR-2F-18): the current password, missing or wrong alike, through the gate every

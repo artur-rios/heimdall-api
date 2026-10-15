@@ -142,6 +142,43 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("application_credential", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AttemptNoticeBudget", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AddressHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("address_hash");
+
+                    b.Property<int>("NoticesSent")
+                        .HasColumnType("integer")
+                        .HasColumnName("notices_sent");
+
+                    b.Property<DateTime>("WindowEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_ends_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attempt_notice_budget");
+
+                    b.HasIndex("AddressHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempt_notice_budget_address_hash");
+
+                    b.HasIndex("WindowEndsAt")
+                        .HasDatabaseName("ix_attempt_notice_budget_window_ends_at");
+
+                    b.ToTable("attempt_notice_budget", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")

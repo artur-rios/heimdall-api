@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -18,8 +20,9 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/auth/resend-verification (UC-15, FR-EV-04): the main flow for each
-// of the three actors, AF-15a (400), the 401 an anonymous caller gets — the first authorization flow
-// any /api/auth endpoint has — and the 404 a token outliving its person gets.
+// of the three actors, AF-15a (400), AF-15b (429, a link was mailed within the per-person cooldown,
+// FR-EV-07), the credential endpoints' rate limit, the 401 an anonymous caller gets — the first
+// authorization flow any /api/auth endpoint has — and the 404 a token outliving its person gets.
 //
 // The token never appears in a response, so every test reads the email_verification_token rows back
 // instead: exactly one live row after a resend, and the previously outstanding ones spent. Since
@@ -362,8 +365,18 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         var created = await PersonByEmailAsync(email);
         var original = Assert.Single(await TokensForAsync(created));
 
-        // When the person asks for a new link, as themselves
+        // When the person asks for a new link at once, as themselves
         Reauthorize(TestTokens.For(created.PublicId, (int)Roles.ScopeAdmin));
+
+        var early = await ResendAsync();
+
+        // Then — AF-15b: UC-06's mail went out inside the cooldown, so nothing is sent or retired
+        Assert.Equal(HttpStatusCode.TooManyRequests, early.StatusCode);
+        Assert.Contains(AuthMessages.EmailSentRecently, early.Body!.Errors);
+        Assert.False(Assert.Single(await TokensForAsync(created)).Used);
+
+        // When they ask again once the cooldown has passed
+        await AgeTokensAsync(created, TimeSpan.FromMinutes(6));
 
         var response = await ResendAsync();
 
@@ -388,6 +401,84 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
             .Where(person => person.Id == created.Id)
             .Select(person => person.EmailVerified)
             .SingleAsync());
+    }
+
+    [FunctionalFact]
+    public async Task GivenALinkWasJustMailed_WhenPostResendVerificationAgain_ThenTooManyRequestsAndTheLinkIsKept()
+    {
+        // Given — AF-15b: a resend a moment ago
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("cooldown"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        Assert.Equal(HttpStatusCode.OK, (await ResendAsync()).StatusCode);
+        var mailed = await SingleLiveTokenAsync(person);
+
+        // When
+        var response = await ResendAsync();
+
+        // Then — refused with the cooldown's answer, and the link just mailed still works
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Contains(AuthMessages.EmailSentRecently, response.Body!.Errors);
+        Assert.Equal(mailed.TokenHash, (await SingleLiveTokenAsync(person)).TokenHash);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheRateLimitIsSpent_WhenPostResendVerification_ThenTooManyRequestsFromTheLimiter()
+    {
+        // Given ten requests from one client address. The first sends; the cooldown answers the rest,
+        // so the limiter is what this test reaches. A trusted caller's named address gives the test a
+        // bucket of its own.
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("limited"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        for (var attempt = 1; attempt <= 10; attempt++)
+        {
+            using var allowed = await ResendFromAsync("203.0.113.61");
+            Assert.NotEqual(RateLimitMessages.TooManyRequests, await FirstErrorAsync(allowed));
+        }
+
+        // When
+        using var response = await ResendFromAsync("203.0.113.61");
+
+        // Then
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.NotNull(response.Headers.RetryAfter);
+        Assert.Equal(RateLimitMessages.TooManyRequests, await FirstErrorAsync(response));
+    }
+
+    private async Task<HttpResponseMessage> ResendFromAsync(string clientAddress)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/resend-verification")
+        {
+            Content = JsonContent.Create(new { })
+        };
+
+        request.Headers.Add(AuthRateLimitPartition.CallerKeyHeader, PostgresFixture.TrustedCallerKey);
+        request.Headers.Add(AuthRateLimitPartition.ClientAddressHeader, clientAddress);
+
+        return await Gateway.Client.SendAsync(request);
+    }
+
+    private static async Task<string?> FirstErrorAsync(HttpResponseMessage response)
+    {
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        return document.RootElement.TryGetProperty("errors", out var errors)
+            ? errors.EnumerateArray().Select(error => error.GetString()).FirstOrDefault()
+            : null;
+    }
+
+    /// <summary>
+    ///     Moves every verification token of the person back in time by <paramref name="age" />, as if
+    ///     it had been issued that much earlier: the cooldown reads a token's issue time from its expiry.
+    /// </summary>
+    private async Task AgeTokensAsync(Person person, TimeSpan age)
+    {
+        await using var context = db.CreateContext();
+
+        await context.EmailVerificationTokens
+            .Where(token => token.PersonId == person.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(token => token.ExpiresAt, token => token.ExpiresAt - age));
     }
 
     private async Task<Person> PersonByEmailAsync(string email)

@@ -193,6 +193,17 @@ remaining guesses and whether it has expired through the API (UC-49) — the sam
 would see in the scope's user list once the registration is confirmed. The hash, salt and token
 hash are never returned.
 
+### `ATTEMPT_NOTICE_BUDGET`
+
+| Column | Purpose |
+| --- | --- |
+| `AddressHash` | Which address a registration-attempt notice went to, so the address gets at most three a day however many scopes or source addresses the attempts come from (FR-SR-14). A SHA-256 digest of the trimmed, lower-cased address, never the address itself — pseudonymisation rather than anonymisation, since whoever already suspects an address can hash it and find the row |
+| `NoticesSent`, `WindowEndsAt` | How many notices went out in the current one-day window and when it ends; the first notice after it ends starts a new one. Purged with the single-use tokens once the window has ended and the grace period passed (Data Retention Schedule) |
+
+The row is written when a notice is sent, which is to say when someone registered with an address that
+already holds an account; it records that much about the holder and nothing else. It is never read
+through the API.
+
 ### Two decisions this review settled
 
 **`ProfilePictureUrl` stays, and it is the weakest case here.** The issue that prompted this review

@@ -19,6 +19,8 @@ public static class TwoFactorMessageMap
             [TwoFactorMessages.NotEligible] = HttpStatusCodes.Forbidden,
             // AF-36c — neither method selected.
             [TwoFactorMessages.NoMethodSelected] = HttpStatusCodes.BadRequest,
+            // AF-36f — a setup code went out within the per-person cooldown (FR-2F-19), as AF-15b.
+            [AuthMessages.EmailSentRecently] = HttpStatusCodes.TooManyRequests,
             // UC-37 main flow — setup confirmed, recovery codes issued.
             [TwoFactorMessages.SetupConfirmed] = HttpStatusCodes.Ok,
             // AF-37a — no pending setup exists for the caller.

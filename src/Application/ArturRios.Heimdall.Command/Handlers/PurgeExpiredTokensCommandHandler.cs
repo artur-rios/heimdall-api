@@ -13,8 +13,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
-///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47)
-///     and spent application credentials (UC-55) whose retention period has run out. All failures
+///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47),
+///     spent application credentials (UC-55) and ended registration-attempt notice budgets (FR-SR-14)
+///     whose retention period has run out. All failures
 ///     are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
@@ -34,6 +35,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         An <see cref="ApplicationCredential" /> purges on a condition of its own: revoked or
 ///         expired at or before <c>now - grace</c>, whichever came first. Expiry alone would not
 ///         do — a credential may have none, and would then be kept for ever once revoked.
+///     </para>
+///     <para>
+///         An <see cref="AttemptNoticeBudget" /> purges once its window ended at or before the
+///         cutoff. An ended window counts nothing — the next notice starts a new one — so the row is
+///         only a digest of an address waiting to be removed, and the grace keeps it no longer than a
+///         token is kept.
 ///     </para>
 ///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token
@@ -61,6 +68,8 @@ public class PurgeExpiredTokensCommandHandler(
     IAsyncRepository<PendingRegistration, long> pendingRegistrationWriter,
     IAsyncReadOnlyRepository<ApplicationCredential, long> applicationCredentialReader,
     IAsyncRepository<ApplicationCredential, long> applicationCredentialWriter,
+    IAsyncReadOnlyRepository<AttemptNoticeBudget, long> attemptNoticeBudgetReader,
+    IAsyncRepository<AttemptNoticeBudget, long> attemptNoticeBudgetWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -104,6 +113,13 @@ public class PurgeExpiredTokensCommandHandler(
                 .OrderBy(credential => credential.RevokedAt ?? credential.ExpiresAt),
             applicationCredentialWriter);
 
+        // FR-SR-14: a notice budget whose window has ended counts nothing any more.
+        var attemptNoticeBudgets = await PurgeAsync(
+            attemptNoticeBudgetReader.Query()
+                .Where(budget => budget.WindowEndsAt <= cutoff)
+                .OrderBy(budget => budget.WindowEndsAt),
+            attemptNoticeBudgetWriter);
+
         // Every table is attempted before the run reports, so one failing table does not hide
         // whether the others were cleared — and the next run retries whatever was missed.
         var errors = passwordResetTokens.Errors
@@ -111,6 +127,7 @@ public class PurgeExpiredTokensCommandHandler(
             .Concat(twoFactorEmailCodes.Errors)
             .Concat(pendingRegistrations.Errors)
             .Concat(applicationCredentials.Errors)
+            .Concat(attemptNoticeBudgets.Errors)
             .ToList();
 
         if (errors.Count > 0)
@@ -127,7 +144,8 @@ public class PurgeExpiredTokensCommandHandler(
                 EmailVerificationTokensPurged = emailVerificationTokens.Count,
                 TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
                 PendingRegistrationsPurged = pendingRegistrations.Count,
-                ApplicationCredentialsPurged = applicationCredentials.Count
+                ApplicationCredentialsPurged = applicationCredentials.Count,
+                AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count
             })
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }

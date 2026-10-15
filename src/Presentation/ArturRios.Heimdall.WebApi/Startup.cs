@@ -99,6 +99,12 @@ public class Startup : WebApiStartup
     private const int AuthEndpointRateLimitWindowSeconds = 60;
 
     /// <summary>
+    ///     The IPv6 prefix one rate-limit partition covers (see <see cref="RateLimitPartitionKey" />).
+    ///     A whole number of bytes.
+    /// </summary>
+    private const int RateLimitIPv6PrefixLength = 56;
+
+    /// <summary>
     ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
     ///     values in the environment, and used again by <see cref="EdgePipeline" /> to mount the scrape
     ///     endpoint — one reading for both, so the exporter and its endpoint cannot disagree.
@@ -229,6 +235,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IApplicationCredentialSlots, ApplicationCredentialSlots>();
         // NFR-21 (#195): the tombstones a hard delete writes first, idempotently, as one upsert.
         Builder.Services.AddScoped<IErasedSubjects, ErasedSubjects>();
+        // FR-SR-14: the per-address budget of registration-attempt notices, charged as one upsert.
+        Builder.Services.AddScoped<IAttemptNoticeBudgets, AttemptNoticeBudgets>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
@@ -769,12 +777,13 @@ public class Startup : WebApiStartup
     ///     password or a second factor (2FA confirm, disable and recovery-code regeneration, and the
     ///     erasure request) carry it too: a bearer token is not the password, and without a limit
     ///     whoever holds one could test passwords or six-digit codes against them as fast as they
-    ///     could send requests, outside the login lockout. Policy name matches the
+    ///     could send requests, outside the login lockout. The verification-link resend carries it
+    ///     as well, since each request there mails the account's address. Policy name matches the
     ///     <see cref="Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute" /> applied to
     ///     each endpoint in <c>AuthController</c>.
     /// </summary>
     /// <remarks>
-    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /64 —
+    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /56 —
     ///     see <see cref="RateLimitPartitionKey" />), which is the caller's own
     ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
     ///     every caller shares the proxy's partition. A client system that is itself one caller to
@@ -785,13 +794,22 @@ public class Startup : WebApiStartup
     /// </remarks>
     /// <summary>
     ///     The partition a caller's requests are counted in: the whole address for IPv4, and the
-    ///     <c>/64</c> it belongs to for IPv6.
+    ///     <c>/56</c> it belongs to for IPv6.
     /// </summary>
     /// <remarks>
-    ///     A /64 is what one IPv6 subscriber is routinely handed, and every address inside it is
-    ///     theirs to use — 2<sup>64</sup> of them. Counted per address, a single caller could give
-    ///     every request a fresh partition and never meet the limit at all. An IPv4-mapped IPv6
-    ///     address is one IPv4 caller, and is counted as that address.
+    ///     <para>
+    ///         A /64 is the least one IPv6 subscriber is handed, and every address inside it is theirs
+    ///         to use — 2<sup>64</sup> of them. Counted per address, a single caller could give every
+    ///         request a fresh partition and never meet the limit at all. Counted per /64 it is no
+    ///         better for the many subscribers routinely handed a /56: 256 partitions each, enough on
+    ///         their own to keep the password-hash gate full. A /56 is one caller here.
+    ///     </para>
+    ///     <para>
+    ///         Coarser is not safer: a /48 is a whole site, often many unrelated people behind one
+    ///         provider, and they would share one budget of ten a minute. A flood from many unrelated
+    ///         networks is not bounded here at all — that is for the edge (Threat Model TH-03). An
+    ///         IPv4-mapped IPv6 address is one IPv4 caller, and is counted as that address.
+    ///     </para>
     /// </remarks>
     public static string RateLimitPartitionKey(IPAddress? address)
     {
@@ -811,9 +829,9 @@ public class Startup : WebApiStartup
         }
 
         var bytes = address.GetAddressBytes();
-        Array.Clear(bytes, 8, 8);
+        Array.Clear(bytes, RateLimitIPv6PrefixLength / 8, 16 - RateLimitIPv6PrefixLength / 8);
 
-        return $"{new IPAddress(bytes)}/64";
+        return $"{new IPAddress(bytes)}/{RateLimitIPv6PrefixLength}";
     }
 
     /// <summary>
