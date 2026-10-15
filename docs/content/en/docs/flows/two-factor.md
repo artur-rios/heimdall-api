@@ -44,6 +44,9 @@ sequenceDiagram
     alt already active (AF-36a)
         EH-->>P: rejected — configuration untouched
     end
+    alt Email selected and a setup code was mailed within the cooldown (AF-36f)
+        EH-->>P: 429 — nothing changed or sent, no password check
+    end
     alt currentPassword missing or wrong (AF-36e)
         EH-->>P: 401 — nothing created
     end

@@ -956,7 +956,7 @@ sequenceDiagram
 **Main Flow:**
 
 1. Authenticated person requests a new verification email.
-2. The system checks that the email is not already verified.
+2. The system checks that the email is not already verified, and that no verification email went to the person within the account-email cooldown (FR-EV-07).
 3. The system invalidates any existing verification tokens.
 4. The system generates a new time-limited verification token.
 5. The system sends the verification email.
@@ -967,6 +967,13 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-15a | Email already verified | Return `400 Bad Request` — "Email already verified" |
+| AF-15b | A verification token was issued for the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — by UC-06, UC-51 or an earlier resend, used or not (FR-EV-07) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
+
+> **On the cooldown and the rate limit.** The endpoint mails the account's own address on every
+> successful call, and a bearer token is all it asks for, so without a bound whoever held one could
+> mail that address once per request. The cooldown is UC-51's, asked the same way, so one person gets
+> at most one link per window however it was asked for. The endpoint is also under the credential
+> endpoints' rate limit, whose own `429` is "Too many requests." with a `Retry-After` header.
 
 ---
 
@@ -1687,7 +1694,7 @@ sequenceDiagram
 ```
 
 1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both, and their `currentPassword` (FR-2F-18).
-2. The system confirms the caller has no already-active two-factor configuration and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+2. The system confirms the caller has no already-active two-factor configuration, that no setup code went to them within the account-email cooldown when `Email` is selected (AF-36f), and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
 3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
@@ -1708,6 +1715,7 @@ sequenceDiagram
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
 | AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
+| AF-36f | `Email` is selected and a setup code was mailed to the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), used or not (FR-2F-19) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; the code already mailed still confirms. Selecting `App` alone is not affected |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
 > does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
@@ -2026,8 +2034,17 @@ sequenceDiagram
 | AF-47h | The link is followed without the password chosen at sign-up | `422 Unprocessable Entity` — "Enter the password you chose when you signed up to finish creating your account." The registration is not consumed (FR-SR-09) |
 | AF-47i | The link is followed with a wrong password | `401 Unauthorized` — "That password does not match the one chosen when signing up." The registration is not consumed, but the guess is charged before it is compared (NFR-27): on the 10th wrong password the registration is discarded, that attempt is still answered `401`, and the link then answers UC-14 AF-14c (FR-SR-09) |
 | AF-47j | The link is followed again after the account exists | UC-14 AF-14c: `400 Bad Request` — "Invalid token". The registration was removed when the account was created, so there is nothing to claim and nothing is created |
+| AF-47k | The address already has three live pending registrations in the scope (FR-SR-13) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; the three links already sent keep working |
+| AF-47l | The address is held (AF-47b), and three attempt notices have gone to it within the current day, whichever scopes they were for (FR-SR-14) | `202 Accepted`, identical to the main flow. Nothing is created and no notice is sent |
 
 > **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
+
+> **On the mail an address can be sent.** Each request may mail the address it names, and the caller
+> cannot see whether it did, so the bound has to be on the recipient rather than the caller: the
+> per-IP rate limit does nothing against a sender with many source addresses. AF-47k bounds the
+> confirmation mail to three live links per scope; AF-47l bounds the notices to three a day per
+> address across every scope. Both are applied after the response, like everything else that depends
+> on the address, so they change nothing the caller sees.
 
 ---
 

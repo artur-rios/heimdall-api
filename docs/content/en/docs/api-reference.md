@@ -35,10 +35,10 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /password-recovery` | Anonymous | UC-12 — request a reset link |
 | `POST /password-reset` | Anonymous | UC-13 — set a new password from the token |
 | `POST /verify-email` | Anonymous | UC-14 — confirm an address from the mailed token |
-| `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one |
+| `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one; `429` inside the account-email cooldown; rate-limited |
 | `POST /google` | Anonymous | UC-25 — Google sign-up/sign-in against a scope |
 | `POST /google/sign-out` | Authenticated (Google User) | UC-26 — end a Google session |
-| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise) |
+| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise); with `Email`, `429` inside the account-email cooldown |
 | `POST /2fa/confirm` | Authenticated (self) | UC-37 — confirm setup, receive recovery codes |
 | `POST /2fa/verify` | Anonymous | UC-38 — redeem the challenge token with a second factor |
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |

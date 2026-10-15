@@ -28,6 +28,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   "The credential presented was not accepted.". A new migration, `AddFactorBudgets`, adds six columns to `person`,
   all starting empty; only targeted writes change them, and anonymisation clears them. **Operators:** no setting
   changes.
+- The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) now also bounds the
+  sends a person can repeat themselves (FR-EV-07, FR-2F-19). `POST /api/auth/resend-verification` answers `429` "An
+  email of this kind was sent to you recently. Try again in a few minutes." when any verification link went to the
+  person inside the window, including the one sent when the account was created, and sends nothing.
+  `POST /api/auth/2fa/enable` gives the same answer when `Email` is selected and a setup code went out inside the
+  window; it is checked before the password, and `App` alone is not affected. `resend-verification` is now also under
+  the credential endpoints' rate limit, whose `429` is "Too many requests." with `Retry-After`. **Clients:** treat
+  both `429`s as "wait and try again", not as a session end; a resend straight after sign-up is now refused for the
+  first five minutes.
+- Self-registration bounds the mail one address can be sent (FR-SR-13, FR-SR-14): at most three live pending
+  registrations per address in a scope, and at most three "someone tried to register your address" notices per
+  address a day, across every scope. A request beyond either stores and sends nothing, and is answered `202` exactly
+  as before. The notice count is kept under a SHA-256 digest of the address in a new table, `attempt_notice_budget`
+  (migration `AddAttemptNoticeBudget`), and purged with the single-use tokens once its day has ended.
+- The credential endpoints' rate limiter counts an IPv6 caller by its `/56` rather than its `/64`, so a subscriber
+  handed a `/56` is one caller instead of 256. Trusted callers' named IPv6 addresses are counted the same way.
+  **Operators:** a flood spread over many unrelated networks can still keep the password-hash gate full; the
+  operations guide now shows how to rate-limit the credential routes at Traefik.
 
 ## [1.5.0] - 2026-10-15
 

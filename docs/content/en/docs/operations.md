@@ -220,7 +220,8 @@ hash it and look for it. What it defeats is reading addresses out of the logs in
 Brute force is bounded in two independent places, because each covers what the other misses.
 
 **Per caller — a fixed-window limiter** of **10 requests per minute, partitioned by client IP**
-(an IPv6 caller by its `/64`, since one subscriber holds the whole prefix), applied to
+(an IPv6 caller by its `/56`, since a subscriber is routinely handed a whole `/56` and counting per
+`/64` would give them 256 partitions), applied to
 `AuthController`'s anonymous, credential-checking endpoints: login, password recovery, password
 reset, email verification, Google sign-in, and second-factor verification and resend. Rejections
 answer **429** with a `Retry-After` header (whole seconds) and the usual error envelope. None of these
@@ -232,7 +233,8 @@ regeneration, the erasure request, and the person update (`PUT /api/persons/{id}
 password when a person changes their own email) — share the same limit: a bearer token is not the
 password, and without it whoever held one could test passwords or six-digit codes against them
 unthrottled. The person update is limited whether or not it checks a password, administrators'
-updates included.
+updates included. The verification-link resend (`POST /api/auth/resend-verification`) shares it too,
+because every call mails the account's address.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -270,6 +272,71 @@ throttle — not a replacement for a WAF or an API gateway's own rate limiting i
 deployment. The per-account budgets above are in the database, so they hold across instances.
 {{% /alert %}}
 
+### Bounding a distributed flood at the edge
+
+Every password check passes through `PasswordHashGate`: four Argon2id derivations at a time per
+instance, about seven hundred a minute, the rest refused with **503** after a ten-second wait. The
+per-caller limit admits ten a minute, so about seventy unrelated networks sending login attempts with
+made-up addresses keep the gate full — and while they do, real sign-ins wait and fail. **The API
+cannot stop this itself** (Threat Model Document, TH-03): those callers look like real ones, and a
+global budget in the API would only let the attacker spend it and deny everybody at a lower cost.
+The bound belongs at the edge, where the request costs nothing to refuse.
+
+On the VPS that edge is Traefik. Add a rate-limit middleware to a router of its own for the
+credential routes, in the stack overlay that declares Heimdall's routers (yggdrasil's
+`stacks/heimdall-api.proxy.yml`):
+
+```yaml
+labels:
+  # A second router for the credential routes, so only they carry the stricter limit.
+  - traefik.http.routers.heimdall-auth.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/api/auth`)
+  - traefik.http.routers.heimdall-auth.priority=100
+  - traefik.http.routers.heimdall-auth.middlewares=heimdall-auth-limit
+  - traefik.http.routers.heimdall-auth.service=heimdall-api
+  # The same router TLS settings as the main router go here.
+  # Per source: 10 a minute with a burst of 10, an IPv6 caller counted by its /56, as the API does.
+  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.average=10
+  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.period=1m
+  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.burst=10
+  - traefik.http.middlewares.heimdall-auth-limit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=56
+```
+
+- The names (`heimdall-auth`, `heimdall-api`) are placeholders: use the router and service names the
+  overlay already declares, and repeat its `tls` and `entrypoints` settings on the new router.
+  `ipv6subnet` needs Traefik 3.1 or later; on an older one, leave that line out.
+- This is the same per-source limit the API applies, moved in front of it: a refused request then
+  never reaches an instance, and one Traefik counts across every replica behind it, where each
+  instance's own limiter counts alone.
+- It does not, by itself, stop a flood from enough unrelated networks: that is the definition of one.
+  What does is visibility and a decision: the hash gate's 503s and the
+  `CREDENTIAL_VERIFICATION_SHEDDING` security signal show it starting; the source networks are in Traefik's access log; and a flood that persists is for the
+  host firewall or an upstream filtering service, which can drop whole networks before they reach
+  Traefik. Raising the replica count raises the gate's total in proportion while it lasts.
+- Do **not** add a global limit (one with `sourcecriterion.requesthost=true`) to the credential
+  routes. It turns the flood into a denial of every caller at a lower cost, which is exactly what the
+  API declines to do.
+
+### Bounds on the mail one address receives
+
+Heimdall sends mail from the operator's Mailgun domain, so mail an attacker can trigger costs the
+operator quota and sender reputation as well as annoying its recipient. A per-caller limit does not
+bound what one recipient receives from many callers, so most sends a caller can repeat are bounded
+per recipient as well:
+
+| Mail | Bound |
+| --- | --- |
+| Verification link, resent by the person (UC-15) or by an administrator (UC-51) | One per person per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes), counting every link issued for them; `429` inside it |
+| Password reset by an administrator (UC-52) | The same cooldown, for reset links |
+| Two-factor setup code (UC-36, email method) | The same cooldown, for setup codes; `429` inside it |
+| Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16) |
+| Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
+| "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
+| Password recovery requested anonymously (UC-12) | **Per-IP rate limit only.** No per-recipient bound yet |
+| Email-change notice to the previous address (FR-PE-15) | Needs the account's password; per-IP rate limit and the re-authentication budget, no per-recipient bound |
+
+The self-registration bounds are silent by design: the caller gets the same `202` whatever happened,
+so the bound cannot be used to learn whether an address is registered.
+
 ### A client system calling for its users — `HEIMDALL_TRUSTED_CALLER_KEYS`
 
 A client system such as Fortuna's API signs its users in on their behalf, so Heimdall sees **one**
@@ -280,7 +347,7 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
 | Header | Value |
 | --- | --- |
 | `X-Heimdall-Caller-Key` | One of the configured keys |
-| `X-Heimdall-Client-Address` | The end user's own IP address, IPv4 or IPv6 (an IPv6 user is counted by its /64, as everywhere else) |
+| `X-Heimdall-Client-Address` | The end user's own IP address, IPv4 or IPv6 (an IPv6 user is counted by its /56, as everywhere else) |
 
 - `HEIMDALL_TRUSTED_CALLER_KEYS` is a comma-separated list. Entries are trimmed and empty ones
   ignored. **Each key must be at least 32 characters** — they are secrets, so a shorter one stops
@@ -302,7 +369,8 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
   endpoints the same limiter guards — `2fa/enable`, `2fa/confirm`, `2fa/disable`,
   `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /api/persons/{id}` — which share the
   re-authentication budget above, whatever addresses the guesses come from (Threat Model Document,
-  TH-32 and TH-36).
+  TH-32 and TH-36). The seventh, `resend-verification`, is bounded per person by the account-email
+  cooldown below, whatever bucket it is counted in.
 - Start-up logs how many keys are configured, never the keys, and neither header's value is logged.
 
 ## Database connection encryption — NFR-25
@@ -333,7 +401,8 @@ of a setting here.
 
 **Single-use tokens are purged on a schedule.** A hosted service dispatches a purge hourly by
 default, removing password reset tokens, email verification tokens, and two-factor email codes that
-are past their expiry by the grace period. Each run removes at most a bounded batch per table,
+are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
+application credentials, and self-registration attempt-notice budgets whose day has ended. Each run removes at most a bounded batch per table,
 oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).
@@ -760,8 +829,16 @@ Application tokens (`HEIMDALL_APPLICATION_TOKEN_AUDIENCE`, UC-56) are validated 
 so instances whose clocks differ can refuse a freshly issued token for the length of the drift: keep
 instance clocks synchronised (NTP).
 
-The administrator-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, UC-51/UC-52) is derived from
-the issued token rows (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:
+The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`) began as the administrators'
+(UC-51/UC-52) and keeps that name, but it now bounds the self-service sends as well: a person's own
+verification-link resend (UC-15, AF-15b) and a two-factor setup that selects the email method (UC-36,
+AF-36f). Each answers **429** "An email of this kind was sent to you recently. Try again in a few
+minutes." and sends nothing. A shorter value lets people retry sooner; `0` removes the bound from
+those endpoints entirely, leaving only the per-IP limit, so keep it on wherever the API faces the
+internet.
+
+The cooldown is derived from the issued token and code rows (`ExpiresAt` minus the lifetime), not
+from a separate record. Two consequences:
 if `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` is `0` and a token lifetime is shorter than the cooldown, an expired
 token from inside the window may already have been purged, and the cooldown can undercount. And the cooldown
 is best-effort: simultaneous requests for the same person can both pass it.

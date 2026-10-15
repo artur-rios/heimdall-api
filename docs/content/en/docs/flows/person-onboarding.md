@@ -95,7 +95,9 @@ the bearer token, so a caller can only ever ask for their own link.
 flowchart TD
     A[POST /api/auth/resend-verification<br/>bearer token only] --> B{Already verified?}
     B -->|Yes| C["400 — AF-15a<br/>a link mailed to it could do nothing"]
-    B -->|No| D[Retire outstanding tokens]
+    B -->|No| G{Link mailed within<br/>the cooldown?}
+    G -->|Yes| H["429 — AF-15b<br/>nothing sent; the last link still works"]
+    G -->|No| D[Retire outstanding tokens]
     D --> E[Issue + mail a fresh one]
     E --> F[200 — only the newest link works]
 ```
@@ -103,6 +105,14 @@ flowchart TD
 Note the asymmetry with UC-14: verifying an already-verified address answers **200**, but *resending*
 to one answers **400**. Verification's job is done either way; a resend would mail a link that could
 do nothing when clicked.
+
+A resend is also held to the account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five
+minutes by default): if any verification link went to the person inside it — the one sent when the
+account was created, an administrator's, or an earlier resend — the answer is **429** "An email of
+this kind was sent to you recently. Try again in a few minutes." and nothing is sent or retired
+(AF-15b). The endpoint is under the credential endpoints' rate limit too, whose own 429 says "Too
+many requests." and carries a `Retry-After` header. A client should tell the person to check their
+inbox and try again in a few minutes.
 
 ### An administrator resending it — UC-51
 
