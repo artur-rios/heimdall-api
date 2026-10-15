@@ -77,6 +77,11 @@ public class DisableTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.FactorInvalid);
         }
 
+        // FR-AU-11: removing a credential revokes every token issued while it stood, the caller's own
+        // included, so the account's sessions after this point are only ones signed in without it.
+        // Before the deletion, so a failed one costs an extra sign-in rather than a live old session.
+        await atomicWrites.RotateSecurityStampAsync(person);
+
         // UC-39 step 4: only once both checks pass. ON DELETE CASCADE (TwoFactorAuthDbMap,
         // TwoFactorRecoveryCodeDbMap, TwoFactorEmailCodeDbMap) removes the recovery codes and email
         // codes at the database level — no explicit child deletion needed.
@@ -86,10 +91,6 @@ public class DisableTwoFactorAuthCommandHandler(
         {
             return output.WithErrors(deletion.Errors);
         }
-
-        // FR-AU-11: removing a credential revokes every token issued while it stood, the caller's own
-        // included, so the account's sessions after this point are only ones signed in without it.
-        await atomicWrites.RotateSecurityStampAsync(person);
 
         return output
             .WithData(new DisableTwoFactorAuthCommandOutput { Disabled = true })

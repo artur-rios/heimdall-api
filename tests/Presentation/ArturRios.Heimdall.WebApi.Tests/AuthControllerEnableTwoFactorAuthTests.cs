@@ -282,8 +282,8 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         Assert.Contains(ActorLivenessFilter.ActorNotLive, response.Body!.Errors);
     }
 
-    // FR-2F-18: the caller's current password is required. A token alone used to be enough for
-    // whoever held it to put their own authenticator on the account and lock its owner out.
+    // FR-2F-18: the caller's current password is required. Adding a second factor requires proof of
+    // identity, as removing one does, and a bearer token alone is not that proof.
 
     [FunctionalFact]
     public async Task GivenNoPassword_WhenPostEnable2fa_ThenUnauthorizedAndNothingIsCreated()

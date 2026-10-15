@@ -99,6 +99,12 @@ public class ResetPasswordCommandHandler(
             return output.WithError(AuthMessages.TokenAlreadyUsed);
         }
 
+        // FR-AU-11: a new password revokes every token issued under the old one. A reset is the
+        // remedy for a password someone else may know, and a token obtained with it would otherwise
+        // outlive the remedy by up to its whole lifetime. Before the save, in its own targeted write,
+        // so a failed save costs one extra sign-in rather than leaving old sessions live.
+        await atomicWrites.RotateSecurityStampAsync(person);
+
         person.PasswordHash = newHash;
         person.Salt = newSalt;
         person.UpdatedAt = now;
@@ -109,11 +115,6 @@ public class ResetPasswordCommandHandler(
         {
             return output.WithErrors(update.Errors);
         }
-
-        // FR-AU-11: a new password revokes every token issued under the old one. A reset is the
-        // remedy for a password someone else may know, and a token they obtained with it would
-        // otherwise outlive the remedy by up to its whole lifetime.
-        await atomicWrites.RotateSecurityStampAsync(person);
 
         // UC-13 step 4, for every other token the person still holds.
         var consumption = await ConsumeTokensAsync(token, now);

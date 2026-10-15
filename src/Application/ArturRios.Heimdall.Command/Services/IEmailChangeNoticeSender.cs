@@ -8,9 +8,8 @@ namespace ArturRios.Heimdall.Command.Services;
 /// <remarks>
 ///     <para>
 ///         The notice goes to the address the change took away, because that is the one its owner
-///         still reads if the change was not theirs: a token taken for a moment was enough to move an
-///         account to an address its holder controls, and recover it from there. The notice is how
-///         the owner finds out.
+///         still reads if the change was not theirs. Recovery follows the address, so a change the
+///         owner did not make must not go unnoticed.
 ///     </para>
 ///     <para>
 ///         It is given only the previous address, never the new one, so it cannot disclose the new

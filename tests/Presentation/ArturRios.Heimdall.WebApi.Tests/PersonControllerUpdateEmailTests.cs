@@ -19,9 +19,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for the re-authentication an own email change needs (UC-08 step 4, FR-PE-14),
-// over PUT /api/persons/{id}. A bearer token alone used to be enough to move an account to another
-// address and recover it from there; now the person's current password is asked for, and their second
-// factor when it is active. An administrator changing someone else's address, and a person changing
+// over PUT /api/persons/{id}. An address change requires proof of identity, because recovery follows
+// the address: the person's current password is asked for, and their second factor when it is active. An administrator changing someone else's address, and a person changing
 // only their name, are asked for nothing. Every refusal leaves the stored address where it was.
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -104,7 +103,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     [FunctionalFact]
     public async Task GivenOwnEmailChangeWithoutPassword_WhenPutPerson_ThenUnauthorizedAndNothingChanges()
     {
-        // Given — the bearer token is all the caller has, which is all a token thief has
+        // Given — the bearer token is all the caller presents
         var person = await SeedPersonAsync("reauth-none");
         ActAs(person);
 
@@ -227,5 +226,43 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         var next = await Gateway.GetAsync<DataOutput<object?>>($"/api/persons/{person.PublicId}");
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenSystemAdminChangingTheirOwnEmailWithoutPassword_WhenPutPerson_ThenUnauthorizedAndNothingChanges()
+    {
+        // Given — the role grants nothing here: an administrator's own address is theirs to prove
+        var admin = await SeedPersonAsync("reauth-own-admin", Roles.SystemAdmin);
+        ActAs(admin);
+
+        // When
+        var response = await UpdateAsync(admin, admin.Name, UniqueEmail("reauth-own-admin-new"));
+
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        await AssertUnchangedAsync(admin);
+    }
+
+    [FunctionalFact]
+    public async Task GivenSystemAdminChangingTheirOwnEmailWithPassword_WhenPutPerson_ThenUpdatedAndTheirTokensRevoked()
+    {
+        // Given
+        var admin = await SeedPersonAsync("reauth-own-admin-ok", Roles.SystemAdmin);
+        ActAs(admin);
+        var newEmail = UniqueEmail("reauth-own-admin-ok-new");
+
+        // When
+        var response = await UpdateAsync(admin, admin.Name, newEmail, Password);
+
+        // Then — changed, the stamp rotated, and the token that did it refused from now on
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stored = await ReloadAsync(admin);
+        Assert.Equal(newEmail, stored.Email);
+        Assert.NotEqual(admin.SecurityStamp, stored.SecurityStamp);
+
+        var next = await Gateway.GetAsync<DataOutput<object?>>($"/api/persons/{admin.PublicId}");
+        Assert.Equal(HttpStatusCode.Unauthorized, next.StatusCode);
+        Assert.Contains(ActorLivenessFilter.ActorTokenRevoked, next.Body!.Errors);
     }
 }

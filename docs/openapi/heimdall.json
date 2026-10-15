@@ -2916,7 +2916,7 @@
           "Person"
         ],
         "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\nany authenticated actor because a User may update their own record; the per-actor rule and\nthe role-change restriction (AF-08c) are enforced by the handler.",
-        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14), so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18): without it, a stolen\ntoken could guess its owner's password here without bound.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14), so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18), as every\npassword-verifying endpoint does.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_Update",
         "parameters": [
           {

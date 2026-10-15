@@ -87,9 +87,9 @@ public class EnableTwoFactorAuthCommandHandler(
         }
 
         // AF-36e (FR-2F-18): the current password, missing or wrong alike, through the gate every
-        // password check goes through (TH-03). A bearer token alone does not prove the account holder
-        // is present, and the factor chosen here is the one UC-38 will demand of them: chosen by a
-        // token thief, it would lock the holder out of their own account. After AF-36a, so a repeat
+        // password check goes through (TH-03). Adding a factor requires proof of identity, as removing
+        // one does (UC-39): the factor chosen here is the one UC-38 will demand of the account holder,
+        // and a bearer token is not proof that they are present. After AF-36a, so a repeat
         // request costs no Argon2id derivation — the same order UC-42 keeps.
         if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
             !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))

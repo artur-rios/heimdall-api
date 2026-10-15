@@ -39,7 +39,7 @@ public class PersonTokenAudienceTests
 
     /// <summary>A System Admin, whose full token claims no scope and so reads no permissions.</summary>
     private static AuthTokenSubject SystemAdmin() =>
-        new(Guid.NewGuid(), "Ada", (int)Roles.SystemAdmin, null, []);
+        new(Guid.NewGuid(), "Ada", (int)Roles.SystemAdmin, null, [], Guid.NewGuid());
 
     private static string AudienceOf(string token) =>
         Assert.Single(new JwtSecurityTokenHandler().ReadJwtToken(token).Audiences);

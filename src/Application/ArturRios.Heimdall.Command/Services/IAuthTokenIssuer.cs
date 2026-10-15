@@ -16,7 +16,9 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </param>
 /// <param name="SecurityStamp">
 ///     The person's current <c>SecurityStamp</c>, which the token carries so a later credential
-///     change revokes it (FR-AU-11); <c>null</c> for a Google User, who has none.
+///     change revokes it (FR-AU-11); <c>null</c> for a Google User, who has none. Required, with no
+///     default, so an issuer cannot build a person's subject and forget it: a Google User's caller
+///     passes <c>null</c> on purpose.
 /// </param>
 public record AuthTokenSubject(
     Guid PersonId,
@@ -24,7 +26,7 @@ public record AuthTokenSubject(
     int RoleId,
     Guid? ScopeId,
     IReadOnlyCollection<Guid> OwnedScopeIds,
-    Guid? SecurityStamp = null);
+    Guid? SecurityStamp);
 
 /// <summary>An issued authentication token and the moment it stops being valid.</summary>
 /// <param name="Token">The signed token.</param>

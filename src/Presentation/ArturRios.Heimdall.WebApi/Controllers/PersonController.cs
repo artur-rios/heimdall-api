@@ -122,8 +122,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <remarks>
     ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
     ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
-    ///     credential endpoints do, and sits under their rate limit (NFR-18): without it, a stolen
-    ///     token could guess its owner's password here without bound.
+    ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
+    ///     password-verifying endpoint does.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

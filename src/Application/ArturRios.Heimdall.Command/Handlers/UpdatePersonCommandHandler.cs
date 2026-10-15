@@ -23,10 +23,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Why an own email change needs the password.</b> The address is where account recovery
-///         is sent. With a bearer token alone, whoever held one for a moment — lifted from a log, a
-///         proxy, a script injected into a client — could move the account to an address they read,
-///         recover it from there, and keep it. So a caller changing their own address presents their
+///         <b>Why an own email change needs the password.</b> An address change requires proof of
+///         identity, because recovery follows the address, and a bearer token is not proof that the
+///         account holder is present. So a caller changing their own address presents their
 ///         current password, and their second factor when it is active (FR-PE-14), checked as UC-39
 ///         checks them and answered with UC-39's refusals (AF-08h, AF-08i). Both are checked before
 ///         anything that depends on the new address, so a caller without them cannot even learn
@@ -100,7 +99,14 @@ public class UpdatePersonCommandHandler(
         }
 
         // UC-08 step 4: an email change re-checks uniqueness and clears the verification flag.
-        var emailChanged = !string.Equals(person.Email, command.Email, StringComparison.OrdinalIgnoreCase);
+        //
+        // Detected ordinally, on the trimmed values as stored, and nothing else decides it: this one
+        // flag gates re-authentication, the verification flag, the stamp rotation, the notice and the
+        // token retirement below. A case-insensitive comparison folds distinct characters together
+        // (final and medial sigma, for one), and two such addresses can name different mailboxes.
+        // Read ordinally, a change of case is a change too, which asks for the password and sends a
+        // notice: it fails closed.
+        var emailChanged = !string.Equals(person.Email.Trim(), command.Email.Trim(), StringComparison.Ordinal);
 
         // UC-08 step 4 (FR-PE-14, AF-08h, AF-08i): changing your own address needs your password, and
         // your second factor when it is active. Before the uniqueness check, so without them a caller
@@ -152,6 +158,16 @@ public class UpdatePersonCommandHandler(
             person.ScopeOwnerships.Clear();
         }
 
+        // FR-AU-11: the address is what account recovery is sent to, so a new one is a credential
+        // change and revokes every token the person holds — whoever makes the change, and when they
+        // make it themselves, the token making it too. Before the save, in its own targeted write: if
+        // the save then fails, the cost is one extra sign-in, where the other order could leave a
+        // changed address with its old sessions live.
+        if (emailChanged)
+        {
+            await atomicWrites.RotateSecurityStampAsync(person);
+        }
+
         // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it).
         person.Name = command.Name;
         person.Email = command.Email;
@@ -166,12 +182,6 @@ public class UpdatePersonCommandHandler(
 
         if (emailChanged)
         {
-            // FR-AU-11: the address is what account recovery is sent to, so a new one is a
-            // credential change and revokes every token the person holds — whoever made the change.
-            // When they made it themselves, that includes the token that made it. First, so nothing
-            // that can still fail below leaves a changed address with its old sessions live.
-            await atomicWrites.RotateSecurityStampAsync(person);
-
             // FR-PE-15: the previous address is told. Only that address is handed over, so the
             // notice cannot disclose the new one; a failed delivery is the sender's to log, and does
             // not fail an update that has already been made.

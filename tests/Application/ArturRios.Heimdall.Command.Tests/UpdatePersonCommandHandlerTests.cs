@@ -710,12 +710,14 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenTheSecurityStampIsKept()
+    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenItCountsAsAChange()
     {
-        // Given — the handler treats the address case-insensitively, so this is no change of address
+        // Given — a change is detected ordinally, as stored, so a different casing is a different
+        // address: it fails closed, revoking and notifying rather than letting a variant slip through
         var target = User(10, Scope(1), email: "user@test.local");
         var stamp = target.SecurityStamp;
-        var handler = HandlerFor(await PersonsWith(target));
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "USER@test.local";
 
@@ -724,7 +726,95 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
+        Assert.NotEqual(stamp, target.SecurityStamp);
+        Assert.False(target.EmailVerified);
+        Assert.Equal(["user@test.local"], twoFactor.NoticesSentTo);
+    }
+
+    [UnitFact]
+    public async Task GivenOnlySurroundingWhitespace_WhenHandlingUpdate_ThenItIsNoChange()
+    {
+        // Given — the comparison is of the trimmed values
+        var target = User(10, Scope(1), email: "user@test.local");
+        var stamp = target.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(target));
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = " user@test.local ";
+        command.CurrentPassword = null;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
         Assert.Equal(stamp, target.SecurityStamp);
+        Assert.True(target.EmailVerified);
+    }
+
+    [UnitFact]
+    public async Task GivenOwnChangeToAVariantACaseInsensitiveComparisonFolds_WhenNoPassword_ThenRefused()
+    {
+        // Given — final and medial sigma are distinct characters that OrdinalIgnoreCase treats as
+        // equal; read that way, this change would have skipped re-authentication altogether
+        var target = User(10, Scope(1), email: "a@x\u03c3.gr");
+        var stamp = target.SecurityStamp;
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "a@x\u03c2.gr";
+        command.CurrentPassword = null;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Equal("a@x\u03c3.gr", target.Email);
+        Assert.Equal(stamp, target.SecurityStamp);
+        Assert.Empty(twoFactor.NoticesSentTo);
+    }
+
+    [UnitFact]
+    public async Task GivenSystemAdminChangingTheirOwnEmailWithoutPassword_WhenHandlingUpdate_ThenRefused()
+    {
+        // Given — the role grants nothing here: their own address is re-authenticated like anyone's
+        var admin = ScopeAdmin(10, email: "root@test.local");
+        admin.RoleId = (long)Roles.SystemAdmin;
+        var stamp = admin.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(admin));
+        var command = CommandFor(admin, (int)Roles.SystemAdmin, actingPersonId: admin.PublicId);
+        command.Email = "elsewhere@test.local";
+        command.CurrentPassword = null;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Equal("root@test.local", admin.Email);
+        Assert.Equal(stamp, admin.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenSystemAdminChangingTheirOwnEmailWithPassword_WhenHandlingUpdate_ThenUpdatedAndTheStampRotated()
+    {
+        // Given
+        var admin = ScopeAdmin(10, email: "root@test.local");
+        admin.RoleId = (long)Roles.SystemAdmin;
+        var stamp = admin.SecurityStamp;
+        var handler = HandlerFor(await PersonsWith(admin));
+        var command = CommandFor(admin, (int)Roles.SystemAdmin, actingPersonId: admin.PublicId);
+        command.Email = "elsewhere@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal("elsewhere@test.local", admin.Email);
+        Assert.NotEqual(stamp, admin.SecurityStamp);
     }
 
     // FR-PE-14: changing your own email needs your password, and your second factor when active.

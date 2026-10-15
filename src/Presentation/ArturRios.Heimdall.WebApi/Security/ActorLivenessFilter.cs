@@ -128,9 +128,8 @@ public class ActorLivenessFilter(
     ///     <para>
     ///         The security stamp is read from the same row for the same reason, and checked first
     ///         (FR-AU-11): a token a credential change has revoked is refused whatever else it claims.
-    ///         Without it, a token outlived a password reset, a new address and a new second factor
-    ///         alike, so whoever held one for a moment could keep acting until it expired — long
-    ///         enough to change the address and recover the account through it (TH-36). A token with
+    ///         A credential change is when a person's earlier sessions should end, and the stamp is
+    ///         what makes them end then rather than when each token expires (TH-36). A token with
     ///         no stamp is refused too: every token issued before the stamp existed lacks one, and no
     ///         person token issued since does. A Google User's token carries none and is not asked
     ///         for one, since nothing here can change its credential.

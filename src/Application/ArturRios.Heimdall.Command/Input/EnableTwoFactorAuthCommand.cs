@@ -18,9 +18,8 @@ public class EnableTwoFactorAuthCommand : BaseCommand, IActorScoped
     public List<string> Methods { get; set; } = [];
 
     /// <summary>
-    ///     The caller's current password (FR-2F-18). Required: a bearer token alone does not prove the
-    ///     account holder is present, and a second factor chosen by whoever holds one would lock the
-    ///     holder out.
+    ///     The caller's current password (FR-2F-18). Required: adding a second factor requires proof of
+    ///     identity, as removing one does, and a bearer token alone is not that proof.
     /// </summary>
     public string? CurrentPassword { get; set; }
 

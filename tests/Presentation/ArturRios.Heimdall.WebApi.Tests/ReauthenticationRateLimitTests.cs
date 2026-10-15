@@ -8,8 +8,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Unit tests for how the two endpoints that began verifying a password are wired: PUT
 // /api/persons/{id}, for an own email change (FR-PE-14), and POST /api/auth/2fa/enable (FR-2F-18).
 // Every other password-verifying endpoint is under the credential-endpoint rate limit (NFR-18, Threat
-// Model TH-32), and without it either would be the way around it: a stolen token could guess its
-// owner's password there as fast as the password-hash gate allowed.
+// Model TH-32), and these two verify one now too, so the same bound applies to them: a bound that
+// some password checks escape is not a bound.
 public class ReauthenticationRateLimitTests
 {
     private static void AssertUnderTheAuthRateLimitPolicy(MethodInfo action)
