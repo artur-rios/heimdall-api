@@ -28,16 +28,36 @@ namespace ArturRios.Heimdall.Data.Persistence;
 /// </remarks>
 public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 {
-    public async Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now)
+    public async Task<bool> TryReserveLoginAttemptAsync(
+        Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil)
     {
+        // One statement, so the attempt that reaches the limit is also the one that locks: every
+        // right-hand side reads the row as it was before the update. A request that dies after this
+        // returns — shed by the hash gate, or cut off by a database fault — has still left a lock that
+        // expires, and not a counter at the limit that nothing could ever reset. A row already at or
+        // past the limit with no lockout date (left by an older instance, or by a lowered limit) is
+        // admitted too: the same >= test locks it and resets the counter, so it heals itself.
         var reserved = await context.Persons
-            .Where(x => x.Id == person.Id && x.FailedLoginAttempts < maxAttempts &&
-                        (x.LockedOutUntil == null || x.LockedOutUntil <= now))
-            .ExecuteUpdateAsync(set => set.SetProperty(x => x.FailedLoginAttempts, x => x.FailedLoginAttempts + 1)) == 1;
+            .Where(x => x.Id == person.Id &&
+                        ((x.FailedLoginAttempts < maxAttempts &&
+                          (x.LockedOutUntil == null || x.LockedOutUntil <= now)) ||
+                         (x.FailedLoginAttempts >= maxAttempts && x.LockedOutUntil == null)))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.LockedOutUntil,
+                    x => x.FailedLoginAttempts + 1 >= maxAttempts ? lockedOutUntil : x.LockedOutUntil)
+                .SetProperty(x => x.FailedLoginAttempts,
+                    x => x.FailedLoginAttempts + 1 >= maxAttempts ? 0 : x.FailedLoginAttempts + 1)) == 1;
 
         if (reserved)
         {
-            Accept(person, x => x.FailedLoginAttempts, person.FailedLoginAttempts + 1);
+            var reachedLimit = person.FailedLoginAttempts + 1 >= maxAttempts;
+
+            if (reachedLimit)
+            {
+                Accept(person, x => x.LockedOutUntil, lockedOutUntil);
+            }
+
+            Accept(person, x => x.FailedLoginAttempts, reachedLimit ? 0 : person.FailedLoginAttempts + 1);
         }
 
         return reserved;
@@ -55,21 +75,6 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         }
 
         return charged;
-    }
-
-    public async Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil)
-    {
-        var locked = await context.Persons
-            .Where(x => x.Id == person.Id && x.FailedLoginAttempts >= maxAttempts)
-            .ExecuteUpdateAsync(set => set
-                .SetProperty(x => x.LockedOutUntil, lockedOutUntil)
-                .SetProperty(x => x.FailedLoginAttempts, 0)) == 1;
-
-        if (locked)
-        {
-            Accept(person, x => x.LockedOutUntil, lockedOutUntil);
-            Accept(person, x => x.FailedLoginAttempts, 0);
-        }
     }
 
     public async Task ClearLoginAttemptsAsync(Person person)
@@ -282,6 +287,17 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         }
 
         return revoked;
+    }
+
+    public async Task RotateSecurityStampAsync(Person person)
+    {
+        var stamp = Guid.NewGuid();
+
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.SecurityStamp, stamp));
+
+        Accept(person, x => x.SecurityStamp, stamp);
     }
 
     /// <summary>

@@ -94,6 +94,8 @@ public class LoginCommandHandlerTests
 
         public (Guid SubjectId, int RoleId)? RightsOnlySubject { get; private set; }
 
+        public Guid? RightsOnlyStamp { get; private set; }
+
         public Task<AuthToken> IssueAsync(AuthTokenSubject subject)
         {
             Subject = subject;
@@ -101,9 +103,10 @@ public class LoginCommandHandlerTests
                 new AuthToken("issued-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
 
-        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId)
+        public Task<AuthToken> IssueSubjectRightsOnlyAsync(Guid subjectId, int roleId, Guid? securityStamp)
         {
             RightsOnlySubject = (subjectId, roleId);
+            RightsOnlyStamp = securityStamp;
             return Task.FromResult(
                 new AuthToken("rights-only-token", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
         }
@@ -115,12 +118,14 @@ public class LoginCommandHandlerTests
         public Guid? PersonId { get; private set; }
         public int? RoleId { get; private set; }
         public Guid? ChallengeId { get; private set; }
+        public Guid? SecurityStamp { get; private set; }
 
-        public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId)
+        public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId, Guid securityStamp)
         {
             PersonId = personId;
             RoleId = roleId;
             ChallengeId = challengeId;
+            SecurityStamp = securityStamp;
             return Task.FromResult(
                 new AuthToken("challenge-token", new DateTime(2026, 1, 1, 0, 5, 0, DateTimeKind.Utc)));
         }
@@ -772,5 +777,57 @@ public class LoginCommandHandlerTests
         Assert.Contains(AuthMessages.InvalidCredentials, output.Errors);
         Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
         Assert.Null(fixture.TokenIssuer.Subject);
+    }
+
+    // FR-AU-11: every person token UC-11 issues carries the person's current security stamp.
+
+    [UnitFact]
+    public async Task GivenSystemAdmin_WhenHandlingLogin_ThenTheTokenCarriesTheirSecurityStamp()
+    {
+        // Given
+        var person = Person(10, "root@test.local", Roles.SystemAdmin);
+        var issuer = new RecordingIssuer();
+
+        // When
+        var output = await HandlerFor(await PersonsWith(person), issuer).HandleAsync(Command("root@test.local"));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(person.SecurityStamp, issuer.Subject!.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonWithActiveTwoFactorAuth_WhenHandlingLogin_ThenTheChallengeCarriesTheirSecurityStamp()
+    {
+        // Given
+        var person = Person(10, "admin@test.local", Roles.SystemAdmin);
+        var fixture = FixtureFor(await PersonsWith(person));
+        await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
+        {
+            PersonId = person.Id, IsActive = true, AppEnabled = true
+        });
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("admin@test.local"));
+
+        // Then
+        Assert.True(output.Data!.RequiresTwoFactor);
+        Assert.Equal(person.SecurityStamp, fixture.ChallengeTokenIssuer.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenRestrictedPerson_WhenHandlingLogin_ThenTheSubjectRightsTokenCarriesTheirSecurityStamp()
+    {
+        // Given
+        var person = Person(10, "restricted-admin@test.local", Roles.SystemAdmin);
+        person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-1);
+        var fixture = FixtureFor(await PersonsWith(person));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("restricted-admin@test.local"));
+
+        // Then
+        Assert.True(output.Data!.ProcessingRestricted);
+        Assert.Equal(person.SecurityStamp, fixture.TokenIssuer.RightsOnlyStamp);
     }
 }

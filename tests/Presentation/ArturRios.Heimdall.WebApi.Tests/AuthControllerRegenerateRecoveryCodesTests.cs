@@ -129,7 +129,8 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     private async Task<string> EnableAppSecretAsync(Person person)
     {
         var enable = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = ["App"] });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = ["App"], CurrentPassword = Password });
         Assert.Equal(HttpStatusCode.OK, enable.StatusCode);
 
         var uri = enable.Body!.Data!.OtpAuthUri!;
@@ -146,6 +147,10 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
         // which no real client does; forget the step so the test exercises its own subject rather
         // than the replay guard. See PostgresFixture.ForgetLastTotpStepAsync.
         await db.ForgetLastTotpStepAsync(person.PublicId);
+
+        // Confirming revoked every earlier token, the one that confirmed it included (FR-AU-11). A
+        // real client signs in again here, so the test does too.
+        Authorize(TestTokens.For(person.PublicId, (int)person.RoleId));
 
         return secret;
     }
@@ -220,7 +225,9 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
         Assert.Equal(10, newCodes.Count);
 
         // Then — the code just used to authorize regeneration is now rejected, both by this endpoint
-        // again and by /2fa/verify's equivalent check
+        // again and by /2fa/verify's equivalent check. Regenerating revoked the token that did it
+        // (FR-AU-11), so the replay is made as a client that has signed in again would make it.
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var replay = await RegenerateAsync(recoveryCode: recoveryCode);
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         Assert.Contains(TwoFactorMessages.FactorInvalid, replay.Body!.Errors);

@@ -47,7 +47,17 @@ public interface IAtomicWrites
     ///     account is not locked out at <paramref name="now" /> and the counter is below
     ///     <paramref name="maxAttempts" />. <c>false</c> means no attempt may be made.
     /// </summary>
-    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now);
+    /// <remarks>
+    ///     The attempt that brings the counter to <paramref name="maxAttempts" /> also locks the
+    ///     account until <paramref name="lockedOutUntil" /> and resets the counter, in the same
+    ///     write. The lock therefore does not depend on the caller surviving to compare the
+    ///     password: a request that reserves the last attempt and then fails leaves an ordinary
+    ///     lock that expires on its own. A row already at or past the limit with no lockout date is
+    ///     admitted and locked the same way, so it cannot stay stuck. On success the instance's
+    ///     counter and lockout are set to match, from the value this request read, which under
+    ///     concurrent attempts can trail the stored count.
+    /// </remarks>
+    Task<bool> TryReserveLoginAttemptAsync(Person person, int maxAttempts, DateTime now, DateTime lockedOutUntil);
 
     /// <summary>
     ///     FR-SR-09: reserves one guess at the sign-up password of a pending registration, while it has
@@ -59,12 +69,6 @@ public interface IAtomicWrites
     ///     (to tell whether this was the last guess) must ask the database for it.
     /// </remarks>
     Task<bool> TryChargePendingRegistrationGuessAsync(PendingRegistration pending, int maxGuesses);
-
-    /// <summary>
-    ///     FR-AU-09: after a wrong password, locks the account until <paramref name="lockedOutUntil" />
-    ///     and resets the counter — if, and only if, the counter has reached <paramref name="maxAttempts" />.
-    /// </summary>
-    Task LockOutIfExhaustedAsync(Person person, int maxAttempts, DateTime lockedOutUntil);
 
     /// <summary>FR-AU-09: after a correct password, clears the counter and any lockout.</summary>
     Task ClearLoginAttemptsAsync(Person person);
@@ -137,4 +141,16 @@ public interface IAtomicWrites
     ///     (AF-55d).
     /// </summary>
     Task<bool> TryRevokeCredentialAsync(ApplicationCredential credential, DateTime revokedAt);
+
+    /// <summary>
+    ///     FR-AU-11: gives the person a fresh <see cref="Person.SecurityStamp" />, writing no other
+    ///     column, so every token issued before this call is refused from the next request on.
+    /// </summary>
+    /// <remarks>
+    ///     Unconditional, unlike the writes above: any number of rotations may race and every one of
+    ///     them revokes the tokens issued before it. What has to be targeted is the write itself. A
+    ///     whole-row save of a copy read before the rotation would put the old stamp back and revive
+    ///     what it revoked, which is why the mapping never lets such a save write this column.
+    /// </remarks>
+    Task RotateSecurityStampAsync(Person person);
 }

@@ -154,7 +154,8 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     private async Task<string> EnableAppSecretAsync(Person person)
     {
         var enable = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
-            "/api/auth/2fa/enable", new EnableTwoFactorAuthCommand { Methods = ["App"] });
+            "/api/auth/2fa/enable",
+            new EnableTwoFactorAuthCommand { Methods = ["App"], CurrentPassword = Password });
         Assert.Equal(HttpStatusCode.OK, enable.StatusCode);
 
         var uri = enable.Body!.Data!.OtpAuthUri!;
@@ -171,6 +172,10 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
         // which no real client does; forget the step so the test exercises its own subject rather
         // than the replay guard. See PostgresFixture.ForgetLastTotpStepAsync.
         await db.ForgetLastTotpStepAsync(person.PublicId);
+
+        // Confirming revoked every earlier token, the one that confirmed it included (FR-AU-11). A
+        // real client signs in again here, so the test does too.
+        Authorize(TestTokens.For(person.PublicId, (int)person.RoleId));
 
         return secret;
     }

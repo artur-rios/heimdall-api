@@ -17,6 +17,12 @@ public class EnableTwoFactorAuthCommand : BaseCommand, IActorScoped
     /// <summary>The method(s) to configure: <c>"App"</c>, <c>"Email"</c>, or both. Required, non-empty.</summary>
     public List<string> Methods { get; set; } = [];
 
+    /// <summary>
+    ///     The caller's current password (FR-2F-18). Required: adding a second factor requires proof of
+    ///     identity, as removing one does, and a bearer token alone is not that proof.
+    /// </summary>
+    public string? CurrentPassword { get; set; }
+
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }
 

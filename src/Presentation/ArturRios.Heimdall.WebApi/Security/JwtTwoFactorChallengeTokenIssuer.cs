@@ -45,18 +45,30 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         <c>AuthenticationMiddleware</c> before the filter ever ran, which would leave the filter
 ///         untested by construction rather than genuinely enforcing anything.
 ///     </para>
+///     <para>
+///         <b>Audience.</b> <see cref="PersonTokenAudiences.TwoFactorChallenge" />, not the full
+///         token's. The claims above mean nothing to a consumer, which validates signature, issuer,
+///         audience and lifetime; under the full token's audience it would take a challenge — what a
+///         password alone obtains — for a sign-in (Threat Model TH-06).
+///     </para>
 /// </remarks>
 public class JwtTwoFactorChallengeTokenIssuer(
     JwtConfiguration configuration,
+    PersonTokenAudiences audiences,
     JwtHandler jwtHandler,
     IAuthenticatedUserMapper mapper) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
 {
-    public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId)
+    public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId, Guid securityStamp)
     {
-        var identity = new IdentityUser(personId, roleId) { MfaPending = true, ChallengeId = challengeId };
+        var identity = new IdentityUser(personId, roleId)
+        {
+            MfaPending = true, ChallengeId = challengeId, SecurityStamp = securityStamp
+        };
 
+        // TH-06: under its own audience, so a consumer pinning the person audience refuses it.
         var challengeConfiguration = configuration with
         {
+            Audience = audiences.TwoFactorChallenge,
             Claims = mapper.ToClaims(identity),
             ExpirationInSeconds = TwoFactorLifetimes.ChallengeToken.TotalSeconds
         };
@@ -93,12 +105,14 @@ public class JwtTwoFactorChallengeTokenIssuer(
         }
 
         // FR-2F-10: only a token carrying the MFA-pending claim is a challenge token at all — a full
-        // login token that happens to still be signature-valid is not accepted here either.
+        // login token that happens to still be signature-valid is not accepted here either. The mapper
+        // reads that claim only under the challenge audience, so one carried by any other token is
+        // not accepted either (TH-06).
         // FR-2F-10 again: a challenge token names which challenge it is, so UC-38 can refuse one that
         // was already redeemed or has been superseded by a newer login. One without that claim
         // cannot be checked, and so is not accepted either.
         return mapper.FromClaims(claims) is IdentityUser { MfaPending: true, ChallengeId: { } challengeId } identity
-            ? new TwoFactorChallengePrincipal(identity.Id, challengeId)
+            ? new TwoFactorChallengePrincipal(identity.Id, challengeId, identity.SecurityStamp)
             : null;
     }
 }

@@ -1257,7 +1257,7 @@
           "Auth"
         ],
         "summary": "Begins opting the caller into two-factor authentication (UC-36, FR-2F-01…FR-2F-03),\nselecting an authenticator-app method, an email method, or both. Setup stays inactive until\nconfirmed by UC-37. The person acted on is always the caller themselves — read from the\nbearer token, the same as M:ArturRios.Heimdall.WebApi.Controllers.AuthController.ResendVerification.",
-        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "No `RoleRequirement`: the authorization matrix grants two-factor setup to all three\nperson roles (`User`, `ScopeAdmin`, `SystemAdmin`) and withholds it from\nanonymous callers, which is exactly what authentication alone enforces. AF-36b (Google User,\n403) is not a role the attribute can see — a Google-issued token names a\n`GoogleUser`, not a `Person` — so the handler enforces it by resolving the caller\nagainst the `Person` table itself. The request carries the caller's\n`currentPassword` (FR-2F-18), so the action sits under the credential endpoints' rate\nlimit, as `2fa/confirm` and `2fa/disable` do.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Auth_EnableTwoFactorAuth",
         "requestBody": {
           "content": {
@@ -2916,7 +2916,7 @@
           "Person"
         ],
         "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\nany authenticated actor because a User may update their own record; the per-actor rule and\nthe role-change restriction (AF-08c) are enforced by the handler.",
-        "description": "**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14), so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18), as every\npassword-verifying endpoint does.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_Update",
         "parameters": [
           {
@@ -6095,6 +6095,10 @@
               "type": "string"
             },
             "nullable": true
+          },
+          "currentPassword": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8748,6 +8752,14 @@
           "roleId": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          },
+          "currentPassword": {
+            "type": "string",
+            "nullable": true
+          },
+          "twoFactorCode": {
+            "type": "string",
             "nullable": true
           }
         },

@@ -118,6 +118,12 @@ public class ConfirmTwoFactorAuthCommandHandler(
             }
         }
 
+        // FR-AU-11: every token issued before the second factor was required is revoked — including
+        // the one confirming it, so the caller signs in again, this time through UC-38. A token that
+        // predates the factor proves only the password, which is what the factor guards against.
+        // Before the writes that activate it, so a failure among them costs one extra sign-in at most.
+        await atomicWrites.RotateSecurityStampAsync(person!);
+
         // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once —
         // written before the activation below, per the write-order note in the remarks.
         var recoveryCodes = GenerateRecoveryCodes();

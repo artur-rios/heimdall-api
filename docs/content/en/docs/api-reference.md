@@ -38,7 +38,7 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one |
 | `POST /google` | Anonymous | UC-25 — Google sign-up/sign-in against a scope |
 | `POST /google/sign-out` | Authenticated (Google User) | UC-26 — end a Google session |
-| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup |
+| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise) |
 | `POST /2fa/confirm` | Authenticated (self) | UC-37 — confirm setup, receive recovery codes |
 | `POST /2fa/verify` | Anonymous | UC-38 — redeem the challenge token with a second factor |
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |
@@ -53,8 +53,9 @@ Two rules apply everywhere and are not repeated per row:
 Every **anonymous** endpoint here is rate-limited to **10 requests per minute per IP**. Each of them
 checks a credential, and none is protected by a token — see
 [Operations](../operations/#rate-limiting) for why that matters and what the limit does not replace.
-The authenticated endpoints that check a password or a second factor — `2fa/confirm`,
-`2fa/disable`, `2fa/recovery-codes/regenerate` and `erasure-request` — share the same limit.
+The authenticated endpoints that check a password or a second factor — `2fa/enable`, `2fa/confirm`,
+`2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` and `PUT /persons/{id}` — share the
+same limit.
 
 The 2FA endpoints never name a person: the subject is always the caller, read from the bearer token,
 so a caller can only ever act on their own configuration.
@@ -99,7 +100,7 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
 | `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list who may own a scope (Scope Admins, plus System Admins for a System Admin caller) for an owner picker; optionally excludes a scope's current owners |
 | `GET /persons/system-admins` | System Admin | UC-07 read e — list the System Admins: who else holds full access |
-| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role |
+| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role. Changing your **own** email needs `currentPassword`, and `twoFactorCode` when your 2FA is active (`401` otherwise); any email change revokes the person's tokens and notifies the previous address |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
 | `POST /persons/{id}/verification-email` | System Admin + Scope Admin | UC-51 — mail a fresh verification link to the person's own address; a Scope Admin only for Users of scopes they own; 429 within the cooldown |

@@ -132,6 +132,8 @@ graph LR
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
 | FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
+| FR-PE-14 | A person changing their own email shall prove they are the account holder: the request shall carry their current password (`currentPassword`) and, when their two-factor authentication is active, a current second factor (`twoFactorCode`: an authenticator-app or email code, or an unused recovery code, which is spent; since no endpoint sends an email code to a signed-in caller, a person whose only method is Email uses a recovery code). A missing or wrong password, or a missing or wrong second factor when one is required, shall be refused with `401 Unauthorized` and the messages UC-39 gives for the same failures, before the new address is checked for uniqueness, and nothing shall change. The password is verified through the password-hash gate (TH-03), and the endpoint is under the credential endpoints' rate limit (NFR-18). An administrator changing another person's email presents no credential of that person, and a change that leaves the email as it is asks for none. The email counts as changed unless the trimmed values are equal ordinally, so a change of case is a change, and a changed address is stored trimmed | High |
+| FR-PE-15 | On every change of a person's email, whoever made it, the system shall send a notice to the previous address saying that the account's email was changed and that, if the person did not make the change, they should contact an administrator. The notice shall contain neither the new address nor any link. A failed delivery shall be logged and shall not fail the update | High |
 
 ### 3.3 Role Assignment
 
@@ -158,6 +160,7 @@ graph LR
 | FR-AU-08 | Upon successful authentication, the system shall fold into the token the distinct `Name`s of the non-logically-deleted `ScopePermission`s of the acting scope(s) whose `IncludeAsJwtClaim` flag is set: the scope a `User` belongs to for a `User`; the union over the scopes a `ScopeAdmin` owns for a `ScopeAdmin`; none for a `SystemAdmin`, who carries no scope. Logically deleted scopes and permissions are excluded, so a deleted resource is never claimed | Medium |
 | FR-AU-09 | The system shall count consecutive failed password attempts per person and, on reaching ten, refuse authentication for that person for fifteen minutes regardless of the password supplied. A successful authentication shall reset the count. The refusal shall be indistinguishable from any other authentication failure — the same message as FR-AU-05 through FR-AU-07, and the same cost, so a lockout is not detectable by response time | High |
 | FR-AU-10 | The system shall verify a submitted password against a hash on every authentication attempt, including one for an address that belongs to nobody, so that the uniform rejection of FR-AU-05 through FR-AU-07 and FR-AU-09 is uniform in elapsed time as well as in message | High |
+| FR-AU-11 | Every token issued to a person — the full authentication token, the two-factor challenge token and the subject-rights-only token — shall carry the person's current security stamp, a random value stored on the person, as the `sst` claim. The stamp shall be replaced when the person's password is reset (UC-13), their email is changed by anyone (UC-08), two-factor authentication is activated (UC-37) or disabled (UC-39), or their recovery codes are regenerated (UC-40), and the replacement shall be a write of that column alone, so no concurrent save can restore the old value. A person token whose stamp is missing or is not the person's current one shall be refused on every endpoint with `401 Unauthorized` and "This token has been revoked. Sign in again."; a challenge token so outdated shall be refused by UC-38 as AF-38a and ignored by UC-46 as AF-46a. The token that made the change is revoked with the rest. A Google User's token carries no stamp and is not checked for one | High |
 
 ### 3.5 Password Recovery
 
@@ -279,6 +282,7 @@ graph LR
 | FR-2F-15 | The system shall allow an authenticated person to read their own two-factor authentication state: whether it is active, which methods are configured, and how many issued recovery codes remain unused. A person with no configuration shall be answered successfully with every flag false and a zero count, since never having enabled it is an ordinary state rather than a fault. A Google User shall be refused, as under FR-2F-01. No secret is returned — never the TOTP secret, never a recovery code | High |
 | FR-2F-16 | The system shall provide an operation, authorized by a challenge token alone, that reissues the email code for an outstanding challenge: it shall retire the person's outstanding codes and send a fresh one per FR-2F-03, inside the existing challenge's lifetime — never extending it, and never issuing a new challenge token — and at most three times per challenge (FR-2F-13). It shall answer identically whether the challenge is valid, unknown, forged, expired, exhausted, or names a person without the email method enabled, so the operation cannot be used to discover whether an address is registered or has email two-factor authentication enabled | High |
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
+| FR-2F-18 | Initiating two-factor setup (UC-36) shall require the caller's current password (`currentPassword`). A missing or wrong password shall be refused with `401 Unauthorized` and "The current password is incorrect.", and nothing shall be created or sent. The password is verified through the password-hash gate, and the endpoint is under the credential endpoints' rate limit. Confirming setup (UC-37) is unchanged | High |
 
 ### 3.11 Audit Trail
 
@@ -361,6 +365,7 @@ erDiagram
         string Email "Email address (unique among a scope's Users; unique among Admins system-wide)"
         bytes PasswordHash "Hashed password, stored as a byte array"
         bytes Salt "Random salt used to hash the password, stored as a byte array"
+        guid SecurityStamp "Carried by every token issued to the person; replaced on a credential change"
         bool IsDeleted "Logical deletion flag"
         bool EmailVerified "Email verification status"
         bigint RoleId FK "Associated role (internal Id)"
@@ -465,6 +470,7 @@ erDiagram
 | Email | String | Required, valid email format. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
 | PasswordHash | Byte array | Required, stores the hash computed from the password and `Salt` |
 | Salt | Byte array | Required, randomly generated per person, used to hash the password |
+| SecurityStamp | GUID | Required, random, generated on creation (`gen_random_uuid()` for rows inserted without one). Carried by every token issued to the person and replaced, by a write of this column alone, on a password reset, an email change, a two-factor activation or removal, or a recovery-code regeneration, which revokes every earlier token (FR-AU-11). Never written by a whole-row save |
 | IsDeleted | Boolean | Default: `false` |
 | EmailVerified | Boolean | Default: `false` |
 | RoleId | BigInt | Foreign key to Role.Id (internal), required |
@@ -620,7 +626,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | GET | `/api/persons/{id}` | Get person by ID | Authenticated |
 | GET | `/api/persons/scope-admins` | List the persons who may own a scope (FR-PE-12) | SystemAdmin, ScopeAdmin |
 | GET | `/api/persons/system-admins` | List the `SystemAdmin` persons (FR-PE-13) | SystemAdmin |
-| PUT | `/api/persons/{id}` | Update a person | ScopeAdmin (owner)+ / self |
+| PUT | `/api/persons/{id}` | Update a person; an own email change also needs the current password, and the second factor when active (FR-PE-14) | ScopeAdmin (owner)+ / self |
 | DELETE | `/api/persons/{id}` | Logically delete a person | ScopeAdmin (owner)+ |
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
 | POST | `/api/persons/{id}/verification-email` | Send a fresh verification link to the person's own address (FR-EV-06, FR-EV-07) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
@@ -652,7 +658,7 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | POST | `/api/auth/verify-email` | Verify email with token; a token that names a pending self-registration confirms it and also takes the optional `password` chosen at sign-up (FR-SR-09) | No |
 | POST | `/api/auth/register` | Register a password User in an open scope (FR-SR-03 … FR-SR-09) | No (anonymous) |
 | POST | `/api/auth/resend-verification` | Resend verification email | Authenticated |
-| POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both | Authenticated |
+| POST | `/api/auth/2fa/enable` | Initiate two-factor setup, selecting App, Email, or both; needs the current password (FR-2F-18) | Authenticated |
 | POST | `/api/auth/2fa/confirm` | Confirm setup with a code per selected method; activates 2FA and returns the ten recovery codes | Authenticated |
 | POST | `/api/auth/2fa/verify` | Exchange a challenge token plus a code or recovery code for a full authentication token | No (holds a challenge token) |
 | POST | `/api/auth/2fa/challenge/resend` | Reissue the email code for an outstanding challenge, inside its existing window | No (holds a challenge token) |

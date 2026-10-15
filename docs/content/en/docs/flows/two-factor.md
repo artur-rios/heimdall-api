@@ -38,11 +38,14 @@ sequenceDiagram
     participant ES as ITwoFactorEmailSender
     participant DB as PostgreSQL
 
-    P->>AC: POST /api/auth/2fa/enable {app?, email?}
+    P->>AC: POST /api/auth/2fa/enable {methods, currentPassword}
     AC->>EH: HandleAsync
     EH->>DB: SELECT TwoFactorAuth for caller
     alt already active (AF-36a)
         EH-->>P: rejected — configuration untouched
+    end
+    alt currentPassword missing or wrong (AF-36e)
+        EH-->>P: 401 — nothing created
     end
     EH->>DB: UPSERT pending row (IsActive = false)
     Note over EH,DB: AF-36d — re-initiating overwrites<br/>the pending selection entirely
@@ -63,24 +66,31 @@ sequenceDiagram
     CH->>DB: SELECT pending row
     CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
+    CH->>DB: replace the person's security stamp
     CH->>DB: INSERT 10 recovery codes (hashes only)
     CH->>DB: UPDATE IsActive = true
     CH->>DB: mark the confirming email code Used
     CH-->>P: 200 — ten recovery codes, shown exactly once
 ```
 
+**Enabling needs the password** (**FR-2F-18**): adding a second factor requires proof of identity,
+as removing one does, and a bearer token alone is not that proof. **Confirming
+revokes every token** the person holds, the confirming one included (**FR-AU-11**): the client keeps
+the recovery codes, then signs in again, now through UC-38.
+
 `IsActive` is what separates a *confirmed* configuration from one still pending. A row with
 `IsActive = false` means UC-36 created it and UC-37 has not yet activated it — and only an active
 configuration gates a login.
 
-**The order of those last three writes is deliberate.** The repository layer exposes no transaction,
-so ordering is what stands in for one, and the dangerous half-write is "two-factor is active but the
-caller holds no recovery codes" — which locks someone out of their own account on the strength of a
-request that reported failure. Writing the codes first (in one insert, not ten) leaves only harmless
-failure modes: codes stored against a configuration that never activated, which the next attempt
-replaces, and which authenticate nothing while `IsActive` is `false`. UC-40 orders its writes the
-same way and for the same reason, creating the replacements before deleting the set they replace, so
-a failure leaves the caller with the codes they already hold rather than none at all.
+**The order of the recovery-code and activation writes is deliberate.** The repository layer exposes
+no transaction, so ordering is what stands in for one, and the dangerous half-write is "two-factor
+is active but the caller holds no recovery codes" — which locks someone out of their own account on
+the strength of a request that reported failure. Writing the codes first (in one insert, not ten)
+leaves only harmless failure modes: codes stored against a configuration that never activated, which
+the next attempt replaces, and which authenticate nothing while `IsActive` is `false`. UC-40 orders
+its writes the same way and for the same reason, creating the replacements before deleting the set
+they replace, so a failure leaves the caller with the codes they already hold rather than none at
+all.
 
 Confirmation requires proof of **every** method selected at setup: an `appCode` if `AppEnabled`, an
 `emailCode` if `EmailEnabled`, both if both.
@@ -102,7 +112,7 @@ sequenceDiagram
     C->>AC: POST /api/auth/2fa/verify {challengeToken, code | recoveryCode}
     AC->>VH: HandleAsync
 
-    VH->>CT: validate signature, expiry, mfaPending claim
+    VH->>CT: validate signature, expiry, challenge audience + mfaPending claim
     alt invalid (AF-38a)
         CT-->>VH: rejected
         VH-->>C: 401 challenge invalid
@@ -189,6 +199,7 @@ code" is implemented in exactly one place.
 | Requires | Bearer token + second factor | Bearer token + second factor |
 | Effect | Removes the configuration | Replaces all ten recovery codes |
 | Response | Confirmation | The ten new codes, shown once |
+| Afterwards | Every token revoked, the caller's included: sign in again | Every token revoked, the caller's included: keep the codes, then sign in again |
 
 ## Storage of secrets
 

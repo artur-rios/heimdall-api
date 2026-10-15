@@ -271,4 +271,26 @@ public class CreateUserCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.EmailAlreadyExists, output.Errors);
     }
+
+    [UnitFact]
+    public async Task GivenAPaddedEmail_WhenHandlingCreateUser_ThenTheTrimmedAddressIsStored()
+    {
+        // Given — sign-in and recovery match the stored address exactly (case aside)
+        var (scopes, scope) = await ScopeStoreAsync();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var email = new Mock<IEmailVerificationService>();
+        var handler = new CreateUserCommandHandler(
+            ValidValidator().Object, scopes, persons, new AsyncFakeRepository<GoogleUser, long>(), persons,
+            OwnershipChecker(), email.Object);
+        var command = Command(scope.PublicId, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        var address = command.Email;
+        command.Email = $"  {address} ";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(address, (await persons.GetAllAsync()).Data!.Single().Email);
+    }
 }

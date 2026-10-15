@@ -92,9 +92,12 @@ public class VerifyTwoFactorAuthCommandHandler(
 
         // AF-38a again, for what a signature cannot say. A challenge is redeemable once (FR-2F-10):
         // the token must still name the configuration's outstanding challenge, which redemption
-        // clears and a newer login replaces.
+        // clears and a newer login replaces. And it must carry the person's current security stamp
+        // (FR-AU-11): a challenge obtained with a password that has since been reset, or before a
+        // credential change, ends with every other token issued before it.
         if (person is null || twoFactorAuth is null ||
-            twoFactorAuth.ChallengeId != principal.ChallengeId)
+            twoFactorAuth.ChallengeId != principal.ChallengeId ||
+            principal.SecurityStamp != person.SecurityStamp)
         {
             return output.WithError(TwoFactorMessages.ChallengeTokenInvalid);
         }

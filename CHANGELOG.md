@@ -47,6 +47,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- 2FA challenge tokens and subject-rights-only tokens now carry their own audience (`HEIMDALL_AUTH_TOKEN_AUDIENCE`
+  plus `.2fa-challenge` and `.subject-rights`, respectively); consumers that pin the person audience reject them.
+  Full authentication tokens keep `HEIMDALL_AUTH_TOKEN_AUDIENCE`, and Heimdall accepts a challenge or
+  subject-rights-only token only under its own audience. Clients that pass the challenge token back to
+  `POST /api/auth/2fa/verify` unread need no change. **Operators:** no new variable; start-up logs the three
+  audiences, and now refuses a `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` equal to either derived audience. Challenge
+  and subject-rights-only tokens issued before the upgrade are refused once, so those users sign in again; full
+  tokens are unaffected. During a rolling deploy, instances not yet upgraded still issue the old tokens, which
+  upgraded instances refuse, and the separation holds only once every instance is upgraded. Consumers that don't
+  validate the audience should start doing so, pinned to `HEIMDALL_AUTH_TOKEN_AUDIENCE` exactly; see the consumer
+  guide, "Login: audiences".
 - A present but unusable `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS`,
   `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` or `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` now logs a warning
   at start-up naming the variable, the rejected value and the default applied. The auth token lifetime also now
@@ -85,9 +96,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the ids of persons and Google Users hard-deleted earlier were never tombstoned, so nothing records that they named
   a person, and they stay in the trail as recorded. Clearing them would need a list of those ids from outside the
   database; this release does not attempt it.
+- `PUT /api/persons/{id}` and `POST /api/auth/2fa/enable` are now under the `AuthAnonymous` rate limit (10
+  requests a minute per client address, `429` with `Retry-After` beyond it), like the other endpoints that check a
+  password. The person update is limited whether or not it checks one, administrators' updates included.
+  **Operators:** no setting changes; a deployment behind a proxy needs `HEIMDALL_TRUSTED_PROXIES` set, as for
+  login, or every caller shares one budget.
 
 ### Fixed
 
+- A sign-in attempt cut short at the lockout threshold now locks the account for the usual period instead of
+  leaving it unable to sign in. An account already left at the limit without a lock is handled normally again by
+  its next sign-in attempt, which locks it for the usual period, or clears it if the password is right. A new data
+  migration, `ReleaseStuckLoginLockouts`, also resets such accounts.
 - The Command tests no longer fail intermittently on password-hash gate timeouts under load (#196): the test
   assembly installs a gate with the production permit count and a two-minute wait, and the saturation
   exception's message now names the gate and how long it waited. Production behaviour and responses are
@@ -118,6 +138,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   which could exist only if somebody wrote one by hand in SQL. Operations, "Shared public ids", gives two queries to
   run before migrating; each should return no rows. Once migrated, hand-written SQL that rewrites a `public_id`, such
   as a support fix-up or a restore that remaps ids, fails with `restrict_violation`.
+- Person tokens are now revoked when a credential changes. Every person token (full, 2FA challenge and
+  subject-rights-only) carries the person's security stamp in a new `sst` claim, and a token whose stamp is missing
+  or out of date is refused on every endpoint with `401` and "This token has been revoked. Sign in again." The stamp
+  is replaced by a password reset, an email change (by the person or by an administrator), confirming or disabling
+  two-factor authentication, and regenerating recovery codes; the token that made the change is revoked with the
+  rest. `POST /api/auth/2fa/verify` refuses a challenge issued before such a change as an invalid challenge. A new
+  migration, `AddPersonSecurityStamp`, adds `person.security_stamp`, filled with a fresh value per row; only a
+  targeted write replaces it, so a concurrent whole-row save cannot restore an old one. Google User tokens are
+  unchanged. **Operators:** tokens issued before the upgrade carry no stamp and are refused, so everyone signs in
+  once more after deploying; during a rolling deploy, tokens issued by instances not yet upgraded are refused by
+  upgraded ones until every instance is upgraded. The migration rewrites the `person` table (its default is
+  evaluated per row) under an exclusive lock, which blocks sign-ins and every other read or write of the table
+  until it finishes; on a large table, plan for that lock time. Consumers that validate person tokens offline
+  do not see the stamp, so a revoked token stays valid at them until it expires. Revocation and the
+  re-authentication below hold only once every instance runs this version: until then, an instance not yet
+  upgraded still accepts revoked tokens and own email changes without a password.
+- Changing your own email through `PUT /api/persons/{id}` now requires `currentPassword`, and `twoFactorCode` (an
+  authenticator-app or email code, or a recovery code, which is spent) when your two-factor authentication is
+  active. No endpoint sends an email code to a signed-in caller, so a person whose only method is Email uses a
+  recovery code. A missing or wrong password answers `401` with "The current password is incorrect.", and a missing or
+  wrong second factor `401` with "The code or recovery code is missing, incorrect, or already used.", before the
+  new address is checked, and nothing changes. An administrator changing someone else's email, and anyone changing
+  only their name, send neither. The email counts as changed unless it matches exactly after trimming, so a change
+  of case alone also asks for the password, revokes tokens, sends the notice and resets `emailVerified`. Starting
+  two-factor setup (`POST /api/auth/2fa/enable`) now requires `currentPassword` too, refused the same way. Any
+  email change also sends a notice to the previous address, which names neither the new address nor a link; a
+  failed delivery is logged and does not fail the update. Addresses are now stored trimmed, on creation and on
+  update; an update that differs from the stored address only by surrounding whitespace is no change.
+  **Clients:** send `currentPassword` (and `twoFactorCode` when 2FA is active) for an own email change, and
+  `currentPassword` to enable 2FA; after an own email change, a password reset, confirming or disabling 2FA, or
+  regenerating recovery codes, sign in again. **Operators:** release the heimdall-ui version that sends
+  `currentPassword` together with this API, or before it; an older UI gets `401` on 2FA enable and on an own email
+  change.
 
 ## [1.4.0] - 2026-10-13
 

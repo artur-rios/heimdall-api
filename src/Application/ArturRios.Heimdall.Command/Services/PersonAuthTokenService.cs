@@ -45,7 +45,8 @@ public class PersonAuthTokenService(IAuthTokenIssuer tokenIssuer)
             person.Name,
             (int)person.RoleId,
             person.RoleId == (long)Roles.User ? person.ScopeMembership!.Scope.PublicId : null,
-            liveOwnedScopeIds);
+            liveOwnedScopeIds,
+            person.SecurityStamp);
 
         return true;
     }
@@ -59,5 +60,5 @@ public class PersonAuthTokenService(IAuthTokenIssuer tokenIssuer)
     ///     claim, and this one claims no scope at all.
     /// </summary>
     public Task<AuthToken> IssueSubjectRightsOnlyAsync(Person person) =>
-        tokenIssuer.IssueSubjectRightsOnlyAsync(person.PublicId, (int)person.RoleId);
+        tokenIssuer.IssueSubjectRightsOnlyAsync(person.PublicId, (int)person.RoleId, person.SecurityStamp);
 }

@@ -100,6 +100,11 @@ public class RegenerateRecoveryCodesCommandHandler(
             return output.WithError(TwoFactorMessages.FactorInvalid);
         }
 
+        // FR-AU-11: a new set of recovery codes is a new second factor, and revokes every token issued
+        // before it, the caller's own included — the codes are usually regenerated because the old
+        // set may be known to someone else. Before the writes that replace them, as everywhere.
+        await atomicWrites.RotateSecurityStampAsync(person);
+
         // UC-40 step 3: the rows this call replaces, captured before anything is written. Taking the
         // set first means a run that failed partway through last time — leaving rows behind — has
         // those rows swept up here too, rather than accumulating.

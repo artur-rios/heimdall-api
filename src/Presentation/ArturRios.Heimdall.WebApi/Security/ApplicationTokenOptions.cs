@@ -10,10 +10,12 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         <b>Why the audience is required and distinct.</b> Application tokens are signed with the
 ///         person tokens' key pair. A consumer that validates person tokens offline would take an
 ///         application token for a person if both carried one audience; a distinct audience is what
-///         makes it refuse (Threat Model TH-35). So start-up refuses a missing audience, and one equal
-///         to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c>, rather than run without the separation. "Equal" is
-///         judged as a validator would: Microsoft.IdentityModel ignores a trailing slash when it
-///         matches <c>aud</c>, so <c>heimdall/</c> and <c>heimdall</c> are the same audience.
+///         makes it refuse (Threat Model TH-35). So start-up refuses a missing audience, and one
+///         equal to <c>HEIMDALL_AUTH_TOKEN_AUDIENCE</c> or to either audience derived from it for
+///         challenge and subject-rights-only tokens (<see cref="PersonTokenAudiences" />), rather
+///         than run without the separation. "Equal" is judged as a validator would:
+///         Microsoft.IdentityModel ignores a trailing slash when it matches <c>aud</c>, so
+///         <c>heimdall/</c> and <c>heimdall</c> are the same audience.
 ///     </para>
 ///     <para>
 ///         <b>Lifetime.</b> Ten minutes by default (TH-34): short enough that a leaked token is soon
@@ -54,8 +56,9 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
 
     /// <summary>
     ///     Builds the options from raw values. Throws <see cref="InvalidOperationException" /> when
-    ///     <paramref name="audience" /> is blank or equals <paramref name="personAudience" />, ignoring
-    ///     surrounding whitespace and a trailing slash.
+    ///     <paramref name="audience" /> is blank, or equals <paramref name="personAudience" /> or an
+    ///     audience derived from it (<see cref="PersonTokenAudiences" />), ignoring surrounding
+    ///     whitespace and a trailing slash.
     /// </summary>
     public static ApplicationTokenOptions Parse(string? audience, string? expirationInSeconds, string? personAudience)
     {
@@ -74,6 +77,23 @@ public sealed record ApplicationTokenOptions(string Audience, TimeSpan Lifetime)
                 $"Environment variable '{AudienceVariable}' equals '{PersonAudienceVariable}'. An " +
                 "application token must carry an audience person tokens do not, or a consumer " +
                 "validating person tokens would accept it as one.");
+        }
+
+        // Nor may it be one of the audiences derived from the person audience, or a consumer checking
+        // only the application audience would take a challenge or a restricted identity's token for
+        // an application's.
+        var derived = new PersonTokenAudiences(personAudience ?? string.Empty);
+
+        foreach (var personTokenAudience in new[] { derived.TwoFactorChallenge, derived.SubjectRights })
+        {
+            if (string.Equals(Comparable(trimmed), Comparable(personTokenAudience), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Environment variable '{AudienceVariable}' equals '{Comparable(personTokenAudience)}', " +
+                    $"the audience Heimdall derives from '{PersonAudienceVariable}' for challenge or " +
+                    "subject-rights-only tokens. An application token must carry an audience no person " +
+                    "token does.");
+            }
         }
 
         var usable = double.TryParse(

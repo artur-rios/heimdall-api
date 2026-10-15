@@ -321,4 +321,38 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
     }
+
+    // FR-AU-11: replacing the recovery codes revokes every token issued before it.
+
+    [UnitFact]
+    public async Task GivenValidAppCode_WhenHandlingRegenerate_ThenTheSecurityStampIsReplaced()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.NotEqual(stamp, fixture.Person.SecurityStamp);
+    }
+
+    [UnitFact]
+    public async Task GivenWrongCode_WhenHandlingRegenerate_ThenTheSecurityStampIsKept()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        var stamp = fixture.Person.SecurityStamp;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
 }

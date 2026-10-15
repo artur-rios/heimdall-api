@@ -10,7 +10,12 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     Which challenge this is. It must still equal the configuration's <c>TwoFactorAuth.ChallengeId</c>
 ///     for the token to be honoured, which is what makes a challenge redeemable once (FR-2F-10).
 /// </param>
-public record TwoFactorChallengePrincipal(Guid PersonId, Guid ChallengeId);
+/// <param name="SecurityStamp">
+///     The person's <c>SecurityStamp</c> when the challenge was issued, or <c>null</c> when the token
+///     carries none. It must still equal the person's for the token to be honoured (FR-AU-11), so a
+///     credential change in between ends the challenge as it ends every other token.
+/// </param>
+public record TwoFactorChallengePrincipal(Guid PersonId, Guid ChallengeId, Guid? SecurityStamp = null);
 
 /// <summary>
 ///     Issues the short-lived challenge token AF-11g returns instead of a full authentication token
@@ -24,8 +29,9 @@ public interface ITwoFactorChallengeTokenIssuer
     /// <param name="personId">The <c>PublicId</c> of the person who passed the password check.</param>
     /// <param name="roleId">Their role value (see <c>Roles</c>) — carried so the mapper that reads the token back can build an identity from it, but never authorizes anything by itself while <c>MfaPending</c> is set.</param>
     /// <param name="challengeId">The identifier recorded as the configuration's outstanding challenge, carried in the token so UC-38 can tell an outstanding challenge from a redeemed or superseded one (FR-2F-10).</param>
+    /// <param name="securityStamp">The person's current <c>SecurityStamp</c>, carried so a credential change before the challenge is redeemed ends it (FR-AU-11).</param>
     /// <returns>The signed challenge token and its (short) expiry.</returns>
-    Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId);
+    Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId, Guid securityStamp);
 }
 
 /// <summary>

@@ -11,6 +11,7 @@ using ArturRios.Output;
 using ArturRios.Util.WebApi.AspNetCore;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
@@ -118,7 +119,14 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     any authenticated actor because a User may update their own record; the per-actor rule and
     ///     the role-change restriction (AF-08c) are enforced by the handler.
     /// </summary>
+    /// <remarks>
+    ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
+    ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
+    ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
+    ///     password-verifying endpoint does.
+    /// </remarks>
     [HttpPut("persons/{id:guid}")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(
         Guid id, [FromBody] UpdatePersonCommand command)
     {
