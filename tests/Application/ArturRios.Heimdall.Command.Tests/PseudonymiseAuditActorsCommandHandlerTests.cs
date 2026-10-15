@@ -10,7 +10,8 @@ using ArturRios.Util.Test.Mock;
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for PseudonymiseAuditActorsCommandHandler (NFR-21): which entries a run selects, and
-// which of each entry's actor and person target it clears.
+// which of each entry's actor and person target it clears — including the target of a hard-deleted
+// person, known only by its tombstone (#195) — and which tombstones the run then removes.
 //
 // What it is permitted to *write* is not tested here and cannot be — the database trigger is the
 // authority on that, and an in-memory fake enforces none of it. AuditActorClearingTests and
@@ -23,12 +24,13 @@ public class PseudonymiseAuditActorsCommandHandlerTests
     private sealed record Fakes(
         AsyncFakeRepository<AuditLog, long> Entries,
         AsyncFakeRepository<Person, long> Persons,
-        AsyncFakeRepository<GoogleUser, long> GoogleUsers)
+        AsyncFakeRepository<GoogleUser, long> GoogleUsers,
+        AsyncFakeRepository<ErasedSubject, Guid> Tombstones)
     {
-        public static Fakes New() => new(new(), new(), new());
+        public static Fakes New() => new(new(), new(), new(), new());
 
         public PseudonymiseAuditActorsCommandHandler Handler(int batchSize = 500) =>
-            new(Entries, Entries, Persons, GoogleUsers,
+            new(Entries, Entries, Persons, GoogleUsers, Tombstones, Tombstones,
                 new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize });
     }
 
@@ -81,6 +83,25 @@ public class PseudonymiseAuditActorsCommandHandlerTests
 
         return googleUser;
     }
+
+    /// <summary>
+    ///     Tombstones <paramref name="id" /> as a hard delete would have, <paramref name="age" /> ago.
+    /// </summary>
+    private static async Task SeedTombstoneAsync(Fakes fakes, Guid id, TimeSpan age)
+    {
+        var tombstone = new ErasedSubject
+        {
+            Kind = (int)ErasedSubjectKinds.Person,
+            CreatedAt = DateTime.UtcNow - age
+        };
+
+        // The fake assigns a fresh Guid key on create; a tombstone's key is the erased id itself.
+        await fakes.Tombstones.CreateAsync(tombstone);
+        tombstone.Id = id;
+    }
+
+    private static async Task<bool> TombstonedAsync(Fakes fakes, Guid id) =>
+        (await fakes.Tombstones.GetAllAsync()).Data!.Any(x => x.Id == id);
 
     private static DateTime PastThePeriod => DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(1));
 
@@ -364,5 +385,172 @@ public class PseudonymiseAuditActorsCommandHandlerTests
         Assert.Empty(output.Errors);
         Assert.Equal(0, output.Data!.EntriesPseudonymised);
         Assert.Equal(0, output.Data.TargetsCleared);
+        Assert.Equal(0, output.Data.TombstonesRemoved);
+    }
+
+    [UnitFact]
+    public async Task GivenARecentEntryAboutAHardDeletedPerson_WhenPseudonymising_ThenTheTargetIsCleared()
+    {
+        // Given an hour-old entry by a live administrator about a person since hard-deleted: no row
+        // is left, but the tombstone says the id was a person's, so it is due at any age
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var removed = Guid.NewGuid();
+        await SeedTombstoneAsync(fakes, removed, TimeSpan.FromMinutes(5));
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, DateTime.UtcNow.AddHours(-1), removed);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — the target is gone and the actor, not due, stays
+        Assert.True(output.Success);
+        Assert.Equal(0, output.Data!.EntriesPseudonymised);
+        Assert.Equal(1, output.Data.TargetsCleared);
+        Assert.Null(entry.TargetId);
+        Assert.Equal(actor.PublicId, entry.ActorPersonId);
+        Assert.Equal("CreateScopeCommand", entry.Action);
+    }
+
+    [UnitFact]
+    public async Task GivenATombstonedIdStillOnRecord_WhenPseudonymising_ThenARecentTargetIsKept()
+    {
+        // Given a person whose hard delete wrote the tombstone and then failed: the row is still
+        // there, so the tombstone is no ground, and a recent entry about a live person is not due
+        var fakes = Fakes.New();
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        await SeedTombstoneAsync(fakes, target.PublicId, TimeSpan.FromDays(3));
+        var entry = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-1), target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — kept, and so is the tombstone, which the entry still names
+        Assert.Equal(0, output.Data!.TargetsCleared);
+        Assert.Equal(target.PublicId, entry.TargetId);
+        Assert.Equal(0, output.Data.TombstonesRemoved);
+        Assert.True(await TombstonedAsync(fakes, target.PublicId));
+    }
+
+    [UnitFact]
+    public async Task GivenATombstonedIdStillOnRecord_WhenPseudonymising_ThenATargetDueOnTheOldGroundsIsCleared()
+    {
+        // Given the same failed delete, but an entry past the attribution period
+        var fakes = Fakes.New();
+        var target = await SeedPersonAsync(fakes, anonymisedAt: null);
+        await SeedTombstoneAsync(fakes, target.PublicId, TimeSpan.FromDays(3));
+        var entry = await SeedEntryAsync(fakes, actorId: null, PastThePeriod, target.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — cleared on age, exactly as without the tombstone
+        Assert.Equal(1, output.Data!.TargetsCleared);
+        Assert.Null(entry.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOrphanedTargetWithNoTombstone_WhenPseudonymising_ThenTheTargetIsKept()
+    {
+        // Given ids that resolve to no row and were never tombstoned — a hard-deleted scope's, or a
+        // person's removed before tombstones existed — recent and ancient
+        var fakes = Fakes.New();
+        var recentOrphan = Guid.NewGuid();
+        var ancientOrphan = Guid.NewGuid();
+        var recent = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddHours(-1), recentOrphan);
+        var ancient = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-4000), ancientOrphan);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — nothing says either named a person, so both stay as recorded
+        Assert.Equal(0, output.Data!.TargetsCleared);
+        Assert.Equal(recentOrphan, recent.TargetId);
+        Assert.Equal(ancientOrphan, ancient.TargetId);
+    }
+
+    [UnitFact]
+    public async Task GivenTombstones_WhenPseudonymising_ThenOnlyOldOnesNothingNamesAreRemoved()
+    {
+        // Given an old tombstone nothing names, a young one nothing names yet (its hard delete's own
+        // entry may still be on its way), and an old one a recent entry about a live row still names
+        var fakes = Fakes.New();
+        var settled = Guid.NewGuid();
+        var young = Guid.NewGuid();
+        var stillNamed = await SeedPersonAsync(fakes, anonymisedAt: null);
+        await SeedTombstoneAsync(fakes, settled, TimeSpan.FromDays(2));
+        await SeedTombstoneAsync(fakes, young, TimeSpan.FromHours(1));
+        await SeedTombstoneAsync(fakes, stillNamed.PublicId, TimeSpan.FromDays(2));
+        await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-1), stillNamed.PublicId);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(1, output.Data!.TombstonesRemoved);
+        Assert.False(await TombstonedAsync(fakes, settled));
+        Assert.True(await TombstonedAsync(fakes, young));
+        Assert.True(await TombstonedAsync(fakes, stillNamed.PublicId));
+    }
+
+    [UnitFact]
+    public async Task GivenAnOldTombstoneWhoseLastEntryIsClearedInThePass_WhenPseudonymising_ThenItIsRemovedInTheSamePass()
+    {
+        // Given a person hard-deleted two days ago, still named by one entry
+        var fakes = Fakes.New();
+        var removed = Guid.NewGuid();
+        await SeedTombstoneAsync(fakes, removed, TimeSpan.FromDays(2));
+        var entry = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-2), removed);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — cleared first, so by the cleanup nothing names it
+        Assert.Equal(1, output.Data!.TargetsCleared);
+        Assert.Equal(1, output.Data.TombstonesRemoved);
+        Assert.Null(entry.TargetId);
+        Assert.False(await TombstonedAsync(fakes, removed));
+    }
+
+    [UnitFact]
+    public async Task GivenMoreTombstonedEntriesThanTheBatchSize_WhenPseudonymising_ThenOldestGoFirstAndTheTombstoneWaits()
+    {
+        // Given three entries about one hard-deleted person, an older one about another, and a
+        // batch of two
+        var fakes = Fakes.New();
+        var removed = Guid.NewGuid();
+        var otherRemoved = Guid.NewGuid();
+        await SeedTombstoneAsync(fakes, removed, TimeSpan.FromDays(2));
+        await SeedTombstoneAsync(fakes, otherRemoved, TimeSpan.FromDays(2));
+        var oldest = await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-9), otherRemoved);
+        var entries = new List<AuditLog>();
+
+        for (var i = 0; i < 3; i++)
+        {
+            entries.Add(await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-3 + i), removed));
+        }
+
+        var handler = fakes.Handler(batchSize: 2);
+
+        // When
+        var first = await handler.HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — the two oldest are cleared; the tombstone they shared with a later entry stays
+        Assert.Equal(2, first.Data!.TargetsCleared);
+        Assert.Null(oldest.TargetId);
+        Assert.Null(entries[0].TargetId);
+        Assert.Equal(removed, entries[1].TargetId);
+        Assert.Equal(1, first.Data.TombstonesRemoved);
+        Assert.True(await TombstonedAsync(fakes, removed));
+        Assert.False(await TombstonedAsync(fakes, otherRemoved));
+
+        // When — the next runs finish the rest
+        var second = await handler.HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.Equal(2, second.Data!.TargetsCleared);
+        Assert.Equal(1, second.Data.TombstonesRemoved);
+        Assert.All(entries, entry => Assert.Null(entry.TargetId));
+        Assert.Empty((await fakes.Tombstones.GetAllAsync()).Data!);
     }
 }

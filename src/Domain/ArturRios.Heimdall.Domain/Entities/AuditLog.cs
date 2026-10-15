@@ -65,8 +65,10 @@ public class AuditLog : Entity<long>
     /// <remarks>
     ///     When this names a person or Google User the entry is personal data about them, whoever
     ///     acted, so it is cleared on the actor's two grounds: past the attribution period, or once
-    ///     that identity is anonymised. A target naming anything else is not personal data and never
-    ///     changes. The database enforces both.
+    ///     that identity is anonymised. It names one still after a hard delete, which tombstones the
+    ///     id first (<see cref="ErasedSubject" />, #195), so a tombstoned id with no row left is
+    ///     cleared too, at any age. A target naming anything else is not personal data and never
+    ///     changes. The database enforces all of it.
     /// </remarks>
     public Guid? TargetId { get; set; }
 

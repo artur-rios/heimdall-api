@@ -3,6 +3,7 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -37,6 +38,11 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         is due, so EF writes the other part back unchanged, and the trigger must accept that.
 ///         The last test reads the result where a System Admin would, through UC-48's listing.
 ///     </para>
+///     <para>
+///         And for hard-deleted persons (#195): a person removed through the API leaves a tombstone,
+///         the pass clears every target naming them — the hard delete's own entry included — and the
+///         tombstone goes once its day of grace is over and nothing names it.
+///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]
 public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(EnvironmentType.Local)
@@ -46,12 +52,41 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
     private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context)
     {
         var entries = new EfRepository<AuditLog, long>(context);
+        var tombstones = new EfRepository<ErasedSubject, Guid>(context);
 
         return new PseudonymiseAuditActorsCommandHandler(
             entries, entries,
             new EfRepository<Person, long>(context),
             new EfRepository<GoogleUser, long>(context),
+            tombstones, tombstones,
             new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = 500 });
+    }
+
+    /// <summary>
+    ///     Runs the pass until a run finds nothing more to do, so entries other tests left due cannot
+    ///     hold this test's back behind the batch bound. Returns the runs' summed output.
+    /// </summary>
+    private async Task<PseudonymiseAuditActorsCommandOutput> DrainAsync()
+    {
+        var total = new PseudonymiseAuditActorsCommandOutput();
+
+        for (var run = 0; run < 20; run++)
+        {
+            await using var context = fixture.CreateContext();
+            var output = await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
+            Assert.True(output.Success, string.Join("; ", output.Errors));
+
+            total.EntriesPseudonymised += output.Data!.EntriesPseudonymised;
+            total.TargetsCleared += output.Data.TargetsCleared;
+            total.TombstonesRemoved += output.Data.TombstonesRemoved;
+
+            if (output.Data.EntriesPseudonymised + output.Data.TargetsCleared + output.Data.TombstonesRemoved == 0)
+            {
+                return total;
+            }
+        }
+
+        throw new InvalidOperationException("The audit pass did not settle within twenty runs.");
     }
 
     private Task<HttpOutput<PaginatedOutput<AuditLogEntryOutput>?>> ListAsync(string filters) =>
@@ -255,5 +290,70 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         // And the target filter that found it a moment ago no longer can
         Assert.Empty((await ListAsync($"targetId={targetId}")).Body!.Data!);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPersonHardDeletedThroughTheApi_WhenThePassRuns_ThenNoEntryNamesThemAndTheTombstoneGoes()
+    {
+        // Given a person, an hour-old entry about them by a live administrator, and the person then
+        // hard-deleted through UC-10 — whose own entry also names them as its target
+        var action = $"AuditRetentionHardDeleted{Guid.NewGuid():N}";
+        var start = DateTime.UtcNow.AddSeconds(-1);
+        Person person;
+        Person administrator;
+
+        await using (var context = fixture.CreateContext())
+        {
+            person = await SeedPersonAsync(context, anonymisedAt: null);
+            administrator = await SeedPersonAsync(context, anonymisedAt: null);
+            await SeedEntryAsync(context, administrator.PublicId, DateTime.UtcNow.AddHours(-1), person.PublicId, action);
+        }
+
+        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        var deletion = await Gateway.DeleteAsync<DataOutput<HardDeletePersonCommandOutput?>>(
+            $"/api/persons/{person.PublicId}/hard");
+        Assert.Equal(HttpStatusCode.OK, deletion.StatusCode);
+
+        var named = (await ListAsync($"targetId={person.PublicId}")).Body!.Data!.ToList();
+        Assert.Equal(2, named.Count);
+        var ownEntry = Assert.Single(named, entry => entry.Action == nameof(HardDeletePersonCommand));
+
+        // When
+        var output = await DrainAsync();
+
+        // Then — both entries are still listed, with what happened, and neither names the person
+        Assert.True(output.TargetsCleared >= 2);
+        Assert.Empty((await ListAsync($"targetId={person.PublicId}")).Body!.Data!);
+
+        var seeded = Assert.Single((await ListAsync($"action={action}")).Body!.Data!);
+        Assert.Null(seeded.TargetId);
+        Assert.Equal(administrator.PublicId, seeded.ActorId);
+
+        var since = Uri.EscapeDataString(start.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+        var hardDeletes = (await ListAsync($"action={nameof(HardDeletePersonCommand)}&from={since}")).Body!.Data!;
+        var own = Assert.Single(hardDeletes, entry => entry.Id == ownEntry.Id);
+        Assert.Null(own.TargetId);
+        Assert.True(own.Succeeded);
+
+        // Then — the tombstone is kept through its day of grace, though nothing names it any more
+        await using (var context = fixture.CreateContext())
+        {
+            Assert.True(await context.ErasedSubjects.AnyAsync(x => x.Id == person.PublicId));
+
+            // When the day has passed — moved back, as the other tests age their entries
+            await context.Database.ExecuteSqlRawAsync(
+                "UPDATE heimdall.erased_subject SET created_at = now() - interval '2 days' WHERE public_id = {0}",
+                person.PublicId);
+        }
+
+        var later = await DrainAsync();
+
+        // Then — it is gone
+        Assert.True(later.TombstonesRemoved >= 1);
+
+        await using (var verification = fixture.CreateContext())
+        {
+            Assert.False(await verification.ErasedSubjects.AnyAsync(x => x.Id == person.PublicId));
+        }
     }
 }

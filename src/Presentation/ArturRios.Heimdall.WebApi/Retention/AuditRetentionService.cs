@@ -7,7 +7,8 @@ namespace ArturRios.Heimdall.WebApi.Retention;
 
 /// <summary>
 ///     Runs <see cref="PseudonymiseAuditActorsCommand" /> on an interval, so the audit trail stops
-///     naming people, as actors or as targets, once it no longer needs to (NFR-21).
+///     naming people, as actors or as targets, once it no longer needs to, and drops the tombstones of
+///     hard-deleted identities once nothing names them (NFR-21).
 /// </summary>
 public class AuditRetentionService(
     IServiceScopeFactory scopeFactory,
@@ -36,8 +37,10 @@ public class AuditRetentionService(
         var pseudonymised = result.Data!;
 
         return pseudonymised.EntriesPseudonymised == 0 && pseudonymised.TargetsCleared == 0
+               && pseudonymised.TombstonesRemoved == 0
             ? null
             : $"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
-              $"and the person target from {pseudonymised.TargetsCleared}";
+              $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
+              $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities";
     }
 }
