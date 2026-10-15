@@ -108,8 +108,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   person clearable. A new migration, `ProtectIdentityPublicIds`, adds triggers on `person` and `google_user`: one
   refuses any `UPDATE` that changes `public_id`, and one refuses an `INSERT` whose `public_id` a row of `scope`,
   `application`, `application_credential`, `scope_permission`, `role`, `pending_registration` or the other identity
-  table already holds, soft-deleted or not. Every other column stays writable, and the API never sets these ids, so
-  no request behaves differently. **Operators:** no setting changes. The triggers guard future writes only; the
+  table already holds, soft-deleted or not. A second migration, `ProtectEntityPublicIds`, makes `public_id` immutable
+  on those six tables too, so `public_id` is now immutable on every table the check trusts: a scope can no longer be
+  moved off its id to free it for a person, which closes the rename-then-reuse path. Every other column stays
+  writable, and the API never changes these ids, so no request behaves differently. **Operators:** no setting changes. The triggers guard future writes only; the
   migration does not look for a duplicate already stored. The API only ever issues fresh random ids, so one could
   exist only if somebody wrote it by hand in SQL; to check, compare `public_id` across those tables before or after
   upgrading.
