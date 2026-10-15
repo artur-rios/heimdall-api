@@ -23,7 +23,7 @@ body:json {
 docs {
   UC-40. Authenticated.
 
-  Invalidates every existing recovery code, including unused ones, and issues ten new ones. Send either code or recoveryCode. A wrong one answers 401 "The password or code is incorrect.".
+  Invalidates every existing recovery code, including unused ones, and issues ten new ones, each XXXX-XXXX-XXXX-XXXX. This is also how codes of the older XXXX-XXXX shape are replaced by the stronger ones. Send either code or recoveryCode. A wrong one answers 401 "The password or code is incorrect.".
 
   Revokes every token the person holds, this one included: keep the codes, then sign in again.
 }

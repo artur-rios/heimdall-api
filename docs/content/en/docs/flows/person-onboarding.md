@@ -69,11 +69,14 @@ sequenceDiagram
     P->>FE: click link
     FE->>AC: POST /api/auth/verify-email {token}
     AC->>H: HandleAsync
-    H->>DB: SELECT token
-    alt unknown (AF-14c) / expired (AF-14a) / spent (AF-14b)
+    H->>DB: SELECT token, its person and their scopes
+    alt unknown (AF-14c), or the person may no longer be acted on (AF-14d)
+        H-->>FE: 400 — invalid token
+    end
+    alt expired (AF-14a) / spent (AF-14b)
         H-->>FE: 400 — each rejection named distinctly
     end
-    H->>DB: UPDATE person.EmailVerified = true
+    H->>DB: UPDATE person.EmailVerified = true<br/>WHERE address unchanged AND not restricted / deleted / anonymised
     H->>DB: mark every live token for this person Used
     H-->>FE: 200
 ```
@@ -84,7 +87,9 @@ any other kind.
 Spending a token retires every other live token the person holds of that kind, so a verification link
 left in an inbox stops working once the address is verified. An address that was **already** verified
 answers 200 rather than an error: UC-14 defines no alternative flow for it, and the caller's intent
-has been satisfied either way.
+has been satisfied either way. A person restricted, deleted or anonymised since the link was mailed,
+or who can no longer sign in through their scope, gets `400` "Invalid token." and nothing is written
+(**FR-EV-08**), as UC-13 answers them.
 
 ## Replacing a lost link — UC-15
 

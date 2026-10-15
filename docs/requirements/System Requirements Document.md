@@ -135,6 +135,7 @@ graph LR
 | FR-PE-14 | A person changing their own email shall prove they are the account holder: the request shall carry their current password (`currentPassword`) and, when their two-factor authentication is active, a current second factor (`twoFactorCode`: an authenticator-app or email code, or an unused recovery code, which is spent; since no endpoint sends an email code to a signed-in caller, a person whose only method is Email uses a recovery code). A missing or wrong password, or a missing or wrong second factor when one is required, shall be refused with `401 Unauthorized` and "The password or code is incorrect." (FR-AU-13), the refusal UC-39 gives for the same failures, before the new address is checked for uniqueness, and nothing shall change. The password is verified through the password-hash gate (TH-03), and the endpoint is under the credential endpoints' rate limit (NFR-18). An administrator changing another person's email presents no credential of that person, and a change that leaves the email as it is asks for none. The email counts as changed unless the trimmed values are equal ordinally, so a change of case is a change, and a changed address is stored trimmed | High |
 | FR-PE-15 | On every change of a person's email, whoever made it, the system shall send a notice to the previous address saying that the account's email was changed and that, if the person did not make the change, they should contact an administrator. The notice shall contain neither the new address nor any link. A failed delivery shall be logged and shall not fail the update | High |
 | FR-PE-16 | The account emails a person's own requests can have sent — a verification link asked for again (FR-EV-04), a two-factor setup code (FR-2F-03) and the notice an own email change sends to the previous address (FR-PE-15) — shall share one per-person budget: at most one within the cooldown of FR-PR-06 and at most five in a day, the first send opening a one-day window. Each send shall be reserved by one conditional write before anything is issued, changed or mailed, so that simultaneous requests cannot exceed it (NFR-27), and a refused request shall change and send nothing: `429 Too Many Requests` with "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, and "You have reached today's limit for account emails. Try again tomorrow." once the day is spent. Administrator-initiated mail (FR-EV-06, FR-PR-05) is not charged to it. The budget shall be returned in the data export and cleared by anonymisation | Medium |
+| FR-PE-17 | On every change of a person's email, whoever made it, every live password-reset link (FR-PR-02) and email-verification link (FR-EV-02) the person holds shall be retired, so nothing mailed to the previous address can act on the account afterwards. They shall be retired before the new address is written and again after it, for any mailed to the previous address in between, and a reset or verification already under way shall write only while the person still holds the address it read (FR-PR-08, FR-EV-08), so it cannot land after the change | High |
 
 ### 3.3 Role Assignment
 
@@ -176,6 +177,7 @@ graph LR
 | FR-PR-05 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a password-reset link sent to the person's own stored address. Eligibility shall be FR-PR-02's: a person whose processing is restricted, who is logically deleted, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused, with the reason. No token or password shall be returned, logged or accepted | Medium |
 | FR-PR-06 | At most one password-reset email per person shall be sent through FR-PR-05 within a configurable cooldown (5 minutes by default, `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`), counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent | Medium |
 | FR-PR-07 | At most one password-reset email per person shall be sent through FR-PR-01 within the cooldown of FR-PR-06, counting every reset token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall send nothing and be answered exactly as any other (FR-PR-02). There shall be no daily cap, so that nobody but the owner can exhaust the owner's recovery | Medium |
+| FR-PR-08 | When a reset token is presented, the system shall re-check the person by FR-PR-02's eligibility rule, as it stands at that moment: a person whose processing is restricted, who is logically deleted or anonymised, or whose account could not sign in (FR-AU-06, FR-AU-07) shall be refused exactly as an unknown token is (AF-13c) — same status, same message — and nothing shall be written, the token included. The new password shall be written by one conditional write of the password columns alone, which repeats those checks and requires the address the person was read with | High |
 
 ### 3.6 Email Verification
 
@@ -188,6 +190,7 @@ graph LR
 | FR-EV-05 | On successful authentication, the system shall report whether the authenticated person's email address is verified | Medium |
 | FR-EV-06 | The system shall allow a `SystemAdmin` for any person, and a `ScopeAdmin` for a `User` of a scope they own, to have a fresh verification link sent to the person's own stored address, retiring their live links as FR-EV-04 does. A person whose processing is restricted, who is logically deleted, or whose address is already verified shall be refused. No token shall be returned, logged or accepted | Medium |
 | FR-EV-07 | At most one verification email per person shall be sent through FR-EV-06 within the cooldown of FR-PR-06, counting every verification token issued for the person in that window, whoever caused it and whether or not it was used. A request inside the window shall be refused and nothing sent. A person's own request for the link again (FR-EV-04) is bounded by FR-PE-16 instead | Medium |
+| FR-EV-08 | When a verification token is presented, the system shall re-check the person by FR-PR-02's eligibility rule, as FR-PR-08 does, refusing an ineligible person exactly as an unknown token is (AF-14c) and writing nothing. The address shall be marked verified by one conditional write that repeats those checks and requires the address the person was read with | High |
 
 ### 3.7 Application Management
 
@@ -220,7 +223,7 @@ graph LR
 | FR-GO-04 | Only accounts equivalent to the `User` role may sign up or sign in via Google; Google authentication shall never create or authenticate a `ScopeAdmin` or `SystemAdmin` | High |
 | FR-GO-05 | The system shall register a Google User with: `Id`, `GoogleId`, `Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`, `IsDeleted`, `ScopeId` | High |
 | FR-GO-06 | A Google User must be associated with exactly **one** scope, matching the scope in which the sign-up/sign-in was initiated | High |
-| FR-GO-07 | A Google User's `Email` must be unique within its scope, considered jointly with the emails of `User` persons in that same scope (see FR-PE-09). `User` persons is meant literally: an admin holds no scope membership, so an admin's address does not make one taken in any scope, and the same address can exist as both. Accepted and tested — see Threat Model TH-21 | High |
+| FR-GO-07 | A Google User's `Email` must be unique within its scope, considered jointly with the emails of `User` persons in that same scope (see FR-PE-09). `User` persons is meant literally: an admin holds no scope membership, so an admin's address does not make one taken in any scope, and the same address can exist as both. Accepted and tested — see Threat Model TH-21. Only an address Google vouches for may take a place in a scope: a sign-up (FR-GO-09) whose verified token does not carry `email_verified` equal to `true` — false, or absent — shall create nothing and be refused with `403 Forbidden` and "Google sign-up requires a verified email address.", before the address is compared with the scope's, so such a token learns nothing about which addresses a scope holds. Sign-in of an existing Google User (FR-GO-10) is not gated on the claim (see TH-40) | High |
 | FR-GO-08 | A Google User's `GoogleId` (Google's `sub` claim) must be unique within its scope | High |
 | FR-GO-09 | On first sign-in with a given Google account for a scope with Google sign-in enabled, the system shall create (sign up) a new Google User record populated from the verified Google ID token claims | High |
 | FR-GO-10 | On subsequent sign-ins with the same Google account and scope, the system shall authenticate the existing Google User by `GoogleId`, without creating a duplicate record | High |
@@ -231,8 +234,9 @@ graph LR
 | FR-GO-15 | The system shall allow **logical deletion** of a Google User by setting `IsDeleted = true` | High |
 | FR-GO-16 | The system shall allow **hard deletion** of a Google User, permanently removing the record | High |
 | FR-GO-17 | Logically deleted Google Users shall not appear in default query results unless explicitly requested | Medium |
-| FR-GO-18 | The system shall allow a signed-in Google User to sign out, invalidating/discarding their authentication token | High |
+| FR-GO-18 | The system shall allow a signed-in Google User to sign out. Heimdall keeps no Google session and no record of issued tokens, so signing out ends the client's session: the client discards its token, which otherwise stays valid until it expires (UC-26) | High |
 | FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
+| FR-GO-20 | A Google sign-in request may carry an optional `nonce`, the value the client sent Google when it asked for the ID token. When it is present and not empty, the verified token's `nonce` claim shall equal it exactly (ordinal comparison), and a token with another nonce or none shall be refused as AF-25a: `401 Unauthorized`, "Google authentication failed.". When it is absent or empty, nothing is compared | Medium |
 
 ### 3.8a Self-Registration
 
@@ -275,7 +279,7 @@ graph LR
 | FR-2F-02 | The authenticator-app method shall use standard TOTP (RFC 6238): a per-person secret, 6-digit codes, 30-second time step, provisioned via an `otpauth://` URI for QR scanning. The secret is stored encrypted at rest and is shown to the person only at initiation | High |
 | FR-2F-03 | The email method shall deliver a random 6-digit numeric code through the existing email service (see FR-PR-02, FR-EV-02 for the established pattern), single-use and expiring 10 minutes after issue. The ten minutes is the tolerance this specification allows for mail delivery, which is the one part of the flow outside the system's control; no other lifetime in the second-factor flow may cut it short (NFR-17) | High |
 | FR-2F-04 | Setup initiated under FR-2F-01 shall remain inactive until confirmed: the caller must submit a currently valid code for **every** method they selected (both, if both were selected) in one confirmation request | High |
-| FR-2F-05 | Confirming setup shall generate exactly ten recovery codes, returned in the confirmation response in plaintext exactly once, and stored thereafter only as hashes | High |
+| FR-2F-05 | Confirming setup shall generate exactly ten recovery codes, returned in the confirmation response in plaintext exactly once, and stored thereafter only as hashes. Their shape and hashing are FR-2F-20's | High |
 | FR-2F-06 | Each recovery code shall be usable at most once. Consuming a recovery code to complete a login marks it used; a used or unknown recovery code shall be rejected | High |
 | FR-2F-07 | When a person with active two-factor authentication completes FR-AU-01/FR-AU-02's password check, the system shall not issue a full authentication token. Instead it shall issue a short-lived challenge token, scoped only to the second-factor verification endpoint, naming the methods available to that person | High |
 | FR-2F-08 | If the email method is enabled for the person, issuing a challenge token shall also send a fresh email code, per FR-2F-03 | High |
@@ -290,6 +294,7 @@ graph LR
 | FR-2F-17 | The system shall count the guesses made at an outstanding challenge with an authenticator-app code or a recovery code, and on the fifth retire the challenge, so that further guessing requires a fresh authentication attempt. The count shall be reset whenever a new challenge is issued. A configuration with only the email method is bounded by FR-2F-13 instead | High |
 | FR-2F-18 | Initiating two-factor setup (UC-36) shall require the caller's current password (`currentPassword`). A missing or wrong password shall be refused with `401 Unauthorized` and "The password or code is incorrect." (FR-AU-13), and nothing shall be created or sent. The password is verified through the password-hash gate, and the endpoint is under the credential endpoints' rate limit. Confirming setup (UC-37) requires no password, only the codes of the methods selected, which are charged to the re-authentication budget of FR-AU-13 | High |
 | FR-2F-19 | A setup request that selects the email method shall be charged to the person's account-email budget (FR-PE-16). The budget shall be read before the password is checked, so a request it would refuse is refused first, with nothing changed or sent, and charged only once the password checks out, so a wrong password never spends it; a request selecting only the authenticator app is not charged | Medium |
+| FR-2F-20 | A recovery code shall carry 80 bits from a cryptographically secure generator: ten random bytes written as sixteen characters of Crockford's base32 (the digits and the uppercase letters without I, L, O and U), shown as `XXXX-XXXX-XXXX-XXXX`, and stored as the SHA-256 digest of the sixteen characters without hyphens. A presented code shall be matched ignoring hyphens, whitespace and case, with Crockford's aliases applied (O read as 0, I and L as 1). Codes of the shape issued before this requirement (`XXXX-XXXX` from `[A-Z0-9]`, stored as the digest of that exact uppercase text) shall keep matching, without aliases, until used or regenerated; any other length matches nothing. Unsalted SHA-256 is sufficient at this entropy: see Threat Model TH-16 | High |
 
 ### 3.11 Audit Trail
 
@@ -605,7 +610,7 @@ A person has at most one `TWO_FACTOR_AUTH` row. Its absence means the person has
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
 | TwoFactorAuthId | BigInt | Foreign key to TwoFactorAuth.Id (internal), required; cascade-deleted when the two-factor configuration is removed |
-| CodeHash | Byte array | Required, hashed with the same approach as `Person.PasswordHash` (see NFR-02) — the plaintext code exists only in the FR-2F-05 response |
+| CodeHash | Byte array | Required, the SHA-256 digest of the code's canonical form (FR-2F-20) — the plaintext code exists only in the FR-2F-05 response |
 | Used | Boolean | Default: `false` |
 | UsedAt | DateTime | Set when `Used` transitions to `true`; null until then |
 | CreatedAt | DateTime | Auto-set on creation |
@@ -1146,17 +1151,17 @@ Notes on cascading behavior:
 
 | Feature | Requirements |
 | --------- | ------------- |
-| Person CRUD | FR-PE-01 through FR-PE-16 |
+| Person CRUD | FR-PE-01 through FR-PE-17 |
 | Application CRUD and authentication | FR-AP-01 through FR-AP-16 |
 | Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-13 |
-| Password Recovery | FR-PR-01 through FR-PR-07 |
-| Email Verification | FR-EV-01 through FR-EV-07 |
-| Google Sign-In | FR-GO-01 through FR-GO-19 |
+| Password Recovery | FR-PR-01 through FR-PR-08 |
+| Email Verification | FR-EV-01 through FR-EV-08 |
+| Google Sign-In | FR-GO-01 through FR-GO-20 |
 | Self-Registration | FR-SR-01 through FR-SR-14 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
-| Two-Factor Authentication | FR-2F-01 through FR-2F-19 |
+| Two-Factor Authentication | FR-2F-01 through FR-2F-20 |
 | Audit Trail | FR-AT-01 through FR-AT-02 |
 | Health & monitoring | FR-HC-01 through FR-HC-07 — specified in the [Operations & Infrastructure Document](Operations%20%26%20Infrastructure%20Document.md), §3.4, together with UC-30, since they describe how the system is run rather than what it does for an actor |
 | Cross-cutting | NFR-01 through NFR-18 (§6). These are not tied to a single feature; each is listed against the feature it constrains in the sections above where it applies |

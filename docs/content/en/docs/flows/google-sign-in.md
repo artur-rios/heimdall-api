@@ -41,7 +41,7 @@ sequenceDiagram
     participant TI as JwtAuthTokenIssuer
     participant DB as PostgreSQL
 
-    C->>AC: POST /api/auth/google {idToken, scopeId}
+    C->>AC: POST /api/auth/google {idToken, scopeId, nonce?}
     AC->>H: HandleAsync
 
     H->>GV: VerifyAsync(idToken)
@@ -50,7 +50,10 @@ sequenceDiagram
         GV-->>H: null
         H-->>C: 401 google authentication failed
     end
-    G-->>GV: payload {sub, email, email_verified, name, picture}
+    G-->>GV: payload {sub, email, email_verified, name, picture, nonce}
+    alt nonce sent and the token's differs or is absent (AF-25g)
+        H-->>C: 401 google authentication failed
+    end
 
     H->>DB: SELECT scope WHERE PublicId = scopeId<br/>AND NOT IsDeleted AND GoogleSignInEnabled
     alt missing, deleted, or disabled (AF-25b)
@@ -59,6 +62,9 @@ sequenceDiagram
 
     H->>DB: SELECT GoogleUser WHERE ScopeId AND GoogleId = sub
     alt not found — sign-up (FR-GO-09)
+        alt email_verified is not true (AF-25f)
+            H-->>C: 403 sign-up requires a verified email address
+        end
         H->>DB: is the email free among the scope's Google Users AND Users?
         alt taken (AF-25c)
             H-->>C: 409 email already registered
@@ -82,16 +88,29 @@ is why UC-25 needs no 400 flow at all.
 has the feature switched off. The alternative flow names all three as one outcome, so one filter
 answers for all three.
 
+**A nonce binds the token to the sign-in that asked for it** (**FR-GO-20**). `nonce` is optional: a
+client that sent one to Google when asking for the ID token sends the same value here, and the
+token's `nonce` claim must equal it exactly; a token with another nonce, or none, answers as an
+unverifiable token does. A request without `nonce` compares nothing, as before.
+
+**Only an address Google vouches for can sign up** (**FR-GO-07**, AF-25f). A first sign-in whose
+token does not carry `email_verified: true` — false, or absent — creates nothing and answers `403`
+"Google sign-up requires a verified email address.". This is checked before the address is compared
+with the scope's. A Google User that already exists signs in whatever the claim says; FR-GO-19 keeps
+its stored flag current.
+
 **AF-25c is named separately, on purpose.** Being told the address is already registered reveals
-something — but the caller has just proved to Google that the address is theirs, so it tells them
-only about themselves. Uniqueness is checked jointly against the scope's Google Users **and** its
-password Users.
+something — but the caller has proved to Google that the address is theirs, and Google vouches for
+it, so it tells them only about themselves. Uniqueness is checked jointly against the scope's Google
+Users **and** its password Users.
 
 ## Signing out — UC-26
 
-`POST /api/auth/google/sign-out` revokes nothing: tokens are stateless signed JWTs with an expiry.
-What the endpoint does is *check* — it confirms the caller still holds a live Google session and then
-answers the success that tells the client to drop the token.
+`POST /api/auth/google/sign-out` ends the client's session and nothing else. Heimdall keeps no
+Google session, and its tokens are stateless signed JWTs with an expiry, so there is nothing to
+revoke: a copy of the token kept elsewhere stays valid until it expires (**FR-GO-18**). What the
+endpoint does is *check* — it confirms the token still names a live Google User and then answers the
+success that tells the client to drop the token.
 
 That check is the substance. Authentication reads no database per request, so a token outlives the
 account it names; one naming a deleted or unknown Google User is refused here.

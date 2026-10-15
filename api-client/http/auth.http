@@ -84,7 +84,9 @@ Authorization: Bearer {{token}}
 
 ### Google sign-up / sign-in against a scope (UC-25) — anonymous.
 # idToken is the ID token obtained from Google by the client application, not anything this API
-# issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403.
+# issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403. A first sign-in
+# whose token lacks email_verified: true answers 403 and creates nothing. An optional "nonce" — the
+# one sent to Google for this token — must equal the token's nonce claim, or the answer is 401.
 POST {{host}}/api/auth/google
 Content-Type: application/json
 

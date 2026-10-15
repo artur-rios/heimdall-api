@@ -257,8 +257,11 @@ Some responses tell the caller less than the API knows, on purpose:
   anyone — in the same time, too: it only queues the request, and the lookup, the token and the email
   happen after the response. A Mailgun failure is logged rather than surfaced — an email outage must
   not turn into a 500 that confirms an anonymous caller's guess.
-- **`POST /api/auth/google`** answers alike for an unverifiable token and a Google User whose account
-  is gone (AF-25a, AF-25d).
+- **`POST /api/auth/google`** answers alike for an unverifiable token, a token that does not carry
+  the `nonce` the request sent, and a Google User whose account is gone (AF-25a, AF-25g, AF-25d).
+- **`POST /api/auth/password-reset`** and **`POST /api/auth/verify-email`** answer "Invalid token."
+  both for a token nobody issued and for one whose person has since been restricted, deleted or
+  anonymised, or can no longer sign in (AF-13e, AF-14d).
 
 ## The specification
 

@@ -30,5 +30,5 @@ script:post-response {
 docs {
   UC-38. Anonymous.
 
-  Redeems the challenge token stored by Login for a full token. Send either code or recoveryCode, not both. The challenge token travels in the body, never as an Authorization header — it is rejected as a bearer credential everywhere.
+  Redeems the challenge token stored by Login for a full token. Send either code or recoveryCode, not both. A recovery code may be sent with or without hyphens, with spaces, in any case; older XXXX-XXXX codes still work until used or regenerated. The challenge token travels in the body, never as an Authorization header — it is rejected as a bearer credential everywhere.
 }

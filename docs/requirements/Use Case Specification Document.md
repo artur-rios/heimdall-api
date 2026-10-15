@@ -537,7 +537,7 @@ sequenceDiagram
 | **Actors** | System Admin, Scope Admin, User |
 | **Description** | Modify person's name, email, or role |
 | **Preconditions** | Actor is authenticated; person exists and is not logically deleted |
-| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11) and the previous address has been sent a notice (FR-PE-15) |
+| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11), every live password-reset and verification link is retired (FR-PE-17), and the previous address has been sent a notice (FR-PE-15) |
 
 **Main Flow:**
 
@@ -565,6 +565,11 @@ sequenceDiagram
      `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
      after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
+   - The system retires every live password-reset link and verification link the person holds
+     (FR-PE-17): they were mailed to the address being replaced. It does so before the new address
+     is saved and again after, for any mailed to the old address in between; a reset or verification
+     already under way writes only while the address is the one it read, so it cannot land after the
+     change (FR-PR-08, FR-EV-08). Following a retired link answers UC-13's AF-13b or UC-14's AF-14b.
    - Just before the update is saved, the system replaces the person's security stamp, which revokes
      every token they hold (FR-AU-11) — whoever made the change — and replaces it once more after the
      save. The first replacement means a save that fails costs one extra sign-in rather than leaving
@@ -876,11 +881,13 @@ requests; a person who receives nothing asks again, as for any email that does n
 **Main Flow:**
 
 1. Caller provides the reset token and a new password.
-2. The system validates the token (exists, not expired, not used).
+2. The system validates the token (exists, its person may still be acted on, not expired, not used).
+   The person is checked by UC-12's rule as they stand now (FR-PR-08, AF-13e).
 3. The system generates a new random `Salt` and hashes the new password using it.
 4. The system marks the token as used, replaces the person's security stamp, which revokes every token
    issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike — then
-   saves the new `PasswordHash` and `Salt`, and replaces the stamp once more. The first replacement
+   writes the new `PasswordHash` and `Salt`, in one conditional write that repeats step 2's checks on
+   the person and requires the address they were read with, and replaces the stamp once more. The first replacement
    means a save that fails leaves no old session live; the second ends any session opened with the old
    password while the save was in flight.
 5. The system returns success. The person signs in again with the new password; a session opened with
@@ -894,6 +901,7 @@ requests; a person who receives nothing asks again, as for any email that does n
 | AF-13b | Token already used — including by a request carrying the same token at the same time (NFR-27): exactly one of them sets a password | Return `400 Bad Request` — "Token already used" |
 | AF-13c | Token not found | Return `400 Bad Request` — "Invalid token" |
 | AF-13d | New password fails validation | Return `400 Bad Request` with validation errors |
+| AF-13e | The token's person may no longer be acted on: since the link was mailed they were put under a restriction on processing (NFR-24), logically deleted or anonymised, or can no longer sign in (FR-AU-06, FR-AU-07); checked before the token's expiry and use, and again by the write in step 4 (FR-PR-08) | As AF-13c: `400 Bad Request` — "Invalid token". Nothing is written, the token included, so a restricted record is preserved |
 
 ---
 
@@ -927,8 +935,10 @@ sequenceDiagram
 ```
 
 1. Person clicks the verification link which calls the API with the token.
-2. The system locates and validates the token.
-3. The system sets `EmailVerified = true` on the person record.
+2. The system locates and validates the token, and checks the person by UC-12's rule as they stand
+   now (FR-EV-08, AF-14d).
+3. The system sets `EmailVerified = true` on the person record, in one conditional write that repeats
+   step 2's checks and requires the address the person was read with.
 4. The system marks the token as used.
 5. The system returns success.
 
@@ -939,6 +949,7 @@ sequenceDiagram
 | AF-14a | Token expired | Return `400 Bad Request` — "Token expired" |
 | AF-14b | Token already used — including by a request carrying the same token at the same time (NFR-27) | Return `400 Bad Request` — "Token already used" |
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
+| AF-14d | The token's person may no longer be acted on, as UC-13's AF-13e (FR-EV-08) | As AF-14c: `400 Bad Request` — "Invalid token". Nothing is written, the token included |
 
 > **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
 
@@ -1349,13 +1360,14 @@ sequenceDiagram
 
     Caller->>GIP: Authenticate with Google
     GIP-->>Caller: ID token { sub, email, email_verified, name, picture }
-    Caller->>API: POST /api/auth/google { scopeId, idToken }
+    Caller->>API: POST /api/auth/google { scopeId, idToken, nonce? }
     API->>GIP: Verify ID token signature, issuer, audience, expiration
     GIP-->>API: Token valid, claims
     API->>DB: Verify scope exists, is not logically deleted, and GoogleSignInEnabled = true
     DB-->>API: Scope found
     API->>DB: Find GOOGLE_USER by GoogleId (sub) and scopeId
     alt Google User does not exist
+        API->>API: Require email_verified == true
         API->>DB: Check email uniqueness in scope (jointly with User persons)
         DB-->>API: Email is unique
         API->>DB: Insert GOOGLE_USER row { GoogleId, Name, Email, EmailVerified, ProfilePictureUrl, ScopeId }
@@ -1370,11 +1382,11 @@ sequenceDiagram
 ```
 
 1. The caller authenticates with Google (outside this API) and obtains a signed ID token.
-2. The caller sends the ID token and target scope ID to the API.
-3. The system verifies the ID token's signature, issuer, audience, and expiration.
+2. The caller sends the ID token and target scope ID to the API, and optionally the `nonce` it sent Google when asking for the token.
+3. The system verifies the ID token's signature, issuer, audience, and expiration. When the request carries a `nonce`, the token's `nonce` claim must equal it (FR-GO-20, AF-25g).
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
-6. If none exists: the system verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
+6. If none exists: the system requires the token's `email_verified` claim to be `true` (AF-25f), verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
 7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
 8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
@@ -1387,6 +1399,8 @@ sequenceDiagram
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
 | AF-25e | Existing Google User is under a restriction on processing (NFR-24), whether or not logically deleted | Return `200 OK` with a subject-rights-only token and `processingRestricted: true`, as UC-11's AF-11i. Nothing is refreshed from the ID token, since that would be processing the record |
+| AF-25f | No Google User exists yet and the token's `email_verified` claim is not `true` — false or absent (FR-GO-07); checked before AF-25c | Return `403 Forbidden` — "Google sign-up requires a verified email address." Nothing is created |
+| AF-25g | The request carries a `nonce` and the token's `nonce` claim is absent or differs (FR-GO-20); checked with AF-25a, before the scope is read | As AF-25a: `401 Unauthorized` — "Google authentication failed." |
 
 ---
 
@@ -1397,14 +1411,14 @@ sequenceDiagram
 | **ID** | UC-26 |
 | **Name** | Sign Out via Google |
 | **Actors** | Google User |
-| **Description** | End a Google User's authenticated session |
+| **Description** | End a Google User's session in the client |
 | **Preconditions** | The caller holds a valid authentication token issued via UC-25 |
-| **Postconditions** | The token is invalidated/discarded and no longer usable |
+| **Postconditions** | The client has been told to discard the token. Heimdall keeps no Google session and records no issued token, so nothing server-side ends: a copy of the token kept elsewhere stays valid until it expires (FR-GO-18) |
 
 **Main Flow:**
 
 1. The Google User sends a sign-out request with their current token.
-2. The system invalidates the token (e.g., via a revocation list) or instructs the client to discard it, per the configured token strategy.
+2. The system confirms the token still names a live Google User and instructs the client to discard it. It revokes nothing: Heimdall's tokens are stateless (NFR-03), a Google User's token carries no security stamp (FR-AU-11), and Heimdall holds no session with Google to end.
 3. The system returns success.
 
 **Alternative Flows:**
@@ -1764,7 +1778,7 @@ sequenceDiagram
 3. Only once every required code checks out, the system replaces the person's security stamp, which
    revokes every token issued before the second factor was required, the caller's own included
    (FR-AU-11).
-4. The system generates ten random recovery codes, hashes each, and stores the hashes.
+4. The system generates ten random recovery codes, hashes each, and stores the hashes. Each is 80 bits, sixteen characters of Crockford's base32 shown as `XXXX-XXXX-XXXX-XXXX` (FR-2F-20).
 5. The system sets `IsActive = true`.
 6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
 
@@ -1811,7 +1825,7 @@ sequenceDiagram
 
 1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
 2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token. The token must also still name the person's outstanding challenge: redeeming a challenge spends it, and a newer login replaces it, so a challenge is redeemable once (FR-2F-10).
-3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13). Every guess is also charged to the person, across challenges, and a correct password does not reset that count: the tenth failure locks the second factor, for fifteen minutes and twice as long at each repeat, up to a day, and only a second factor that checks out resets it (FR-AU-12).
+3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes — ignoring its hyphens, whitespace and case, and reading an O, I or L in a sixteen-character code as 0, 1 and 1; a code of the shorter `XXXX-XXXX` shape issued before still matches as it was stored (FR-2F-20). A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13). Every guess is also charged to the person, across challenges, and a correct password does not reset that count: the tenth failure locks the second factor, for fifteen minutes and twice as long at each repeat, up to a day, and only a second factor that checks out resets it (FR-AU-12).
 4. If a recovery code was used, the system marks it consumed — it cannot be used again.
 5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success. A person whose processing is restricted (NFR-24) — including one restricted after the challenge was issued — gets UC-11's AF-11i subject-rights-only token instead, and AF-38d's scope check does not apply to them.
 
@@ -1910,8 +1924,9 @@ sequenceDiagram
 3. The system replaces the person's security stamp, revoking every token issued before (FR-AU-11): the
    codes are usually replaced because the old set may be known to somebody else, and so may a session
    opened with one.
-4. The system generates ten new codes, hashes each, and stores them, then deletes every earlier
-   recovery code row for the person, including any still unused.
+4. The system generates ten new codes of the current shape (FR-2F-20), hashes each, and stores them,
+   then deletes every earlier recovery code row for the person, including any still unused. This is
+   also how a person holding the shorter codes issued before FR-2F-20 gets the stronger ones.
 5. The system returns the ten new codes in plaintext — the only response that will ever contain them. The client keeps them, then signs in again.
 
 **Alternative Flows:**
@@ -2729,13 +2744,13 @@ sequenceDiagram
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
 | UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
-| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-PE-17, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
 | UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
-| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-AU-11, NFR-27 |
-| UC-14: Email Verification | FR-EV-03, NFR-27 |
+| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-PR-08, FR-PE-17, FR-AU-11, NFR-24, NFR-27 |
+| UC-14: Email Verification | FR-EV-03, FR-EV-08, FR-PE-17, NFR-24, NFR-27 |
 | UC-15: Resend Verification Email | FR-EV-04 |
 | UC-16: Create Application | FR-AP-01, FR-AP-02, FR-AP-03 |
 | UC-17: View Application | FR-AP-04, FR-AP-05, FR-AP-09 |
@@ -2746,7 +2761,7 @@ sequenceDiagram
 | UC-22: Remove Scope Owner | FR-SC-08, FR-SC-10 |
 | UC-23: Promote User to Scope Owner | FR-SC-08, FR-SC-13, FR-RO-03 |
 | UC-24: Enable/Disable Google Sign-In | FR-GO-01, FR-GO-02 |
-| UC-25: Sign Up / Sign In via Google | FR-GO-03 through FR-GO-11 |
+| UC-25: Sign Up / Sign In via Google | FR-GO-03 through FR-GO-11, FR-GO-19, FR-GO-20 |
 | UC-26: Sign Out via Google | FR-GO-18 |
 | UC-27: View Google User | FR-GO-14, FR-GO-17 |
 | UC-28: Logical Delete Google User | FR-GO-15, FR-GO-17 |
@@ -2757,10 +2772,10 @@ sequenceDiagram
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
 | UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18, FR-AU-13 |
-| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11, FR-AU-13 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, FR-AU-12, NFR-27 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-2F-20, FR-AU-11, FR-AU-13 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-2F-20, FR-AU-11, FR-AU-12, NFR-27 |
 | UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11, FR-AU-13 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, FR-AU-13, NFR-27 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-2F-20, FR-AU-11, FR-AU-13, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |

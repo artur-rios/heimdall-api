@@ -64,6 +64,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   handed a `/56` is one caller instead of 256. Trusted callers' named IPv6 addresses are counted the same way.
   **Operators:** a flood spread over many unrelated networks can still keep the password-hash gate full; the
   operations guide now shows how to rate-limit the credential routes at Traefik.
+- Two-factor recovery codes now carry 80 bits (FR-2F-20): ten random bytes written as sixteen characters of
+  Crockford's base32 (the digits and the uppercase letters without I, L, O and U) and returned by
+  `POST /api/auth/2fa/confirm` and `POST /api/auth/2fa/recovery-codes/regenerate` as `XXXX-XXXX-XXXX-XXXX`. Each is
+  stored as the SHA-256 of its sixteen characters. Wherever a recovery code is accepted (`2fa/verify`, `2fa/disable`,
+  `2fa/recovery-codes/regenerate`, the `twoFactorCode` of an own email change) it is matched ignoring hyphens,
+  whitespace and case, and an O, I or L in a sixteen-character code reads as 0, 1 and 1. Codes of the earlier
+  `XXXX-XXXX` shape keep working, in any case and with or without the hyphen, until used or regenerated.
+  **Users:** regenerate your recovery codes to get the stronger ones; the old set stops working once you do.
+  **Clients:** accept and show codes of 19 characters as well as 9, and do not restrict their alphabet beyond letters,
+  digits, hyphens and spaces. No migration: the column already holds a digest.
+- A first Google sign-in (`POST /api/auth/google`) now requires the ID token's `email_verified` to be `true`
+  (FR-GO-07). A token where it is `false` or absent creates no Google User and is answered `403` with the new
+  message "Google sign-up requires a verified email address.", before the address is compared with the scope's.
+  A Google User that already exists signs in as before, whatever the claim says.
+- `POST /api/auth/google` accepts an optional `nonce` (FR-GO-20): the value the client sent Google when it asked for
+  the ID token. When it is present and not empty, the token's `nonce` claim must equal it exactly, or the request is
+  answered `401` "Google authentication failed.", as for any token that fails verification. Without it nothing is
+  compared. **Clients:** generate a fresh random nonce for each Google sign-in, pass it to Google, and send the same
+  value here.
+- A password-reset or verification link is checked against its account again when it is followed (FR-PR-08,
+  FR-EV-08): if the person has since been restricted, deleted or anonymised, or can no longer sign in through their
+  scope, `POST /api/auth/password-reset` and `POST /api/auth/verify-email` answer `400` "Invalid token.", exactly
+  as for an unknown token, and nothing is written. The new password and the verified flag are written only while
+  the person still holds the address they were read with. An email change, by the person or an administrator, now
+  retires every live reset link as well as every verification link the person holds (FR-PE-17); following one
+  afterwards answers `400` "Token already used.". **Clients:** no new messages; "Invalid token." and "Token already
+  used." keep their meaning of "this link no longer works, ask for a new one".
 
 ## [1.5.0] - 2026-10-15
 

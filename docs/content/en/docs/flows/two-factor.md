@@ -74,11 +74,18 @@ sequenceDiagram
     CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
     CH->>DB: replace the person's security stamp
-    CH->>DB: INSERT 10 recovery codes (hashes only)
+    CH->>DB: INSERT 10 recovery codes (SHA-256 digests only)
     CH->>DB: UPDATE IsActive = true
     CH->>DB: mark the confirming email code Used
     CH-->>P: 200 — ten recovery codes, shown exactly once
 ```
+
+**Recovery codes are 80 bits** (**FR-2F-20**): ten random bytes written as sixteen characters of
+Crockford's base32 — the digits and the uppercase letters without I, L, O and U — and shown as
+`XXXX-XXXX-XXXX-XXXX`. A code is accepted with or without its hyphens, with spaces, and in any case,
+and an O, I or L typed in one reads as 0, 1 and 1. Codes of the shorter `XXXX-XXXX` shape issued
+before keep working until they are used or regenerated; regenerating (UC-40) is how a person gets
+the stronger ones.
 
 **Enabling needs the password** (**FR-2F-18**): adding a second factor requires proof of identity,
 as removing one does, and a bearer token alone is not that proof. **Confirming
@@ -232,7 +239,7 @@ its owner out of signing in.
 | | Stored as | Returned |
 | --- | --- | --- |
 | TOTP secret | Encrypted at rest via ASP.NET Core Data Protection | Once, at provisioning |
-| Recovery codes | Hash only — high-entropy random text needs no per-code salt | Once, when generated |
+| Recovery codes | SHA-256 only — 80 random bits need no per-code salt or slow hash (FR-2F-20) | Once, when generated |
 | Email codes | Hash **+ per-code salt** — only 10⁶ possible values | Never; mailed |
 
 That is **NFR-16**. See [Domain model](../../domain-model/#secrets-at-rest).
