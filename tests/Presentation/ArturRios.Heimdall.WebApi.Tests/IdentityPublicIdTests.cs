@@ -9,8 +9,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
 ///     The identity tables' <c>public_id</c> means what it says (#199): it can never be rewritten,
-///     and a new person or Google User cannot take an id another entity already holds, against real
-///     PostgreSQL.
+///     and a new person or Google User cannot take an id another entity holds or an audit entry
+///     names, against real PostgreSQL.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -22,9 +22,10 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         it, each refusal by its own reason, and that every ordinary write still passes.
 ///     </para>
 ///     <para>
-///         "Already held" means by a row that is there, soft-deleted or not. A hard-deleted entity's
-///         id is not remembered; that is deliberate, as a registry would keep a removed person's id
-///         for good.
+///         "Already held" means by a row that is there, soft-deleted or not; no registry of issued
+///         ids is kept, as it would keep a removed person's id for good. A hard-deleted entity's id
+///         is still refused while the audit trail names it (R3, I1), which is the only place a
+///         removed entity's id still matters.
 ///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]
@@ -320,6 +321,54 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
         // Then
         AssertRefused(failure, "heimdall.google_user public_id is already used by another entity");
         Assert.Equal(0, await CountAsync("google_user", person.PublicId));
+    }
+
+    /// <summary>
+    ///     A scope hard-deleted as UC-05 does it, after an audit entry about it was written: no row
+    ///     holds its id any more, but the trail still names it.
+    /// </summary>
+    private async Task<Guid> HardDeletedScopeTheTrailNamesAsync()
+    {
+        var scope = await SeedScopeAsync();
+
+        Assert.Null(await RunAsync(
+            $"""
+             INSERT INTO heimdall.audit_log (public_id, action, succeeded, target_id)
+             VALUES ('{Guid.NewGuid()}', 'IdentityPublicIdTestCommand', true, '{scope.PublicId}')
+             """));
+        Assert.Null(await RunAsync($"DELETE FROM heimdall.scope WHERE public_id = '{scope.PublicId}'"));
+
+        return scope.PublicId;
+    }
+
+    [FunctionalFact]
+    public async Task GivenAHardDeletedScopeTheTrailNames_WhenAPersonIsInsertedWithItsId_ThenTheDatabaseRefuses()
+    {
+        // Given — the delete-then-reinsert path (R3, I1): an anonymised person with this id would make
+        // every entry about the scope clearable
+        var scopeId = await HardDeletedScopeTheTrailNamesAsync();
+
+        // When
+        var failure = await RunAsync(InsertPersonStatement(scopeId));
+
+        // Then
+        AssertRefused(failure, "heimdall.person public_id is named by an audit entry");
+        Assert.Equal(0, await CountAsync("person", scopeId));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAHardDeletedScopeTheTrailNames_WhenAGoogleUserIsInsertedWithItsId_ThenTheDatabaseRefuses()
+    {
+        // Given
+        var scopeId = await HardDeletedScopeTheTrailNamesAsync();
+        var scope = await SeedScopeAsync();
+
+        // When
+        var failure = await RunAsync(InsertGoogleUserStatement(scopeId, scope.Id));
+
+        // Then
+        AssertRefused(failure, "heimdall.google_user public_id is named by an audit entry");
+        Assert.Equal(0, await CountAsync("google_user", scopeId));
     }
 
     [FunctionalFact]

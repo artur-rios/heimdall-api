@@ -7,21 +7,25 @@ using Npgsql;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
-///     <c>public_id</c> is immutable on every table the identity insert check consults (#199, R2):
-///     <c>scope</c>, <c>application</c>, <c>application_credential</c>, <c>scope_permission</c>,
-///     <c>role</c> and <c>pending_registration</c>, against real PostgreSQL.
+///     <c>public_id</c> on every table the identity check trusts — <c>scope</c>, <c>application</c>,
+///     <c>application_credential</c>, <c>scope_permission</c>, <c>role</c> and
+///     <c>pending_registration</c> — is immutable, and no guarded table, the identity tables included,
+///     takes an id another one holds (#199, R2 and R3), against real PostgreSQL.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The insert check refuses a new person or Google User whose <c>public_id</c> another
-///         entity holds, but only at that moment. While the other tables' ids could be rewritten, it
-///         could be walked round: rename a scope's id, insert a person with the freed id, anonymise
-///         them, clear every audit target naming the scope, then rename the scope back. With the id
-///         fixed everywhere the check looks, the first step is refused and the chain cannot start.
+///         The identity check can only see who holds an id at the moment it runs. While the other
+///         tables' ids could be rewritten it could be walked round: rename a scope's id, insert a
+///         person with the freed id, anonymise them, clear every audit target naming the scope, then
+///         rename the scope back. And while only identity inserts were checked, a person inserted
+///         first could share its id with a scope inserted after it. Both are pinned here: the rename
+///         is refused and the chain leaves the entry as it was, and every one of the eight tables
+///         refuses an id another holds.
 ///     </para>
 ///     <para>
-///         Each table gets a refusal and an ordinary update that passes, so a test cannot pass on a
-///         trigger that refuses everything.
+///         Each table also gets an ordinary update and a fresh-id insert that pass, so a test cannot
+///         pass on a trigger that refuses everything. Inserts that could leave a row in a table other
+///         tests share, the role table above all, run in a transaction that is rolled back.
 ///     </para>
 /// </remarks>
 [Collection(nameof(FunctionalCollection))]
@@ -301,10 +305,155 @@ public class EntityPublicIdTests(PostgresFixture fixture)
             "pending_registration", pending.PublicId, "failed_attempts = failed_attempts + 1");
     }
 
-    [FunctionalFact]
-    public async Task GivenAScopeNamedInTheAuditTrail_WhenRenamedToFreeItsIdForAPerson_ThenTheChainCannotStart()
+    /// <summary>The rows a test row of any guarded table depends on.</summary>
+    private sealed record Dependencies(long ScopeId, long ApplicationId, long OwnerId);
+
+    private async Task<Dependencies> SeedDependenciesAsync()
     {
-        // Given — a scope an audit entry names, which is not personal data and must stay as recorded
+        var application = await SeedApplicationAsync();
+
+        return new Dependencies(application.ScopeId, application.Id, application.OwnerId);
+    }
+
+    /// <summary>An INSERT of one row with the given <c>public_id</c> into any of the eight guarded tables.</summary>
+    private static string InsertStatement(string table, Guid publicId, Dependencies with) => table switch
+    {
+        "person" => $"""
+                     INSERT INTO heimdall.person (public_id, name, email, password_hash, salt, role_id)
+                     VALUES ('{publicId}', 'Entity Public Id', '{Unique("entity-public-id")}@functional.test',
+                             '\x01', '\x02', {(long)Roles.User})
+                     """,
+        "google_user" => $"""
+                          INSERT INTO heimdall.google_user (public_id, google_id, name, email, scope_id)
+                          VALUES ('{publicId}', '{Guid.NewGuid():N}', 'Entity Public Id',
+                                  '{Unique("entity-public-id")}@functional.test', {with.ScopeId})
+                          """,
+        "scope" => $"INSERT INTO heimdall.scope (public_id, name) VALUES ('{publicId}', '{Unique("entity-public-id")}')",
+        "application" => $"""
+                          INSERT INTO heimdall.application (public_id, name, scope_id, owner_id)
+                          VALUES ('{publicId}', '{Unique("entity-public-id")}', {with.ScopeId}, {with.OwnerId})
+                          """,
+        "application_credential" => $"""
+                                     INSERT INTO heimdall.application_credential
+                                         (public_id, application_id, secret_hash, created_at)
+                                     VALUES ('{publicId}', {with.ApplicationId}, '{Guid.NewGuid():N}{Guid.NewGuid():N}', now())
+                                     """,
+        "scope_permission" => $"""
+                               INSERT INTO heimdall.scope_permission (public_id, name, scope_id)
+                               VALUES ('{publicId}', '{Unique("entity-public-id")}', {with.ScopeId})
+                               """,
+        "role" => $"""
+                   INSERT INTO heimdall.role (id, public_id, name)
+                   VALUES ((SELECT max(id) + 1000 FROM heimdall.role), '{publicId}', '{Unique("role")}')
+                   """,
+        "pending_registration" => $"""
+                                   INSERT INTO heimdall.pending_registration
+                                       (public_id, scope_id, name, email, password_hash, salt, token_hash, expires_at)
+                                   VALUES ('{publicId}', {with.ScopeId}, 'Entity Public Id',
+                                           '{Unique("entity-public-id")}@functional.test', '\x01', '\x02',
+                                           '{Guid.NewGuid():N}{Guid.NewGuid():N}', now() + interval '1 day')
+                                   """,
+        _ => throw new ArgumentOutOfRangeException(nameof(table), table, null)
+    };
+
+    /// <summary>
+    ///     A committed row of the given table, holding a fresh id. A role is the seeder's own, so the
+    ///     shared role table never gains a test row.
+    /// </summary>
+    private async Task<Guid> SeedHolderAsync(string table, Dependencies with)
+    {
+        if (table == "role")
+        {
+            return await SeededRolePublicIdAsync();
+        }
+
+        var publicId = Guid.NewGuid();
+        Assert.Null(await RunAsync(InsertStatement(table, publicId, with)));
+
+        return publicId;
+    }
+
+    /// <summary>
+    ///     Runs the statement inside a transaction that is always rolled back, so an insert that is
+    ///     permitted, into <c>role</c> above all, leaves nothing behind. Returns the failure, if any,
+    ///     and how many rows of the table held the id inside the transaction.
+    /// </summary>
+    private async Task<(Exception? Failure, long Inside)> RunRolledBackAsync(string statement, string table, Guid publicId)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using var command = new NpgsqlCommand(statement, connection, transaction);
+        var failure = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync());
+
+        long inside = 0;
+
+        if (failure is null)
+        {
+            await using var count = new NpgsqlCommand(
+                $"SELECT count(*) FROM heimdall.{table} WHERE public_id = '{publicId}'", connection, transaction);
+            inside = (long)(await count.ExecuteScalarAsync())!;
+        }
+
+        await transaction.RollbackAsync();
+
+        return (failure, inside);
+    }
+
+    [FunctionalTheory]
+    [InlineData("person", "pending_registration")]
+    [InlineData("google_user", "role")]
+    [InlineData("scope", "person")]
+    [InlineData("application", "google_user")]
+    [InlineData("application_credential", "scope_permission")]
+    [InlineData("scope_permission", "application_credential")]
+    [InlineData("role", "application")]
+    [InlineData("pending_registration", "scope")]
+    public async Task GivenAnIdAnotherTableHolds_WhenARowIsInsertedWithIt_ThenTheDatabaseRefuses(string table, string holder)
+    {
+        // Given — every table is inserted into once and holds an id once, so every branch of the check is
+        // exercised from both sides (R3, I2)
+        var with = await SeedDependenciesAsync();
+        var held = await SeedHolderAsync(holder, with);
+
+        // When
+        var (failure, _) = await RunRolledBackAsync(InsertStatement(table, held, with), table, held);
+
+        // Then
+        var refusal = Assert.IsType<PostgresException>(failure);
+        Assert.Equal(RestrictViolation, refusal.SqlState);
+        Assert.Contains($"heimdall.{table} public_id is already used by another entity", refusal.MessageText);
+        Assert.Equal(0, await CountAsync(table, held));
+    }
+
+    [FunctionalTheory]
+    [InlineData("person")]
+    [InlineData("google_user")]
+    [InlineData("scope")]
+    [InlineData("application")]
+    [InlineData("application_credential")]
+    [InlineData("scope_permission")]
+    [InlineData("role")]
+    [InlineData("pending_registration")]
+    public async Task GivenAFreshId_WhenARowIsInsertedWithIt_ThenTheDatabasePermitsIt(string table)
+    {
+        // Given
+        var with = await SeedDependenciesAsync();
+        var fresh = Guid.NewGuid();
+
+        // When
+        var (failure, inside) = await RunRolledBackAsync(InsertStatement(table, fresh, with), table, fresh);
+
+        // Then
+        Assert.Null(failure);
+        Assert.Equal(1, inside);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAScopeNamedInTheAuditTrail_WhenTheRenameThenReuseChainIsAttempted_ThenTheTargetIsStillTheScope()
+    {
+        // Given — a scope an audit entry names, past every floor; not personal data, so it must stay
         var scope = await SeedScopeAsync();
         var entry = Guid.NewGuid();
         Assert.Null(await RunAsync(
@@ -312,28 +461,32 @@ public class EntityPublicIdTests(PostgresFixture fixture)
              INSERT INTO heimdall.audit_log (public_id, action, succeeded, target_id, created_at)
              VALUES ('{entry}', 'EntityPublicIdTestCommand', true, '{scope.PublicId}', now() - interval '400 days')
              """));
+        var freed = Guid.NewGuid();
 
-        // When — the bypass: move the scope off its id, so a person could be inserted with it
+        // When — the whole chain: move the scope off its id, plant an anonymised person with it, clear
+        // the target, move the scope back. Each step is attempted whatever the one before did.
         var rename = await RunAsync(
-            $"UPDATE heimdall.scope SET public_id = '{Guid.NewGuid()}' WHERE public_id = '{scope.PublicId}'");
+            $"UPDATE heimdall.scope SET public_id = '{freed}' WHERE public_id = '{scope.PublicId}'");
+        await RunAsync(
+            $"""
+             INSERT INTO heimdall.person (public_id, name, email, password_hash, salt, role_id, anonymised_at)
+             VALUES ('{scope.PublicId}', 'Entity Public Id', '{Unique("entity-public-id")}@functional.test',
+                     '\x01', '\x02', {(long)Roles.User}, now())
+             """);
+        await RunAsync($"UPDATE heimdall.audit_log SET target_id = NULL WHERE public_id = '{entry}'");
+        await RunAsync($"UPDATE heimdall.scope SET public_id = '{scope.PublicId}' WHERE public_id = '{freed}'");
 
-        // Then — the first step is refused, so the id stays the scope's, a person cannot take it, and
-        // the entry's target cannot be cleared
+        // Then — the first step is refused, and the end state is what it was: the entry still names the scope
         var refusal = Assert.IsType<PostgresException>(rename);
         Assert.Equal(RestrictViolation, refusal.SqlState);
         Assert.Contains("heimdall.scope public_id is immutable", refusal.MessageText);
 
-        var insert = await RunAsync(
-            $"""
-             INSERT INTO heimdall.person (public_id, name, email, password_hash, salt, role_id, anonymised_at)
-             VALUES ('{scope.PublicId}', 'Entity Public Id', '{Unique("entity-public-id")}@functional.test',
-                     '\x01', '\x02', 3, now())
-             """);
-        Assert.Contains("heimdall.person public_id is already used by another entity",
-            Assert.IsType<PostgresException>(insert).MessageText);
-
-        var clearing = await RunAsync($"UPDATE heimdall.audit_log SET target_id = NULL WHERE public_id = '{entry}'");
-        Assert.Contains("names no person", Assert.IsType<PostgresException>(clearing).MessageText);
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var target = new NpgsqlCommand(
+            $"SELECT target_id FROM heimdall.audit_log WHERE public_id = '{entry}'", connection);
+        Assert.Equal(scope.PublicId, (Guid)(await target.ExecuteScalarAsync())!);
         Assert.Equal(1, await CountAsync("scope", scope.PublicId));
+        Assert.Equal(0, await CountAsync("person", scope.PublicId));
     }
 }
