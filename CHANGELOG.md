@@ -88,6 +88,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The Command tests no longer fail intermittently on password-hash gate timeouts under load (#196): the test
+  assembly installs a gate with the production permit count and a two-minute wait, and the saturation
+  exception's message now names the gate and how long it waited. Production behaviour and responses are
+  unchanged.
 - A request that cannot be bound now answers `400` with "The request is malformed." on every endpoint (#186),
   instead of running the action with a missing or default argument: a body that is not JSON was a `500`, and a
   query filter of the wrong type (`?succeeded=maybe`, `?actorId=not-a-guid`) was dropped and answered `200`

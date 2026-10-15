@@ -173,6 +173,14 @@ instead), and prints every test any run recorded as failed. Hunt with the **whol
 than a single project: a failure that only appears under the CPU contention of parallel test
 projects will not reproduce from one project alone.
 
+### 5.2 The Command tests use a patient password-hash gate
+
+Production Argon2id is 600 MB and 16 lanes, so the Command tests derive through
+`PasswordHashGate.Shared`, which bounds concurrency at four. A module initializer
+(`Support/CommandTestGate.cs`) replaces it for the whole assembly with a gate of the same permit
+count and a two-minute wait, so a run under CPU or memory pressure queues instead of failing on the
+production ten-second refusal. `PasswordHashGateTests` still pins the production defaults.
+
 ## 6. Unit testing standard (Commands, Queries, Domain behavior)
 
 ### 6.1 Scope of a unit test
