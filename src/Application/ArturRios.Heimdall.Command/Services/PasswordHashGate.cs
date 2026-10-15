@@ -134,7 +134,7 @@ public sealed class PasswordHashGate
     {
         if (!await _permits.WaitAsync(MaxWait))
         {
-            throw new PasswordHashGateSaturatedException();
+            throw new PasswordHashGateSaturatedException(MaxWait);
         }
 
         try
@@ -175,7 +175,9 @@ public sealed class PasswordHashGate
 /// <remarks>
 ///     A load condition rather than a fault: nothing is wrong with the request, and the caller should
 ///     retry. <c>PasswordHashSaturationFilter</c> turns it into the canonical
-///     <c>AuthenticationTemporarilyUnavailable</c> message and <c>503</c>.
+///     <c>AuthenticationTemporarilyUnavailable</c> message and <c>503</c>; this exception's own message
+///     is never sent to a client, so it names the gate and the wait for whoever reads a log or a failing
+///     test.
 /// </remarks>
-public sealed class PasswordHashGateSaturatedException()
-    : Exception("The password verification gate is saturated.");
+public sealed class PasswordHashGateSaturatedException(TimeSpan waited)
+    : Exception($"The password-hash gate stayed full for {waited.TotalSeconds:0.###} s.");

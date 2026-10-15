@@ -35,6 +35,34 @@ public class PasswordHashGateTests
     }
 
     [UnitFact]
+    public async Task GivenEveryPermitHeld_WhenTheWaitExpires_ThenTheMessageNamesTheGateAndTheWait()
+    {
+        // The message is internal — the filter answers 503 with its own canonical text — so it is
+        // what a failing test or a log line shows. "Saturated" alone does not say which bound, or
+        // how long the caller stood in it.
+        var gate = new PasswordHashGate(1, TimeSpan.FromSeconds(2));
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var holder = gate.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        await holding.Task;
+
+        var exception = await Assert.ThrowsAsync<PasswordHashGateSaturatedException>(
+            () => gate.RunAsync(() => Task.CompletedTask));
+
+        release.SetResult();
+        await holder;
+
+        Assert.Equal("The password-hash gate stayed full for 2 s.", exception.Message);
+    }
+
+    [UnitFact]
     public void GivenAnInvalidBound_WhenConstructing_ThenItIsRefused()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PasswordHashGate(0, TimeSpan.FromSeconds(1)));
