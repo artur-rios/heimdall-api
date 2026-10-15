@@ -124,7 +124,10 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         return publicId;
     }
 
-    /// <summary>Tombstones <paramref name="publicId" /> as a hard delete would have.</summary>
+    /// <summary>
+    ///     Tombstones a live person as a hard delete would, before the row goes. The tombstone table
+    ///     only accepts the id of a person or Google User that exists (#195, R1).
+    /// </summary>
     private async Task InsertTombstoneAsync(Guid publicId)
     {
         await using var connection = new NpgsqlConnection(fixture.ConnectionString);
@@ -136,6 +139,19 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         command.Parameters.AddWithValue("publicId", publicId);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    ///     A person hard-deleted the way UC-10 does it: tombstoned while still on record, then removed.
+    /// </summary>
+    private async Task<Guid> InsertHardDeletedPersonAsync()
+    {
+        var publicId = await InsertPersonAsync(anonymised: false);
+        await InsertTombstoneAsync(publicId);
+
+        Assert.Null(await RunAsync($"DELETE FROM heimdall.person WHERE public_id = '{publicId}'"));
+
+        return publicId;
     }
 
     private async Task<Scope> InsertScopeAsync()
@@ -503,8 +519,7 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         // Given a day-old entry by a live actor about somebody hard-deleted since: tombstoned, and no
         // row left — due at once, like an anonymised person
         var actor = await InsertPersonAsync(anonymised: false);
-        var removed = Guid.NewGuid();
-        await InsertTombstoneAsync(removed);
+        var removed = await InsertHardDeletedPersonAsync();
         var entry = await InsertEntryAsync(actor, removed, ageInDays: 1);
 
         // When
@@ -537,8 +552,7 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
     public async Task GivenAHardDeletedPersonsTarget_WhenReassignedToSomebodyElse_ThenTheDatabaseRefuses()
     {
         // Given — a tombstone permits forgetting the target, never naming somebody else
-        var removed = Guid.NewGuid();
-        await InsertTombstoneAsync(removed);
+        var removed = await InsertHardDeletedPersonAsync();
         var someoneElse = await InsertPersonAsync(anonymised: false);
         var entry = await InsertEntryAsync(actorId: null, removed, ageInDays: 1);
 
@@ -555,8 +569,7 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
     public async Task GivenAHardDeletedPersonsTarget_WhenTheActionIsRewrittenAlongside_ThenTheDatabaseRefuses()
     {
         // Given — the tombstone ground is for the target alone, not a way to smuggle a rewrite
-        var removed = Guid.NewGuid();
-        await InsertTombstoneAsync(removed);
+        var removed = await InsertHardDeletedPersonAsync();
         var entry = await InsertEntryAsync(actorId: null, removed, ageInDays: 1);
 
         // When
@@ -575,8 +588,7 @@ public class AuditTargetClearingTests(PostgresFixture fixture)
         // Given a recent entry by a live actor about a hard-deleted person: the target is due, the
         // actor is not, and the actor rule is unchanged
         var actor = await InsertPersonAsync(anonymised: false);
-        var removed = Guid.NewGuid();
-        await InsertTombstoneAsync(removed);
+        var removed = await InsertHardDeletedPersonAsync();
         var entry = await InsertEntryAsync(actor, removed, ageInDays: 1);
 
         // When

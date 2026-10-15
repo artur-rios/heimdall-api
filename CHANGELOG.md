@@ -76,7 +76,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   age (#195). Before, a removed person's id stayed in the trail for good, because with the row gone the trigger
   could not tell it had named a person. Each hard delete now first writes a tombstone — the id, whether it was a
   person or a Google User, and when — to a new `erased_subject` table (migration `AddErasedSubject`); a retried
-  delete writes it again without error. A target whose id is tombstoned and no longer resolves to a row is due, and
+  delete writes it again without error. A trigger on that table accepts a row only for a person or Google User that
+  still exists, so a tombstone cannot be planted to make any other target clearable. A target whose id is tombstoned and no longer resolves to a row is due, and
   a new migration, `AllowClearingErasedSubjectTarget`, lets the `audit_log_attribution_clear_only()` trigger accept
   exactly that clearing; nothing else it permits changes. The pass removes a tombstone once it is a day old and no
   entry names it, and its output and log line now report how many it removed. **Operators:** no setting changes.

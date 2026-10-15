@@ -171,7 +171,7 @@ added, so this table is unchanged.
 
 | Column | Purpose |
 | --- | --- |
-| `PublicId`, `Kind`, `CreatedAt` | A short-lived processing record of a hard delete (#195): the removed person's or Google User's id, which of the two it was, and when. Held only so NFR-21 can clear the audit targets that still name the id — the hard delete's own entry among them — once no row is left to say the id was a person's. Removed by the same pass once it is a day old and no entry names it, usually the first or second run after the delete. Nothing else about the person is kept, and it is never read through the API |
+| `PublicId`, `Kind`, `CreatedAt` | A short-lived processing record of a hard delete (#195): the removed person's or Google User's id, which of the two it was, and when. Held only so NFR-21 can clear the audit targets that still name the id — the hard delete's own entry among them — once no row is left to say the id was a person's. Removed by the first run of the same pass after its day of grace, once no entry names it. Nothing else about the person is kept, it is never read through the API, and the database accepts a row only for a person or Google User that exists when it is written (#195, R1) |
 
 ### `PENDING_REGISTRATION`
 

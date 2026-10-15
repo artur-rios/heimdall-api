@@ -22,6 +22,12 @@ namespace ArturRios.Heimdall.Domain.Entities;
 ///         it once it is a day old and no audit entry names it any more.
 ///     </para>
 ///     <para>
+///         <b>Only for somebody who exists.</b> A database trigger accepts a row only while a
+///         <c>person</c> or <c>google_user</c> row has its id (#195, R1). A tombstone is what makes a
+///         target with no row clearable, so one planted for a scope's id would otherwise let that
+///         scope's targets be cleared too.
+///     </para>
+///     <para>
 ///         <b>The key is the public id.</b> <c>Id</c> holds the removed identity's <c>PublicId</c>,
 ///         stored as <c>public_id</c>; there is no surrogate key. The table is looked up by the id
 ///         the trail carries and holds each id at most once, so a hard delete that is retried writes

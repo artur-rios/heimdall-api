@@ -15,6 +15,7 @@ using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -339,11 +340,23 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         await using (var context = fixture.CreateContext())
         {
             Assert.True(await context.ErasedSubjects.AnyAsync(x => x.Id == person.PublicId));
+        }
 
-            // When the day has passed — moved back, as the other tests age their entries
-            await context.Database.ExecuteSqlRawAsync(
-                "UPDATE heimdall.erased_subject SET created_at = now() - interval '2 days' WHERE public_id = {0}",
-                person.PublicId);
+        // When the day has passed — moved back, as the other tests age their entries. The table's
+        // guard refuses any write naming an id with no person row (#195, R1), which is now true of
+        // this one, so the test steps round it for this one statement: replica mode skips ordinary
+        // triggers, for this transaction only.
+        await using (var connection = new NpgsqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            await using var backdate = new NpgsqlCommand(
+                "SET LOCAL session_replication_role = replica; " +
+                "UPDATE heimdall.erased_subject SET created_at = now() - interval '2 days' WHERE public_id = @id",
+                connection, transaction);
+            backdate.Parameters.AddWithValue("id", person.PublicId);
+            Assert.Equal(1, await backdate.ExecuteNonQueryAsync());
+            await transaction.CommitAsync();
         }
 
         var later = await DrainAsync();

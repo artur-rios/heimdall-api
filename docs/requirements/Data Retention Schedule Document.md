@@ -284,10 +284,11 @@ recorded here so it is a decision rather than a surprise.
 other passes, selecting entries whose attribution period has elapsed **or** whose actor has been
 anonymised, and on the same two grounds, entries whose target names a person or Google User — past
 the period, or that identity anonymised — and, at any age, entries whose target is a tombstoned id
-that no `PERSON` or `GOOGLE_USER` row has any more. Each entry has only what is due cleared: a recent entry by
-a live administrator about an erased person loses its target and keeps its actor. The run reports
-both counts, and the tombstones it removed (§7.2). It shares the other passes' properties: bounded per run, needing no coordination between
-instances, audited, and treating an empty run as a success.
+that no `PERSON` or `GOOGLE_USER` row has any more. Each entry has only what is due cleared: a
+recent entry by a live administrator about an erased person loses its target and keeps its actor.
+The run reports both counts, and the tombstones it removed (§7.2). It shares the other passes'
+properties: bounded per run, needing no coordination between instances, audited, and treating an
+empty run as a success.
 
 What is different is where the rule lives. The pass does not decide what it is allowed to write —
 **the database does**, through the trigger installed by `AllowClearingAuditActor` and widened by
@@ -332,22 +333,26 @@ is exactly what storage limitation requires of it.
 
 ### 7.2 Tombstones of hard-deleted identities
 
-`ERASED_SUBJECT` holds one row per hard-deleted person or Google User: the `PublicId`, which of the two
-it was, and when the row was written. Nothing else about the person. It is a processing record of
-the deletion, held for one purpose — to let §7.1 clear the targets that still name the id — and it
-goes once that purpose is spent.
+`ERASED_SUBJECT` holds one row per hard-deleted person or Google User: the `PublicId`, which of the
+two it was, and when the row was written. Nothing else about the person. It is a processing record
+of the deletion, held for one purpose — to let §7.1 clear the targets that still name the id — and
+it goes once that purpose is spent.
 
 **Written first.** UC-10, UC-29 and UC-05 (for each member person and Google User it removes) write
 the tombstone before they delete anything. If the delete then fails, the tombstone names a live row,
 which neither the pass nor the trigger acts on. The write is idempotent: a retried hard delete
-records the id again without error, keeping one row and moving its `created_at` to the retry.
+records the id again without error, keeping one row and moving its `created_at` to the retry. The
+table accepts a row only for a person or Google User that exists when it is written (#195, R1), so a
+tombstone cannot be planted for any other id to make its targets clearable; the Threat Model, §6.1,
+gives the reasoning.
 
-**Removed by the audit pass, on two conditions.** After clearing, the same run removes each tombstone
-that is older than **one day** and that no audit entry names as its target any more, bounded per run
-like the clearing. The day covers the hard delete's own audit entry, which the auditing decorator
-writes just after the handler returns: until it lands, nothing names the tombstone, and removing it
-then would leave that entry naming the person for good. A tombstone named by an entry the run's batch
-did not reach waits for a later run. In practice a tombstone lives a day or a little more.
+**Removed by the audit pass, on two conditions.** After clearing, the same run removes each
+tombstone that is older than **one day** and that no audit entry names as its target any more,
+bounded per run like the clearing. The day covers the hard delete's own audit entry, which the
+auditing decorator writes just after the handler returns: until it lands, nothing names the
+tombstone, and removing it then would leave that entry naming the person for good. A tombstone named
+by an entry the run's batch did not reach waits for a later run. In practice a tombstone lives a day
+or a little more.
 
 ## 8. Application logs: why 12 months, and on what condition
 
