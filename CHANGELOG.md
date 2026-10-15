@@ -100,6 +100,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   parameter sent empty or unparseable (`?pageNumber=`, `?pageNumber=abc`, `?includeDeleted=1`) is now a `400`
   rather than its default; a missing required field keeps its validator message.
 
+### Security
+
+- A person's or Google User's `public_id` can no longer be rewritten or borrowed from another entity (#199). The
+  audit trail's retention rules (#184, #195) read that id as proof an audit target names a person, so a row given a
+  scope's, an application's or a credential's id, then anonymised or tombstoned, made targets that never named a
+  person clearable. A new migration, `ProtectIdentityPublicIds`, adds triggers on `person` and `google_user`: one
+  refuses any `UPDATE` that changes `public_id`, and one refuses an `INSERT` whose `public_id` a row of `scope`,
+  `application`, `application_credential`, `scope_permission`, `role`, `pending_registration` or the other identity
+  table already holds, soft-deleted or not. Every other column stays writable, and the API never sets these ids, so
+  no request behaves differently. **Operators:** no setting changes. The triggers guard future writes only; the
+  migration does not look for a duplicate already stored. The API only ever issues fresh random ids, so one could
+  exist only if somebody wrote it by hand in SQL; to check, compare `public_id` across those tables before or after
+  upgrading.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added

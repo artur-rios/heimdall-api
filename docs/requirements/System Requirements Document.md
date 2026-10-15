@@ -296,7 +296,7 @@ graph LR
 Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`) has two identifiers:
 
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
-- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04).
+- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). On `PERSON` and `GOOGLE_USER` it is immutable, enforced by trigger, and a new row may not take a `PublicId` another entity's row already holds (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
 
 `PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
@@ -460,7 +460,7 @@ erDiagram
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
 | Name | String | Required, max 200 characters |
 | Email | String | Required, valid email format. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
 | PasswordHash | Byte array | Required, stores the hash computed from the password and `Salt` |
@@ -522,7 +522,7 @@ A scope may have many rows (one or more owners); a person may have many rows (a 
 | Field | Type | Constraints |
 | ------- | ------ | ------------- |
 | Id | BigInt | Primary key, auto-increment, internal only |
-| PublicId | GUID | Required, unique, auto-generated on creation; external identifier |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
 | GoogleId | String | Required, from Google's `sub` claim; unique within the scope |
 | Name | String | From Google's `name` claim, max 200 characters |
 | Email | String | Required, from Google's `email` claim; unique within the scope, considered jointly with `User` persons' emails in that scope |
