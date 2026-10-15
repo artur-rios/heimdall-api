@@ -49,6 +49,7 @@ own record is covered below.
 | Single-use tokens | `PASSWORD_RESET_TOKEN`, `EMAIL_VERIFICATION_TOKEN`, `TWO_FACTOR_EMAIL_CODE`, `APPLICATION_CREDENTIAL` (revoked or expired) | Expiry **+ 7 days** (default, configurable) | §5 | ✅ Scheduled purge (§6) |
 | Pending registrations | `PENDING_REGISTRATION` — the registrant's name, email address, password hash and salt, before any account exists (UC-47) | Until the link is followed, when the row is removed, or until expiry **+ 7 days** (default, configurable) | The registrant asked for an account and has not yet proved the address is theirs. Nothing but the link's hash and the request itself is kept, and the row stops serving its purpose when the link is followed or expires; the grace period is §5's | ✅ Removed on confirmation or when a scope owner discards it (UC-50); scheduled purge otherwise (§6) |
 | Audit trail | `AUDIT_LOG` | **18 months** identifiable, then pseudonymised and kept — §7 | Accountability (GDPR Art. 5(2)) needs the trail for as long as a claim could be raised against it. A pseudonymised entry is no longer personal data, so storage limitation stops applying and the forensic value survives | ✅ Scheduled pseudonymisation (§7.1) |
+| Hard-deletion tombstones | `ERASED_SUBJECT` — the `PublicId` of a hard-deleted person or Google User, which table it came from, and when (#195) | Until no audit entry names the id, and **at least 1 day** — §7.2 | Held only so the audit pass can clear the targets that still name a removed person once no row is left to say the id was a person's. The day covers the hard delete's own entry, written just after the row goes | ✅ Removed by the audit pass (§7.2) |
 | Application logs | Serilog file sink, including every request's client IP address | **12 months** — §8 | Security detection lag, not operational debugging: these are the telemetry [#105](https://github.com/artur-rios/heimdall-api/issues/105) reads, and a shorter period deletes the evidence of a breach before anyone knows to look for it | ✅ File sink retention (§8) |
 | Database backups | The backup store, outside the schema | **35 days** (proposed) — §9 | A backup is a full copy of every category above. Longer than the 30-day erasure deadline, which is what makes restore-time reconciliation mandatory | ⚠️ Regime proposed, reconciliation implemented — §9 |
 | Network data | Rate limiter partition key (`RemoteIpAddress`) | The fixed window, in memory only | An IP address is personal data under both laws. As the partition key it is never persisted; the window is one minute and the key is discarded with it. The same address is also written to the application logs, and kept for their period — §8 | By construction |
@@ -255,6 +256,19 @@ actor — the attribution period has elapsed, or that identity has been anonymis
 naming anything else (a scope, an application, a credential, a permission) is not personal data and
 is kept as recorded.
 
+**So does the target of a hard-deleted person (#195).** A hard delete (UC-05's members, UC-10,
+UC-29) removes the row, but not the id: the entries about that person, and the hard delete's own
+entry, still carry it, and anything holding a copy of the old row — a backup inside its window, an
+export, a log line — can still resolve it. So it stays personal data. With the row gone, though,
+nothing in the database could tell the id was a person's, and the trigger refused to clear it as
+"names no person". Each hard delete therefore writes the id to `ERASED_SUBJECT` before the row goes,
+and a target whose id is there and which no `PERSON` or `GOOGLE_USER` row has any more is cleared on
+the pass's next run, at any age — the person is gone, which is the outcome an anonymisation only
+approximates. A tombstone whose row is still there (a delete that failed after writing it) is no
+ground at all. An id that resolves to nobody and was never tombstoned — a hard-deleted scope's, or a
+person's removed before tombstones existed — is still kept, because nothing says it was ever a
+person's; the ids of persons hard-deleted before #195 were never recorded and cannot be cleared.
+
 **Erasure does not wait for the clock.** When a data subject is erased under §4, the entries they
 produced lose their attribution, and the entries about them lose their target, on the pass's next
 run — the same mechanism, triggered by the erasure rather than by eighteen months elapsing.
@@ -269,14 +283,15 @@ recorded here so it is a decision rather than a surprise.
 `AuditRetentionService` dispatches `PseudonymiseAuditActorsCommand` on the same interval as the
 other passes, selecting entries whose attribution period has elapsed **or** whose actor has been
 anonymised, and on the same two grounds, entries whose target names a person or Google User — past
-the period, or that identity anonymised. Each entry has only what is due cleared: a recent entry by
+the period, or that identity anonymised — and, at any age, entries whose target is a tombstoned id
+that no `PERSON` or `GOOGLE_USER` row has any more. Each entry has only what is due cleared: a recent entry by
 a live administrator about an erased person loses its target and keeps its actor. The run reports
-both counts. It shares the other passes' properties: bounded per run, needing no coordination between
+both counts, and the tombstones it removed (§7.2). It shares the other passes' properties: bounded per run, needing no coordination between
 instances, audited, and treating an empty run as a success.
 
 What is different is where the rule lives. The pass does not decide what it is allowed to write —
 **the database does**, through the trigger installed by `AllowClearingAuditActor` and widened by
-`AllowClearingAuditTarget`:
+`AllowClearingAuditTarget` and `AllowClearingErasedSubjectTarget`:
 
 | Operation | Permitted |
 | --- | --- |
@@ -287,7 +302,8 @@ What is different is where the rule lives. The pass does not decide what it is a
 | `UPDATE` clearing the attribution, actor anonymised | Yes, at any age |
 | `UPDATE` clearing the attribution, recent entry, live actor | Never |
 | `UPDATE` setting the target to a *different* value, or setting one where there was none | Never |
-| `UPDATE` clearing a target that names no `PERSON` or `GOOGLE_USER` row | Never |
+| `UPDATE` clearing a target that names no `PERSON` or `GOOGLE_USER` row and is not in `ERASED_SUBJECT` | Never |
+| `UPDATE` clearing a target that names no `PERSON` or `GOOGLE_USER` row and is in `ERASED_SUBJECT` (a hard-deleted person) | Yes, at any age |
 | `UPDATE` clearing a person target, entry older than 30 days | Yes |
 | `UPDATE` clearing a person target, that person anonymised | Yes, at any age |
 | `UPDATE` clearing a person target, recent entry, live person | Never |
@@ -307,11 +323,31 @@ erasure completes thirty days after the request and the entries it produced, or 
 person, days earlier have to go with it.
 
 **What this narrows, stated honestly.** Before, nothing could change in this table at all. Now two
-things can: the attribution, and a target that names a person. The guarantee that remains is
+things can: the attribution, and a target that names a person — on record, or tombstoned by a hard
+delete. The guarantee that remains is
 narrower but still precise: *an action can never be denied, and who took it, or which person it was
 taken on, can never be reassigned — only forgotten.* Non-repudiation of the act survives
 intact; attribution, and the naming of a person it was taken on, is what becomes time-limited, which
 is exactly what storage limitation requires of it.
+
+### 7.2 Tombstones of hard-deleted identities
+
+`ERASED_SUBJECT` holds one row per hard-deleted person or Google User: the `PublicId`, which of the two
+it was, and when the row was written. Nothing else about the person. It is a processing record of
+the deletion, held for one purpose — to let §7.1 clear the targets that still name the id — and it
+goes once that purpose is spent.
+
+**Written first.** UC-10, UC-29 and UC-05 (for each member person and Google User it removes) write
+the tombstone before they delete anything. If the delete then fails, the tombstone names a live row,
+which neither the pass nor the trigger acts on. The write is idempotent: a retried hard delete
+records the id again without error, keeping one row and moving its `created_at` to the retry.
+
+**Removed by the audit pass, on two conditions.** After clearing, the same run removes each tombstone
+that is older than **one day** and that no audit entry names as its target any more, bounded per run
+like the clearing. The day covers the hard delete's own audit entry, which the auditing decorator
+writes just after the handler returns: until it lands, nothing names the tombstone, and removing it
+then would leave that entry naming the person for good. A tombstone named by an entry the run's batch
+did not reach waits for a later run. In practice a tombstone lives a day or a little more.
 
 ## 8. Application logs: why 12 months, and on what condition
 

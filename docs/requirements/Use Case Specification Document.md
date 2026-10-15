@@ -321,10 +321,11 @@ sequenceDiagram
 
 1. System Admin sends a hard delete request.
 2. The system locates the scope.
-3. The system permanently deletes all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope.
-4. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
-5. The system permanently deletes the scope record.
-6. The system returns success, including the count of scope permissions removed.
+3. The system records a tombstone in `ERASED_SUBJECT` for each User and Google User it is about to remove — their `PublicId`, which kind, and when — before anything is deleted, so the audit entries naming them can still be cleared once their rows are gone (NFR-21, #195). Scope Admins are not removed and get none; nor does the scope.
+4. The system permanently deletes all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope.
+5. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
+6. The system permanently deletes the scope record.
+7. The system returns success, including the count of scope permissions removed.
 
 **Alternative Flows:**
 
@@ -642,11 +643,12 @@ sequenceDiagram
 2. The system loads the person **in any deletion state** — a logically deleted person is exactly what a
    cleanup pass starts from, so soft deletion must not block a hard one.
 3. If the person owns any scope, the system verifies that every scope they own has at least one other owner.
-4. The system permanently deletes all tokens (password reset, email verification) associated with the person.
-5. The system permanently deletes any applications owned by the person.
-6. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
-7. The system permanently deletes the person record.
-8. The system returns success, reporting how many applications and tokens went with the person.
+4. The system records a tombstone for the person in `ERASED_SUBJECT` — their `PublicId`, that it was a person, and when — before anything is deleted, so the audit entries naming them, this hard delete's own among them, can still be cleared once the row is gone (NFR-21, #195). A retry records it again without error.
+5. The system permanently deletes all tokens (password reset, email verification) associated with the person.
+6. The system permanently deletes any applications owned by the person.
+7. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
+8. The system permanently deletes the person record.
+9. The system returns success, reporting how many applications and tokens went with the person.
 
 **Alternative Flows:**
 
@@ -1437,8 +1439,9 @@ sequenceDiagram
 **Main Flow:**
 
 1. System Admin sends a hard delete request.
-2. The system permanently deletes the Google User record.
-3. The system returns success.
+2. The system records a tombstone for the Google User in `ERASED_SUBJECT` — their `PublicId`, that it was a Google User, and when — before the record is deleted, so the audit entries naming them, this hard delete's own among them, can still be cleared once the row is gone (NFR-21, #195). A retry records it again without error.
+3. The system permanently deletes the Google User record.
+4. The system returns success.
 
 **Alternative Flows:**
 
@@ -2193,8 +2196,12 @@ sequenceDiagram
 > Schedule §7.1). An entry whose attribution period is over, or whose actor has been anonymised,
 > reads `actorId: null`, and filtering by `actorId` cannot find it. The same holds for targets: an
 > entry whose target was a person or Google User has that target cleared on the same two grounds and
-> reads `targetId: null`, so filtering by `targetId` cannot find it either. Targets naming anything
-> else — a scope, an application, a credential, a permission — are kept and stay filterable.
+> reads `targetId: null`, so filtering by `targetId` cannot find it either. So does an entry whose
+> target was hard-deleted (UC-05, UC-10, UC-29) — the hard delete's own entry included — on the pass
+> after the delete, at any age, because the hard delete tombstoned the id first (#195). Targets
+> naming anything else — a scope, an application, a credential, a permission — are kept and stay
+> filterable, as is the id of a person hard-deleted before tombstones existed, which nothing
+> recorded.
 >
 > **On Scope Admins.** `AUDIT_LOG` has no scope column, and an old entry's target may since have been
 > deleted or anonymised, so the trail cannot be divided by scope reliably. The listing is therefore
