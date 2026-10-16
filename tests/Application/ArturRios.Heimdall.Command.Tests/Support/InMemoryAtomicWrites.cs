@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 
 namespace ArturRios.Heimdall.Command.Tests.Support;
@@ -20,11 +21,19 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     public Action<Person>? OnPasswordWrite { get; init; }
 
     /// <summary>
-    ///     Called with the person before <see cref="TrySetPasswordAsync" /> or
-    ///     <see cref="TryMarkEmailVerifiedAsync" /> evaluates its condition, so a test can land a
-    ///     change on the row between the handler's own checks and the write.
+    ///     Called with the person before any conditional write to their row evaluates its condition —
+    ///     <see cref="TrySetPasswordAsync" />, <see cref="TryMarkEmailVerifiedAsync" /> and the
+    ///     lifecycle writes (#237) — so a test can land a change on the row between the handler's own
+    ///     checks and the write.
     /// </summary>
     public Action<Person>? BeforeConditionalWrite { get; init; }
+
+    /// <summary>
+    ///     The persons the test's fake repository holds, for a write whose condition reaches past the
+    ///     row it writes: <see cref="TryRemoveScopeOwnerAsync" />'s live co-owner. Required by that
+    ///     write and read by no other.
+    /// </summary>
+    public IQueryable<Person>? Persons { get; init; }
 
     /// <summary>How many pending-registration guesses have been charged through this instance.</summary>
     public int PendingGuessCharges { get; private set; }
@@ -162,15 +171,6 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         person.AccountEmailLastSentAt = now;
 
         return Task.FromResult(AccountEmailReservation.Reserved);
-    }
-
-    public Task ClearAccountEmailsAsync(Person person)
-    {
-        person.AccountEmailsSent = 0;
-        person.AccountEmailWindowEndsAt = null;
-        person.AccountEmailLastSentAt = null;
-
-        return Task.CompletedTask;
     }
 
     public Task StartChallengeAsync(TwoFactorAuth configuration, Guid challengeId)
@@ -331,14 +331,6 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         return Task.FromResult(true);
     }
 
-    public Task ClearPasswordAsync(Person person)
-    {
-        person.PasswordHash = [];
-        person.Salt = [];
-
-        return Task.CompletedTask;
-    }
-
     public Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
     {
         BeforeConditionalWrite?.Invoke(person);
@@ -390,5 +382,230 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         person.SecurityStamp = Guid.NewGuid();
 
         return Task.CompletedTask;
+    }
+
+    public async Task<AccountChangeOutcome> TryChangeEmailAndRoleAsync(
+        Person person, string email, long roleId, DateTime now, Func<Task<bool>> saveAlongside)
+    {
+        // What the caller read, compared with the row once the hook has had its say.
+        var readEmail = person.Email;
+        var readRoleId = person.RoleId;
+
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.Email != readEmail || person.RoleId != readRoleId ||
+            person.IsDeleted || person.AnonymisedAt is not null)
+        {
+            return AccountChangeOutcome.Stale;
+        }
+
+        if (!string.Equals(email, person.Email, StringComparison.Ordinal))
+        {
+            person.Email = email;
+            person.EmailVerified = false;
+        }
+
+        if (roleId != person.RoleId)
+        {
+            person.RoleId = roleId;
+            person.ScopeId = null;
+        }
+
+        person.UpdatedAt = now;
+
+        return await saveAlongside() ? AccountChangeOutcome.Changed : AccountChangeOutcome.SaveFailed;
+    }
+
+    public Task<bool> TryMarkDeletedAsync(Person person, DeletionKinds kind, DateTime at)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.IsDeleted)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.IsDeleted = true;
+        person.DeletedAt = at;
+        person.DeletionKind = (int)kind;
+        person.UpdatedAt = at;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRecordErasureRequestAsync(
+        Person person, DateTime requestedAt, DateTime dueAt, string? blockedReason)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.ErasureRequestedAt is not null || person.IsDeleted || person.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.ErasureRequestedAt = requestedAt;
+        person.ErasureDueAt = dueAt;
+        person.ProcessingRestrictedAt = null;
+        person.RestrictionGround = null;
+        person.RestrictionLiftNotifiedAt = null;
+        person.UpdatedAt = requestedAt;
+
+        if (blockedReason is null)
+        {
+            person.IsDeleted = true;
+            person.DeletedAt = requestedAt;
+            person.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        }
+        else
+        {
+            person.ErasureBlockedReason = blockedReason;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TrySuspendBlockedErasureAsync(Person person, DateTime now)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.IsDeleted || person.ErasureRequestedAt is null || person.ErasureBlockedReason is null ||
+            person.ProcessingRestrictedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.IsDeleted = true;
+        person.DeletedAt = person.ErasureRequestedAt;
+        person.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        person.ErasureBlockedReason = null;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRestrictProcessingAsync(Person person, int ground, DateTime at)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.ProcessingRestrictedAt is not null || person.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.ProcessingRestrictedAt = at;
+        person.RestrictionGround = ground;
+        person.RestrictionLiftNotifiedAt = null;
+        person.UpdatedAt = at;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryLiftRestrictionAsync(Person person, DateTime? notifiedAt, DateTime now)
+    {
+        var restrictedAt = person.ProcessingRestrictedAt;
+
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (restrictedAt is null || person.ProcessingRestrictedAt != restrictedAt)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.ProcessingRestrictedAt = null;
+        person.RestrictionGround = null;
+        person.RestrictionLiftNotifiedAt = notifiedAt;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryAnonymiseAsync(Person person, string name, string email, DateTime at)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (!person.IsDeleted || person.AnonymisedAt is not null || person.ProcessingRestrictedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        Anonymise(person, name, email, at);
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryReapplyErasureAsync(Person person, string name, string email, DateTime at)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.IsDeleted = true;
+        person.DeletedAt ??= at;
+        person.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        Anonymise(person, name, email, at);
+
+        return Task.FromResult(true);
+    }
+
+    /// <summary>The columns both anonymisation writes overwrite, as <c>AtomicWrites</c> sets them.</summary>
+    private static void Anonymise(Person person, string name, string email, DateTime at)
+    {
+        person.Name = name;
+        person.Email = email;
+        person.PasswordHash = [];
+        person.Salt = [];
+        person.EmailVerified = false;
+        person.FailedLoginAttempts = 0;
+        person.LockedOutUntil = null;
+        person.FailedSecondFactorAttempts = 0;
+        person.SecondFactorLockedOutUntil = null;
+        person.SecondFactorLockouts = 0;
+        person.FailedReauthenticationAttempts = 0;
+        person.ReauthenticationWindowStartedAt = null;
+        person.ReauthenticationPausedUntil = null;
+        person.AccountEmailsSent = 0;
+        person.AccountEmailWindowEndsAt = null;
+        person.AccountEmailLastSentAt = null;
+        person.ErasureBlockedReason = null;
+        person.AnonymisedAt = at;
+        person.UpdatedAt = at;
+    }
+
+    public Task<bool> TryAddScopeOwnerAsync(Person person, long scopeId)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.IsDeleted ||
+            person.RoleId is not ((long)Roles.ScopeAdmin or (long)Roles.SystemAdmin) ||
+            person.ScopeOwnerships.Any(x => x.ScopeId == scopeId))
+        {
+            return Task.FromResult(false);
+        }
+
+        person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scopeId, PersonId = person.Id });
+
+        return Task.FromResult(true);
+    }
+
+    /// <remarks>
+    ///     The co-owner condition is evaluated here, at the write, over <see cref="Persons" />, as the
+    ///     statement's <c>EXISTS</c> is: a co-owner deleted since the handler's own check is seen.
+    /// </remarks>
+    public Task<bool> TryRemoveScopeOwnerAsync(Person person, long scopeId)
+    {
+        var persons = Persons ?? throw new InvalidOperationException(
+            $"{nameof(TryRemoveScopeOwnerAsync)} needs {nameof(Persons)} to find a live co-owner.");
+
+        BeforeConditionalWrite?.Invoke(person);
+
+        var ownership = person.ScopeOwnerships.FirstOrDefault(x => x.ScopeId == scopeId);
+
+        var liveCoOwner = persons.Any(other =>
+            other.Id != person.Id && !other.IsDeleted && other.ScopeOwnerships.Any(x => x.ScopeId == scopeId));
+
+        return Task.FromResult(ownership is not null && liveCoOwner && person.ScopeOwnerships.Remove(ownership));
     }
 }

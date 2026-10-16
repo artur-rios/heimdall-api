@@ -40,7 +40,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         public static Fakes New() => new(new(), new(), new(), new(), new());
 
         public AnonymiseExpiredDeletionsCommandHandler Handler(DataRetentionOptions? retention = null) =>
-            new(Persons, Persons, GoogleUsers, GoogleUsers,
+            new(Persons, GoogleUsers, GoogleUsers,
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,

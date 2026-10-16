@@ -1,8 +1,10 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -26,8 +28,9 @@ public class LiftProcessingRestrictionCommandHandlerTests
     private static LiftProcessingRestrictionCommandHandler Handler(
         AsyncFakeRepository<Person, long> persons,
         AsyncFakeRepository<GoogleUser, long> googleUsers,
-        IRestrictionLiftNotifier notifier) =>
-        new(persons, persons, googleUsers, googleUsers, notifier);
+        IRestrictionLiftNotifier notifier,
+        IAtomicWrites? atomicWrites = null) =>
+        new(persons, googleUsers, googleUsers, notifier, atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedRestrictedAsync(AsyncFakeRepository<Person, long> persons)
     {
@@ -68,6 +71,34 @@ public class LiftProcessingRestrictionCommandHandlerTests
         Assert.Null(person.ProcessingRestrictedAt);
         Assert.Null(person.RestrictionGround);
         Assert.NotNull(person.RestrictionLiftNotifiedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenTheRestrictionReimposedSinceTheRead_WhenLifting_ThenTheNewOneStands()
+    {
+        // Given a restriction lifted and imposed again by other requests while the notice was sent
+        var persons = new AsyncFakeRepository<Person, long>();
+        var person = await SeedRestrictedAsync(persons);
+        var reimposedAt = DateTime.UtcNow.AddMinutes(-1);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row => row.ProcessingRestrictedAt = reimposedAt
+        };
+
+        // When
+        var output = await Handler(persons, new(), Notifier(true), atomicWrites)
+            .HandleAsync(new LiftProcessingRestrictionCommand
+            {
+                SubjectId = person.PublicId,
+                ActingPersonId = Guid.NewGuid(),
+                ActingRole = (int)Roles.SystemAdmin
+            });
+
+        // Then a notice about the first restriction does not lift the second
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.NotRestricted, output.Errors);
+        Assert.Equal(reimposedAt, person.ProcessingRestrictedAt);
+        Assert.NotNull(person.RestrictionGround);
     }
 
     [UnitFact]

@@ -1,7 +1,9 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -64,8 +66,9 @@ public class AddScopeOwnerCommandHandlerTests
     };
 
     private static AddScopeOwnerCommandHandler Handler(
-        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true) =>
-        new(scopes, persons, persons, OwnershipChecker(allowed));
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
+        IAtomicWrites? atomicWrites = null) =>
+        new(scopes, persons, OwnershipChecker(allowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
@@ -329,5 +332,25 @@ public class AddScopeOwnerCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.NotScopeOwner, output.Errors);
         Assert.DoesNotContain(PersonMessages.PersonNotValidScopeAdmin, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenThePersonDeletedSinceTheRead_WhenHandlingAddScopeOwner_ThenNoOwnershipIsAdded()
+    {
+        // Given a deletion another request makes between this one's checks and its write
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons);
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = row => row.IsDeleted = true };
+
+        // When
+        var output = await Handler(scopes, persons, atomicWrites: atomicWrites)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then it is refused as AF-21b, and no ownership was granted to the deleted person
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.PersonNotValidScopeAdmin, output.Errors);
+        Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
     }
 }

@@ -44,13 +44,14 @@ public class PersonControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pr
             EmailVerified = true,
             IsDeleted = isDeleted
         };
+        // Set before the insert: a whole-row save ignores it once the row exists (#237).
+        // Person.ScopeId mirrors the membership row, as the application writes it — without
+        // it the seeded User sits outside the per-scope uniqueness index.
+        person.ScopeId = scope.Id;
         context.Persons.Add(person);
         await context.SaveChangesAsync();
 
         context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
         await context.SaveChangesAsync();
 
         return person;

@@ -118,8 +118,18 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     (AF-23c), whether the scope is active (AF-23a), whether the named person is a <c>User</c>
     ///     of it (AF-23b), and whether they already hold the role (AF-23d).
     /// </summary>
+    /// <remarks>
+    ///     The role is written only while the person is still the <c>User</c> the request read
+    ///     (#237): when another request changed, promoted or deleted them in the meantime, nothing is
+    ///     written and the answer is 409 "Concurrency conflict: the record was modified or removed by
+    ///     another process." (AF-23f), or 409 "Conflict: a record with the same unique value already
+    ///     exists." when an administrator took the address meanwhile. Read the person again before
+    ///     retrying.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/users/{personId:guid}/promote")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<PromoteScopeUserCommandOutput>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DataOutput<PromoteScopeUserCommandOutput>>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DataOutput<PromoteScopeUserCommandOutput?>>> PromoteScopeUser(
         Guid scopeId, Guid personId)
     {
@@ -153,10 +163,20 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     no recovery or email code is spent (an accepted authenticator code's time step is recorded,
     ///     as for any accepted code). While the caller's email sign-in method is enabled, an own
     ///     email change answers 409 "Turn off the email sign-in method before changing your email
-    ///     address." (AF-08k), once the credentials are accepted.
+    ///     address." (AF-08k), once the credentials are accepted. An address or role change is
+    ///     written only while the person still holds the address and role the request read (#237):
+    ///     when another request changed or deleted them in the meantime, neither the change nor the
+    ///     name is written and the answer is 409 "Concurrency conflict: the record was modified or removed by
+    ///     another process." (AF-08l), or 409 "Conflict: a record with the same unique value already
+    ///     exists." when the new address was taken meanwhile. As for a failed save, an email change's
+    ///     earlier steps stand: the person's tokens are already revoked and their reset and
+    ///     verification links retired, and for an own change the account-email budget is charged and
+    ///     any recovery or email code presented is spent. Read the person again before retrying.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(
         Guid id, [FromBody] UpdatePersonCommand command)
     {

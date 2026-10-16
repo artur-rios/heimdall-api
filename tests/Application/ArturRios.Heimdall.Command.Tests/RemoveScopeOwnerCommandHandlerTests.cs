@@ -1,7 +1,9 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -64,8 +66,10 @@ public class RemoveScopeOwnerCommandHandlerTests
     };
 
     private static RemoveScopeOwnerCommandHandler Handler(
-        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true) =>
-        new(scopes, persons, persons, OwnershipChecker(allowed));
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
+        IAtomicWrites? atomicWrites = null) =>
+        new(scopes, persons, OwnershipChecker(allowed),
+            atomicWrites ?? new InMemoryAtomicWrites { Persons = persons.Query() });
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
@@ -357,5 +361,53 @@ public class RemoveScopeOwnerCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.NotScopeOwner, output.Errors);
         Assert.DoesNotContain(PersonMessages.PersonNotScopeOwner, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOwnershipRemovedSinceTheRead_WhenHandlingRemoveScopeOwner_ThenNotAnOwner()
+    {
+        // Given another request that removes the same row between this one's checks and its write
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        await SeedPersonAsync(persons, ownedScopes: scope);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            Persons = persons.Query(), BeforeConditionalWrite = row => row.ScopeOwnerships.Clear()
+        };
+
+        // When
+        var output = await Handler(scopes, persons, atomicWrites: atomicWrites)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then it answers as AF-22a would have a moment later
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.PersonNotScopeOwner, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenTheLastLiveCoOwnerDeletedSinceTheCheck_WhenHandlingRemoveScopeOwner_ThenScopeWouldLoseLastOwner()
+    {
+        // Given a co-owner that another request deletes between this one's checks and its write
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        var coOwner = await SeedPersonAsync(persons, ownedScopes: scope);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            Persons = persons.Query(),
+            BeforeConditionalWrite = _ => persons.Query().Single(x => x.PublicId == coOwner.PublicId).IsDeleted = true
+        };
+
+        // When
+        var output = await Handler(scopes, persons, atomicWrites: atomicWrites)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then the write re-checks AF-22b and leaves the row in place (NFR-12)
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.Equal(scope.Id, Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships).ScopeId);
     }
 }

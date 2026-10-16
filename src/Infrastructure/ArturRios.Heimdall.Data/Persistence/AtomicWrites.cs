@@ -1,9 +1,12 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace ArturRios.Heimdall.Data.Persistence;
 
@@ -267,20 +270,6 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             : AccountEmailReservation.CoolingDown;
     }
 
-    public async Task ClearAccountEmailsAsync(Person person)
-    {
-        await context.Persons
-            .Where(x => x.Id == person.Id)
-            .ExecuteUpdateAsync(set => set
-                .SetProperty(x => x.AccountEmailsSent, 0)
-                .SetProperty(x => x.AccountEmailWindowEndsAt, (DateTime?)null)
-                .SetProperty(x => x.AccountEmailLastSentAt, (DateTime?)null));
-
-        Accept(person, x => x.AccountEmailsSent, 0);
-        Accept(person, x => x.AccountEmailWindowEndsAt, null);
-        Accept(person, x => x.AccountEmailLastSentAt, null);
-    }
-
     public async Task ClearReauthenticationAttemptsAsync(Person person)
     {
         await context.Persons
@@ -489,20 +478,6 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return written;
     }
 
-    public async Task ClearPasswordAsync(Person person)
-    {
-        byte[] empty = [];
-
-        await context.Persons
-            .Where(x => x.Id == person.Id)
-            .ExecuteUpdateAsync(set => set
-                .SetProperty(x => x.PasswordHash, empty)
-                .SetProperty(x => x.Salt, empty));
-
-        Accept(person, x => x.PasswordHash, empty);
-        Accept(person, x => x.Salt, empty);
-    }
-
     public async Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
     {
         var written = await context.Persons
@@ -558,6 +533,423 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             .ExecuteUpdateAsync(set => set.SetProperty(x => x.SecurityStamp, stamp));
 
         Accept(person, x => x.SecurityStamp, stamp);
+    }
+
+    public async Task<AccountChangeOutcome> TryChangeEmailAndRoleAsync(
+        Person person, string email, long roleId, DateTime now, Func<Task<bool>> saveAlongside)
+    {
+        var id = person.Id;
+        var readEmail = person.Email;
+        var readRoleId = person.RoleId;
+        var emailChanged = !string.Equals(email, readEmail, StringComparison.Ordinal);
+        var roleChanged = roleId != readRoleId;
+
+        // The caller's save has to land with the change or not at all, so the two share a
+        // transaction — one of their own, unless the caller already runs in one.
+        await using var transaction = context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync()
+            : null;
+
+        int written;
+
+        try
+        {
+            // Only the columns that change are set: an address change leaves the role and scope as
+            // they are, and a role change the address and its flag.
+            written = await context.Persons
+                .Where(x => x.Id == id && x.Email == readEmail && x.RoleId == readRoleId &&
+                            !x.IsDeleted && x.AnonymisedAt == null)
+                .ExecuteUpdateAsync(set =>
+                {
+                    set.SetProperty(x => x.UpdatedAt, now);
+
+                    if (emailChanged)
+                    {
+                        set.SetProperty(x => x.Email, email);
+                        set.SetProperty(x => x.EmailVerified, false);
+                    }
+
+                    if (roleChanged)
+                    {
+                        set.SetProperty(x => x.RoleId, roleId);
+                        set.SetProperty(x => x.ScopeId, (long?)null);
+                    }
+                });
+        }
+        catch (Exception exception) when (RelationalErrors.IsUniqueViolation(exception))
+        {
+            // FR-PE-09's partial unique indexes: another identity took the address in the namespace
+            // the new role puts it in, between the caller's check and this write.
+            DiscardPendingChanges();
+
+            return AccountChangeOutcome.AddressTaken;
+        }
+
+        if (written != 1)
+        {
+            DiscardPendingChanges();
+
+            return AccountChangeOutcome.Stale;
+        }
+
+        Accept(person, x => x.UpdatedAt, now);
+
+        if (emailChanged)
+        {
+            Accept(person, x => x.Email, email);
+            Accept(person, x => x.EmailVerified, false);
+        }
+
+        if (roleChanged)
+        {
+            Accept(person, x => x.RoleId, roleId);
+            Accept(person, x => x.ScopeId, null);
+        }
+
+        if (!await saveAlongside())
+        {
+            // Rolled back when the transaction is disposed. The instance keeps the values accepted
+            // above, but nothing the mapping lets a whole-row save write, so nothing writes them.
+            DiscardPendingChanges();
+
+            return AccountChangeOutcome.SaveFailed;
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
+
+        return AccountChangeOutcome.Changed;
+    }
+
+    public async Task<bool> TryMarkDeletedAsync(Person person, DeletionKinds kind, DateTime at)
+    {
+        var deletionKind = (int)kind;
+
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsDeleted, true)
+                .SetProperty(x => x.DeletedAt, at)
+                .SetProperty(x => x.DeletionKind, deletionKind)
+                .SetProperty(x => x.UpdatedAt, at)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.IsDeleted, true);
+            Accept(person, x => x.DeletedAt, at);
+            Accept(person, x => x.DeletionKind, deletionKind);
+            Accept(person, x => x.UpdatedAt, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryRecordErasureRequestAsync(
+        Person person, DateTime requestedAt, DateTime dueAt, string? blockedReason)
+    {
+        const int subjectRequested = (int)DeletionKinds.SubjectRequested;
+        var suspend = blockedReason is null;
+
+        // One statement: the request, the lifted restriction, and either the suspension or the
+        // reason it waits, so none of them can be written without the others (UC-42).
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && x.ErasureRequestedAt == null && !x.IsDeleted && x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set =>
+            {
+                set.SetProperty(x => x.ErasureRequestedAt, requestedAt);
+                set.SetProperty(x => x.ErasureDueAt, dueAt);
+                set.SetProperty(x => x.ProcessingRestrictedAt, (DateTime?)null);
+                set.SetProperty(x => x.RestrictionGround, (int?)null);
+                set.SetProperty(x => x.RestrictionLiftNotifiedAt, (DateTime?)null);
+                set.SetProperty(x => x.UpdatedAt, requestedAt);
+
+                if (suspend)
+                {
+                    set.SetProperty(x => x.IsDeleted, true);
+                    set.SetProperty(x => x.DeletedAt, requestedAt);
+                    set.SetProperty(x => x.DeletionKind, subjectRequested);
+                }
+                else
+                {
+                    set.SetProperty(x => x.ErasureBlockedReason, blockedReason);
+                }
+            }) == 1;
+
+        if (!written)
+        {
+            return false;
+        }
+
+        Accept(person, x => x.ErasureRequestedAt, requestedAt);
+        Accept(person, x => x.ErasureDueAt, dueAt);
+        Accept(person, x => x.ProcessingRestrictedAt, null);
+        Accept(person, x => x.RestrictionGround, null);
+        Accept(person, x => x.RestrictionLiftNotifiedAt, null);
+        Accept(person, x => x.UpdatedAt, requestedAt);
+
+        if (suspend)
+        {
+            Accept(person, x => x.IsDeleted, true);
+            Accept(person, x => x.DeletedAt, requestedAt);
+            Accept(person, x => x.DeletionKind, subjectRequested);
+        }
+        else
+        {
+            Accept(person, x => x.ErasureBlockedReason, blockedReason);
+        }
+
+        return true;
+    }
+
+    public async Task<bool> TrySuspendBlockedErasureAsync(Person person, DateTime now)
+    {
+        const int subjectRequested = (int)DeletionKinds.SubjectRequested;
+
+        // Dated from the request, read from the row itself rather than from the instance.
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && !x.IsDeleted && x.ErasureRequestedAt != null &&
+                        x.ErasureBlockedReason != null && x.ProcessingRestrictedAt == null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsDeleted, true)
+                .SetProperty(x => x.DeletedAt, x => x.ErasureRequestedAt)
+                .SetProperty(x => x.DeletionKind, subjectRequested)
+                .SetProperty(x => x.ErasureBlockedReason, (string?)null)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.IsDeleted, true);
+            Accept(person, x => x.DeletedAt, person.ErasureRequestedAt);
+            Accept(person, x => x.DeletionKind, subjectRequested);
+            Accept(person, x => x.ErasureBlockedReason, null);
+            Accept(person, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryRestrictProcessingAsync(Person person, int ground, DateTime at)
+    {
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && x.ProcessingRestrictedAt == null && x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ProcessingRestrictedAt, at)
+                .SetProperty(x => x.RestrictionGround, ground)
+                .SetProperty(x => x.RestrictionLiftNotifiedAt, (DateTime?)null)
+                .SetProperty(x => x.UpdatedAt, at)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.ProcessingRestrictedAt, at);
+            Accept(person, x => x.RestrictionGround, ground);
+            Accept(person, x => x.RestrictionLiftNotifiedAt, null);
+            Accept(person, x => x.UpdatedAt, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryLiftRestrictionAsync(Person person, DateTime? notifiedAt, DateTime now)
+    {
+        if (person.ProcessingRestrictedAt is not { } restrictedAt)
+        {
+            return false;
+        }
+
+        // The restriction read, by when it began: one lifted meanwhile is not there to lift, and
+        // one imposed again meanwhile is not the one the subject was told about.
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && x.ProcessingRestrictedAt == restrictedAt)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ProcessingRestrictedAt, (DateTime?)null)
+                .SetProperty(x => x.RestrictionGround, (int?)null)
+                .SetProperty(x => x.RestrictionLiftNotifiedAt, notifiedAt)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.ProcessingRestrictedAt, null);
+            Accept(person, x => x.RestrictionGround, null);
+            Accept(person, x => x.RestrictionLiftNotifiedAt, notifiedAt);
+            Accept(person, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryAnonymiseAsync(Person person, string name, string email, DateTime at)
+    {
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && x.IsDeleted && x.AnonymisedAt == null && x.ProcessingRestrictedAt == null)
+            .ExecuteUpdateAsync(set => SetAnonymised(set, name, email, at)) == 1;
+
+        if (written)
+        {
+            AcceptAnonymised(person, name, email, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryReapplyErasureAsync(Person person, string name, string email, DateTime at)
+    {
+        const int subjectRequested = (int)DeletionKinds.SubjectRequested;
+
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set =>
+            {
+                set.SetProperty(x => x.IsDeleted, true);
+                set.SetProperty(x => x.DeletedAt, x => x.DeletedAt ?? at);
+                set.SetProperty(x => x.DeletionKind, subjectRequested);
+                SetAnonymised(set, name, email, at);
+            }) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.IsDeleted, true);
+            Accept(person, x => x.DeletedAt, person.DeletedAt ?? at);
+            Accept(person, x => x.DeletionKind, subjectRequested);
+            AcceptAnonymised(person, name, email, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryAddScopeOwnerAsync(Person person, long scopeId)
+    {
+        // Table names come from the model, never from input, so building them into the SQL is safe;
+        // the values stay parameters. The insert selects from the person's own row, so it lands only
+        // while that row is a live administrator, and ON CONFLICT answers AF-21d without an error.
+        var ownerTable = context.Model.FindEntityType(typeof(ScopeOwner))!.GetSchemaQualifiedTableName();
+        var personTable = context.Model.FindEntityType(typeof(Person))!.GetSchemaQualifiedTableName();
+
+        var sql =
+            $$"""
+              INSERT INTO {{ownerTable}} (scope_id, person_id)
+              SELECT {0}, person.id FROM {{personTable}} AS person
+              WHERE person.id = {1} AND NOT person.is_deleted AND person.role_id IN ({2}, {3})
+              ON CONFLICT DO NOTHING
+              """;
+
+        var added = await context.Database.ExecuteSqlRawAsync(
+            sql, scopeId, person.Id, (long)Roles.ScopeAdmin, (long)Roles.SystemAdmin) == 1;
+
+        if (added)
+        {
+            var ownership = new ScopeOwner { ScopeId = scopeId, PersonId = person.Id };
+
+            // Tracked as already stored, which also adds it to a tracked person's collection, so a
+            // later save in the same unit of work does not insert it a second time.
+            if (context.Entry(person).State is EntityState.Detached)
+            {
+                person.ScopeOwnerships.Add(ownership);
+            }
+            else
+            {
+                context.Entry(ownership).State = EntityState.Unchanged;
+            }
+        }
+
+        return added;
+    }
+
+    public async Task<bool> TryRemoveScopeOwnerAsync(Person person, long scopeId)
+    {
+        var personId = person.Id;
+
+        var removed = await context.ScopeOwners
+            .Where(x => x.ScopeId == scopeId && x.PersonId == personId &&
+                        context.ScopeOwners.Any(other =>
+                            other.ScopeId == scopeId && other.PersonId != personId && !other.Person.IsDeleted))
+            .ExecuteDeleteAsync() == 1;
+
+        if (removed)
+        {
+            // Detached before it leaves the collection: removed from a tracked person's collection
+            // while still tracked, it would be deleted again by the next save.
+            foreach (var ownership in person.ScopeOwnerships.Where(x => x.ScopeId == scopeId).ToList())
+            {
+                context.Entry(ownership).State = EntityState.Detached;
+                person.ScopeOwnerships.Remove(ownership);
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>The columns anonymisation overwrites (NFR-20), for both of its writes.</summary>
+    private static void SetAnonymised(UpdateSettersBuilder<Person> set, string name, string email, DateTime at)
+    {
+        byte[] empty = [];
+
+        set.SetProperty(x => x.Name, name);
+        set.SetProperty(x => x.Email, email);
+        set.SetProperty(x => x.PasswordHash, empty);
+        set.SetProperty(x => x.Salt, empty);
+        set.SetProperty(x => x.FailedSecondFactorAttempts, 0);
+        set.SetProperty(x => x.SecondFactorLockedOutUntil, (DateTime?)null);
+        set.SetProperty(x => x.SecondFactorLockouts, 0);
+        set.SetProperty(x => x.FailedReauthenticationAttempts, 0);
+        set.SetProperty(x => x.ReauthenticationWindowStartedAt, (DateTime?)null);
+        set.SetProperty(x => x.ReauthenticationPausedUntil, (DateTime?)null);
+        set.SetProperty(x => x.AccountEmailsSent, 0);
+        set.SetProperty(x => x.AccountEmailWindowEndsAt, (DateTime?)null);
+        set.SetProperty(x => x.AccountEmailLastSentAt, (DateTime?)null);
+        set.SetProperty(x => x.EmailVerified, false);
+        set.SetProperty(x => x.FailedLoginAttempts, 0);
+        set.SetProperty(x => x.LockedOutUntil, (DateTime?)null);
+        set.SetProperty(x => x.ErasureBlockedReason, (string?)null);
+        set.SetProperty(x => x.AnonymisedAt, at);
+        set.SetProperty(x => x.UpdatedAt, at);
+    }
+
+    private void AcceptAnonymised(Person person, string name, string email, DateTime at)
+    {
+        Accept(person, x => x.Name, name);
+        Accept(person, x => x.Email, email);
+        Accept(person, x => x.PasswordHash, []);
+        Accept(person, x => x.Salt, []);
+        Accept(person, x => x.FailedSecondFactorAttempts, 0);
+        Accept(person, x => x.SecondFactorLockedOutUntil, null);
+        Accept(person, x => x.SecondFactorLockouts, 0);
+        Accept(person, x => x.FailedReauthenticationAttempts, 0);
+        Accept(person, x => x.ReauthenticationWindowStartedAt, null);
+        Accept(person, x => x.ReauthenticationPausedUntil, null);
+        Accept(person, x => x.AccountEmailsSent, 0);
+        Accept(person, x => x.AccountEmailWindowEndsAt, null);
+        Accept(person, x => x.AccountEmailLastSentAt, null);
+        Accept(person, x => x.EmailVerified, false);
+        Accept(person, x => x.FailedLoginAttempts, 0);
+        Accept(person, x => x.LockedOutUntil, null);
+        Accept(person, x => x.ErasureBlockedReason, null);
+        Accept(person, x => x.AnonymisedAt, at);
+        Accept(person, x => x.UpdatedAt, at);
+    }
+
+    /// <summary>
+    ///     After a refused or rolled-back <see cref="TryChangeEmailAndRoleAsync" />, drops whatever the
+    ///     caller had staged on its tracked entities — added rows, removed rows, changed columns — so
+    ///     the next save in the same unit of work, the audit entry's among them, cannot write part of a
+    ///     change that was refused.
+    /// </summary>
+    private void DiscardPendingChanges()
+    {
+        foreach (var entry in context.ChangeTracker.Entries().ToList())
+        {
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                case EntityState.Deleted:
+                    entry.State = EntityState.Detached;
+                    break;
+                case EntityState.Modified:
+                    entry.State = EntityState.Unchanged;
+                    break;
+            }
+        }
     }
 
     /// <summary>

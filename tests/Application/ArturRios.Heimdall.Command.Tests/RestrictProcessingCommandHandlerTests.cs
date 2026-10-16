@@ -1,7 +1,9 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -16,8 +18,9 @@ public class RestrictProcessingCommandHandlerTests
     private static (AsyncFakeRepository<Person, long>, AsyncFakeRepository<GoogleUser, long>) Fakes() => (new(), new());
 
     private static RestrictProcessingCommandHandler Handler(
-        AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers) =>
-        new(persons, persons, googleUsers, googleUsers);
+        AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers,
+        IAtomicWrites? atomicWrites = null) =>
+        new(persons, googleUsers, googleUsers, atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons, bool isDeleted = false, DateTime? restrictedAt = null)
@@ -82,6 +85,32 @@ public class RestrictProcessingCommandHandlerTests
 
         Assert.False(output.Success);
         Assert.Contains(ErasureMessages.ProcessingAlreadyRestricted, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictionImposedSinceTheRead_WhenRestricting_ThenTheFirstStands()
+    {
+        // Given a restriction another request records between this one's check and its write
+        var (persons, googleUsers) = Fakes();
+        var person = await SeedPersonAsync(persons);
+        var first = DateTime.UtcNow.AddMinutes(-1);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row =>
+            {
+                row.ProcessingRestrictedAt = first;
+                row.RestrictionGround = (int)RestrictionGrounds.ObjectionPending;
+            }
+        };
+
+        // When
+        var output = await Handler(persons, googleUsers, atomicWrites).HandleAsync(Command(person.PublicId));
+
+        // Then it is refused as the check would have refused it, and the first restriction stands
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.ProcessingAlreadyRestricted, output.Errors);
+        Assert.Equal(first, person.ProcessingRestrictedAt);
+        Assert.Equal((int)RestrictionGrounds.ObjectionPending, person.RestrictionGround);
     }
 
     [UnitTheory]

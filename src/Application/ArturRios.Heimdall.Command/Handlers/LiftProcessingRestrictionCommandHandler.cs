@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -34,10 +35,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class LiftProcessingRestrictionCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
-    IRestrictionLiftNotifier notifier)
+    IRestrictionLiftNotifier notifier,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>
 {
     public async Task<DataOutput<LiftProcessingRestrictionCommandOutput?>> HandleAsync(
@@ -73,16 +74,14 @@ public class LiftProcessingRestrictionCommandHandler(
 
         if (person is not null)
         {
+            // A targeted write of the restriction's columns alone (#237), and only of the
+            // restriction read: one lifted since answers AF-45a, as it would have a moment earlier,
+            // and one imposed again since is not lifted by a notice sent about the first.
             return await LiftAsync(
                 output, person.ProcessingRestrictedAt, person.Email, liftingOwn,
-                notifiedAt =>
-                {
-                    person.ProcessingRestrictedAt = null;
-                    person.RestrictionGround = null;
-                    person.RestrictionLiftNotifiedAt = notifiedAt;
-                    person.UpdatedAt = DateTime.UtcNow;
-                },
-                () => personWriter.UpdateAsync(person),
+                async notifiedAt => await atomicWrites.TryLiftRestrictionAsync(person, notifiedAt, DateTime.UtcNow)
+                    ? null
+                    : [ErasureMessages.NotRestricted],
                 person.PublicId);
         }
 
@@ -95,24 +94,34 @@ public class LiftProcessingRestrictionCommandHandler(
 
         return await LiftAsync(
             output, googleUser.ProcessingRestrictedAt, googleUser.Email, liftingOwn,
-            notifiedAt =>
+            async notifiedAt =>
             {
                 googleUser.ProcessingRestrictedAt = null;
                 googleUser.RestrictionGround = null;
                 googleUser.RestrictionLiftNotifiedAt = notifiedAt;
                 googleUser.UpdatedAt = DateTime.UtcNow;
+
+                var update = await googleUserWriter.UpdateAsync(googleUser);
+
+                return update.Success ? null : update.Errors;
             },
-            () => googleUserWriter.UpdateAsync(googleUser),
             googleUser.PublicId);
     }
 
-    private async Task<DataOutput<LiftProcessingRestrictionCommandOutput?>> LiftAsync<T>(
+    /// <param name="output">The output to answer on.</param>
+    /// <param name="restrictedAt">When the restriction read began, or <c>null</c> when there is none.</param>
+    /// <param name="email">Where the Art. 18(3) notice goes.</param>
+    /// <param name="liftingOwn">Whether the subject is lifting their own restriction.</param>
+    /// <param name="lift">
+    ///     Lifts and persists, given when the subject was told; returns the errors, or <c>null</c>.
+    /// </param>
+    /// <param name="subjectPublicId">The subject's public id, for the response.</param>
+    private async Task<DataOutput<LiftProcessingRestrictionCommandOutput?>> LiftAsync(
         DataOutput<LiftProcessingRestrictionCommandOutput?> output,
         DateTime? restrictedAt,
         string email,
         bool liftingOwn,
-        Action<DateTime?> clear,
-        Func<Task<DataOutput<T>>> save,
+        Func<DateTime?, Task<IEnumerable<string>?>> lift,
         Guid subjectPublicId)
     {
         // AF-45a.
@@ -134,11 +143,9 @@ public class LiftProcessingRestrictionCommandHandler(
             notifiedAt = DateTime.UtcNow;
         }
 
-        clear(notifiedAt);
+        var errors = await lift(notifiedAt);
 
-        var update = await save();
-
-        return update.Success
+        return errors is null
             ? output
                 .WithData(new LiftProcessingRestrictionCommandOutput
                 {
@@ -147,6 +154,6 @@ public class LiftProcessingRestrictionCommandHandler(
                     SubjectNotified = notifiedAt is not null
                 })
                 .WithMessage(ErasureMessages.RestrictionLifted)
-            : output.WithErrors(update.Errors);
+            : output.WithErrors(errors);
     }
 }

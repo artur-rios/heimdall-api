@@ -6,6 +6,7 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Util.Test.Attributes;
@@ -42,10 +43,11 @@ public class RequestErasureCommandHandlerTests
     private static RequestErasureCommandHandler Handler(
         AsyncFakeRepository<Person, long> persons,
         AsyncFakeRepository<GoogleUser, long> googleUsers,
-        GoogleIdTokenPayload? payload = null) =>
+        GoogleIdTokenPayload? payload = null,
+        IAtomicWrites? atomicWrites = null) =>
         new(new RequestErasureCommandValidator(),
-            persons, persons, googleUsers, googleUsers,
-            Verifier(payload), Retention(), InMemoryAtomicWrites.Instance);
+            persons, googleUsers, googleUsers,
+            Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons,
@@ -92,6 +94,34 @@ public class RequestErasureCommandHandlerTests
 
     private static RequestErasureCommand Command(Guid actingPersonId, string? password = Password, string? idToken = null) =>
         new() { ActingPersonId = actingPersonId, ActingRole = (int)Roles.User, Password = password, IdToken = idToken };
+
+    [UnitFact]
+    public async Task GivenARequestRecordedSinceTheRead_WhenRequestingErasure_ThenTheFirstDeadlineStands()
+    {
+        // Given a request another call records between this one's checks and its write
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons);
+        var firstRequest = DateTime.UtcNow.AddMinutes(-1);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row =>
+            {
+                row.ErasureRequestedAt = firstRequest;
+                row.ErasureDueAt = firstRequest + ErasureDeadline;
+            }
+        };
+
+        // When
+        var output = await Handler(persons, googleUsers, atomicWrites: atomicWrites)
+            .HandleAsync(Command(person.PublicId));
+
+        // Then it is refused as AF-42c, and the deadline that attached first is not moved
+        Assert.False(output.Success);
+        Assert.Contains(ErasureMessages.ErasureAlreadyRequested, output.Errors);
+        Assert.Equal(firstRequest, person.ErasureRequestedAt);
+        Assert.Equal(firstRequest + ErasureDeadline, person.ErasureDueAt);
+    }
 
     [UnitFact]
     public async Task GivenAPersonWithTheirPassword_WhenRequestingErasure_ThenItIsRecordedAndTheyAreSuspended()
