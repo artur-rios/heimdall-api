@@ -81,10 +81,9 @@ restore that remaps ids — fails with `restrict_violation`.
 
 ## Database roles — TH-18
 
-The audit triggers (TH-18), the tombstone guard and the `public_id` triggers hold against every role
-that neither owns the tables they are on nor is a superuser. A table's owner can alter, disable or drop its triggers and
-replace their functions, so the guarantees they give are only as strong as the separation between the
-role that owns the schema and the role the API connects as. The supported setup is two roles per
+The supported setup runs the migrations as an owner role and the API as a role that owns nothing
+(NFR-29). The owner holds the schema and everything in it, including the audit triggers and their
+functions; the API's role gets the row privileges it needs and nothing more. Two roles per
 environment, which the operator creates and applies:
 
 | Role | Example | Owns | Used by |
@@ -94,12 +93,11 @@ environment, which the operator creates and applies:
 
 The runtime role may connect, read and write rows, and nothing else: `SELECT`, `INSERT`, `UPDATE`
 and `DELETE` on the `heimdall` tables, except that `audit_log` gets no `DELETE`; `SELECT` on the
-migrations history, which the start-up seeder reads; no `TRUNCATE` anywhere, no `CREATE` on the
-database or a schema, and no temporary tables. `audit_log` keeps `UPDATE` because the retention pass
-writes the rows it clears whole; the triggers accept an update only when it clears the attribution
-or a person target once due (NFR-21), and a role that does not own the table cannot change that.
-That covers everything the API does at runtime, `attempt_notice_budget` and the budget columns on
-`person` included.
+migrations history, which the start-up seeder reads; no `TRUNCATE` anywhere and no `CREATE` on the
+database or a schema. `audit_log` keeps `UPDATE` because the retention pass writes the rows it
+clears whole; the triggers accept an update only when it clears the attribution or a person target
+once due (NFR-21). That covers everything the API does at runtime, `attempt_notice_budget` and the
+budget columns on `person` included.
 
 Use one pair per environment, as the deployment guide does for logins: `heimdall_owner` and
 `heimdall_svc` for production, `heimdall_development_owner` and `heimdall_development_svc`, and so on.
@@ -112,7 +110,6 @@ first migration too; part 2 needs the `audit_log` table, so it runs after the fi
 
 ```sql
 -- Part 1. Access: connect, use the schema, read and write rows, create nothing.
-REVOKE ALL ON DATABASE heimdall FROM PUBLIC;
 GRANT CONNECT ON DATABASE heimdall TO heimdall_svc;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 CREATE SCHEMA IF NOT EXISTS heimdall AUTHORIZATION heimdall_owner;
@@ -136,12 +133,60 @@ REVOKE DELETE ON heimdall.audit_log FROM heimdall_svc;
 ```
 
 `public` holds nothing but the migrations history (`"__EFMigrationsHistory"`, kept there by the
-pinned `Search Path=public`), so the runtime role reads that table and nothing else of it. Default
-privileges are recorded against the owner, so they apply only to objects the owner creates: never run
-a migration as a superuser or as the runtime role, or its tables will not be granted. A migration
-that adds a table the API must not write freely — another append-only table, say — revokes from the
-runtime role in the migration itself, as part 2 does for `audit_log`, and the operations guide's
-grants are updated with it.
+pinned `Search Path=public`), so the runtime role reads that table and nothing else of it. On
+PostgreSQL 15 and later nobody but the database owner may create in `public` anyway, and the
+`REVOKE CREATE` only restates it; `CONNECT` is granted to the runtime role by name, and whatever
+else `PUBLIC` may do on the database is left as it was. Default privileges are recorded against the
+owner, so they apply only to objects the owner creates: never run a migration as a superuser or as
+the runtime role, or its tables will not be granted. When a migration adds a table the API must not
+write freely — another append-only table, say — its revoke is added to part 2 of the grants here,
+and the operator runs it after that migration, as part 2 is run for `audit_log`.
+
+### Checking the setup
+
+As a superuser, connected to the environment's database. Each query must return no rows, and every
+column of the last one must be `false`:
+
+```sql
+-- 1. Nothing in this database, and no database, still belongs to the runtime login.
+SELECT classid::regclass AS catalog, objid FROM pg_shdepend
+WHERE deptype = 'o' AND refobjid = 'heimdall_svc'::regrole
+  AND dbid IN (0, (SELECT oid FROM pg_database WHERE datname = 'heimdall'));
+
+-- 2. The database, the schema, every table, sequence and index in heimdall and public, and every
+--    function in heimdall belong to the owner.
+SELECT 'database' AS kind, datname AS name, pg_get_userbyid(datdba) AS owner
+FROM pg_database WHERE datname = 'heimdall' AND datdba <> 'heimdall_owner'::regrole
+UNION ALL
+SELECT 'schema', nspname, pg_get_userbyid(nspowner)
+FROM pg_namespace WHERE nspname = 'heimdall' AND nspowner <> 'heimdall_owner'::regrole
+UNION ALL
+SELECT 'relation', n.nspname || '.' || c.relname, pg_get_userbyid(c.relowner)
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname IN ('heimdall', 'public') AND c.relowner <> 'heimdall_owner'::regrole
+UNION ALL
+SELECT 'function', n.nspname || '.' || p.proname, pg_get_userbyid(p.proowner)
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'heimdall' AND p.proowner <> 'heimdall_owner'::regrole;
+
+-- 3. The runtime login's privileges and flags.
+SELECT has_table_privilege(r.oid, 'heimdall.audit_log', 'DELETE') AS audit_delete,
+       has_table_privilege(r.oid, 'heimdall.person', 'TRUNCATE') AS truncate,
+       has_schema_privilege(r.oid, 'heimdall', 'CREATE') AS create_in_heimdall,
+       has_schema_privilege(r.oid, 'public', 'CREATE') AS create_in_public,
+       has_database_privilege(r.oid, 'heimdall', 'CREATE') AS create_schema,
+       pg_has_role(r.oid, 'heimdall_owner', 'MEMBER') AS member_of_owner,
+       r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolbypassrls
+FROM pg_roles r WHERE r.rolname = 'heimdall_svc';
+```
+
+Then, connected as `heimdall_svc`, this must fail with "must be owner of table audit_log". It is
+wrapped in a transaction that is rolled back, so it changes nothing even if it is run by mistake as
+the owner — in which case it answers `ALTER TABLE`, and the session is the wrong one:
+
+```sql
+BEGIN; ALTER TABLE heimdall.audit_log DISABLE TRIGGER USER; ROLLBACK;
+```
 
 ### A new deployment
 
@@ -164,20 +209,26 @@ grants are updated with it.
    Deploy. The entrypoint migrates as the owner, and the API starts as the runtime role, which part
    1's default privileges have already granted the new tables.
 4. Run part 2 of the grants.
+5. Run the checks above.
 
 ### Switching an existing deployment over
 
-A deployment that followed the earlier guide has one login, `heimdall_svc`, owning the database and
-everything in it. The switch moves the ownership to a new owner and grants the old login back what
-the API needs, in one transaction, so the API keeps running throughout and never sees a moment with
-neither:
+A deployment created from the earlier guide has one login, `heimdall_svc`, owning the database and
+everything in it. The switch moves the ownership to a new owner and grants the login back what the
+API needs, in one transaction.
 
-1. Create the owner login: `sudo -u postgres createuser --pwprompt heimdall_owner`, and its
+1. **First deploy a release whose entrypoint reads `HEIMDALL_MIGRATIONS_CONNECTIONSTRING`** — this
+   one or later. On an older image the variable is ignored.
+2. Create the owner login: `sudo -u postgres createuser --pwprompt heimdall_owner`, and its
    `pg_hba.conf` rule as above.
-2. As a superuser, connected to the environment's database (`sudo -u postgres psql -d heimdall`):
+3. Make sure no deploy runs between steps 4 and 5: once the ownership has moved, a container that
+   migrates as `heimdall_svc` fails. Hold the environment's deploys for those minutes, or set
+   `HEIMDALL_RUN_MIGRATIONS=false` in its env file until step 5.
+4. As a superuser, connected to the environment's database (`sudo -u postgres psql -d heimdall`):
 
    ```sql
    BEGIN;
+   SET LOCAL lock_timeout = '5s';
    ALTER DATABASE heimdall OWNER TO heimdall_owner;
    REASSIGN OWNED BY heimdall_svc TO heimdall_owner;
    -- Part 1 and part 2 of the grants, as above.
@@ -185,44 +236,28 @@ neither:
    ```
 
    `REASSIGN OWNED` moves everything the login owns in this database — the schema, the tables, their
-   sequences, the trigger functions and the migrations history. Run it in each environment's own
-   database; it does not touch another's.
-3. Add `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the owner's) to the env file, and redeploy. Leave
-   `DB_USER` as it is.
-4. Check it took. As a superuser, every column of this must be `false`, and the second query must
-   return no rows — nothing left that the runtime login owns:
-
-   ```sql
-   SELECT has_table_privilege('heimdall_svc', 'heimdall.audit_log', 'DELETE') AS audit_delete,
-          has_table_privilege('heimdall_svc', 'heimdall.person', 'TRUNCATE') AS truncate,
-          has_schema_privilege('heimdall_svc', 'heimdall', 'CREATE') AS create_in_schema,
-          has_database_privilege('heimdall_svc', 'heimdall', 'CREATE') AS create_schema,
-          has_database_privilege('heimdall_svc', 'heimdall', 'TEMPORARY') AS temporary,
-          pg_has_role('heimdall_svc', 'heimdall_owner', 'MEMBER') AS member_of_owner;
-
-   SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE n.nspname IN ('heimdall', 'public') AND pg_get_userbyid(c.relowner) = 'heimdall_svc';
-   ```
-
-   Then, connected as `heimdall_svc`, this must fail with "must be owner of table audit_log". It is
-   wrapped in a transaction that is rolled back, so it changes nothing even if it is run by mistake
-   as the owner — in which case it answers `ALTER TABLE`, and the session is the wrong one:
-
-   ```sql
-   BEGIN; ALTER TABLE heimdall.audit_log DISABLE TRIGGER USER; ROLLBACK;
-   ```
+   sequences, the trigger functions and the migrations history — and any database the login owns.
+   It takes a lock on every table it changes and holds them until `COMMIT`, so requests wait for
+   that moment; with `lock_timeout` the transaction gives up after five seconds rather than queue
+   behind a long one, and rolls back whole. Run it again at a quieter moment if it does. Because it
+   is one transaction, the API sees either the old ownership or the new one with its grants.
+5. Add `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the owner's) to the env file, put
+   `HEIMDALL_RUN_MIGRATIONS` back if step 3 changed it, and redeploy. Leave `DB_USER` as it is.
+6. Run the checks above.
 
 To undo it, reverse the ownership in one transaction —
 `ALTER DATABASE heimdall OWNER TO heimdall_svc; REASSIGN OWNED BY heimdall_owner TO heimdall_svc;` —
 and remove `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` from the env file. The grants left behind then name
-the runtime login on objects it owns again, which changes nothing.
+the runtime login on objects it owns again, which changes nothing. On PostgreSQL 14 or earlier, where
+`PUBLIC` could create in `public` by default, `GRANT CREATE ON SCHEMA public TO PUBLIC` restores
+that too.
 
 **Where the owner's password lives.** With `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` set, the owner's
 connection string is in the env file and the container's configuration, beside the other secrets
-there. The entrypoint uses it for the migration bundle and removes it from the environment before
-the API starts, so the API process never holds it. A deployment that wants it off the container
-altogether sets `HEIMDALL_RUN_MIGRATIONS=false` and migrates out of band with `scripts/migrations.py`,
-from an environment file that names the owner.
+there. The entrypoint hands it to the migration bundle through the bundle's own environment, never
+its command line, and removes it before the API starts, so the API process never holds it. A
+deployment that wants it off the container altogether sets `HEIMDALL_RUN_MIGRATIONS=false` and
+migrates out of band with `scripts/migrations.py`, from an environment file that names the owner.
 
 ## Start-up sequence
 
@@ -231,8 +266,9 @@ flowchart TD
     A[Configure Serilog] --> B[Load environment configuration]
     B --> C[Configure Web API + custom model-state response]
     C --> D0{Diagnostics on and<br/>a public host?}
-    D0 -->|"Yes, and HEIMDALL_ALLOW_<br/>SENSITIVE_DIAGNOSTICS ≠ true"| D0X["Refuse to start —<br/>names the setting and the host"]
+    D0 -->|"Yes, and HEIMDALL_ALLOW_<br/>SENSITIVE_DIAGNOSTICS ≠ true"| D0X["Turn them off —<br/>one warning"]
     D0 -->|No, or allowed| D[Register dependencies]
+    D0X --> D
     D --> D1{Production and<br/>Mailgun unconfigured?}
     D1 -->|Yes| DX["Refuse to start —<br/>tokens would be logged in plaintext"]
     D1 -->|No| E[Configure security + JWT + rate limiting]
@@ -260,31 +296,35 @@ health check never turns green.
 
 ### Diagnostics on a public host — NFR-28
 
-Every environment but Production turns on EF Core's sensitive data logging and detailed errors,
-which write query parameter values — addresses and password hashes among them — to the log; and
-Development and Local also serve the developer exception page, which shows any caller a stack trace.
-That is fine on a developer's machine and acceptable on the VPS's development and homologation
-environments only because they hold made-up people.
+Every environment but Production asks for EF Core's sensitive data logging and detailed errors,
+which put query parameter values in the log, and Development and Local also ask for the developer
+exception page, which answers a failed request with its details. That suits a developer's machine.
 
-So an instance that serves a public host refuses to start with any of them on:
+On an instance that serves a public host they are turned off, all three together, and the instance
+starts as usual with one warning:
 
 ```
-Unhandled exception. System.InvalidOperationException: The Development environment turns on EF Core
-sensitive data logging and detailed errors and the developer exception page, and this instance
-serves a public host (PUBLIC_HOST=heimdall-api-dev.example.com, UI_HOST=heimdall-dev.example.com).
-… Refusing to start. Run the instance as Production, or set HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true
-to state that it holds made-up people only.
+This instance serves a public host (PUBLIC_HOST=heimdall-api-dev.example.com, UI_HOST=heimdall-dev.example.com),
+so EF Core sensitive data logging, detailed errors and the developer exception page are off in the
+"Development" environment. Set HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true to keep them on where the
+instance holds made-up people only
 ```
 
-A host is public when `PUBLIC_HOST` or `UI_HOST` — the names Traefik routes to the instance, which
-`docker-compose.yml` now also passes into the container — names anything but `localhost`, a name
-under `.localhost`, or a loopback address. Neither set, or both local, and nothing is checked: a
-developer machine and the functional suite start as before.
+One decision, taken once at start-up, sets both EF Core's options and the exception page, so neither
+can stay on while the other is off.
 
-`HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` lets such an instance start, with a warning at every
-start. Setting it says that the environment holds no real person's data; the development and
-homologation templates set it for that reason. Remove it, and the instance stops starting, the day
-that stops being true — or move the environment to `Production`.
+A host is public when any of these names anything but `localhost`, a name under `.localhost`, or a
+loopback address: `PUBLIC_HOST` or `UI_HOST` (the names Traefik routes to the instance, which
+`docker-compose.yml` passes into the container), the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or
+`HEIMDALL_PASSWORD_RESET_URL`, or any origin in `HEIMDALL_CORS_ALLOWED_ORIGINS`. The URLs and origins
+count only when they are absolute `http` or `https` URLs, so a template placeholder does not. With
+none of them public, nothing changes: a developer machine and the functional suite keep their
+diagnostics.
+
+`HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` keeps them on with a public host, and logs a warning at
+every start. Set it only where the environment holds no real person's data. The templates leave it
+empty, so the development and homologation environments run without these diagnostics unless their
+operator sets it.
 
 ## Health checks — UC-30
 
@@ -417,8 +457,9 @@ because every call mails the account's address.
 `POST /api/persons`, `POST /api/scopes/{id}/persons` and `POST /api/scopes/{id}/owners` — each derive
 an Argon2id hash, and need nothing but an administrator's token. They are limited to **30 requests a
 minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
-with `Retry-After`. Only requests with a token count against the address, so requests without
-one cannot use up an address an administrator shares. Thirty a minute is more than anyone creates by
+with `Retry-After`. Only administrators' access tokens count against the address, so other requests
+— without a token, or with a User's, a two-factor challenge or a subject-rights token — cannot use
+up an address administrators share. Thirty a minute is more than anyone creates by
 hand, and a bulk import should pace itself to it. For traffic from many addresses at once, see
 [Bounding a distributed flood at the edge](#bounding-a-distributed-flood-at-the-edge).
 
@@ -1067,8 +1108,8 @@ validates them offline must be given both keys for the same period.
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint only (see [Database roles](#database-roles--th-18)) |
-| `PUBLIC_HOST` / `UI_HOST` | | unset → the instance is taken as private (see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
-| `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → outside Production, an instance with a public host refuses to start |
+| `PUBLIC_HOST` / `UI_HOST` | | unset → these two name no public host (the verification and reset URLs and the CORS origins are read too; see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
+| `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → with a public host, EF Core's sensitive logging and detailed errors and the developer exception page are off |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
 | `HEIMDALL_MONITORING_ENABLED` | | `true` |
 | `HEIMDALL_MONITORING_WINDOW_MINUTES` | | `15` |

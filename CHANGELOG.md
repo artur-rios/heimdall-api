@@ -35,21 +35,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   it is safe to deploy first. Third-party clients need the same change before upgrading. **Operators:** no setting
   changes; the operations guide has SQL to release a second-factor lock or a re-authentication pause for a verified
   person.
-- A person's own requests now share one account-email budget (FR-PE-16): asking for the verification link again
-  (`POST /api/auth/resend-verification`), starting two-factor setup with the `Email` method (`POST /api/auth/2fa/enable`)
-  and an own email change (`PUT /api/persons/{id}`, whose notice goes to the previous address). At most one such email
-  per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five in each day-long window starting at
+- A person's own requests now share one account-email budget (FR-PE-16): asking for the verification link again (`POST
+  /api/auth/resend-verification`), starting two-factor setup with the `Email` method (`POST /api/auth/2fa/enable`) and
+  an own email change (`PUT /api/persons/{id}`, whose notice goes to the previous address). At most one such email per
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five in each day-long window starting at
   the first send, reserved by one conditional write before anything is sent, so simultaneous requests cannot exceed
   it. Both refusals carry `Retry-After`, the seconds until a send would be accepted. A refusal is `429` and changes
   and sends nothing: "An email of this kind was sent to you recently. Try again in a few minutes." inside the
   cooldown, "You have reached the limit for account emails. Try again later." once the window's five are spent.
-  Two-factor setup checks it before the password and charges it only after, and `App` alone is never charged; an
-  email change charges it after the password and second factor, before the factor is spent.
-  Administrator-initiated mail (UC-51, UC-52) is not charged, so a person whose account was just created by an administrator, or who has spent their day, can still
+  Two-factor setup checks it before the password and charges it only after, and `App` alone is never charged; an email
+  change charges it after the password and second factor, and a refusal spends no recovery or email code (an accepted
+  authenticator code's time step is recorded, as for any accepted code). Administrator-initiated mail (UC-51, UC-52)
+  is not charged, so a person whose account was just created by an administrator, or whose budget is spent, can still
   be helped. `resend-verification` is now also under the credential endpoints' rate limit, whose `429` is "Too many
   requests." with `Retry-After`. A new migration, `AddAccountEmailBudget`, adds three columns to `person`, starting
-  empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and
-  try again", not as a session end or a refused credential; the wait can be hours, and `Retry-After` gives it.
+  empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and try
+  again", not as a session end or a refused credential; the wait can be hours, and `Retry-After` gives it.
 - Anonymous password recovery (`POST /api/auth/password-recovery`) sends at most one reset link per person per
   `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, held to the reset link's lifetime, counting links sent by an
   administrator too (FR-PR-07). The answer is unchanged.
@@ -59,8 +60,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   to turn the method off first; it can be set up again at the new address. An administrator's change is unaffected.
 - Creating a person with a password (`POST /api/persons`, `POST /api/scopes/{id}/persons`,
   `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator and 30 a minute per
-  address; a rejection is `429` "Too many requests." with `Retry-After`. Only requests with a token count against
-  the address, so requests without one from an address an administrator shares cannot use it up.
+  address; a rejection is `429` "Too many requests." with `Retry-After`. Only administrators' access tokens count
+  against the address, so requests without a token, or with a User's, a two-factor challenge or a subject-rights
+  token, from an address administrators share cannot use it up.
 - Self-registration bounds the mail one address can be sent (FR-SR-13, FR-SR-14): at most three live pending
   registrations per address in a scope, and at most three "someone tried to register your address" notices per
   address a day, across every scope. A request beyond either stores and sends nothing, and is answered `202` exactly
@@ -110,21 +112,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   reading themselves, still see every scope. `GET /api/persons/scope-admins` is unchanged: identifier, name and
   email. **Clients:** no status or message changes; do not read another person's `ownedScopeIds` as the full list
   of what they own.
-- An instance that serves a public host refuses to start while EF Core's sensitive data logging and detailed
-  errors, or the developer exception page, are on (NFR-28) — that is, outside Production — unless
-  `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true`. A host is public when `PUBLIC_HOST` or `UI_HOST` names anything
-  but `localhost` or a loopback address; `docker-compose.yml` now passes both, and the new variable, into the
-  container. The refusal names the setting and the host and exits non-zero; an allowed start logs a warning.
-  **Operators:** before deploying this release, add `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` to the development
-  and homologation env files on the VPS — it states that they hold made-up people only — or those environments
-  will not start. Production needs nothing. A local run without either host variable is unaffected.
-- The container entrypoint migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set, and with
-  `HEIMDALL_DATA_CONNECTIONSTRING` as before when it is not; the API never reads it, and the entrypoint removes it
-  from the environment before the API starts (NFR-29). It lets the API run as a database role that owns nothing,
-  so the API's credentials cannot alter or remove the audit triggers (Threat Model TH-18). **Operators:**
-  optional, and applied by you: the operations guide's "Database roles" has the grants, the default privileges
-  for tables later migrations add, and the steps for switching an existing database over in one transaction
-  without stopping the API. The env templates list the new variable; `docker-compose.yml` passes it through.
+- On an instance that serves a public host, EF Core's sensitive data logging and detailed errors and the developer
+  exception page are off, whatever the environment, unless `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true`
+  (NFR-28). One decision at start-up sets all three, and the instance starts as usual with one warning naming the
+  hosts. A host is public when `PUBLIC_HOST` or `UI_HOST`, the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or
+  `HEIMDALL_PASSWORD_RESET_URL`, or a `HEIMDALL_CORS_ALLOWED_ORIGINS` entry names anything but `localhost` or a
+  loopback address; `docker-compose.yml` now passes `PUBLIC_HOST`, `UI_HOST` and the new variable into the
+  container. **Operators:** nothing to change. The development and homologation environments run without these
+  diagnostics from this release; set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` in an environment's env file only
+  where it holds made-up people and its diagnostics are wanted. Production and a local run are unaffected.
+  **Clients:** a failed request on those two environments no longer answers with the developer exception page.
+- The supported database setup runs the migrations as an owner role and the API as a role that owns nothing
+  (NFR-29). The container entrypoint migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set, and with
+  `HEIMDALL_DATA_CONNECTIONSTRING` as before when it is not. It hands the connection string to the migration
+  bundle through the bundle's environment rather than its command line, and removes the migrations string before
+  the API starts, which never reads it. **Operators:** optional, and applied by you: the operations guide's
+  "Database roles" has the grants, the default privileges for tables later migrations add, the steps for a new
+  database and for switching an existing one over, and the checks. Deploy this release before switching. The env
+  templates list the new variable; `docker-compose.yml` passes it through.
 - Every token the API reads is now checked for its issuer and audience as well as its signature and lifetime
   (NFR-30). A bearer token must name `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer and exactly one of the person,
   `.2fa-challenge` and `.subject-rights` audiences; the challenge token at `POST /api/auth/2fa/verify` and

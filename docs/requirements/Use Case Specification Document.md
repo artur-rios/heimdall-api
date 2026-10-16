@@ -613,7 +613,7 @@ sequenceDiagram
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
-| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and the second factor is not spent |
+| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
 | AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
 
 ---
@@ -1203,10 +1203,8 @@ sequenceDiagram
 | AF-21c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-21d | Person is already an owner of the scope | Return `200 OK` (idempotent) |
 
-> **On the person added.** The person is not asked to accept: the ownership takes effect at once.
-> From then on the actor may read them as a co-owner (UC-07 read a), seeing the scopes the two share
-> and none of the others (FR-PE-19). An acceptance step is not built; the Threat Model records it
-> under TH-41.
+> **On the person added.** The person is not asked to accept; the ownership takes effect at once
+> (Threat Model TH-41).
 
 ---
 
