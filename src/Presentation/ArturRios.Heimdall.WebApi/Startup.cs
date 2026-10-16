@@ -39,8 +39,10 @@ using ArturRios.Util.WebApi.Configuration;
 using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
+using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Rewrite;
 using Serilog;
@@ -77,8 +79,8 @@ public class Startup : WebApiStartup
     private const string TokenAudienceEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
     private const string TokenExpirationEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS";
     private const string TokenIssuerEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
-    private const string TokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
-    private const string PreviousTokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
+    private const string TokenSecretEnvironmentVariable = TokenSigningSecrets.SecretVariable;
+    private const string PreviousTokenSecretEnvironmentVariable = TokenSigningSecrets.PreviousSecretVariable;
     private const double DefaultTokenExpirationInSeconds = 3600;
 
     private const string CorsAllowedOriginsEnvironmentVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
@@ -765,6 +767,17 @@ public class Startup : WebApiStartup
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
 
+        // TB-5: the library's validator checks the signature and lifetime but not the issuer or the
+        // audience, and the signing key is not Heimdall's alone. PersonTokenValidator wraps it and
+        // takes its place, so a token reaches the middleware's user only if Heimdall issued it, for
+        // one of the person audiences.
+        var libraryValidator = Builder.Services.Single(descriptor =>
+            descriptor.ServiceType == typeof(ITokenValidator) &&
+            descriptor.ImplementationType == typeof(JwtTokenValidator));
+        Builder.Services.Remove(libraryValidator);
+        Builder.Services.AddSingleton<JwtTokenValidator>();
+        Builder.Services.AddSingleton<ITokenValidator, PersonTokenValidator>();
+
         AddAuthEndpointRateLimiting();
 
         // TH-03: bound how many Argon2id derivations run at once. Read here, with the rest of the
@@ -1100,9 +1113,10 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
-    ///     Reads the token settings from the environment. The signing secret is required: with an
-    ///     empty one every authenticated request dies inside the token validator with an opaque
-    ///     <c>IDX10703</c>, so a missing secret fails startup instead.
+    ///     Reads the token settings from the environment. The signing secret is required, and it and
+    ///     any previous secret must be at least 32 bytes of ASCII (<see cref="TokenSigningSecrets" />):
+    ///     an unusable one fails start-up rather than signing with a weak key, or failing every
+    ///     request inside the token validator.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -1111,7 +1125,8 @@ public class Startup : WebApiStartup
     ///         to <c>JwtConfiguration.Keys</c>, so a token signed with either is accepted, while new
     ///         tokens are signed with the current one. Rotating is then: set the previous variable to
     ///         the secret in use, set the current variable to a new one, restart; and an hour later —
-    ///         one token lifetime — clear the previous variable and restart again.
+    ///         one token lifetime — clear the previous variable and restart again. An empty previous
+    ///         variable is never passed to the library as a key.
     ///     </para>
     ///     <para>
     ///         The keys carry ids because <c>JwtKey</c> requires them, but no <c>kid</c> is written to
@@ -1129,12 +1144,10 @@ public class Startup : WebApiStartup
     {
         var secret = Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable);
 
-        if (string.IsNullOrWhiteSpace(secret))
-        {
-            throw new InvalidOperationException(
-                $"Environment variable '{TokenSecretEnvironmentVariable}' is unset. The API cannot " +
-                "validate tokens without a signing secret.");
-        }
+        // The current secret is always accepted; the previous one only while it is configured, and
+        // only when it is genuinely a different key.
+        var keys = TokenSigningSecrets.Parse(
+            secret, Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable));
 
         var lifetime = TokenLifetimeSetting.Parse(
             Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
@@ -1142,25 +1155,11 @@ public class Startup : WebApiStartup
 
         WarnOnFallback(TokenExpirationEnvironmentVariable, lifetime.RejectedValue, DefaultTokenExpirationInSeconds);
 
-        var expiration = lifetime.Seconds;
-
-        var previousSecret = Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable);
-
-        // The current secret is always accepted; the previous one only while it is configured, and
-        // only when it is genuinely a different key — the same value under two ids would be two ways
-        // of saying nothing has been rotated yet.
-        List<JwtKey> keys = [new("current", secret)];
-
-        if (!string.IsNullOrWhiteSpace(previousSecret) && previousSecret != secret)
-        {
-            keys.Add(new JwtKey("previous", previousSecret));
-        }
-
         return new JwtConfiguration(
-            expiration,
+            lifetime.Seconds,
             Environment.GetEnvironmentVariable(TokenIssuerEnvironmentVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
-            secret,
+            secret!,
             [])
         {
             Keys = keys

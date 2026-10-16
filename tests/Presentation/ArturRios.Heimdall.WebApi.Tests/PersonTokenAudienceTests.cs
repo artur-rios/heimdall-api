@@ -205,6 +205,31 @@ public class PersonTokenAudienceTests
         Assert.Null(principal);
     }
 
+    [UnitTheory]
+    [InlineData("another-service", "heimdall-unit.2fa-challenge")]
+    [InlineData(Issuer, "another-service")]
+    public async Task GivenAChallengeFromAnotherIssuerOrAudience_WhenValidatedForVerification_ThenItIsRefused(
+        string issuer, string audience)
+    {
+        // Given — a correctly signed challenge-shaped token that Heimdall did not issue for itself (TB-5)
+        var configuration = Configuration() with
+        {
+            Issuer = issuer,
+            Audience = audience,
+            Claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+            {
+                MfaPending = true, ChallengeId = Guid.NewGuid()
+            })
+        };
+        var crafted = new JwtHandler().CreateToken(configuration);
+
+        // When
+        var principal = await ChallengeIssuer().ValidateAsync(crafted);
+
+        // Then
+        Assert.Null(principal);
+    }
+
     /// <summary>
     ///     The permission reader a System Admin's full token never touches, since they act within no
     ///     scope. Every member throws, so a read would fail the test rather than pass unnoticed.

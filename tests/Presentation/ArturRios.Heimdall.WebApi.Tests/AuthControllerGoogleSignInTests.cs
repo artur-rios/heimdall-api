@@ -577,7 +577,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.Equal([AuthMessages.GoogleEmailNotVerified], response.Body!.Errors);
     }
 
-    // AF-25g (FR-GO-20): an optional nonce binds the token to the sign-in that asked for it.
+    // AF-25g (FR-GO-20): an optional nonce binds the token to the client's own sign-in attempt.
 
     [FunctionalFact]
     public async Task GivenANonceTheTokenCarries_WhenPostAuthGoogle_ThenSignedIn()
