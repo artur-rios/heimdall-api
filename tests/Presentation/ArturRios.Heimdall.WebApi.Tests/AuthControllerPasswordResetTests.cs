@@ -479,7 +479,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     }
 
     [FunctionalFact]
-    public async Task GivenThePersonUnchangedSinceTheyWereRead_WhenThePasswordIsWritten_ThenOnlyThePasswordColumnsChange()
+    public async Task GivenThePersonUnchangedSinceTheyWereRead_WhenThePasswordIsWritten_ThenThePasswordColumnsAndTheStampChange()
     {
         // Given the control for the test above
         var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("unraced"));
@@ -498,6 +498,76 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
         Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
         Assert.Equal(person.Email, stored.Email);
+        Assert.NotEqual(person.SecurityStamp, stored.SecurityStamp);
+        Assert.Equal(read.SecurityStamp, stored.SecurityStamp);
+    }
+
+    // FR-PR-08: once the row exists, only targeted writes reach the password columns.
+
+    [FunctionalFact]
+    public async Task GivenACopyReadBeforeAReset_WhenSavedAsAWholeRow_ThenTheResetPasswordStands()
+    {
+        // Given one request holding the person as it was — an administrator's edit, say — while the
+        // person completes a reset
+        var email = UniqueEmail("whole-row");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using var stale = db.CreateContext();
+        var staleCopy = await stale.Persons.SingleAsync(x => x.Id == person.Id);
+
+        var reset = await ResetAsync(await SeedTokenAsync(person));
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+
+        // When the first request saves its copy the way the repositories do — every column
+        staleCopy.Name = "Renamed meanwhile";
+        stale.Persons.Update(staleCopy);
+        await stale.SaveChangesAsync();
+
+        // Then the reset password still verifies, the old one does not, and the rename landed
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
+        Assert.False(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.Equal("Renamed meanwhile", stored.Name);
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
+    }
+
+    [FunctionalTheory]
+    [InlineData("restricted")]
+    [InlineData("deleted")]
+    public async Task GivenAnAccountChangeAfterThePersonWasRead_WhenThePasswordIsWritten_ThenNothingIsWrittenTheStampIncluded(
+        string state)
+    {
+        // Given a person read, as UC-13 reads them with the token, and then restricted or deleted
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail($"raced-{state}"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var changing = db.CreateContext())
+        {
+            var rows = changing.Persons.Where(x => x.Id == person.Id);
+
+            if (state == "restricted")
+            {
+                await rows.ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
+            }
+            else
+            {
+                await rows.ExecuteUpdateAsync(set => set.SetProperty(x => x.IsDeleted, true));
+            }
+        }
+
+        // When
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
+
+        // Then — refused, and the record keeps its password and its stamp (NFR-24)
+        Assert.False(written);
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
         Assert.Equal(person.SecurityStamp, stored.SecurityStamp);
     }
 }

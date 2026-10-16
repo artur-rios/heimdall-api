@@ -22,10 +22,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <remarks>
 ///     <para>
 ///         The token is the whole of the caller's claim — no email, no scope, no password is asked
-///         for — so the three rejections are checked in the order UC-13's main flow states: exists,
-///         not expired, not used. They are named separately, unlike UC-11's uniform 401, because
-///         there is no account to enumerate here: the token is a 48-character random string, and a
-///         caller either holds one that was mailed to them or holds nothing.
+///         for — so the four rejections are checked in the order UC-13's main flow states: exists,
+///         its person may still be acted on (answered as "exists" fails), not expired, not used. The
+///         token's own three are named separately, unlike UC-11's uniform 401, because there is no
+///         account to enumerate here: the token is a 48-character random string, and a caller either
+///         holds one that was mailed to them or holds nothing.
 ///     </para>
 ///     <para>
 ///         <b>The account is checked again when the link is followed</b> (AF-13e, FR-PR-08). UC-12
@@ -124,24 +125,18 @@ public class ResetPasswordCommandHandler(
             return output.WithError(AuthMessages.TokenAlreadyUsed);
         }
 
-        // FR-AU-11: a new password revokes every token issued under the old one. A reset is the
-        // remedy for a password someone else may know, and a token obtained with it would otherwise
-        // outlive the remedy by up to its whole lifetime. Before the write, in its own targeted
-        // write, so a failed write costs one extra sign-in rather than leaving old sessions live.
-        await atomicWrites.RotateSecurityStampAsync(person);
-
-        // UC-13 step 3, written only while the person is still as found above (FR-PR-08, FR-PE-17):
-        // one of the account changes AF-13e refuses, or an address change, landed in between, so
-        // the link is answered as AF-13e would now answer it. The token stays spent.
+        // UC-13 step 3 and FR-AU-11, in one conditional statement: the new hash and salt and a
+        // fresh security stamp, which revokes every token issued under the old password — a reset is
+        // the remedy for a password someone else may know. Written only while the person is still as
+        // found above (FR-PR-08, FR-PE-17); otherwise one of the account changes AF-13e refuses, or
+        // an address change, landed in between, the link is answered as AF-13e would now answer it,
+        // and nothing about the person changes, the stamp included. The token stays spent. One
+        // statement also means no sign-in can read the new password beside the old stamp, so no
+        // second rotation is needed.
         if (!await atomicWrites.TrySetPasswordAsync(person, newHash, newSalt, now))
         {
             return output.WithError(AuthMessages.TokenInvalid);
         }
-
-        // FR-AU-11 again, once the new password is written: a sign-in with the old password between
-        // the first rotation and the write read the first new stamp, and its token must not outlive
-        // the reset. The first rotation is what makes a failed write safe; this one closes that gap.
-        await atomicWrites.RotateSecurityStampAsync(person);
 
         // UC-13 step 4, for every other token the person still holds.
         var consumption = await ConsumeTokensAsync(token, now);

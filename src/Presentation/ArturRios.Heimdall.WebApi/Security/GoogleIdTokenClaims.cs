@@ -22,7 +22,10 @@ public static class GoogleIdTokenClaims
 
     /// <summary>
     ///     The <c>email_verified</c> claim, or <c>null</c> when the token asserts nothing — the claim
-    ///     is absent, is JSON <c>null</c>, or holds something that is not a boolean.
+    ///     is absent, is JSON <c>null</c>, or holds something that is not a boolean. The strings
+    ///     <c>"true"</c> and <c>"false"</c> read as the booleans they name: measured, and pinned by
+    ///     <c>GoogleIdTokenClaimsTests</c>, because a sign-up needs the claim to read as <c>true</c>
+    ///     (FR-GO-07) and a token that writes it as a string would otherwise be refused.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -42,7 +45,7 @@ public static class GoogleIdTokenClaims
     ///         succeeds only for that null-valued claim — an absent claim and a real <c>true</c> or
     ///         <c>false</c> all make it fail — so it isolates it precisely. That discriminator is
     ///         measured behaviour rather than a documented contract, which is exactly why
-    ///         <c>GoogleIdTokenClaimsTests</c> pins all four shapes: a package bump that changes it
+    ///         <c>GoogleIdTokenClaimsTests</c> pins every shape: a package bump that changes it
     ///         fails the suite instead of quietly downgrading someone's verified address.
     ///     </para>
     ///     <para>

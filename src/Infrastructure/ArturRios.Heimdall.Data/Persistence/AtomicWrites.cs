@@ -468,21 +468,39 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 
     public async Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now)
     {
+        var stamp = Guid.NewGuid();
+
         var written = await context.Persons
             .Where(RedeemableAsRead(person))
             .ExecuteUpdateAsync(set => set
                 .SetProperty(x => x.PasswordHash, passwordHash)
                 .SetProperty(x => x.Salt, salt)
+                .SetProperty(x => x.SecurityStamp, stamp)
                 .SetProperty(x => x.UpdatedAt, now)) == 1;
 
         if (written)
         {
             Accept(person, x => x.PasswordHash, passwordHash);
             Accept(person, x => x.Salt, salt);
+            Accept(person, x => x.SecurityStamp, stamp);
             Accept(person, x => x.UpdatedAt, now);
         }
 
         return written;
+    }
+
+    public async Task ClearPasswordAsync(Person person)
+    {
+        byte[] empty = [];
+
+        await context.Persons
+            .Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.PasswordHash, empty)
+                .SetProperty(x => x.Salt, empty));
+
+        Accept(person, x => x.PasswordHash, empty);
+        Accept(person, x => x.Salt, empty);
     }
 
     public async Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)

@@ -60,7 +60,9 @@ public static class IdentityAnonymiser
 
         // Zeroed rather than left alone: a hash and its salt are the material an offline attack
         // works on, and keeping them for a record nobody can log into serves nothing. Both columns
-        // are NOT NULL, so they are emptied rather than nulled.
+        // are NOT NULL, so they are emptied rather than nulled. A whole-row save does not write
+        // them once the row exists (FR-PR-08), so the callers also clear them through
+        // IAtomicWrites.ClearPasswordAsync, as they clear the factor budgets.
         person.PasswordHash = [];
         person.Salt = [];
 

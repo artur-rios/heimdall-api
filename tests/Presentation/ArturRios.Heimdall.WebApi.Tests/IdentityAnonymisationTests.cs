@@ -229,4 +229,40 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         Assert.Null(stored.ReauthenticationWindowStartedAt);
         Assert.Null(stored.ReauthenticationPausedUntil);
     }
+
+    [FunctionalFact]
+    public async Task GivenARestoredIdentity_WhenErasureIsReapplied_ThenItsPasswordHashAndSaltAreEmptiedInTheDatabase()
+    {
+        // Given a live person a restore brought back. The password columns are written only by
+        // targeted writes once the row exists (FR-PR-08), so the reconciliation must clear them so
+        await using var context = fixture.CreateContext();
+        var restored = DeletedPerson(DateTime.UtcNow, DeletionKinds.SubjectRequested);
+        restored.IsDeleted = false;
+        restored.DeletedAt = null;
+        context.Persons.Add(restored);
+        await context.SaveChangesAsync();
+
+        var persons = new EfRepository<Person, long>(context);
+        var googleUsers = new EfRepository<GoogleUser, long>(context);
+        var handler = new ReapplyErasuresCommandHandler(
+            persons, persons, googleUsers, googleUsers,
+            new EfRepository<PasswordResetToken, long>(context),
+            new EfRepository<EmailVerificationToken, long>(context),
+            new EfRepository<TwoFactorAuth, long>(context),
+            new AtomicWrites(context));
+
+        // When
+        var output = await handler.HandleAsync(new ReapplyErasuresCommand
+        {
+            SubjectIds = [restored.PublicId], ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        });
+
+        // Then
+        Assert.True(output.Success);
+        await using var verification = fixture.CreateContext();
+        var stored = await verification.Persons.SingleAsync(x => x.Id == restored.Id);
+        Assert.NotNull(stored.AnonymisedAt);
+        Assert.Empty(stored.PasswordHash);
+        Assert.Empty(stored.Salt);
+    }
 }

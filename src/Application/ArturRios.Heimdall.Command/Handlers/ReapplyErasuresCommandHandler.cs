@@ -92,6 +92,10 @@ public class ReapplyErasuresCommandHandler(
             await atomicWrites.ClearReauthenticationAttemptsAsync(person);
             await atomicWrites.ClearAccountEmailsAsync(person);
 
+            // The password hash and salt likewise: a whole-row save never writes them once the row
+            // exists, so the anonymiser's in-memory clear reaches the row only through this.
+            await atomicWrites.ClearPasswordAsync(person);
+
             // Nothing blocks it any more; it is done — as the scheduled pass leaves it.
             person.ErasureBlockedReason = null;
 

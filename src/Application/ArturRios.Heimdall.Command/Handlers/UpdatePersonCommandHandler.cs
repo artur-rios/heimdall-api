@@ -182,9 +182,9 @@ public class UpdatePersonCommandHandler(
         // verification — were mailed to the address being replaced, and go with it. Retired here,
         // before the new address is written, so none can be followed once it is; and again after
         // the save, for any mailed to the old address in between. Here also means before the person
-        // is modified below, since each retirement saves. A reset or verification already under
-        // way cannot land after the change either: both write only while the address is the one
-        // they read (IAtomicWrites.TrySetPasswordAsync, TryMarkEmailVerifiedAsync).
+        // is modified below, since each retirement saves. A reset or verification that read the
+        // person before the change cannot write after it: both write only while the address is the
+        // one they read (IAtomicWrites.TrySetPasswordAsync, TryMarkEmailVerifiedAsync).
         if (emailChanged && await RetireAddressLinksAsync(person.Id) is { } earlyRetirement)
         {
             return output.WithErrors(earlyRetirement);
@@ -235,21 +235,24 @@ public class UpdatePersonCommandHandler(
         if (emailChanged)
         {
             await atomicWrites.RotateSecurityStampAsync(person);
-        }
 
-        if (emailChanged)
-        {
+            // UC-08 step 4, continued (FR-PE-17), the second pass of the two, made the moment the
+            // new address is saved and before anything slower, such as the notice below. A
+            // verification token is proof of control of the address it was mailed to, and that is
+            // no longer the person's address: left live, one mailed to the old address would mark
+            // the new one verified through UC-14 without anybody having read anything sent to it.
+            // A reset token mailed there would let that mailbox set the password. This pass catches
+            // any mailed to the old address after the first one; a link followed from now on finds
+            // it spent.
+            var retirement = await RetireAddressLinksAsync(person.Id);
+
             // FR-PE-15: the previous address is told. Only that address is handed over, so the
             // notice cannot disclose the new one; a failed delivery is the sender's to log, and does
-            // not fail an update that has already been made.
+            // not fail an update that has already been made. Sent even when the retirement failed:
+            // the address has changed either way, and its owner is owed the notice.
             await emailChangeNoticeSender.SendAsync(previousEmail);
 
-            // UC-08 step 4, continued (FR-PE-17): a verification token is proof of control of the
-            // address it was mailed to, and that is no longer the person's address. Left live, one
-            // mailed to the old address would mark the new one verified through UC-14 without
-            // anybody having read anything sent to it — undoing the reset just made. A reset token
-            // mailed there would let that mailbox set the password. The second pass of the two.
-            if (await RetireAddressLinksAsync(person.Id) is { } retirement)
+            if (retirement is not null)
             {
                 return output.WithErrors(retirement);
             }

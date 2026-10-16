@@ -454,16 +454,15 @@ public class ResetPasswordCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
+    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheStampIsReplacedByTheWriteThatSetsThePassword()
     {
-        // Given writes that record the stamp a concurrent sign-in with the old password would have
-        // read while the new password was being written
+        // Given writes that record the stamp as the new password is about to be written
         var fixture = await FixtureAsync();
         await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
         var original = fixture.Person.SecurityStamp;
-        Guid? duringSave = null;
+        Guid? beforeTheWrite = null;
 
-        var atomicWrites = new InMemoryAtomicWrites { OnPasswordWrite = person => duringSave = person.SecurityStamp };
+        var atomicWrites = new InMemoryAtomicWrites { OnPasswordWrite = person => beforeTheWrite = person.SecurityStamp };
 
         var handler = new ResetPasswordCommandHandler(
             PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
@@ -471,10 +470,39 @@ public class ResetPasswordCommandHandlerTests
         // When
         var output = await handler.HandleAsync(Command("race-token"));
 
-        // Then — rotated before the save, and again after it
+        // Then — nothing rotated it before (FR-PR-08: a refused write leaves it alone), and the
+        // write that set the password replaced it (FR-AU-11)
         Assert.True(output.Success);
-        Assert.NotNull(duringSave);
-        Assert.NotEqual(original, duringSave);
-        Assert.NotEqual(duringSave, fixture.Person.SecurityStamp);
+        Assert.Equal(original, beforeTheWrite);
+        Assert.NotEqual(original, fixture.Person.SecurityStamp);
+    }
+
+    [UnitTheory]
+    [InlineData("deleted")]
+    [InlineData("restricted")]
+    [InlineData("anonymised")]
+    public async Task GivenAnAccountChangeLandingBeforeTheWrite_WhenHandlingResetPassword_ThenInvalidTokenAndThePersonIsUnchanged(
+        string state)
+    {
+        // Given the person eligible when the token is found, and changed before the write
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
+        var stamp = fixture.Person.SecurityStamp;
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person => MakeIneligible(person, state)
+        };
+
+        var handler = new ResetPasswordCommandHandler(
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
+
+        // When
+        var output = await handler.HandleAsync(Command("race-token"));
+
+        // Then — answered as AF-13e, and the record keeps its password and its stamp (NFR-24)
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
     }
 }

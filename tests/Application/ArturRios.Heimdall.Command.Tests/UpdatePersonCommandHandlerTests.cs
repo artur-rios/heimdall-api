@@ -455,6 +455,60 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenLinksMailedToTheOldAddressDuringTheSave_WhenTheEmailChanges_ThenTheSecondPassRetiresThemBeforeTheNotice()
+    {
+        // Given a reset link and a verification link issued while the save is in flight — after the
+        // first pass, still to the old address — and a sender that records their state as it sends
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var resetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var verificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var lateReset = new PasswordResetToken
+        {
+            PersonId = target.Id, TokenHash = "late-reset", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+        var lateVerification = new EmailVerificationToken
+        {
+            PersonId = target.Id, TokenHash = "late-verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
+        };
+
+        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
+        writer
+            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
+            .Returns(async (Person person, CancellationToken ct) =>
+            {
+                await resetTokens.CreateAsync(lateReset, ct);
+                await verificationTokens.CreateAsync(lateVerification, ct);
+                return await persons.UpdateAsync(person, ct);
+            });
+
+        bool? resetUsedAtNotice = null;
+        var sender = new Mock<IEmailChangeNoticeSender>();
+        sender
+            .Setup(x => x.SendAsync(It.IsAny<string>()))
+            .Callback<string>(_ => resetUsedAtNotice = lateReset.Used)
+            .Returns(Task.CompletedTask);
+
+        var twoFactor = new TwoFactorState();
+        var handler = new UpdatePersonCommandHandler(
+            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
+            Ownership(true), verificationTokens, resetTokens,
+            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
+            sender.Object, new AdminEmailOptions(), twoFactor.RetryAfter);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then — both were retired by the pass after the save, and before the notice was sent
+        Assert.True(output.Success);
+        Assert.True(lateReset.Used);
+        Assert.True(lateVerification.Used);
+        Assert.True(resetUsedAtNotice);
+    }
+
+    [UnitFact]
     public async Task GivenUnchangedEmail_WhenUpdating_ThenEmailVerifiedIsPreserved()
     {
         // Given a verified person whose email is resubmitted unchanged

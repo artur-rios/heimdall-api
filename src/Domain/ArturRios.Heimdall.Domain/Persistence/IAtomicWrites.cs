@@ -214,18 +214,28 @@ public interface IAtomicWrites
     Task<bool> TryConsumeEmailVerificationTokenAsync(EmailVerificationToken token, DateTime now);
 
     /// <summary>
-    ///     UC-13 (FR-PR-08): writes the reset password — <paramref name="passwordHash" />,
-    ///     <paramref name="salt" /> and <c>UpdatedAt</c>, and no other column — while the person still
-    ///     holds the address they were read with and is neither logically deleted, under a
-    ///     restriction (NFR-24), nor anonymised. <c>false</c> means one of those changed after the
-    ///     caller read the person, and nothing was written.
+    ///     UC-13 (FR-PR-08, FR-AU-11): writes the reset password — <paramref name="passwordHash" />,
+    ///     <paramref name="salt" />, a fresh <see cref="Person.SecurityStamp" /> and <c>UpdatedAt</c>,
+    ///     and no other column — while the person still holds the address they were read with and is
+    ///     neither logically deleted, under a restriction (NFR-24), nor anonymised. <c>false</c> means
+    ///     one of those changed after the caller read the person, and nothing was written, the stamp
+    ///     included.
     /// </summary>
     /// <remarks>
-    ///     Targeted rather than a whole-row save for the reason <see cref="RotateSecurityStampAsync" />
-    ///     is: a save of the copy read when the token was found would write back every other column
-    ///     as it was then, and so undo an address change, or a restriction, that landed meanwhile.
-    ///     The address in the condition is what orders a reset against an address change (FR-PE-17):
-    ///     a token read before the change cannot set a password after it.
+    ///     <para>
+    ///         Targeted rather than a whole-row save for the reason <see cref="RotateSecurityStampAsync" />
+    ///         is: a save of the copy read when the token was found would write back every other
+    ///         column as it was then, and so undo an address change, or a restriction, that landed
+    ///         meanwhile. The address in the condition is what orders a reset against an address
+    ///         change (FR-PE-17): a token read before the change cannot set a password after it.
+    ///     </para>
+    ///     <para>
+    ///         The stamp is replaced in the same statement, so no sign-in can read the new password
+    ///         beside the old stamp or the old password beside the new one, and a refused write
+    ///         leaves the stamp — which a restricted person's subject-rights token carries — as it
+    ///         was. The password columns are written by nothing else once the row exists: the
+    ///         mapping keeps every whole-row save off them, as it does the stamp.
+    ///     </para>
     /// </remarks>
     Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now);
 
@@ -236,6 +246,13 @@ public interface IAtomicWrites
     ///     anonymised. <c>false</c> means nothing was written.
     /// </summary>
     Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now);
+
+    /// <summary>
+    ///     NFR-20: empties the person's password hash and salt, writing no other column, for
+    ///     anonymisation. Like the stamp, the two are written only by targeted writes once the row
+    ///     exists, so a whole-row save of an anonymised copy does not clear them.
+    /// </summary>
+    Task ClearPasswordAsync(Person person);
 
     /// <summary>
     ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes

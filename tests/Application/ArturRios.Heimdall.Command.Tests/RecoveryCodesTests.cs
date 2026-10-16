@@ -237,4 +237,29 @@ public class RecoveryCodesTests
         // Then
         Assert.All(digests, Assert.Null);
     }
+
+    [UnitTheory]
+    [InlineData("00000000000000000000", "0000000000000000")]
+    [InlineData("ffffffffffffffffffff", "ZZZZZZZZZZZZZZZZ")]
+    [InlineData("0123456789abcdef0011", "04HMASW9NF6YY00H")]
+    [InlineData("f0f0f0f0f00f0f0f0f0f", "Y3RF1W7G1W7GY3RF")]
+    public void GivenKnownBytes_WhenEncoded_ThenTheCrockfordCharactersAreTheKnownOnes(string hex, string expected)
+    {
+        // Given vectors computed independently: five bits a character, most significant first.
+        // The third starts 00000 00100 10001 -> 0, 4, H, so a swapped bit order or alphabet entry fails
+        var bytes = Convert.FromHexString(hex);
+
+        // When
+        var encoded = RecoveryCodes.Encode(bytes);
+
+        // Then
+        Assert.Equal(expected, encoded);
+    }
+
+    [UnitFact]
+    public void GivenALengthThatIsNotAMultipleOfFive_WhenEncoded_ThenItIsRefused()
+    {
+        // When / Then — no padding is defined, so a partial group is refused rather than truncated
+        Assert.Throws<ArgumentException>(() => RecoveryCodes.Encode(new byte[9]));
+    }
 }

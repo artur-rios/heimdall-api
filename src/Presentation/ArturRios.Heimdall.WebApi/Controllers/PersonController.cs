@@ -139,7 +139,10 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// </summary>
     /// <remarks>
     ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
-    ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
+    ///     when their second factor is active (FR-PE-14) — six digits for an authenticator-app code,
+    ///     or a recovery code, matched as <c>2fa/verify</c> matches one (<c>XXXX-XXXX-XXXX-XXXX</c>,
+    ///     hyphens, spaces and case ignored, the shorter <c>XXXX-XXXX</c> codes still accepted,
+    ///     FR-2F-20) — so this action verifies a password like the
     ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
     ///     password-verifying endpoint does. An own email change mails the previous address, so it is
     ///     charged to the person's account-email budget once the credentials are accepted: 429 "An

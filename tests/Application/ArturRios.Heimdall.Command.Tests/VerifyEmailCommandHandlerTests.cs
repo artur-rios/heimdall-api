@@ -360,6 +360,28 @@ public class VerifyEmailCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenARestrictionLandingBeforeTheWrite_WhenHandlingVerifyEmail_ThenInvalidTokenAndNotVerified()
+    {
+        // Given the person eligible when the token is found, and restricted before the write
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person => person.ProcessingRestrictedAt = Now
+        };
+        var handler = new VerifyEmailCommandHandler(
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites,
+            Confirming(PendingRegistrationOutcome.NotFound));
+
+        // When
+        var output = await handler.HandleAsync(Command("race-token"));
+
+        // Then
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+        Assert.False(fixture.Person.EmailVerified);
+    }
+
+    [UnitFact]
     public async Task GivenASpentTokenOfAPersonNoLongerEligible_WhenHandlingVerifyEmail_ThenAnsweredAsAnUnknownToken()
     {
         // Given — the account is checked before the token's own state, so it says nothing more

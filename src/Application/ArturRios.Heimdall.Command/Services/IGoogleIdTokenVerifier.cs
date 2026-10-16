@@ -2,8 +2,8 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     The claims UC-25 trusts once a Google ID token has been verified (UC-25 step 3, FR-GO-11).
-///     The five fields a Google User is populated from (FR-GO-05), and the <c>nonce</c> a caller may
-///     bind the token to (FR-GO-20) — nothing else on the token is read, so the application layer
+///     The five fields a Google User is populated from (FR-GO-05), and the <c>nonce</c> a client's
+///     own sign-in attempt is checked against (FR-GO-20) — nothing else on the token is read, so the application layer
 ///     never sees an unverified claim.
 /// </summary>
 /// <param name="Subject">Google's stable <c>sub</c> claim, stored as the Google User's <c>GoogleId</c>.</param>

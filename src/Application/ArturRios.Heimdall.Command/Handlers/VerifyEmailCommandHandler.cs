@@ -27,10 +27,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <para>
 ///         The mirror of <see cref="ResetPasswordCommandHandler" />, and it takes the same positions
 ///         for the same reasons. The token is the whole of the caller's claim — no email, no scope —
-///         so the three rejections are checked in the order UC-14's main flow states: exists, not
-///         expired, not used. They are named separately, unlike UC-11's uniform 401, because there is
-///         no account to enumerate here: the token is a 48-character random string, and a caller
-///         either holds one that was mailed to them or holds nothing.
+///         so the four rejections are checked in the order UC-14's main flow states: exists, its person
+///         may still be acted on (answered as "exists" fails), not expired, not used. The token's own
+///         three are named separately, unlike UC-11's uniform 401, because there is no account to
+///         enumerate here: the token is a 48-character random string, and a caller either holds one
+///         that was mailed to them or holds nothing.
 ///     </para>
 ///     <para>
 ///         An address that is already verified is verified again, and the token spent. UC-14 defines

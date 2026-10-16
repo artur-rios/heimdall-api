@@ -447,4 +447,28 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         Assert.False(written);
         Assert.False(await IsVerifiedAsync(person));
     }
+
+    [FunctionalFact]
+    public async Task GivenARestrictionAfterThePersonWasRead_WhenMarkedVerified_ThenNothingIsWritten()
+    {
+        // Given a person read, as UC-14 reads them with the token, and then restricted
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced-restricted"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var changing = db.CreateContext())
+        {
+            await changing.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
+        }
+
+        // When
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TryMarkEmailVerifiedAsync(read, DateTime.UtcNow);
+
+        // Then
+        Assert.False(written);
+        Assert.False(await IsVerifiedAsync(person));
+    }
 }

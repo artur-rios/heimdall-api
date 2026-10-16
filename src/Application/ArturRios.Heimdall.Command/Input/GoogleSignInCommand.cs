@@ -24,9 +24,10 @@ public class GoogleSignInCommand : BaseCommand
 
     /// <summary>
     ///     Optional: the nonce the client sent Google when it asked for <see cref="IdToken" />. When
-    ///     present, the token's <c>nonce</c> claim must equal it exactly, so a token issued to some
-    ///     other sign-in cannot be presented in this one (FR-GO-20). Absent or empty, nothing is
-    ///     compared.
+    ///     present, the token's <c>nonce</c> claim must equal it exactly (FR-GO-20), which binds the
+    ///     token to the client's own sign-in attempt: a client can refuse a token that was not issued
+    ///     for its request. Absent or empty, nothing is compared. The nonce is the client's, not the
+    ///     server's, so it does not stop a holder of the token from presenting it without one.
     /// </summary>
     public string? Nonce { get; set; }
 }

@@ -50,10 +50,10 @@ public class GoogleSignInCommandHandler(
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }
 
-        // AF-25g (FR-GO-20): a caller that names a nonce is owed a token issued for it, so one
-        // obtained for any other sign-in — with another nonce, or none — is refused as an
-        // unverifiable token is. Ordinal: the nonce is an opaque value the client chose. A request
-        // without one compares nothing.
+        // AF-25g (FR-GO-20): a caller that names a nonce is owed a token issued for its own sign-in
+        // attempt, so one carrying another nonce, or none, is refused as an unverifiable token is.
+        // Ordinal: the nonce is an opaque value the client chose. A request without one compares
+        // nothing; the server issued no nonce, so this binds the client's attempt, not the token.
         if (!string.IsNullOrEmpty(command.Nonce) &&
             !string.Equals(payload.Nonce, command.Nonce, StringComparison.Ordinal))
         {

@@ -19,6 +19,13 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     /// </summary>
     public Action<Person>? OnPasswordWrite { get; init; }
 
+    /// <summary>
+    ///     Called with the person before <see cref="TrySetPasswordAsync" /> or
+    ///     <see cref="TryMarkEmailVerifiedAsync" /> evaluates its condition, so a test can land a
+    ///     change on the row between the handler's own checks and the write.
+    /// </summary>
+    public Action<Person>? BeforeConditionalWrite { get; init; }
+
     /// <summary>How many pending-registration guesses have been charged through this instance.</summary>
     public int PendingGuessCharges { get; private set; }
 
@@ -307,6 +314,8 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
     public Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now)
     {
+        BeforeConditionalWrite?.Invoke(person);
+
         if (!RedeemableAsRead(person))
         {
             return Task.FromResult(false);
@@ -316,13 +325,24 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         person.PasswordHash = passwordHash;
         person.Salt = salt;
+        person.SecurityStamp = Guid.NewGuid();
         person.UpdatedAt = now;
 
         return Task.FromResult(true);
     }
 
+    public Task ClearPasswordAsync(Person person)
+    {
+        person.PasswordHash = [];
+        person.Salt = [];
+
+        return Task.CompletedTask;
+    }
+
     public Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
     {
+        BeforeConditionalWrite?.Invoke(person);
+
         if (!RedeemableAsRead(person))
         {
             return Task.FromResult(false);

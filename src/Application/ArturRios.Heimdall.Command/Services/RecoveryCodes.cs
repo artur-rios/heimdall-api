@@ -120,19 +120,24 @@ public static class RecoveryCodes
     }
 
     /// <summary>
-    ///     Sixteen characters for <see cref="RandomBytes" /> random bytes, five bits each, most
-    ///     significant first.
+    ///     <paramref name="bytes" /> in <see cref="Alphabet" />, five bits a character, most
+    ///     significant first: the canonical form of a code. Ten bytes give the sixteen characters of
+    ///     <see cref="Length" /> exactly. Public so the mapping can be pinned by known answers; issuing
+    ///     goes through <see cref="Issue" />.
     /// </summary>
-    private static string NewCanonicalCode()
+    /// <exception cref="ArgumentException">The length is not a multiple of five bytes.</exception>
+    public static string Encode(ReadOnlySpan<byte> bytes)
     {
-        Span<byte> random = stackalloc byte[RandomBytes];
-        RandomNumberGenerator.Fill(random);
+        if (bytes.Length % 5 != 0)
+        {
+            throw new ArgumentException("Base32 without padding needs a multiple of five bytes.", nameof(bytes));
+        }
 
-        var code = new StringBuilder(Length);
+        var code = new StringBuilder(bytes.Length * 8 / BitsPerCharacter);
         var buffer = 0;
         var bits = 0;
 
-        foreach (var value in random)
+        foreach (var value in bytes)
         {
             buffer = (buffer << 8) | value;
             bits += 8;
@@ -145,6 +150,15 @@ public static class RecoveryCodes
         }
 
         return code.ToString();
+    }
+
+    /// <summary>Sixteen characters for <see cref="RandomBytes" /> random bytes.</summary>
+    private static string NewCanonicalCode()
+    {
+        Span<byte> random = stackalloc byte[RandomBytes];
+        RandomNumberGenerator.Fill(random);
+
+        return Encode(random);
     }
 
     /// <summary><c>XXXX-XXXX-XXXX-XXXX</c>.</summary>

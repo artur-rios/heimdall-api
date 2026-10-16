@@ -125,7 +125,8 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     for it, and the link did what it promised. As in UC-13, the account is checked when the link
     ///     is followed (AF-14d, FR-EV-08): a person restricted, deleted or anonymised since it was
     ///     mailed, or who can no longer sign in through their scope, gets 400 "Invalid token.", and
-    ///     nothing is changed.
+    ///     nothing is changed. A link mailed before the person's address changed has been retired
+    ///     (FR-PE-17) and answers 400 "Token already used.".
     ///     <para>
     ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
     ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
@@ -191,8 +192,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     anonymous callers for the same reason <c>login</c> is — this is where a Google User gets
     ///     the token every other endpoint requires. <c>nonce</c> is optional: the value the client
     ///     sent Google when it asked for the ID token. When it is present, the token's <c>nonce</c>
-    ///     claim must equal it exactly, so a token issued to any other sign-in is refused (AF-25g,
-    ///     FR-GO-20); when it is absent or empty, nothing is compared.
+    ///     claim must equal it exactly (AF-25g, FR-GO-20), which lets a client make sure the token it
+    ///     presents was issued for its own sign-in attempt; when it is absent or empty, nothing is
+    ///     compared. It does not stop whoever holds an ID token from presenting it without one.
     /// </summary>
     /// <remarks>
     ///     The 401 flows answer alike (AF-25a, AF-25d, AF-25g) with "Google authentication failed.",
@@ -402,6 +404,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     AF-39a answers 404 (not active). AF-39b and AF-39c — a wrong password and a wrong second
     ///     factor — answer the same 401, "The password or code is incorrect.", so the answer never
     ///     says which was wrong; a paused re-authentication budget (FR-AU-13) answers it too.
+    ///     <c>recoveryCode</c> is matched as <c>2fa/verify</c> matches it: <c>XXXX-XXXX-XXXX-XXXX</c>,
+    ///     with or without hyphens, with spaces, in any case, an O, I or L read as 0, 1 and 1, and
+    ///     the shorter <c>XXXX-XXXX</c> codes issued before still accepted (FR-2F-20).
     /// </remarks>
     [HttpPost("2fa/disable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

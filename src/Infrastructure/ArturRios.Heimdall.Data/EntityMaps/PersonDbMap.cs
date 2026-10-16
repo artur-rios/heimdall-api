@@ -92,6 +92,13 @@ internal static class PersonDbMap
         IgnoredAfterInsert(person.Property(x => x.ReauthenticationWindowStartedAt));
         IgnoredAfterInsert(person.Property(x => x.ReauthenticationPausedUntil));
 
+        // FR-PR-03 and FR-PR-08: the password hash and salt, for the reason the stamp is. Set at
+        // insert; after that only the targeted writes in AtomicWrites change them — a reset and
+        // anonymisation — so a whole-row save of a copy read before a reset, an administrator's
+        // edit racing the person's own reset for one, cannot put the old password back.
+        IgnoredAfterInsert(person.Property(x => x.PasswordHash));
+        IgnoredAfterInsert(person.Property(x => x.Salt));
+
         // FR-PE-16: the account-email budget, for the same reason — a whole-row save of a copy read
         // before a send was reserved would hand the day's allowance back.
         IgnoredAfterInsert(person.Property(x => x.AccountEmailsSent));
