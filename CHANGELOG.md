@@ -88,9 +88,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `POST /api/auth/google` accepts an optional `nonce` (FR-GO-20): the value the client sent Google when it asked for
   the ID token. When it is present and not empty, the token's `nonce` claim must equal it exactly, or the request is
   answered `401` "Google authentication failed.", as for any token that fails verification. Without it nothing is
-  compared. The nonce binds the token to the client's own sign-in attempt; it does not stop a holder of an ID token
-  from presenting it directly. **Clients:** generate a fresh random nonce for each Google sign-in, pass it to Google,
-  and send the same value here.
+  compared. The nonce is a client-side check that the token it presents was issued for its own sign-in request;
+  whether a token is accepted rests on its signature, issuer, audience and expiry. **Clients:** generate a fresh
+  random nonce for each Google sign-in, pass it to Google, and send the same value here.
 - A password-reset or verification link is checked against its account again when it is followed (FR-PR-08,
   FR-EV-08): if the person has since been restricted, deleted or anonymised, or can no longer sign in through their
   scope, `POST /api/auth/password-reset` and `POST /api/auth/verify-email` answer `400` "Invalid token.", exactly
@@ -125,6 +125,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   optional, and applied by you: the operations guide's "Database roles" has the grants, the default privileges
   for tables later migrations add, and the steps for switching an existing database over in one transaction
   without stopping the API. The env templates list the new variable; `docker-compose.yml` passes it through.
+- Every token the API reads is now checked for its issuer and audience as well as its signature and lifetime
+  (NFR-30). A bearer token must name `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer and exactly one of the person,
+  `.2fa-challenge` and `.subject-rights` audiences; the challenge token at `POST /api/auth/2fa/verify` and
+  `2fa/challenge/resend`, the challenge audience; an application token at `GET /api/applications/self`, the
+  application audience. A token Heimdall did not issue for that reader is refused however it is signed: `401`
+  "Invalid token" as a bearer token, as for a bad signature, and the endpoint's usual `401` at the other two.
+  **Clients:** tokens Heimdall issues are unaffected, and no new message is introduced.
+- Tokens are accepted under HS256 only, the algorithm they are signed with, now that the API is on
+  `ArturRios.Jwt` 1.3.0, declared directly in the Web API project.
+- Start-up checks the signing secrets (NFR-31): `HEIMDALL_AUTH_TOKEN_SECRET`, and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`
+  when it is set, must each be at least 32 bytes and ASCII only, or the API refuses to start with a message that
+  names the variable and never the value. A previous secret that is unset, blank or `""` means no previous key.
+  **Operators:** before deploying, check that every environment's secrets meet the rule; `openssl rand -base64 48`
+  gives 64 bytes.
 
 ## [1.5.0] - 2026-10-15
 

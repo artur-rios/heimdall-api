@@ -1029,6 +1029,11 @@ a compromised key and the wrong response to a routine replacement.
 Every instance must carry the same pair, so roll the change out to all of them before step 3 — an
 instance that has already dropped the old secret will refuse tokens its neighbours still accept.
 
+Both secrets must be at least 32 bytes of ASCII, or the API refuses to start, naming the variable and
+never the value (NFR-31); `openssl rand -base64 48` gives 64. An empty previous variable, including
+one holding just `""`, means no previous key, so clearing it in step 3 is safe whatever the env file
+quoting.
+
 Application tokens (UC-56) are signed with the same keys, so the same rotation covers them. Step 2
 waits out the longer of the two lifetimes, `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` and
 `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default), and a consumer that
@@ -1040,12 +1045,12 @@ validates them offline must be given both keys for the same period.
 | --- | --- | --- |
 | `HEIMDALL_DATA_CONNECTIONSTRING` | ✅ | — |
 | `HEIMDALL_DATA_DATABASETYPE` | ✅ | — (`PostgreSql`) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — (at least 32 bytes of ASCII) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it) |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty (when set, at least 32 bytes of ASCII) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |

@@ -140,7 +140,7 @@ master user's credentials. Open it and fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | The login from step 2 |
 | `DB_NAME` | `heimdall_local` |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment: at least 32 bytes of ASCII, or the API will not start (`openssl rand -base64 48`) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
 
@@ -357,7 +357,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | That environment's login from step 2 |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | Optional: the owner role's whole connection string, when the environment has one ([Database roles](../operations/#database-roles--th-18)) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`) — fortuna-api in the same environment is given the same value |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`), at least 32 bytes of ASCII or the API will not start — fortuna-api in the same environment is given the same value |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |
@@ -448,6 +448,7 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | `set DB_USER in the env file` at `up` | Compose interpolation found the variable empty | Fill it in — the `:?` markers in the Compose file fail loudly rather than starting a container that cannot connect |
 | Container restarts; log ends at `entrypoint: applying EF Core migrations...` | The bundle cannot reach PostgreSQL | Re-run the two probes above; the address in the error names which side is wrong |
 | Container restarts; log ends with `… serves a public host … Refusing to start` | A development or homologation env file without `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` (NFR-28) | Add it if the environment holds made-up people only, as both should; see [Operations](../operations/#diagnostics-on-a-public-host--nfr-28) |
+| Container restarts; log ends with `Environment variable 'HEIMDALL_AUTH_TOKEN_SECRET…' is … bytes` or `… holds characters outside ASCII` | A signing secret, current or previous, shorter than 32 bytes or with a character outside ASCII (NFR-31) | Replace it with `openssl rand -base64 48`; the message names the variable, never the value. Leave the previous one empty when not rotating |
 | Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Re-run the grants in [Database roles](../operations/#database-roles--th-18) |
 | `no pg_hba.conf entry for host "..."` | The connection arrives from an address no rule covers | Add a `host` rule for that address, then `systemctl reload postgresql` |
 | `relation "role" already exists` on the second run | The login is named `heimdall`, so `"$user"` resolves to the entities' schema | Rename the login, or keep `Search Path=public` in every connection string |

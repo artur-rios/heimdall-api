@@ -193,9 +193,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     anonymous callers for the same reason <c>login</c> is — this is where a Google User gets
     ///     the token every other endpoint requires. <c>nonce</c> is optional: the value the client
     ///     sent Google when it asked for the ID token. When it is present, the token's <c>nonce</c>
-    ///     claim must equal it exactly (AF-25g, FR-GO-20), which lets a client make sure the token it
-    ///     presents was issued for its own sign-in attempt; when it is absent or empty, nothing is
-    ///     compared. It does not stop whoever holds an ID token from presenting it without one.
+    ///     claim must equal it exactly (AF-25g, FR-GO-20), a client-side check that the token it
+    ///     presents was issued for its own sign-in request; when it is absent or empty, nothing is
+    ///     compared. Whether a token is accepted rests on its signature, issuer, audience and expiry.
     /// </summary>
     /// <remarks>
     ///     The 401 flows answer alike (AF-25a, AF-25d, AF-25g) with "Google authentication failed.",

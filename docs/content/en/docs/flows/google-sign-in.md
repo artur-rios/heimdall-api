@@ -91,10 +91,9 @@ answers for all three.
 **A nonce binds the token to the client's own sign-in attempt** (**FR-GO-20**). `nonce` is optional: a
 client that sent one to Google when asking for the ID token sends the same value here, and the
 token's `nonce` claim must equal it exactly; a token with another nonce, or none, answers as an
-unverifiable token does. That lets a client refuse a token that was not issued for its own request.
-It is not a defence against replay: the nonce is the client's, not the server's, so whoever holds an
-ID token can still present it directly, within its lifetime, to this deployment's audience. A request
-without `nonce` compares nothing, as before.
+unverifiable token does. The nonce is a client-side check that the token it presents was issued for
+its own sign-in request; whether a token is accepted rests on its signature, issuer, audience and
+expiry (NFR-13). A request without `nonce` compares nothing, as before.
 
 **Only an address Google vouches for can sign up** (**FR-GO-07**, AF-25f). A first sign-in whose
 token does not carry `email_verified: true` — false, or absent — creates nothing and answers `403`
