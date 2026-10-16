@@ -414,6 +414,29 @@ public class RequestErasureCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAGoogleTokenAlreadyUsed_WhenRequestingErasure_ThenTheCredentialIsNotAcceptedAndNothingIsWritten()
+    {
+        // Given (FR-GO-21) a token already used once, to sign in say
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            GoogleIdTokenUses = new HashSet<string> { GoogleIdTokenUse.KeyOf(null, "a-used-token") }
+        };
+
+        // When
+        var output = await Handler(persons, googleUsers, Payload(), atomicWrites)
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: "a-used-token"));
+
+        // Then it is refused as an unverifiable token is
+        Assert.False(output.Success);
+        Assert.Equal([ErasureMessages.CredentialNotAccepted], output.Errors);
+        Assert.Null(googleUser.ErasureRequestedAt);
+        Assert.False(googleUser.IsDeleted);
+    }
+
+    [UnitFact]
     public async Task GivenARestrictedGoogleUser_WhenRequestingErasure_ThenTheRestrictionIsLiftedWithTheRequest()
     {
         var persons = new AsyncFakeRepository<Person, long>();

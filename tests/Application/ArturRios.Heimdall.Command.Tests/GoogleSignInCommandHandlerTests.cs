@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -31,8 +32,9 @@ public class GoogleSignInCommandHandlerTests
         string email = Email,
         bool? emailVerified = true,
         string? name = "Google Signer",
-        string? pictureUrl = "https://lh3.googleusercontent.test/a/photo") =>
-        new(subject, email, emailVerified, name, pictureUrl);
+        string? pictureUrl = "https://lh3.googleusercontent.test/a/photo",
+        string? tokenId = "jti-1") =>
+        new(subject, email, emailVerified, name, pictureUrl, TokenId: tokenId, ExpiresAt: TokenExpiry);
 
     /// <summary>A verifier that accepts every token and returns <paramref name="payload" />.</summary>
     private static IGoogleIdTokenVerifier Verifier(GoogleIdTokenPayload? payload)
@@ -117,7 +119,8 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var (issuer, _) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -150,7 +153,8 @@ public class GoogleSignInCommandHandlerTests
         var existing = await SeedGoogleUserAsync(googleUsers, scope);
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -175,7 +179,8 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         await handler.HandleAsync(Command(scope.PublicId));
@@ -201,7 +206,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(null), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -221,7 +226,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(Guid.NewGuid()));
@@ -241,7 +246,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -260,7 +265,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -282,7 +287,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub");
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -304,7 +309,8 @@ public class GoogleSignInCommandHandlerTests
         await SeedUserPersonAsync(persons, scope, Email);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer);
+            Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -326,7 +332,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub", email: Email.ToUpper());
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -349,7 +355,8 @@ public class GoogleSignInCommandHandlerTests
         var persons = new AsyncFakeRepository<Person, long>();
         await SeedUserPersonAsync(persons, otherScope, Email);
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer);
+            Verifier(Payload()), scopes, persons, googleUsers, googleUsers, TokenIssuer().issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(targetScope.PublicId));
@@ -371,7 +378,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, isDeleted: true);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -399,7 +406,7 @@ public class GoogleSignInCommandHandlerTests
             .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
-            googleUsers, issuer);
+            googleUsers, issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -427,7 +434,8 @@ public class GoogleSignInCommandHandlerTests
             .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User, null))
             .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -450,7 +458,8 @@ public class GoogleSignInCommandHandlerTests
         googleUser.ProcessingRestrictedAt = DateTime.UtcNow;
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -473,7 +482,8 @@ public class GoogleSignInCommandHandlerTests
         var existing = await SeedGoogleUserAsync(googleUsers, otherScope);
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
-            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer);
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(targetScope.PublicId));
@@ -500,7 +510,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(name: null, pictureUrl: null)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -521,7 +531,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -542,7 +552,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -563,7 +573,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -589,7 +599,7 @@ public class GoogleSignInCommandHandlerTests
         var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer);
+            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -611,7 +621,7 @@ public class GoogleSignInCommandHandlerTests
         var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer);
+            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -632,7 +642,7 @@ public class GoogleSignInCommandHandlerTests
         var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer);
+            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -655,7 +665,7 @@ public class GoogleSignInCommandHandlerTests
         var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer);
+            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -683,7 +693,7 @@ public class GoogleSignInCommandHandlerTests
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: emailVerified)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, issuer);
+            googleUsers, googleUsers, issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -706,7 +716,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: false)), scopes, persons, googleUsers, googleUsers,
-            TokenIssuer().issuer);
+            TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -725,7 +735,7 @@ public class GoogleSignInCommandHandlerTests
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -749,7 +759,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload() with { Nonce = "n-0123456789" }), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
@@ -773,7 +783,7 @@ public class GoogleSignInCommandHandlerTests
         var (issuer, issuerMock) = TokenIssuer();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload() with { Nonce = tokenNonce }), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, issuer);
+            googleUsers, googleUsers, issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
@@ -793,7 +803,7 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload() with { Nonce = "n-other" }), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId, nonce: "n-0123456789"));
@@ -813,12 +823,107 @@ public class GoogleSignInCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload() with { Nonce = "n-0123456789" }), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, googleUsers, TokenIssuer().issuer);
+            googleUsers, googleUsers, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId, nonce));
 
         // Then
         Assert.True(output.Success);
+    }
+
+    [UnitFact]
+    public async Task GivenATokenAlreadyUsed_WhenSigningInAgain_ThenRefusedAsAnInvalidTokenAndNothingIsCreated()
+    {
+        // Given (FR-GO-21) a token that has signed somebody up once
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var (issuer, issuerMock) = TokenIssuer();
+        var atomicWrites = new InMemoryAtomicWrites { GoogleIdTokenUses = new HashSet<string>() };
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
+            atomicWrites);
+        Assert.True((await handler.HandleAsync(Command(scope.PublicId))).Success);
+        var created = (await googleUsers.GetAllAsync()).Data!.Count();
+        issuerMock.Invocations.Clear();
+
+        // When the same token is presented again
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], output.Errors);
+        Assert.Equal(created, (await googleUsers.GetAllAsync()).Data!.Count());
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+    }
+
+    [UnitFact]
+    public async Task GivenTwoTokensSharingAnId_WhenBothArePresented_ThenTheSecondIsRefused()
+    {
+        // Given two different token strings that carry the same jti: the jti is what identifies a token
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var atomicWrites = new InMemoryAtomicWrites { GoogleIdTokenUses = new HashSet<string>() };
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(tokenId: "shared-jti")), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
+            googleUsers, TokenIssuer().issuer, atomicWrites);
+
+        // When
+        var first = await handler.HandleAsync(new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "token-a" });
+        var second = await handler.HandleAsync(new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "token-b" });
+
+        // Then
+        Assert.True(first.Success);
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], second.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenTokensWithoutAnId_WhenPresented_ThenEachIsKnownByItsSignedPart()
+    {
+        // Given tokens carrying no jti, which fall back to a digest of their signed part
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var atomicWrites = new InMemoryAtomicWrites { GoogleIdTokenUses = new HashSet<string>() };
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(tokenId: null)), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
+            googleUsers, TokenIssuer().issuer, atomicWrites);
+
+        // When
+        var first = await handler.HandleAsync(
+            new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "header.payload-a.signature" });
+        var other = await handler.HandleAsync(
+            new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "header.payload-b.signature" });
+        var replay = await handler.HandleAsync(
+            new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "header.payload-a.signaturf" });
+
+        // Then — the replay differs only in its signature segment, and is refused
+        Assert.True(first.Success);
+        Assert.True(other.Success);
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], replay.Errors);
+        Assert.Contains(GoogleIdTokenUse.KeyOf(null, "header.payload-a.signature"), atomicWrites.GoogleIdTokenUses);
+    }
+
+    [UnitFact]
+    public async Task GivenANonceMismatch_WhenSigningIn_ThenTheTokenIsNotSpent()
+    {
+        // Given a token refused for another sign-in attempt's nonce (AF-25g)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var atomicWrites = new InMemoryAtomicWrites { GoogleIdTokenUses = new HashSet<string>() };
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
+            TokenIssuer().issuer, atomicWrites);
+
+        // When
+        var output = await handler.HandleAsync(
+            new GoogleSignInCommand { ScopeId = scope.PublicId, IdToken = "a-google-id-token", Nonce = "other" });
+
+        // Then nothing is recorded: only an accepted token is spent
+        Assert.False(output.Success);
+        Assert.Empty(atomicWrites.GoogleIdTokenUses!);
     }
 }

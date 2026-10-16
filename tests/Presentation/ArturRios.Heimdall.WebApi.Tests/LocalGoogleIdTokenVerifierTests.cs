@@ -143,4 +143,35 @@ public class LocalGoogleIdTokenVerifierTests
         Assert.NotNull(payload);
         Assert.Null(payload.Nonce);
     }
+
+    [UnitFact]
+    public async Task GivenATokenCarryingAnId_WhenVerified_ThenItsIdAndExpiryAreReturned()
+    {
+        // Given (FR-GO-21)
+        var before = DateTime.UtcNow;
+
+        // When
+        var payload = await Verifier().VerifyAsync(
+            TestGoogleTokens.For(tokenId: "jti-42", expiresIn: TimeSpan.FromMinutes(10)));
+
+        // Then
+        Assert.NotNull(payload);
+        Assert.Equal("jti-42", payload.TokenId);
+        Assert.NotNull(payload.ExpiresAt);
+        Assert.InRange(payload.ExpiresAt.Value, before.AddMinutes(9), before.AddMinutes(11));
+    }
+
+    [UnitFact]
+    public async Task GivenATokenWithoutAnId_WhenVerified_ThenTheIdIsAbsent()
+    {
+        // Given
+        var token = TestGoogleTokens.For(withTokenId: false);
+
+        // When
+        var payload = await Verifier().VerifyAsync(token);
+
+        // Then
+        Assert.NotNull(payload);
+        Assert.Null(payload.TokenId);
+    }
 }

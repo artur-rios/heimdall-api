@@ -394,4 +394,18 @@ public interface IAtomicWrites
     ///     <see cref="Person.ScopeOwnerships" />.
     /// </remarks>
     Task<bool> TryRemoveScopeOwnerAsync(Person person, long scopeId);
+
+    /// <summary>
+    ///     FR-GO-21: records that a Google ID token was accepted, under <paramref name="tokenHash" /> —
+    ///     the digest of its <c>jti</c>, or of its signed part when it carries none
+    ///     (<see cref="GoogleIdTokenUse.KeyOf" />) — until <paramref name="expiresAt" />, the token's own
+    ///     expiry. <c>false</c> means it was already recorded: the token was used before, and must be
+    ///     refused as an invalid one is.
+    /// </summary>
+    /// <remarks>
+    ///     One <c>INSERT … ON CONFLICT DO NOTHING</c>, so of any number of simultaneous requests
+    ///     presenting one token exactly one records it. The row is kept until the token has expired
+    ///     and the single-use grace has passed, then purged (NFR-19).
+    /// </remarks>
+    Task<bool> TryRecordGoogleIdTokenUseAsync(string tokenHash, DateTime expiresAt);
 }

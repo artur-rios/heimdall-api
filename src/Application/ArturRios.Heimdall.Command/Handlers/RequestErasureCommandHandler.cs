@@ -198,6 +198,14 @@ public class RequestErasureCommandHandler(
             return output.WithError(ErasureMessages.CredentialNotAccepted);
         }
 
+        // FR-GO-21: the token is a proof of presence only once. A token already used — to sign in, or
+        // to ask for this before — is refused as an invalid one is, before anything is written.
+        if (!await atomicWrites.TryRecordGoogleIdTokenUseAsync(
+                GoogleIdTokenUse.KeyOf(payload.TokenId, command.IdToken), payload.ExpiresAt ?? DateTime.UtcNow))
+        {
+            return output.WithError(ErasureMessages.CredentialNotAccepted);
+        }
+
         var requestedAt = DateTime.UtcNow;
         var dueAt = requestedAt + retention.SubjectErasureDeadline;
 

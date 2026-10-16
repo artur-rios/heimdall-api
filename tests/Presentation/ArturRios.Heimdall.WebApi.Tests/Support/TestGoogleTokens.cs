@@ -39,13 +39,22 @@ public static class TestGoogleTokens
         string? name = "Google Signer",
         string? pictureUrl = "https://lh3.googleusercontent.test/a/photo",
         TimeSpan? expiresIn = null,
-        string? nonce = null)
+        string? nonce = null,
+        string? tokenId = null,
+        bool withTokenId = true)
     {
         var claims = new List<Claim>
         {
             new("sub", subject ?? $"google-sub-{Guid.NewGuid():N}"),
             new("email", email ?? $"google-{Guid.NewGuid():N}@gmail.test")
         };
+
+        // Google sets jti on every token it issues, and FR-GO-21 records a token's use under it, so
+        // each token minted here gets its own unless the test asks for none.
+        if (withTokenId)
+        {
+            claims.Add(new Claim("jti", tokenId ?? Guid.NewGuid().ToString("N")));
+        }
 
         if (emailVerified is not null)
         {
@@ -89,7 +98,9 @@ public static class TestGoogleTokens
         {
             Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = LocalGoogleIdTokenVerifier.TestIssuer,
-            Subject = new ClaimsIdentity([new Claim("sub", subject), new Claim("email", email)]),
+            Subject = new ClaimsIdentity([
+                new Claim("sub", subject), new Claim("email", email), new Claim("jti", Guid.NewGuid().ToString("N"))
+            ]),
             Claims = new Dictionary<string, object> { ["email_verified"] = null! },
             Expires = DateTime.UtcNow.AddMinutes(10),
             SigningCredentials = new SigningCredentials(

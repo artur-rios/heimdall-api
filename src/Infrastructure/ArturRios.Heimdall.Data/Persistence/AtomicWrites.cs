@@ -880,6 +880,23 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         return removed;
     }
 
+    public async Task<bool> TryRecordGoogleIdTokenUseAsync(string tokenHash, DateTime expiresAt)
+    {
+        // The table name comes from the model, never from input, so building it into the SQL is safe;
+        // the values stay parameters. A competing insert of the same key waits for the first to commit
+        // and then inserts nothing, so the affected-row count says which request recorded the use.
+        var table = context.Model.FindEntityType(typeof(GoogleIdTokenUse))!.GetSchemaQualifiedTableName();
+
+        var sql =
+            $$"""
+              INSERT INTO {{table}} (token_hash, expires_at)
+              VALUES ({0}, {1})
+              ON CONFLICT (token_hash) DO NOTHING
+              """;
+
+        return await context.Database.ExecuteSqlRawAsync(sql, tokenHash, expiresAt) == 1;
+    }
+
     /// <summary>The columns anonymisation overwrites (NFR-20), for both of its writes.</summary>
     private static void SetAnonymised(UpdateSettersBuilder<Person> set, string name, string email, DateTime at)
     {

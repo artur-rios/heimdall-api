@@ -29,6 +29,13 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     public Action<Person>? BeforeConditionalWrite { get; init; }
 
     /// <summary>
+    ///     The Google ID token keys recorded as used (FR-GO-21), or <c>null</c> — as on
+    ///     <see cref="Instance" />, which every test shares — to accept every use without keeping one,
+    ///     so tests that present the same placeholder token do not refuse each other.
+    /// </summary>
+    public ISet<string>? GoogleIdTokenUses { get; init; }
+
+    /// <summary>
     ///     The persons the test's fake repository holds, for a write whose condition reaches past the
     ///     row it writes: <see cref="TryRemoveScopeOwnerAsync" />'s live co-owner. Required by that
     ///     write and read by no other.
@@ -607,5 +614,18 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
             other.Id != person.Id && !other.IsDeleted && other.ScopeOwnerships.Any(x => x.ScopeId == scopeId));
 
         return Task.FromResult(ownership is not null && liveCoOwner && person.ScopeOwnerships.Remove(ownership));
+    }
+
+    public Task<bool> TryRecordGoogleIdTokenUseAsync(string tokenHash, DateTime expiresAt)
+    {
+        if (GoogleIdTokenUses is null)
+        {
+            return Task.FromResult(true);
+        }
+
+        lock (GoogleIdTokenUses)
+        {
+            return Task.FromResult(GoogleIdTokenUses.Add(tokenHash));
+        }
     }
 }
