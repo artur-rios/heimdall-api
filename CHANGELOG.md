@@ -50,14 +50,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   be helped. `resend-verification` is now also under the credential endpoints' rate limit, whose `429` is "Too many
   requests." with `Retry-After`. A new migration, `AddAccountEmailBudget`, adds three columns to `person`, starting
   empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and try
-  again", not as a session end or a refused credential; the wait can be hours, and `Retry-After` gives it.
+  again", not as a session end or a refused credential; the wait can be hours, and `Retry-After` gives it. An own
+  email change counts toward the budget too, so asking for the new address's verification link straight after the
+  change waits out the cooldown.
 - Anonymous password recovery (`POST /api/auth/password-recovery`) sends at most one reset link per person per
   `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, held to the reset link's lifetime, counting links sent by an
   administrator too (FR-PR-07). The answer is unchanged.
 - A person can no longer change their own email while their email sign-in method is enabled, active or pending
   (FR-PE-18): `PUT /api/persons/{id}` answers `409` "Turn off the email sign-in method before changing your email
-  address." once the password and second factor are accepted, and nothing is charged or changed. **Clients:** offer
-  to turn the method off first; it can be set up again at the new address. An administrator's change is unaffected.
+  address." once the password and second factor are accepted. The re-authentication budget is cleared, as after any
+  accepted check, and an accepted authenticator code's time step is recorded; no account-email budget is charged, no
+  recovery or email code is spent, and the email does not change. **Clients:** offer to turn the method off first;
+  it can be set up again at the new address. An administrator's change is unaffected.
 - Creating a person with a password (`POST /api/persons`, `POST /api/scopes/{id}/persons`,
   `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator and 30 a minute per
   address; a rejection is `429` "Too many requests." with `Retry-After`. Only administrators' access tokens count
@@ -70,8 +74,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (migration `AddAttemptNoticeBudget`), and purged with the single-use tokens once its day has ended.
 - The credential endpoints' rate limiter counts an IPv6 caller by its `/56` rather than its `/64`, so a subscriber
   handed a `/56` is one caller instead of 256. Trusted callers' named IPv6 addresses are counted the same way.
-  **Operators:** a flood spread over many unrelated networks can still keep the password-hash gate full; the
-  operations guide now shows how to rate-limit the credential routes at Traefik.
+  **Operators:** the operations guide now shows how to add a rate limit for the credential routes at Traefik,
+  alongside the API's own limits.
 - Two-factor recovery codes now carry 80 bits (FR-2F-20): ten random bytes written as sixteen characters of
   Crockford's base32 (the digits and the uppercase letters without I, L, O and U) and returned by
   `POST /api/auth/2fa/confirm` and `POST /api/auth/2fa/recovery-codes/regenerate` as `XXXX-XXXX-XXXX-XXXX`. Each is
@@ -104,7 +108,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   new address is saved and again straight after (FR-PE-17); following one afterwards answers `400` "Token already
   used.". **Clients:** no new messages; "Invalid token." and "Token already
   used." keep their meaning of "this link no longer works, ask for a new one".
-
 - A Scope Admin reading another person now sees only the scope ownerships the two share (FR-PE-19). In
   `GET /api/persons/{id}`, `GET /api/scopes/{id}/owners`, `GET /api/scopes/{id}/persons` and the response of
   `PUT /api/persons/{id}`, `ownedScopeIds` lists, for a Scope Admin reading somebody else, only the scopes the
@@ -114,14 +117,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   of what they own.
 - On an instance that serves a public host, EF Core's sensitive data logging and detailed errors and the developer
   exception page are off, whatever the environment, unless `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true`
-  (NFR-28). One decision at start-up sets all three, and the instance starts as usual with one warning naming the
-  hosts. A host is public when `PUBLIC_HOST` or `UI_HOST`, the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or
-  `HEIMDALL_PASSWORD_RESET_URL`, or a `HEIMDALL_CORS_ALLOWED_ORIGINS` entry names anything but `localhost` or a
-  loopback address; `docker-compose.yml` now passes `PUBLIC_HOST`, `UI_HOST` and the new variable into the
-  container. **Operators:** nothing to change. The development and homologation environments run without these
-  diagnostics from this release; set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` in an environment's env file only
-  where it holds made-up people and its diagnostics are wanted. Production and a local run are unaffected.
-  **Clients:** a failed request on those two environments no longer answers with the developer exception page.
+  (NFR-28). One decision at start-up sets all three, the exception page the host adds by itself in Development
+  included, and the instance starts as usual with one warning naming the hosts. A host is public when `PUBLIC_HOST`
+  or `UI_HOST`, the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or `HEIMDALL_PASSWORD_RESET_URL`, or a
+  `HEIMDALL_CORS_ALLOWED_ORIGINS` entry, with or without a scheme, names anything but `localhost` or a loopback
+  address; `docker-compose.yml` now passes `PUBLIC_HOST`, `UI_HOST` and the new variable into the container.
+  **Operators:** nothing to change; set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` in an environment's env file
+  only where it holds made-up people and its diagnostics are wanted. Production and a local run are unaffected.
+  **Clients:** a public-host instance does not answer with the developer exception page unless the override is
+  `true`; a failed request gets the usual `500` "Internal server error, please try again later".
 - The supported database setup runs the migrations as an owner role and the API as a role that owns nothing
   (NFR-29). The container entrypoint migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set, and with
   `HEIMDALL_DATA_CONNECTIONSTRING` as before when it is not. It hands the connection string to the migration
@@ -134,11 +138,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (NFR-30). A bearer token must name `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer and exactly one of the person,
   `.2fa-challenge` and `.subject-rights` audiences; the challenge token at `POST /api/auth/2fa/verify` and
   `2fa/challenge/resend`, the challenge audience; an application token at `GET /api/applications/self`, the
-  application audience. A token Heimdall did not issue for that reader is refused however it is signed: `401`
-  "Invalid token" as a bearer token, as for a bad signature, and the endpoint's usual `401` at the other two.
-  **Clients:** tokens Heimdall issues are unaffected, and no new message is introduced.
+  application audience. A token Heimdall did not issue for that reader is refused however it is signed, with the
+  answer the endpoint already gives a token it cannot use: as a bearer token, `401` "Invalid token", as for a bad
+  signature; at `2fa/verify`, `401` "The two-factor challenge is invalid or has expired. Log in again."; at
+  `2fa/challenge/resend`, the usual `200` "If the challenge is still valid, a new code has been sent.", with nothing
+  sent; at `GET /api/applications/self`, `401` "The application token was not accepted.". **Clients:** tokens
+  Heimdall issues are unaffected, and no new message is introduced.
 - Tokens are accepted under HS256 only, the algorithm they are signed with, now that the API is on
-  `ArturRios.Jwt` 1.3.0, declared directly in the Web API project.
+  `ArturRios.Jwt` 1.3.0, declared directly in the Web API project. A token under HS384 or HS512 is refused as a
+  bearer token with `401` "Invalid token", and at the two challenge endpoints and `GET /api/applications/self` as
+  above.
+- A browser front end on an origin in `HEIMDALL_CORS_ALLOWED_ORIGINS` can now read `Retry-After`: the API lists it in
+  `Access-Control-Expose-Headers`, so the wait a `429` gives reaches a cross-origin client too.
 - Start-up checks the signing secrets (NFR-31): `HEIMDALL_AUTH_TOKEN_SECRET`, and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`
   when it is set, must each be at least 32 bytes and ASCII only, or the API refuses to start with a message that
   names the variable and never the value. A previous secret that is unset, blank or `""` means no previous key.

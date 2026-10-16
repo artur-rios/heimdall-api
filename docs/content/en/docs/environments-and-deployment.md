@@ -365,7 +365,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | That environment's runtime login (`…_svc`) from step 2 |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | Optional: the owner role's whole connection string, when the environment has one ([Database roles](../operations/#database-roles--th-18)) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`), at least 32 bytes of ASCII or the API will not start — fortuna-api in the same environment is given the same value |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`), at least 32 bytes of ASCII or the API will not start — every service that validates Heimdall's tokens with this key is given the same value |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |

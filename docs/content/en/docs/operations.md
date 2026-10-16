@@ -245,9 +245,18 @@ API needs, in one transaction.
    `HEIMDALL_RUN_MIGRATIONS` back if step 3 changed it, and redeploy. Leave `DB_USER` as it is.
 6. Run the checks above.
 
-To undo it, reverse the ownership in one transaction —
-`ALTER DATABASE heimdall OWNER TO heimdall_svc; REASSIGN OWNED BY heimdall_owner TO heimdall_svc;` —
-and remove `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` from the env file. The grants left behind then name
+To undo it, reverse the ownership in one transaction, as a superuser connected to the environment's
+database, with the same `lock_timeout` and the same retry as step 4:
+
+```sql
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+ALTER DATABASE heimdall OWNER TO heimdall_svc;
+REASSIGN OWNED BY heimdall_owner TO heimdall_svc;
+COMMIT;
+```
+
+Then remove `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` from the env file. The grants left behind then name
 the runtime login on objects it owns again, which changes nothing. On PostgreSQL 14 or earlier, where
 `PUBLIC` could create in `public` by default, `GRANT CREATE ON SCHEMA public TO PUBLIC` restores
 that too.
@@ -311,20 +320,21 @@ instance holds made-up people only
 ```
 
 One decision, taken once at start-up, sets both EF Core's options and the exception page, so neither
-can stay on while the other is off.
+can stay on while the other is off. It covers the exception page the host adds by itself in
+Development too: where the decision turns the page off, a failed request gets the API's usual `500`
+body, "Internal server error, please try again later".
 
 A host is public when any of these names anything but `localhost`, a name under `.localhost`, or a
 loopback address: `PUBLIC_HOST` or `UI_HOST` (the names Traefik routes to the instance, which
 `docker-compose.yml` passes into the container), the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or
-`HEIMDALL_PASSWORD_RESET_URL`, or any origin in `HEIMDALL_CORS_ALLOWED_ORIGINS`. The URLs and origins
-count only when they are absolute `http` or `https` URLs, so a template placeholder does not. With
-none of them public, nothing changes: a developer machine and the functional suite keep their
-diagnostics.
+`HEIMDALL_PASSWORD_RESET_URL`, or any origin in `HEIMDALL_CORS_ALLOWED_ORIGINS`. A URL or an origin
+counts by its host, and one written without a scheme is read as a host name; a template placeholder
+(`[[...]]`) does not count. With none of them public, nothing changes: a developer machine and the
+functional suite keep their diagnostics.
 
 `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` keeps them on with a public host, and logs a warning at
 every start. Set it only where the environment holds no real person's data. The templates leave it
-empty, so the development and homologation environments run without these diagnostics unless their
-operator sets it.
+empty.
 
 ## Health checks — UC-30
 
@@ -624,10 +634,10 @@ powers over the accounts they manage are:
 
 | Mail | Bound |
 | --- | --- |
-| A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16): one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five in each day-long window, which starts at the first send, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached the limit for account emails. Try again later." once the window's five are spent; both carry `Retry-After`, the seconds until a send would be accepted (for the limit, the later of the window's end and the cooldown's) |
+| A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16), so an own email change counts toward it and the new address's verification link, asked for straight after, waits out the cooldown: one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five in each day-long window, which starts at the first send, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached the limit for account emails. Try again later." once the window's five are spent; both carry `Retry-After`, the seconds until a send would be accepted (for the limit, the later of the window's end and the cooldown's) |
 | Verification link or password reset an administrator asks for (UC-51, UC-52) | One of each kind per person per cooldown, counting every link of that kind issued for them; not charged to the person's own budget, so an administrator can still help someone who has spent theirs |
 | Password recovery requested anonymously (UC-12) | One reset link per person per cooldown — never longer than the link's lifetime — whoever asks; further requests send nothing and are answered as before |
-| Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), and only ever to an address that confirmed a code: an own email change is refused while the email method is on (FR-PE-18) |
+| Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), sent to the registered address; a person's own email change is refused while the email method is on (FR-PE-18) |
 | Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
 | "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
 
