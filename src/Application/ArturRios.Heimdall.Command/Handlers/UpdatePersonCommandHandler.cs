@@ -27,15 +27,18 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         identity, because recovery follows the address, and a bearer token is not proof that the
 ///         account holder is present. So a caller changing their own address presents their
 ///         current password, and their second factor when it is active (FR-PE-14), checked as UC-39
-///         checks them and answered with UC-39's refusals (AF-08h, AF-08i). Both are checked before
+///         checks them, charged to the same re-authentication budget, and answered with UC-39's one
+///         refusal (AF-08h, AF-08i). Both are checked before
 ///         anything that depends on the new address, so a caller without them cannot even learn
 ///         whether it is taken. An administrator changing someone else's address presents nothing of
 ///         theirs: the administrator's own authorisation covers it, as it always has.
 ///     </para>
 ///     <para>
 ///         <b>What follows any email change.</b> Whoever made it, the person's security stamp is
-///         replaced, which revokes every token they hold (FR-AU-11), and the previous address is told
-///         (FR-PE-15) — so a change its owner did not make does not go unnoticed.
+///         replaced, which revokes every token they hold (FR-AU-11), every live verification and
+///         password-reset link is retired (FR-PE-17), and the previous address is told (FR-PE-15) —
+///         so a change its owner did not make does not go unnoticed, and nothing mailed to the old
+///         address still acts on the account.
 ///     </para>
 /// </remarks>
 public class UpdatePersonCommandHandler(
@@ -45,10 +48,13 @@ public class UpdatePersonCommandHandler(
     IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter,
+    IAsyncRepository<PasswordResetToken, long> resetTokenWriter,
     IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     ITwoFactorFactorVerifier factorVerifier,
-    IEmailChangeNoticeSender emailChangeNoticeSender)
+    IEmailChangeNoticeSender emailChangeNoticeSender,
+    AdminEmailOptions emailOptions,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
     /// <summary>The length of an authenticator-app or email code, which is all digits; a recovery code is not.</summary>
@@ -125,6 +131,20 @@ public class UpdatePersonCommandHandler(
             return output.WithError(reauthentication.Error);
         }
 
+        // FR-PE-18 (AF-08k): not while the email sign-in method is enabled, active or pending — every
+        // sign-in would then mail a code to an address nobody has proved is theirs. The person turns
+        // it off, changes the address, and sets it up again there, which proves it. Only once the
+        // credentials are accepted, so it tells nobody without them anything, and before the budget
+        // or the address are touched and before a recovery or email code is spent. An authenticator
+        // code accepted on the way has had its time step recorded (FR-2F-14), as any accepted app
+        // code does, so a retry needs the next one. An administrator's change is their authority and
+        // is not held back.
+        if (emailChanged && command.ActingPersonId == person.PublicId &&
+            await twoFactorReader.Query().AnyAsync(x => x.PersonId == person.Id && x.EmailEnabled))
+        {
+            return output.WithError(PersonMessages.EmailSignInMethodEnabled);
+        }
+
         // A role change re-checks it too, even on an unchanged address (FR-PE-09). The namespace the
         // address has to be unique in is chosen by the role, so promoting a User to System Admin
         // moves their address out of their scope's space and into the system-wide admin one, where a
@@ -137,6 +157,21 @@ public class UpdatePersonCommandHandler(
             return output.WithError(PersonMessages.EmailAlreadyExists);
         }
 
+        // FR-PE-16 (AF-08j): an own change mails the previous address (FR-PE-15), so it is charged to
+        // the person's account-email budget — after the password and factor were accepted, so a token
+        // without them cannot spend it, and before a recovery or email code is spent or anything is
+        // written, so a refusal spends neither and changes nothing. An accepted authenticator code has
+        // had its time step recorded already (FR-2F-14), as any accepted app code does. Switching an
+        // address back and forth therefore mails the address it leaves at most the budget's day. An
+        // administrator's change is not charged: it is their authority, not the person's own request.
+        if (emailChanged && command.ActingPersonId == person.PublicId &&
+            AccountEmailBudget.RefusalOf(
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter) is { } mailRefusal)
+        {
+            return output.WithError(mailRefusal);
+        }
+
         // The second factor is spent only now, once nothing else can refuse the request — and by a
         // write only one request can win, as everywhere a code is accepted.
         var spending = await SpendFactorAsync(reauthentication.Verification);
@@ -144,6 +179,18 @@ public class UpdatePersonCommandHandler(
         if (spending is not null)
         {
             return output.WithError(spending);
+        }
+
+        // FR-PE-17: the links that act on the account through its address — password reset and
+        // verification — were mailed to the address being replaced, and go with it. Retired here,
+        // before the new address is written, so none can be followed once it is; and again after
+        // the save, for any mailed to the old address in between. Here also means before the person
+        // is modified below, since each retirement saves. A reset or verification that read the
+        // person before the change cannot write after it: both write only while the address is the
+        // one they read (IAtomicWrites.TrySetPasswordAsync, TryMarkEmailVerifiedAsync).
+        if (emailChanged && await RetireAddressLinksAsync(person.Id) is { } earlyRetirement)
+        {
+            return output.WithErrors(earlyRetirement);
         }
 
         var previousEmail = person.Email;
@@ -191,21 +238,22 @@ public class UpdatePersonCommandHandler(
         if (emailChanged)
         {
             await atomicWrites.RotateSecurityStampAsync(person);
-        }
 
-        if (emailChanged)
-        {
+            // UC-08 step 4, continued (FR-PE-17), the second pass of the two, made the moment the
+            // new address is saved and before anything slower, such as the notice below. A
+            // verification token is proof of control of the address it was mailed to, and that is
+            // no longer the person's address: left live, one mailed to the old address would mark
+            // the new one verified through UC-14 without anybody having read anything sent to it.
+            // A reset token mailed there would let that mailbox set the password. This pass catches
+            // any mailed to the old address after the first one; a link followed from now on finds
+            // it spent.
+            var retirement = await RetireAddressLinksAsync(person.Id);
+
             // FR-PE-15: the previous address is told. Only that address is handed over, so the
             // notice cannot disclose the new one; a failed delivery is the sender's to log, and does
-            // not fail an update that has already been made.
+            // not fail an update that has already been made. Sent even when the retirement failed:
+            // the address has changed either way, and its owner is owed the notice.
             await emailChangeNoticeSender.SendAsync(previousEmail);
-
-            // UC-08 step 4, continued: a verification token is proof of control of the address it
-            // was mailed to, and that is no longer the person's address. Left live, one mailed to the
-            // old address would mark the new one verified through UC-14 without anybody having read
-            // anything sent to it — undoing the reset just made.
-            var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
-                verificationTokenWriter, verificationTokenWriter, person.Id, DateTime.UtcNow);
 
             if (retirement is not null)
             {
@@ -213,7 +261,14 @@ public class UpdatePersonCommandHandler(
             }
         }
 
-        // UC-08 step 7: return the updated person.
+        // UC-08 step 7: return the updated person. Its ownerships as FR-PE-19 lets the actor see
+        // them: every one to a System Admin or the person themselves, otherwise only those of scopes
+        // the actor owns too. A Scope Admin can update only a User, who owns none (FR-SC-08), so the
+        // trim normally removes nothing; it keeps the output from saying more than a read would.
+        var visibleScopeIds = command.ActingPersonId == person.PublicId
+            ? null
+            : await OwnedScopeVisibility.ScopesVisibleToAsync(personReader, command.ActingRole, command.ActingPersonId);
+
         return output
             .WithData(new UpdatePersonCommandOutput
             {
@@ -223,11 +278,28 @@ public class UpdatePersonCommandHandler(
                 Role = (int)person.RoleId,
                 EmailVerified = person.EmailVerified,
                 ScopeId = person.ScopeMembership?.Scope.PublicId,
-                OwnedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.Scope.PublicId).ToList(),
+                OwnedScopeIds = person.ScopeOwnerships
+                    .Where(ownership => visibleScopeIds is null || visibleScopeIds.Contains(ownership.ScopeId))
+                    .Select(ownership => ownership.Scope.PublicId)
+                    .ToList(),
                 CreatedAt = person.CreatedAt,
                 UpdatedAt = person.UpdatedAt
             })
             .WithMessage(PersonMessages.PersonUpdatedSuccessfully);
+    }
+
+    /// <summary>
+    ///     FR-PE-17: retires every live verification and password-reset link the person holds.
+    ///     Returns the persistence errors of the first failed write, or <c>null</c>.
+    /// </summary>
+    private async Task<IEnumerable<string>?> RetireAddressLinksAsync(long personId)
+    {
+        var now = DateTime.UtcNow;
+
+        return await EmailVerificationTokenRetirement.RetireLiveAsync(
+                   verificationTokenWriter, verificationTokenWriter, personId, now)
+               ?? await PasswordResetTokenRetirement.RetireLiveAsync(
+                   resetTokenWriter, resetTokenWriter, personId, now);
     }
 
     /// <summary>
@@ -248,42 +320,51 @@ public class UpdatePersonCommandHandler(
     ///     FR-PE-14: the current password, through <see cref="PasswordHashGate" /> as every password
     ///     check is (Threat Model TH-03), then — when the person's two-factor authentication is
     ///     active — a current second factor, through the same <see cref="ITwoFactorFactorVerifier" />
-    ///     UC-38, UC-39 and UC-40 use. The refusals are UC-39's own (AF-39b, AF-39c), and like them
-    ///     count nothing against the account: the rate limit on the endpoint and the hash gate bound
-    ///     the guessing, as they do for UC-39 and UC-42.
+    ///     UC-38, UC-39 and UC-40 use. Charged, once, to the account's re-authentication budget
+    ///     (<see cref="ReauthenticationBudget" />, FR-AU-13), and refused as UC-39 refuses: one
+    ///     message for a wrong password, a wrong factor and a paused budget alike.
     /// </summary>
     /// <remarks>
     ///     One field carries the second factor, so its shape decides how it is checked: six digits are
-    ///     an authenticator-app or email code, anything else a recovery code, which is never all
-    ///     digits (<c>XXXX-XXXX</c>). A missing one is checked as a code and so refused like a wrong one.
+    ///     an authenticator-app or email code, anything else a recovery code, which is never six
+    ///     characters long (<c>XXXX-XXXX-XXXX-XXXX</c>, or <c>XXXX-XXXX</c> for one issued before
+    ///     those). A missing one is checked as a code and so refused like a wrong one.
     /// </remarks>
     private async Task<Reauthentication> ReauthenticateAsync(UpdatePersonCommand command, Person person)
     {
-        // AF-08h: missing or wrong alike.
-        if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
-            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
-        {
-            return Reauthentication.Refused(TwoFactorMessages.PasswordMismatch);
-        }
+        // FR-AU-13: charged before anything is compared. A paused budget still has the credentials
+        // compared, and refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
+        // AF-08h: missing or wrong alike. Decided below, once the factor has been checked too, so a
+        // wrong password takes as long to refuse as a wrong factor does.
+        var passwordMatches = !string.IsNullOrWhiteSpace(command.CurrentPassword) &&
+                              await PasswordHashGate.Shared.TextMatchesAsync(
+                                  command.CurrentPassword, person.PasswordHash, person.Salt);
 
         var twoFactorAuth = await twoFactorReader.Query()
             .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
 
-        if (twoFactorAuth is null)
+        TwoFactorFactorVerificationResult? verification = null;
+
+        if (twoFactorAuth is not null)
         {
-            return Reauthentication.NotRequired;
+            var factor = command.TwoFactorCode?.Trim();
+            var isCode = factor is null || (factor.Length == CodeLength && factor.All(char.IsAsciiDigit));
+
+            verification = await factorVerifier.VerifyAsync(
+                twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
         }
 
-        var factor = command.TwoFactorCode?.Trim();
-        var isCode = factor is null || (factor.Length == CodeLength && factor.All(char.IsAsciiDigit));
+        // AF-08h and AF-08i, answered alike, and the pause with them.
+        if (!passwordMatches || verification is { Matched: false } || !admitted)
+        {
+            return Reauthentication.Refused(AuthMessages.PasswordOrCodeIncorrect);
+        }
 
-        var verification = await factorVerifier.VerifyAsync(
-            twoFactorAuth, isCode ? factor : null, isCode ? null : factor);
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
-        // AF-08i.
-        return verification.Matched
-            ? new Reauthentication(null, verification)
-            : Reauthentication.Refused(TwoFactorMessages.FactorInvalid);
+        return new Reauthentication(null, verification);
     }
 
     /// <summary>
@@ -297,13 +378,13 @@ public class UpdatePersonCommandHandler(
         if (verification?.ConsumedEmailCode is { } emailCode &&
             !await atomicWrites.TryConsumeEmailCodeAsync(emailCode))
         {
-            return TwoFactorMessages.FactorInvalid;
+            return AuthMessages.PasswordOrCodeIncorrect;
         }
 
         if (verification?.ConsumedRecoveryCode is { } recoveryCode &&
             !await atomicWrites.TryConsumeRecoveryCodeAsync(recoveryCode, DateTime.UtcNow))
         {
-            return TwoFactorMessages.FactorInvalid;
+            return AuthMessages.PasswordOrCodeIncorrect;
         }
 
         return null;

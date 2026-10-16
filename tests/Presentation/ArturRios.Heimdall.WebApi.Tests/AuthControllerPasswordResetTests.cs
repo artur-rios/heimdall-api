@@ -16,9 +16,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Functional tests for POST /api/auth/password-reset (UC-13, FR-PR-03/04): the main flow for a User
-// and for an admin, AF-13a…AF-13c (400, each named), AF-13d (400), and the anonymous access the
-// endpoint depends on.
+// Functional tests for POST /api/auth/password-reset (UC-13, FR-PR-03/04/08): the main flow for a
+// User and for an admin, AF-13a…AF-13c (400, each named), AF-13d (400), AF-13e (400, as AF-13c), the
+// conditional password write, and the anonymous access the endpoint depends on.
 //
 // The proof that the password really changed is a login: the response says only that it did, and the
 // stored hash is meaningless on its own, so the tests reset a password and then authenticate with
@@ -312,24 +312,6 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     }
 
     [FunctionalFact]
-    public async Task GivenLogicallyDeletedPerson_WhenPostPasswordReset_ThenPasswordIsChangedButLoginStillFails()
-    {
-        // Given a deletion that landed between the email and the click. UC-13 defines no alternative
-        // flow for it, and the reset grants nothing: UC-11 refuses the login by AF-11c either way.
-        var email = UniqueEmail("deleted");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
-        var token = await SeedTokenAsync(person);
-
-        // When
-        var response = await ResetAsync(token);
-
-        // Then
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(Assert.Single(await TokensForAsync(person)).Used);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(email, NewPassword)).StatusCode);
-    }
-
-    [FunctionalFact]
     public async Task GivenNoBearerToken_WhenPostPasswordReset_ThenEndpointAnswersAnonymously()
     {
         // Given no bearer token on the gateway: someone resetting a password they have lost cannot
@@ -390,5 +372,202 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         Assert.False(issued.Used);
         Assert.True(issued.ExpiresAt > DateTime.UtcNow);
         Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
+    }
+
+    // AF-13e (FR-PR-08): the account is checked again when the link is followed.
+
+    private async Task AssertPasswordUnchangedAndTokenUnspentAsync(Person person)
+    {
+        await using var context = db.CreateContext();
+        var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.Equal(person.SecurityStamp, stored.SecurityStamp);
+        Assert.All(await context.PasswordResetTokens.Where(x => x.PersonId == person.Id).ToListAsync(),
+            token => Assert.False(token.Used));
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPersonRestrictedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidTokenAndTheRecordIsKept()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted"));
+        var token = await SeedTokenAsync(person);
+
+        await using (var context = db.CreateContext())
+        {
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
+        }
+
+        // When
+        var response = await ResetAsync(token);
+
+        // Then — exactly what an unknown token gets (AF-13c), and nothing written (NFR-24)
+        var unknown = await ResetAsync(UniqueToken());
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(unknown.StatusCode, response.StatusCode);
+        Assert.Equal(["Invalid token."], response.Body!.Errors);
+        Assert.Equal(unknown.Body!.Errors, response.Body.Errors);
+        await AssertPasswordUnchangedAndTokenUnspentAsync(person);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPersonDeletedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidTokenAndTheRecordIsKept()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("deleted"), isDeleted: true);
+        var token = await SeedTokenAsync(person);
+
+        // When
+        var response = await ResetAsync(token);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal([AuthMessages.TokenInvalid], response.Body!.Errors);
+        await AssertPasswordUnchangedAndTokenUnspentAsync(person);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAUserWhoseScopeWasDeletedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidToken()
+    {
+        // Given
+        var scope = await SeedScopeAsync();
+        var person = await SeedUserAsync(scope, UniqueEmail("scope-gone"));
+        var token = await SeedTokenAsync(person);
+
+        await using (var context = db.CreateContext())
+        {
+            await context.Scopes.Where(x => x.Id == scope.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.IsDeleted, true));
+        }
+
+        // When
+        var response = await ResetAsync(token);
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal([AuthMessages.TokenInvalid], response.Body!.Errors);
+        await AssertPasswordUnchangedAndTokenUnspentAsync(person);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheAddressChangedAfterThePersonWasRead_WhenThePasswordIsWritten_ThenNothingIsWritten()
+    {
+        // Given a person read, as UC-13 reads them with the token, and an address change saved after
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var changing = db.CreateContext())
+        {
+            await changing.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.Email, UniqueEmail("moved")));
+        }
+
+        // When
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
+
+        // Then — the change wins (FR-PE-17), and the old password stands
+        Assert.False(written);
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+    }
+
+    [FunctionalFact]
+    public async Task GivenThePersonUnchangedSinceTheyWereRead_WhenThePasswordIsWritten_ThenThePasswordColumnsAndTheStampChange()
+    {
+        // Given the control for the test above
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("unraced"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        // When
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
+
+        // Then
+        Assert.True(written);
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
+        Assert.Equal(person.Email, stored.Email);
+        Assert.NotEqual(person.SecurityStamp, stored.SecurityStamp);
+        Assert.Equal(read.SecurityStamp, stored.SecurityStamp);
+    }
+
+    // FR-PR-08: once the row exists, only targeted writes reach the password columns.
+
+    [FunctionalFact]
+    public async Task GivenACopyReadBeforeAReset_WhenSavedAsAWholeRow_ThenTheResetPasswordStands()
+    {
+        // Given one request holding the person as it was — an administrator's edit, say — while the
+        // person completes a reset
+        var email = UniqueEmail("whole-row");
+        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+
+        await using var stale = db.CreateContext();
+        var staleCopy = await stale.Persons.SingleAsync(x => x.Id == person.Id);
+
+        var reset = await ResetAsync(await SeedTokenAsync(person));
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+
+        // When the first request saves its copy the way the repositories do — every column
+        staleCopy.Name = "Renamed meanwhile";
+        stale.Persons.Update(staleCopy);
+        await stale.SaveChangesAsync();
+
+        // Then the reset password still verifies, the old one does not, and the rename landed
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
+        Assert.False(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.Equal("Renamed meanwhile", stored.Name);
+        Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
+    }
+
+    [FunctionalTheory]
+    [InlineData("restricted")]
+    [InlineData("deleted")]
+    public async Task GivenAnAccountChangeAfterThePersonWasRead_WhenThePasswordIsWritten_ThenNothingIsWrittenTheStampIncluded(
+        string state)
+    {
+        // Given a person read, as UC-13 reads them with the token, and then restricted or deleted
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail($"raced-{state}"));
+
+        await using var reading = db.CreateContext();
+        var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var changing = db.CreateContext())
+        {
+            var rows = changing.Persons.Where(x => x.Id == person.Id);
+
+            if (state == "restricted")
+            {
+                await rows.ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
+            }
+            else
+            {
+                await rows.ExecuteUpdateAsync(set => set.SetProperty(x => x.IsDeleted, true));
+            }
+        }
+
+        // When
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+            .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
+
+        // Then — refused, and the record keeps its password and its stamp (NFR-24)
+        Assert.False(written);
+        await using var checking = db.CreateContext();
+        var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.Equal(person.SecurityStamp, stored.SecurityStamp);
     }
 }

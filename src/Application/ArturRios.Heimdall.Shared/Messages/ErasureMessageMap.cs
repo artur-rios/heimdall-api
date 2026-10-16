@@ -16,8 +16,10 @@ public static class ErasureMessageMap
             // AF-42d — recorded and running, but blocked. Still a success: the request was accepted,
             // and answering 4xx would tell the subject their right had been refused when it has not.
             [ErasureMessages.ErasureRequestedButBlocked] = HttpStatusCodes.Ok,
-            // AF-42a — the re-authentication credential failed.
+            // AF-42a — the re-authentication credential failed: a Google User's ID token, and a
+            // person's password, which shares every re-authentication's refusal (FR-AU-13).
             [ErasureMessages.CredentialNotAccepted] = HttpStatusCodes.Unauthorized,
+            [AuthMessages.PasswordOrCodeIncorrect] = HttpStatusCodes.Unauthorized,
             // AF-42b — the token names no identity this endpoint can act for.
             [ErasureMessages.NotEligible] = HttpStatusCodes.Forbidden,
             // AF-42c — already requested.

@@ -142,6 +142,43 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("application_credential", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AttemptNoticeBudget", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AddressHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("address_hash");
+
+                    b.Property<int>("NoticesSent")
+                        .HasColumnType("integer")
+                        .HasColumnName("notices_sent");
+
+                    b.Property<DateTime>("WindowEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_ends_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attempt_notice_budget");
+
+                    b.HasIndex("AddressHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempt_notice_budget_address_hash");
+
+                    b.HasIndex("WindowEndsAt")
+                        .HasDatabaseName("ix_attempt_notice_budget_window_ends_at");
+
+                    b.ToTable("attempt_notice_budget", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -552,6 +589,18 @@ namespace ArturRios.Heimdall.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<DateTime?>("AccountEmailLastSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("account_email_last_sent_at");
+
+                    b.Property<DateTime?>("AccountEmailWindowEndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("account_email_window_ends_at");
+
+                    b.Property<int>("AccountEmailsSent")
+                        .HasColumnType("integer")
+                        .HasColumnName("account_emails_sent");
+
                     b.Property<DateTime?>("AnonymisedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("anonymised_at");
@@ -603,6 +652,14 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("failed_login_attempts");
 
+                    b.Property<int>("FailedReauthenticationAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_reauthentication_attempts");
+
+                    b.Property<int>("FailedSecondFactorAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_second_factor_attempts");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -643,6 +700,14 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("public_id");
 
+                    b.Property<DateTime?>("ReauthenticationPausedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reauthentication_paused_until");
+
+                    b.Property<DateTime?>("ReauthenticationWindowStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reauthentication_window_started_at");
+
                     b.Property<int?>("RestrictionGround")
                         .HasColumnType("integer")
                         .HasColumnName("restriction_ground");
@@ -663,6 +728,14 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.Property<long?>("ScopeId")
                         .HasColumnType("bigint")
                         .HasColumnName("scope_id");
+
+                    b.Property<DateTime?>("SecondFactorLockedOutUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("second_factor_locked_out_until");
+
+                    b.Property<int>("SecondFactorLockouts")
+                        .HasColumnType("integer")
+                        .HasColumnName("second_factor_lockouts");
 
                     b.Property<Guid>("SecurityStamp")
                         .ValueGeneratedOnAdd()

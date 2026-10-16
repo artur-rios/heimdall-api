@@ -112,7 +112,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
 
     private async Task<string> SeedRecoveryCodeAsync(TwoFactorAuth twoFactorAuth)
     {
-        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9];
+        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
 
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
@@ -389,7 +389,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     }
 
     [FunctionalFact]
-    public async Task GivenASubjectRightsToken_WhenUsedBeforeAndAfterAPasswordReset_ThenItWorksAndThenIsRefused()
+    public async Task GivenASubjectRightsToken_WhenUsedBeforeAndAfterTheStampRotates_ThenItWorksAndThenIsRefused()
     {
         // Given a restricted person, signed in for their own rights
         var person = await SeedPersonAsync("stamp-rights", restrictedAt: DateTime.UtcNow.AddDays(-1));
@@ -400,11 +400,32 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         ActAs(rightsToken);
         Assert.Equal(HttpStatusCode.OK, (await ExportAsync()).StatusCode);
 
-        // When
-        Assert.Equal(HttpStatusCode.OK, (await ResetAsync(await SeedResetTokenAsync(person))).StatusCode);
+        // When the stamp rotates. Not through a password reset: a reset link no longer reaches a
+        // restricted record (FR-PR-08), which is the next test's subject.
+        await using (var context = db.CreateContext())
+        {
+            var current = await context.Persons.SingleAsync(x => x.Id == person.Id);
+            await new AtomicWrites(context).RotateSecurityStampAsync(current);
+        }
 
         // Then
         AssertRevoked(await ExportAsync());
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedPersonHoldingAResetLink_WhenFollowed_ThenRefusedAndTheirSubjectRightsTokenStillWorks()
+    {
+        // Given — NFR-24 preserves the record exactly, the stamp included
+        var person = await SeedPersonAsync("stamp-rights-reset", restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var login = await LoginAsync(person.Email);
+        ActAs(login.Body!.Data!.Token!);
+
+        // When
+        var reset = await ResetAsync(await SeedResetTokenAsync(person));
+
+        // Then
+        Assert.Equal(HttpStatusCode.BadRequest, reset.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ExportAsync()).StatusCode);
     }
 
     // The stamp is written only by the targeted rotation

@@ -1,9 +1,6 @@
-using System.Security.Cryptography;
-using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Persistence;
-using ArturRios.Util.Hashing;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
@@ -61,15 +58,22 @@ public class TwoFactorFactorVerifier(
 
     /// <summary>
     ///     Finds an unused recovery code for this configuration whose hash matches
-    ///     <paramref name="recoveryCode" />. An unknown code and an already-used one both return
-    ///     <c>null</c> here — the query itself excludes used rows, so the two cases are
+    ///     <paramref name="recoveryCode" />, normalised by <see cref="RecoveryCodes.DigestOf" /> —
+    ///     hyphens, spaces and case ignored, in the current shape or the one issued before it; a
+    ///     value of neither shape is not looked up at all. An unknown code and an already-used one
+    ///     both return <c>null</c> here — the query itself excludes used rows, so the two cases are
     ///     indistinguishable by construction. A match is not spent here: the caller spends it, in a
     ///     write that only one request can win (<see cref="IAtomicWrites.TryConsumeRecoveryCodeAsync" />).
     /// </summary>
     private async Task<TwoFactorRecoveryCode?> FindMatchingRecoveryCodeAsync(
         long twoFactorAuthId, string recoveryCode)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode));
+        var hash = RecoveryCodes.DigestOf(recoveryCode);
+
+        if (hash is null)
+        {
+            return null;
+        }
 
         var unused = await recoveryCodeReader.Query()
             .Where(x => x.TwoFactorAuthId == twoFactorAuthId && !x.Used)

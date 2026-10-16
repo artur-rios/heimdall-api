@@ -75,6 +75,27 @@ public class TrustedCallerRateLimitTests() : WebApiTest<Program>(EnvironmentType
     }
 
     [FunctionalFact]
+    public async Task GivenOneIPv6Slash56SpreadOverItsSlash64s_WhenItsBudgetIsSpent_ThenItIsRefusedAndAnotherSlash56IsServed()
+    {
+        // Given ten requests, each from a different /64 of one /56 — what one subscriber handed a /56
+        // can send without ever reusing a /64
+        for (var subnet = 0; subnet < PermitLimit; subnet++)
+        {
+            Assert.NotEqual(
+                HttpStatusCode.TooManyRequests,
+                await PostAsync(PostgresFixture.TrustedCallerKey, $"2001:db8:5:7{subnet:x2}::1"));
+        }
+
+        // When an eleventh arrives from yet another /64 of it, and a request from the next /56
+        var flooding = await PostAsync(PostgresFixture.TrustedCallerKey, "2001:db8:5:7ff::1");
+        var neighbour = await PostAsync(PostgresFixture.TrustedCallerKey, "2001:db8:5:800::1");
+
+        // Then the /56 is one caller, and its neighbour is not charged for it
+        Assert.Equal(HttpStatusCode.TooManyRequests, flooding);
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, neighbour);
+    }
+
+    [FunctionalFact]
     public async Task GivenNoKey_WhenDifferentClientAddressesAreNamed_ThenTheyShareOneBudget()
     {
         await ExhaustAsync(key: null, "203.0.113.7");

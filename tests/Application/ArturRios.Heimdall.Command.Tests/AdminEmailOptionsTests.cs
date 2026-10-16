@@ -120,4 +120,24 @@ public class AdminEmailOptionsTests
         // Then
         Assert.Null(options.RejectedCooldown);
     }
+
+    [UnitFact]
+    public void GivenACooldownLongerThanTheLimit_WhenCapped_ThenItIsTheLimit()
+    {
+        // Given / When
+        var capped = new AdminEmailOptions { Cooldown = TimeSpan.FromHours(2) }.CappedAt(TimeSpan.FromHours(1));
+
+        // Then
+        Assert.Equal(TimeSpan.FromHours(1), capped.Cooldown);
+    }
+
+    [UnitFact]
+    public void GivenACooldownShorterThanTheLimit_WhenCapped_ThenItIsUnchanged()
+    {
+        // Given / When
+        var capped = new AdminEmailOptions { Cooldown = TimeSpan.FromMinutes(5) }.CappedAt(TimeSpan.FromHours(1));
+
+        // Then
+        Assert.Equal(TimeSpan.FromMinutes(5), capped.Cooldown);
+    }
 }

@@ -83,16 +83,19 @@ public class PurgeExpiredTokensCommandHandlerTests
         AsyncFakeRepository<TwoFactorEmailCode, long> twoFactorEmailCodes,
         DataRetentionOptions? retention = null,
         AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null,
-        AsyncFakeRepository<ApplicationCredential, long>? credentials = null)
+        AsyncFakeRepository<ApplicationCredential, long>? credentials = null,
+        AsyncFakeRepository<AttemptNoticeBudget, long>? noticeBudgets = null)
     {
         pendingRegistrations ??= new AsyncFakeRepository<PendingRegistration, long>();
         credentials ??= new AsyncFakeRepository<ApplicationCredential, long>();
+        noticeBudgets ??= new AsyncFakeRepository<AttemptNoticeBudget, long>();
 
         return new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
             twoFactorEmailCodes, twoFactorEmailCodes,
             pendingRegistrations, pendingRegistrations,
             credentials, credentials,
+            noticeBudgets, noticeBudgets,
             retention ?? Retention());
     }
 
@@ -292,6 +295,43 @@ public class PurgeExpiredTokensCommandHandlerTests
         Assert.DoesNotContain(longExpired.Id, remaining);
         Assert.Contains(recentlyExpired.Id, remaining);
         Assert.Contains(live.Id, remaining);
+    }
+
+    [UnitFact]
+    public async Task GivenNoticeBudgetsWhoseWindowEndedBeforeTheGrace_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given (FR-SR-14) a budget whose window ended before the grace period, one whose window ended
+        // inside it, and one still counting
+        var budgets = new AsyncFakeRepository<AttemptNoticeBudget, long>();
+        var stale = new AttemptNoticeBudget
+        {
+            AddressHash = "a", NoticesSent = 3, WindowEndsAt = DateTime.UtcNow - Grace - TimeSpan.FromDays(1)
+        };
+        var recent = new AttemptNoticeBudget
+        {
+            AddressHash = "b", NoticesSent = 1, WindowEndsAt = DateTime.UtcNow.AddHours(-1)
+        };
+        var open = new AttemptNoticeBudget { AddressHash = "c", NoticesSent = 2, WindowEndsAt = DateTime.UtcNow.AddHours(1) };
+        await budgets.CreateAsync(stale);
+        await budgets.CreateAsync(recent);
+        await budgets.CreateAsync(open);
+
+        // When
+        var output = await Handler(
+                new AsyncFakeRepository<PasswordResetToken, long>(),
+                new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+                noticeBudgets: budgets)
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — the tokens' cutoff, counted on its own and in the total
+        Assert.True(output.Success);
+        Assert.Equal(1, output.Data!.AttemptNoticeBudgetsPurged);
+        Assert.Equal(1, output.Data.TotalPurged);
+        var remaining = budgets.Query().Select(x => x.Id).ToList();
+        Assert.DoesNotContain(stale.Id, remaining);
+        Assert.Contains(recent.Id, remaining);
+        Assert.Contains(open.Id, remaining);
     }
 
     [UnitFact]

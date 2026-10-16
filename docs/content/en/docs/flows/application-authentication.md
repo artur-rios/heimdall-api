@@ -128,7 +128,8 @@ A consumer can validate the token without calling Heimdall. It must check all of
 - the algorithm is HS256, and nothing else is accepted;
 - the signature, against **both** signing keys while a rotation is in progress
   (`HEIMDALL_AUTH_TOKEN_SECRET` and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`);
-- the issuer, when Heimdall is configured with one;
+- the issuer, when Heimdall is configured with one (Heimdall itself requires its own issuer, or none
+  when none is configured, and the application audience as the token's only audience — NFR-30);
 - **the audience is the application audience**, the value of `HEIMDALL_APPLICATION_TOKEN_AUDIENCE`;
 - the lifetime, with **zero clock skew**;
 - `tokenKind` is `"application"`.

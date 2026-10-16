@@ -85,7 +85,7 @@ system. Its `OwnerId` names a person, but the row describes the system.
 | Identity | `Name`, `Email` | Identify the account and address it | Art. 7 V (execução de contrato) | Art. 6(1)(b) contract |
 | Authentication material | `PasswordHash`, `Salt`, `SecurityStamp`, `TwoFactorAuth.TotpSecretEncrypted`, recovery code hashes | Verify that the account holder is present | Art. 7 V, Art. 46 (segurança) | Art. 6(1)(b), Art. 32 |
 | Third-party identifiers | `GoogleUser.GoogleId`, `ProfilePictureUrl` | Resolve a Google sign-in to a stored identity | Art. 7 V | Art. 6(1)(b) |
-| Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
+| Behavioural / security | `FailedLoginAttempts`, `LockedOutUntil`, the second-factor and re-authentication budgets, `AUDIT_LOG` | Defend accounts against brute force; demonstrate what the system did | Art. 7 IX (legítimo interesse), Art. 37 | Art. 6(1)(f) legitimate interests, Art. 5(2) |
 | Deletion and erasure state | `DeletedAt`, `DeletionKind`, `AnonymisedAt`, `ErasureRequestedAt`, `ErasureDueAt`, `ErasureBlockedReason` | Honour erasure within the statutory deadline and show that it was honoured | Art. 7 II (obrigação legal) | Art. 6(1)(c) legal obligation |
 | Network | Client IP address: the rate limiter's partition key (in memory), and every request's entry in the application logs (12 months) | Bound anonymous request rates; detect and investigate attacks on accounts | Art. 7 IX, Art. 46 | Art. 6(1)(f), Art. 32 |
 | Delivery | Recipient address passed to Mailgun | Send verification, reset and second-factor emails, and the notice of an email change to the previous address (FR-PE-15) | Art. 7 V | Art. 6(1)(b) |
@@ -131,6 +131,9 @@ with the purpose that justifies holding it. A column with no purpose is a column
 | `IsDeleted` | Suspending an identity without destroying it |
 | `EmailVerified` | Whether the address has been proven reachable (FR-EV-01) |
 | `FailedLoginAttempts`, `LockedOutUntil` | Bounding credential guessing per account (FR-AU-09) |
+| `FailedSecondFactorAttempts`, `SecondFactorLockedOutUntil`, `SecondFactorLockouts` | Bounding second-factor guessing at sign-in per account, across challenges (FR-AU-12). Cleared by a successful second factor and by anonymisation (NFR-20) |
+| `FailedReauthenticationAttempts`, `ReauthenticationWindowStartedAt`, `ReauthenticationPausedUntil` | Bounding password and code guessing under a bearer token per account (FR-AU-13). Cleared by a successful re-authentication and by anonymisation (NFR-20) |
+| `AccountEmailsSent`, `AccountEmailWindowEndsAt`, `AccountEmailLastSentAt` | Bounding the account emails the person's own requests can have sent — a verification link asked for again, a two-factor setup code, the notice an own email change sends to the previous address — to one per cooldown and five per day-long window (FR-PE-16), so an account cannot be used to flood an address. Returned in the data export; cleared by anonymisation (NFR-20) |
 | `SecurityStamp` | Revoking the person's tokens when a credential changes (FR-AU-11). A random value with no meaning of its own, replaced on each change |
 | `RoleId`, `ScopeId` | Authorisation, and the per-scope uniqueness index FR-PE-09 needs |
 | `CreatedAt`, `UpdatedAt` | Ordinary record keeping; `UpdatedAt` is why `DeletedAt` had to exist separately |
@@ -190,6 +193,24 @@ A scope's owners and System Admins can read the id, name, address, creation and 
 remaining guesses and whether it has expired through the API (UC-49) — the same name and address they
 would see in the scope's user list once the registration is confirmed. The hash, salt and token
 hash are never returned.
+
+### `ATTEMPT_NOTICE_BUDGET`
+
+| Column | Purpose |
+| --- | --- |
+| `AddressHash` | Which address a registration-attempt notice went to, so the address gets at most three a day however many scopes or source addresses the attempts come from (FR-SR-14). A SHA-256 digest of the trimmed, lower-cased address, never the address itself — pseudonymisation rather than anonymisation, since whoever already suspects an address can hash it and find the row |
+| `NoticesSent`, `WindowEndsAt` | How many notices went out in the current one-day window and when it ends; the first notice after it ends starts a new one. Purged with the single-use tokens once the window has ended and the grace period passed (Data Retention Schedule) |
+
+The row is written when a notice is sent, which is to say when someone registered with an address that
+already holds an account; it records that much about the holder and nothing else. It is never read
+through the API.
+
+It is linked to no person or Google User — the digest is of an address, which several accounts in
+different scopes may share — so erasure, anonymisation and a hard delete do not reach it, and the data
+export (UC-41) does not include it: there is no account to attach it to, and finding it would mean
+hashing the subject's address to look it up, which is processing the row exists to avoid. What bounds
+it instead is its retention: it lasts at most the one-day window plus the grace period, and is then
+purged whether or not anyone asked.
 
 ### Two decisions this review settled
 

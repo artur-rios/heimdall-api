@@ -77,6 +77,14 @@ public class ListScopeOwnersQueryHandler(
             owners = owners.Where(x => x.Email.ToLower().Contains(email));
         }
 
+        // FR-PE-19: an owner's other scopes are other tenants'. A Scope Admin sees only the
+        // ownerships of scopes they own too — which always includes this one — and a System Admin
+        // sees them all.
+        var visibleScopeIds = await OwnedScopeVisibility.ScopesVisibleToAsync(
+            personReader, query.ActingRole, query.ActingPersonId);
+        var seesEveryOwnership = visibleScopeIds is null;
+        var visible = visibleScopeIds ?? [];
+
         var projected = owners.Select(x => new PersonOutput
         {
             Id = x.PublicId,
@@ -87,7 +95,10 @@ public class ListScopeOwnersQueryHandler(
             TwoFactorEnabled = x.TwoFactorAuth != null && x.TwoFactorAuth.IsActive,
             IsDeleted = x.IsDeleted,
             ScopeId = x.ScopeMembership != null ? x.ScopeMembership.Scope.PublicId : null,
-            OwnedScopeIds = x.ScopeOwnerships.Select(ownership => ownership.Scope.PublicId).ToList(),
+            OwnedScopeIds = x.ScopeOwnerships
+                .Where(ownership => seesEveryOwnership || visible.Contains(ownership.ScopeId))
+                .Select(ownership => ownership.Scope.PublicId)
+                .ToList(),
             CreatedAt = x.CreatedAt,
             UpdatedAt = x.UpdatedAt
         });

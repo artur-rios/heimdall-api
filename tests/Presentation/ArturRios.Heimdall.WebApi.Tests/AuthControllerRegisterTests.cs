@@ -222,4 +222,48 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.DoesNotContain(Password, System.Text.Json.JsonSerializer.Serialize(response.Body));
     }
+
+    [FunctionalFact]
+    public async Task GivenFourRegistrationsOfOneFreeAddress_WhenProcessed_ThenOnlyThreeArePending()
+    {
+        // Given — FR-SR-13: each pending registration is a confirmation mail to the address
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("capped");
+
+        // When
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            AssertGenericAcceptance(await RegisterAsync(email, scope.PublicId));
+        }
+
+        await SettleAsync();
+
+        // Then — the fourth answered alike and created nothing
+        Assert.Equal(PendingRegistration.MaxLivePerAddress, (await PendingForAsync(scope, email)).Count);
+    }
+
+    [FunctionalFact]
+    public async Task GivenFourRegistrationsOfATakenAddress_WhenProcessed_ThenItsHolderIsSentThreeNotices()
+    {
+        // Given — FR-SR-14: the holder is told of an attempt at most three times a day
+        var scope = await SeedScopeAsync();
+        var email = UniqueEmail("noticed");
+        await SeedUserAsync(scope, email);
+
+        // When
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            AssertGenericAcceptance(await RegisterAsync(email, scope.PublicId, name: $"Attempt {attempt}"));
+        }
+
+        await SettleAsync();
+
+        // Then — the budget recorded three, under the address's digest and never the address
+        await using var context = db.CreateContext();
+        var hash = AttemptNoticeBudget.AddressHashOf(email);
+        var budget = await context.AttemptNoticeBudgets.SingleAsync(x => x.AddressHash == hash);
+
+        Assert.Equal(AttemptNoticeBudget.MaxNotices, budget.NoticesSent);
+        Assert.False(await context.AttemptNoticeBudgets.AnyAsync(x => x.AddressHash.Contains("@")));
+    }
 }

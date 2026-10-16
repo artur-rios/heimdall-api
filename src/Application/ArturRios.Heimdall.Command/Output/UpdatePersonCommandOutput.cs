@@ -26,7 +26,11 @@ public class UpdatePersonCommandOutput : CommandOutput
     /// <summary>Public identifier of the scope the person belongs to as a User; <c>null</c> otherwise.</summary>
     public Guid? ScopeId { get; set; }
 
-    /// <summary>Public identifiers of the scopes the person owns; empty for non-owners.</summary>
+    /// <summary>
+    ///     Public identifiers of the scopes the person owns, as far as the reader may see them
+    ///     (FR-PE-19): every one for a System Admin and for the person themselves, and for a Scope
+    ///     Admin reading somebody else only those the Scope Admin owns too. Empty for non-owners.
+    /// </summary>
     public IEnumerable<Guid> OwnedScopeIds { get; set; } = new List<Guid>();
 
     /// <summary>Creation timestamp.</summary>

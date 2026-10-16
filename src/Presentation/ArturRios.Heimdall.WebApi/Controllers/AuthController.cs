@@ -94,7 +94,11 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Unlike the two endpoints above, each rejection is named — unknown (AF-13c), expired
     ///     (AF-13a), and spent (AF-13b) tokens all answer 400 with their own message, as does a
     ///     malformed request (AF-13d). Nothing is disclosed by the distinction: the token identifies
-    ///     no account to a caller who does not already hold it.
+    ///     no account to a caller who does not already hold it. The account is checked again when the
+    ///     link is followed (AF-13e, FR-PR-08): a person restricted, deleted or anonymised since it was
+    ///     mailed, or who can no longer sign in through their scope, gets exactly the unknown-token
+    ///     answer, 400 "Invalid token.", and nothing is changed. A link mailed before the person's
+    ///     address changed has been retired (FR-PE-17) and answers 400 "Token already used.".
     /// </remarks>
     [HttpPost("password-reset")]
     [AllowAnonymous]
@@ -118,7 +122,11 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Each rejection is named, as UC-13's are — unknown (AF-14c), expired (AF-14a), and spent
     ///     (AF-14b) tokens all answer 400 with their own message, as does a request carrying no token
     ///     at all. An address that was already verified answers 200: UC-14 defines no alternative flow
-    ///     for it, and the link did what it promised.
+    ///     for it, and the link did what it promised. As in UC-13, the account is checked when the link
+    ///     is followed (AF-14d, FR-EV-08): a person restricted, deleted or anonymised since it was
+    ///     mailed, or who can no longer sign in through their scope, gets 400 "Invalid token.", and
+    ///     nothing is changed. A link mailed before the person's address changed has been retired
+    ///     (FR-PE-17) and answers 400 "Token already used.".
     ///     <para>
     ///         A token that names a UC-47 pending registration also needs <c>password</c>, the one chosen
     ///         at sign-up: without it the answer is 422, and with a wrong one 401, and either leaves the
@@ -151,9 +159,20 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     enforces. An address that is already verified answers 400 (AF-15a) — unlike UC-14's
     ///     idempotent success, since a link mailed to a verified address could do nothing when clicked.
     ///     A token naming a person who no longer exists answers 404: it was validated, but there is no
-    ///     address left to send to.
+    ///     address left to send to. The send is charged to the person's account-email budget, shared
+    ///     with a two-factor setup code and an own email change: one per
+    ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c> (five minutes by default) and five per
+    ///     day-long window from the first. Inside the cooldown it answers 429 "An email of this kind
+    ///     was sent to you recently. Try again in a few minutes." (AF-15b); once the window's five are
+    ///     spent, 429 "You have reached the limit for account emails. Try again later."
+    ///     (AF-15c). Both carry <c>Retry-After</c>, the seconds until a send would be accepted: the
+    ///     cooldown's end, or for the limit the later of the window's end and the cooldown's.
+    ///     Nothing is sent either way. The
+    ///     endpoint is also under the credential endpoints' rate limit, whose 429 is "Too many
+    ///     requests." with a <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("resend-verification")]
+    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResendVerificationEmailCommandOutput?>>> ResendVerification()
     {
         var command = new ResendVerificationEmailCommand();
@@ -172,14 +191,22 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>PublicId</c> of the scope they are entering; the first call for a given Google account
     ///     in a given scope creates the Google User, every later one authenticates it. Open to
     ///     anonymous callers for the same reason <c>login</c> is — this is where a Google User gets
-    ///     the token every other endpoint requires.
+    ///     the token every other endpoint requires. <c>nonce</c> is optional: the value the client
+    ///     sent Google when it asked for the ID token. When it is present, the token's <c>nonce</c>
+    ///     claim must equal it exactly (AF-25g, FR-GO-20), a client-side check that the token it
+    ///     presents was issued for its own sign-in request; when it is absent or empty, nothing is
+    ///     compared. Whether a token is accepted rests on its signature, issuer, audience and expiry.
     /// </summary>
     /// <remarks>
-    ///     Both 401 flows answer alike (AF-25a, AF-25d), as UC-11's do, so an anonymous caller cannot
-    ///     use the endpoint to learn which Google accounts a scope has registered or which were
-    ///     deleted. AF-25b answers 403 for a missing, deleted, and disabled scope alike — a scope is
-    ///     not enumerable through here either. Only AF-25c (409) is named, and it discloses nothing:
-    ///     the caller has already proved the address is theirs.
+    ///     The 401 flows answer alike (AF-25a, AF-25d, AF-25g) with "Google authentication failed.",
+    ///     as UC-11's do, so an anonymous caller cannot use the endpoint to learn which Google accounts
+    ///     a scope has registered or which were deleted. AF-25b answers 403 for a missing, deleted, and
+    ///     disabled scope alike — a scope is not enumerable through here either. A first sign-in whose
+    ///     token does not carry <c>email_verified: true</c> creates nothing and answers 403 "Google
+    ///     sign-up requires a verified email address." (AF-25f, FR-GO-07), before the address is
+    ///     compared with the scope's; a Google User that already exists signs in whatever the claim
+    ///     says. AF-25c (409) is named, and it discloses nothing: the caller has proved the address is
+    ///     theirs, and Google vouches for it.
     /// </remarks>
     [HttpPost("google")]
     [AllowAnonymous]
@@ -233,7 +260,16 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>GoogleUser</c>, not a <c>Person</c> — so the handler enforces it by resolving the caller
     ///     against the <c>Person</c> table itself. The request carries the caller's
     ///     <c>currentPassword</c> (FR-2F-18), so the action sits under the credential endpoints' rate
-    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do.
+    ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> mails a code,
+    ///     charged to the account-email budget the verification resend uses: 429 "An email of this
+    ///     kind was sent to you recently. Try again in a few minutes." inside the cooldown (AF-36f),
+    ///     429 "You have reached the limit for account emails. Try again later." once the
+    ///     window's five are spent (AF-36g), both with <c>Retry-After</c>; it is checked before the
+    ///     password and charged only after it. Selecting
+    ///     <c>App</c> alone is never held back by it. A missing
+    ///     or wrong password answers 401 "The password or code is incorrect.", and is charged to the
+    ///     account's re-authentication budget (FR-AU-13): five failures within fifteen minutes pause
+    ///     the check for fifteen minutes, with the same answer.
     /// </remarks>
     [HttpPost("2fa/enable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -252,7 +288,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     Confirms the caller's pending two-factor authentication setup (UC-37, FR-2F-04/05), proving
     ///     control of every method selected in UC-36 — an <c>appCode</c> if <c>AppEnabled</c>, an
     ///     <c>emailCode</c> if <c>EmailEnabled</c>, both if both. On success, activates the
-    ///     configuration and returns ten recovery codes in plaintext, exactly once. The person acted on
+    ///     configuration and returns ten recovery codes in plaintext, exactly once: sixteen characters
+    ///     of Crockford's base32 (the digits and the uppercase letters but I, L, O and U), shown as
+    ///     <c>XXXX-XXXX-XXXX-XXXX</c> (FR-2F-20). The person acted on
     ///     is always the caller themselves — read from the bearer token, the same as
     ///     <see cref="EnableTwoFactorAuth" />.
     /// </summary>
@@ -261,7 +299,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     the authorization matrix grants confirmation to all three person roles and withholds it from
     ///     anonymous callers, which authentication alone already enforces. AF-37a's 404 covers both "no
     ///     setup was ever initiated" and "the caller is a Google User" alike — a Google-issued token
-    ///     names a <c>GoogleUser</c>, never a row this lookup could find.
+    ///     names a <c>GoogleUser</c>, never a row this lookup could find. A missing or wrong code for
+    ///     either method (AF-37b, AF-37c) answers 401 "The password or code is incorrect.", whichever
+    ///     it was, and is charged to the account's re-authentication budget (FR-AU-13), whose pause
+    ///     answers the same.
     /// </remarks>
     [HttpPost("2fa/confirm")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -287,7 +328,10 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     AF-38a (invalid/expired challenge token) and AF-38b/AF-38c (wrong code, or a reused
     ///     recovery code) all answer the same 401 with the same message, so this endpoint cannot be
     ///     used to distinguish a forged challenge from an expired one, or a wrong code from a
-    ///     recovery code that was already spent. <see cref="MfaPendingGuardFilter" /> is what keeps a
+    ///     recovery code that was already spent. A recovery code is accepted with or without its
+    ///     hyphens, with spaces, and in any case, and an O, I or L in a sixteen-character code reads as
+    ///     0, 1 and 1; codes of the shorter <c>XXXX-XXXX</c> shape issued before keep working until used
+    ///     or regenerated (FR-2F-20). <see cref="MfaPendingGuardFilter" /> is what keeps a
     ///     challenge token from working anywhere else (FR-2F-10) — it never applies here, since this
     ///     action never reads the challenge token as a bearer credential in the first place.
     /// </remarks>
@@ -358,11 +402,12 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
     ///     the authorization matrix grants disabling two-factor authentication to all three person
     ///     roles and withholds it from anonymous callers, which authentication alone already enforces.
-    ///     AF-39a (404, not active) and AF-39b/AF-39c (401, wrong password / wrong second factor) are
-    ///     kept as the three separate flows the Use Case Specification Document defines them as —
-    ///     unlike UC-38's AF-38b/AF-38c, which the spec collapses into one message, UC-39 lists the
-    ///     password mismatch and the second-factor mismatch as distinct conditions, so they are not
-    ///     merged here.
+    ///     AF-39a answers 404 (not active). AF-39b and AF-39c — a wrong password and a wrong second
+    ///     factor — answer the same 401, "The password or code is incorrect.", so the answer never
+    ///     says which was wrong; a paused re-authentication budget (FR-AU-13) answers it too.
+    ///     <c>recoveryCode</c> is matched as <c>2fa/verify</c> matches it: <c>XXXX-XXXX-XXXX-XXXX</c>,
+    ///     with or without hyphens, with spaces, in any case, an O, I or L read as 0, 1 and 1, and
+    ///     the shorter <c>XXXX-XXXX</c> codes issued before still accepted (FR-2F-20).
     /// </remarks>
     [HttpPost("2fa/disable")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -382,7 +427,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     FR-2F-12), requiring a valid second factor — an app/email code or one of the caller's
     ///     remaining recovery codes — verified exactly as <see cref="VerifyTwoFactorAuth" /> verifies
     ///     one. On success, every existing <c>TWO_FACTOR_RECOVERY_CODE</c> row for the caller is
-    ///     removed, including any still unused, and replaced with ten new ones. The person acted on is
+    ///     removed, including any still unused, and replaced with ten new ones of the current
+    ///     <c>XXXX-XXXX-XXXX-XXXX</c> shape (FR-2F-20) — which is also how a person holding the shorter
+    ///     <c>XXXX-XXXX</c> codes issued before gets the stronger ones. The person acted on is
     ///     always the caller themselves — read from the bearer token, the same as
     ///     <see cref="EnableTwoFactorAuth" />.
     /// </summary>
@@ -390,8 +437,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     No <c>RoleRequirement</c>, for the same reason <see cref="EnableTwoFactorAuth" /> has none:
     ///     the authorization matrix grants regenerating recovery codes to all three person roles and
     ///     withholds it from anonymous callers, which authentication alone already enforces. AF-40a
-    ///     (404, not active) and AF-40b (401, second factor invalid) reuse UC-39's "not active" and
-    ///     UC-38's "factor invalid" messages rather than inventing new ones.
+    ///     (404, not active) reuses UC-39's "not active" message; AF-40b (401, second factor invalid,
+    ///     or a paused re-authentication budget, FR-AU-13) answers "The password or code is
+    ///     incorrect.", as every re-authentication does.
     /// </remarks>
     [HttpPost("2fa/recovery-codes/regenerate")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

@@ -79,9 +79,9 @@ public class JwtTwoFactorChallengeTokenIssuer(
     }
 
     /// <summary>
-    ///     Signature and lifetime, against every configured key when there are any — the same rule
-    ///     the bearer-token validator applies — so rotating the signing secret does not void the
-    ///     challenges already in flight while it keeps every full token issued beside them valid.
+    ///     Signature (HS256 only) and lifetime, against every configured key when there are any — the
+    ///     same rule the bearer-token validator applies — so rotating the signing secret does not void
+    ///     the challenges already in flight while it keeps every full token issued beside them valid.
     /// </summary>
     private Task<bool> IsSignedAndLiveAsync(string token) =>
         configuration.Keys.Count > 0
@@ -93,6 +93,13 @@ public class JwtTwoFactorChallengeTokenIssuer(
         // Signature and lifetime (JwtHandler.IsTokenValidAsync validates both) — AF-38a's "expired
         // or invalid".
         if (string.IsNullOrWhiteSpace(token) || !await IsSignedAndLiveAsync(token))
+        {
+            return null;
+        }
+
+        // TB-5: issued by Heimdall, for the challenge audience alone. The signature proves only that
+        // the key signed it, and the key is not Heimdall's alone.
+        if (!TokenOrigin.IsIssuedFor(token, configuration.Issuer, audiences.TwoFactorChallenge))
         {
             return null;
         }

@@ -3,12 +3,15 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for PasswordRecoveryProcessor (UC-12 steps 2 to 4, run after the caller has been
 // answered). The caller's answer is the same on every path and is the handler's business; what is
-// left to test here is whether a token is issued, and for whom. AF-12a is the case where none is.
+// left to test here is whether a token is issued, and for whom. AF-12a is the case where none is, and
+// so is a request inside the per-person cooldown (FR-PR-07): one reset link per person per
+// HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS, however many anonymous requests name the address.
 public class PasswordRecoveryProcessorTests
 {
     private static Scope Scope(long id, bool isDeleted = false) => new()
@@ -75,9 +78,30 @@ public class PasswordRecoveryProcessorTests
         }
     }
 
+    private static readonly PasswordResetOptions ResetOptions = new() { TokenLifetime = TimeSpan.FromHours(1) };
+
     private static PasswordRecoveryProcessor ProcessorFor(
-        AsyncFakeRepository<Person, long> persons, IPasswordResetService passwordReset) =>
-        new(persons, passwordReset);
+        AsyncFakeRepository<Person, long> persons,
+        IPasswordResetService passwordReset,
+        AsyncFakeRepository<PasswordResetToken, long>? tokens = null,
+        TimeSpan? cooldown = null) =>
+        new(persons, tokens ?? new AsyncFakeRepository<PasswordResetToken, long>(), passwordReset, ResetOptions,
+            new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) },
+            NullLogger<PasswordRecoveryProcessor>.Instance);
+
+    /// <summary>A reset token for <paramref name="person" /> issued <paramref name="age" /> ago.</summary>
+    private static async Task<AsyncFakeRepository<PasswordResetToken, long>> TokensIssuedAsync(Person person, TimeSpan age)
+    {
+        var tokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        await tokens.CreateAsync(new PasswordResetToken
+        {
+            PersonId = person.Id,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTime.UtcNow + ResetOptions.TokenLifetime - age
+        });
+
+        return tokens;
+    }
 
     private static PasswordRecoveryRequest Request(string email, Guid? scopeId = null) => new(email, scopeId);
 
@@ -266,5 +290,72 @@ public class PasswordRecoveryProcessorTests
 
         // Then
         Assert.Null(passwordReset.Recipient);
+    }
+
+    [UnitFact]
+    public async Task GivenAResetLinkIssuedInsideTheCooldown_WhenProcessingRecovery_ThenNoneIsIssued()
+    {
+        // Given a link issued a minute ago — by an earlier request, or by UC-52
+        var person = ScopeAdmin(10, "admin@test.local", Scope(1));
+        var persons = await PersonsWith(person);
+        var tokens = await TokensIssuedAsync(person, TimeSpan.FromMinutes(1));
+        var passwordReset = new RecordingResetService();
+
+        // When
+        await ProcessorFor(persons, passwordReset, tokens).ProcessAsync(Request("admin@test.local"));
+
+        // Then — skipped silently: the caller was answered long ago, and the link already sent works
+        Assert.Null(passwordReset.Recipient);
+    }
+
+    [UnitFact]
+    public async Task GivenTheLastResetLinkWasIssuedBeforeTheCooldown_WhenProcessingRecovery_ThenANewOneIsIssued()
+    {
+        // Given
+        var person = ScopeAdmin(10, "admin@test.local", Scope(1));
+        var persons = await PersonsWith(person);
+        var tokens = await TokensIssuedAsync(person, TimeSpan.FromMinutes(6));
+        var passwordReset = new RecordingResetService();
+
+        // When
+        await ProcessorFor(persons, passwordReset, tokens).ProcessAsync(Request("admin@test.local"));
+
+        // Then
+        Assert.Same(person, passwordReset.Recipient);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherPersonsResetLinkIssuedInsideTheCooldown_WhenProcessingRecovery_ThenOneIsIssued()
+    {
+        // Given — the cooldown is per person
+        var person = ScopeAdmin(10, "admin@test.local", Scope(1));
+        var other = ScopeAdmin(11, "other@test.local", Scope(2));
+        var persons = await PersonsWith(person, other);
+        var tokens = await TokensIssuedAsync(other, TimeSpan.FromMinutes(1));
+        var passwordReset = new RecordingResetService();
+
+        // When
+        await ProcessorFor(persons, passwordReset, tokens).ProcessAsync(Request("admin@test.local"));
+
+        // Then
+        Assert.Same(person, passwordReset.Recipient);
+    }
+
+    [UnitFact]
+    public async Task GivenACooldownLongerThanTheLinkLifetime_WhenTheLastLinkHasExpired_ThenANewOneIsIssued()
+    {
+        // Given a two-hour cooldown and a one-hour link issued 61 minutes ago — dead, so holding the
+        // cooldown to its full length would leave the owner with no working link at all
+        var person = ScopeAdmin(10, "admin@test.local", Scope(1));
+        var persons = await PersonsWith(person);
+        var tokens = await TokensIssuedAsync(person, TimeSpan.FromMinutes(61));
+        var passwordReset = new RecordingResetService();
+
+        // When
+        await ProcessorFor(persons, passwordReset, tokens, TimeSpan.FromHours(2))
+            .ProcessAsync(Request("admin@test.local"));
+
+        // Then — the cooldown is clamped to the link's lifetime
+        Assert.Same(person, passwordReset.Recipient);
     }
 }

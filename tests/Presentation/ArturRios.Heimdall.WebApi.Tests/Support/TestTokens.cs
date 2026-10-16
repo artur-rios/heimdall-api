@@ -86,6 +86,20 @@ public static class TestTokens
     public static string WithAudience(IdentityUser user, string audience) => Create(user, audience: audience);
 
     /// <summary>
+    ///     Builds a token for <paramref name="user" /> under an issuer and an audience of the test's
+    ///     choosing, signed with the host's real key — for tests proving that a correctly signed token
+    ///     Heimdall did not issue, or did not issue for itself, is refused (Threat Model TB-5).
+    /// </summary>
+    public static string WithOrigin(IdentityUser user, string issuer, string audience) =>
+        Create(user, audience: audience, issuer: issuer);
+
+    /// <summary>
+    ///     The issuer the host under test issues every token under, as <see cref="PostgresFixture" />
+    ///     publishes it.
+    /// </summary>
+    public static string Issuer => Environment.GetEnvironmentVariable(IssuerVariable) ?? string.Empty;
+
+    /// <summary>
     ///     The audiences the host under test issues person tokens under, derived from the person
     ///     audience <see cref="PostgresFixture" /> publishes, as the host derives them.
     /// </summary>
@@ -123,11 +137,12 @@ public static class TestTokens
         return command.ExecuteScalar() as Guid?;
     }
 
-    private static string Create(IdentityUser user, TimeSpan? lifetime = null, string? audience = null)
+    private static string Create(
+        IdentityUser user, TimeSpan? lifetime = null, string? audience = null, string? issuer = null)
     {
         var configuration = new JwtConfiguration(
             lifetime?.TotalSeconds ?? 3600,
-            Environment.GetEnvironmentVariable(IssuerVariable) ?? string.Empty,
+            issuer ?? Issuer,
             audience ?? Audiences.Person,
             Environment.GetEnvironmentVariable(SecretVariable) ?? string.Empty,
             new IdentityUserMapper(Audiences).ToClaims(user));

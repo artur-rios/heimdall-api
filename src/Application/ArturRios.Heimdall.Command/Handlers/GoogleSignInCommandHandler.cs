@@ -19,10 +19,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the <c>User</c> role.
 /// </summary>
 /// <remarks>
-///     The endpoint is anonymous, so it is careful about what a rejection reveals: AF-25a and AF-25d
-///     share <see cref="AuthMessages.GoogleAuthenticationFailed" /> and AF-25b answers alike for a
-///     missing, deleted, and disabled scope. AF-25c is named separately — the caller has proved the
-///     address is theirs, so being told it is taken tells them only about themselves.
+///     The endpoint is anonymous, so it is careful about what a rejection reveals: AF-25a, AF-25d
+///     and AF-25g share <see cref="AuthMessages.GoogleAuthenticationFailed" /> and AF-25b answers
+///     alike for a missing, deleted, and disabled scope. AF-25c is named separately — the caller has
+///     proved the address is theirs, so being told it is taken tells them only about themselves —
+///     and that proof is why AF-25f comes first: a token whose address Google does not vouch for is
+///     refused before the address is compared with anything.
 /// </remarks>
 public class GoogleSignInCommandHandler(
     IGoogleIdTokenVerifier tokenVerifier,
@@ -44,6 +46,16 @@ public class GoogleSignInCommandHandler(
         var payload = await tokenVerifier.VerifyAsync(command.IdToken);
 
         if (payload is null)
+        {
+            return output.WithError(AuthMessages.GoogleAuthenticationFailed);
+        }
+
+        // AF-25g (FR-GO-20): a caller that names a nonce is owed a token issued for its own sign-in
+        // attempt, so one carrying another nonce, or none, is refused as an unverifiable token is.
+        // Ordinal: the nonce is an opaque value the client chose. A request without one compares
+        // nothing; the server issued no nonce, so this binds the client's attempt, not the token.
+        if (!string.IsNullOrEmpty(command.Nonce) &&
+            !string.Equals(payload.Nonce, command.Nonce, StringComparison.Ordinal))
         {
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }
@@ -173,8 +185,8 @@ public class GoogleSignInCommandHandler(
 
     /// <summary>
     ///     UC-25 step 6 (FR-GO-09): first sign-in with this Google account in this scope, so the
-    ///     Google User is created from the verified claims (FR-GO-05) after the address is confirmed
-    ///     free (AF-25c).
+    ///     Google User is created from the verified claims (FR-GO-05) once Google vouches for the
+    ///     address (AF-25f) and it is confirmed free (AF-25c).
     /// </summary>
     /// <returns>
     ///     The created Google User, or the failure output to return instead. A tuple rather than an
@@ -185,6 +197,14 @@ public class GoogleSignInCommandHandler(
         SignUpAsync(
             GoogleIdTokenPayload payload, Scope scope, DataOutput<GoogleSignInCommandOutput?> output)
     {
+        // AF-25f (FR-GO-07): only an address Google vouches for may take a place in the scope. An
+        // absent claim proves nothing, so it is refused with a false one. First, so that a token for
+        // an unproven address cannot ask whether the address is taken either.
+        if (payload.EmailVerified is not true)
+        {
+            return (null, output.WithError(AuthMessages.GoogleEmailNotVerified));
+        }
+
         var email = payload.Email.ToLower();
 
         // AF-25c (FR-GO-07): the address must be free within the scope, considered jointly with the
@@ -216,16 +236,14 @@ public class GoogleSignInCommandHandler(
 
         // FR-GO-05/06: every field comes from the verified token, and the row is bound to the one
         // scope the sign-in was initiated in. Name and picture are optional on the token — a caller
-        // who granted only the email scope still gets an account, with the fields left empty. An
-        // absent email_verified claim becomes false: the column is not nullable, and there is
-        // nothing stored yet to preserve, so a brand-new row starts unverified — the value it would
-        // have held before FR-GO-19 existed.
+        // who granted only the email scope still gets an account, with the fields left empty. The
+        // address is verified: AF-25f admitted nothing else.
         var newGoogleUser = new GoogleUser
         {
             GoogleId = payload.Subject,
             Name = payload.Name ?? string.Empty,
             Email = payload.Email,
-            EmailVerified = payload.EmailVerified ?? false,
+            EmailVerified = true,
             ProfilePictureUrl = payload.PictureUrl,
             ScopeId = scope.Id
         };

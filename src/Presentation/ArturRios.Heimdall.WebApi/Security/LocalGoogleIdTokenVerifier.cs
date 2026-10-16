@@ -8,7 +8,7 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// <summary>
 ///     A <see cref="IGoogleIdTokenVerifier" /> that validates ID tokens signed with a locally held
 ///     secret instead of by Google, so the functional suite can exercise UC-25 end-to-end without
-///     reaching the network. Reads the same five claims the real verifier does.
+///     reaching the network. Reads the same claims the real verifier does.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -84,7 +84,8 @@ public class LocalGoogleIdTokenVerifier(
             email,
             EmailVerified(result),
             Claim(result, "name"),
-            Claim(result, "picture"));
+            Claim(result, "picture"),
+            Claim(result, "nonce"));
     }
 
     /// <summary>

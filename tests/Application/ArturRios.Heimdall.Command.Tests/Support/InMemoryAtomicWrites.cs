@@ -13,6 +13,19 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 {
     public static readonly InMemoryAtomicWrites Instance = new();
 
+    /// <summary>
+    ///     Called with the person as <see cref="TrySetPasswordAsync" /> is about to write their new
+    ///     password, so a test can see what the row held at that moment.
+    /// </summary>
+    public Action<Person>? OnPasswordWrite { get; init; }
+
+    /// <summary>
+    ///     Called with the person before <see cref="TrySetPasswordAsync" /> or
+    ///     <see cref="TryMarkEmailVerifiedAsync" /> evaluates its condition, so a test can land a
+    ///     change on the row between the handler's own checks and the write.
+    /// </summary>
+    public Action<Person>? BeforeConditionalWrite { get; init; }
+
     /// <summary>How many pending-registration guesses have been charged through this instance.</summary>
     public int PendingGuessCharges { get; private set; }
 
@@ -56,6 +69,106 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     {
         person.FailedLoginAttempts = 0;
         person.LockedOutUntil = null;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TryReserveSecondFactorAttemptAsync(
+        Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil)
+    {
+        var stuck = person.FailedSecondFactorAttempts >= maxAttempts &&
+                    (person.SecondFactorLockedOutUntil is null || person.SecondFactorLockedOutUntil <= now);
+
+        if (!stuck && (person.FailedSecondFactorAttempts >= maxAttempts || person.SecondFactorLockedOutUntil > now))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (person.FailedSecondFactorAttempts + 1 >= maxAttempts)
+        {
+            person.SecondFactorLockedOutUntil = lockedOutUntil[Math.Min(person.SecondFactorLockouts, lockedOutUntil.Count - 1)];
+            person.SecondFactorLockouts++;
+            person.FailedSecondFactorAttempts = 0;
+        }
+        else
+        {
+            person.FailedSecondFactorAttempts++;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task ClearSecondFactorAttemptsAsync(Person person)
+    {
+        person.FailedSecondFactorAttempts = 0;
+        person.SecondFactorLockedOutUntil = null;
+        person.SecondFactorLockouts = 0;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TryReserveReauthenticationAsync(
+        Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil)
+    {
+        if (person.ReauthenticationPausedUntil > now)
+        {
+            return Task.FromResult(false);
+        }
+
+        var windowOpen = person.ReauthenticationWindowStartedAt > windowStartedBy;
+        var failures = windowOpen ? person.FailedReauthenticationAttempts + 1 : 1;
+
+        if (failures >= maxFailures)
+        {
+            person.ReauthenticationPausedUntil = pausedUntil;
+            person.FailedReauthenticationAttempts = 0;
+            person.ReauthenticationWindowStartedAt = null;
+        }
+        else
+        {
+            person.FailedReauthenticationAttempts = failures;
+            person.ReauthenticationWindowStartedAt = windowOpen ? person.ReauthenticationWindowStartedAt : now;
+        }
+
+        return Task.FromResult(true);
+    }
+
+    public Task ClearReauthenticationAttemptsAsync(Person person)
+    {
+        person.FailedReauthenticationAttempts = 0;
+        person.ReauthenticationWindowStartedAt = null;
+        person.ReauthenticationPausedUntil = null;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<AccountEmailReservation> TryReserveAccountEmailAsync(
+        Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt)
+    {
+        var windowOpen = person.AccountEmailWindowEndsAt > now;
+
+        if (windowOpen && person.AccountEmailsSent >= maxPerWindow)
+        {
+            return Task.FromResult(AccountEmailReservation.DailyLimitReached);
+        }
+
+        if (person.AccountEmailLastSentAt > lastSentBefore)
+        {
+            return Task.FromResult(AccountEmailReservation.CoolingDown);
+        }
+
+        person.AccountEmailsSent = windowOpen ? person.AccountEmailsSent + 1 : 1;
+        person.AccountEmailWindowEndsAt = windowOpen ? person.AccountEmailWindowEndsAt : windowEndsAt;
+        person.AccountEmailLastSentAt = now;
+
+        return Task.FromResult(AccountEmailReservation.Reserved);
+    }
+
+    public Task ClearAccountEmailsAsync(Person person)
+    {
+        person.AccountEmailsSent = 0;
+        person.AccountEmailWindowEndsAt = null;
+        person.AccountEmailLastSentAt = null;
 
         return Task.CompletedTask;
     }
@@ -198,6 +311,55 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         return Task.FromResult(true);
     }
+
+    public Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (!RedeemableAsRead(person))
+        {
+            return Task.FromResult(false);
+        }
+
+        OnPasswordWrite?.Invoke(person);
+
+        person.PasswordHash = passwordHash;
+        person.Salt = salt;
+        person.SecurityStamp = Guid.NewGuid();
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task ClearPasswordAsync(Person person)
+    {
+        person.PasswordHash = [];
+        person.Salt = [];
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (!RedeemableAsRead(person))
+        {
+            return Task.FromResult(false);
+        }
+
+        person.EmailVerified = true;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    /// <summary>
+    ///     The state half of the condition. The instance is the row here, so the address it was read
+    ///     with is always the one it holds; only the functional suite can change it in between.
+    /// </summary>
+    private static bool RedeemableAsRead(Person person) =>
+        !person.IsDeleted && person.ProcessingRestrictedAt is null && person.AnonymisedAt is null;
 
     public Task<bool> TryStampCredentialUseAsync(ApplicationCredential credential, DateTime now)
     {

@@ -22,7 +22,13 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     Creates a <c>ScopeAdmin</c> or <c>SystemAdmin</c> person with no scope (UC-06 path b).
     ///     Restricted to System Admins (AF-06c).
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
+    /// </remarks>
     [HttpPost("persons")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateAdmin(
         [FromBody] CreateAdminCommand command)
@@ -37,7 +43,13 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     Creates a <c>User</c> within a scope (UC-06 path a). A System Admin or an owner of the scope
     ///     may call it; the ownership check (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/persons")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateUser(
         Guid scopeId, [FromBody] CreateUserCommand command)
@@ -56,7 +68,13 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     c, FR-SC-12). A System Admin or an owner of the scope may call it; the ownership check
     ///     (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
+    /// <remarks>
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
@@ -117,13 +135,25 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to
     ///     any authenticated actor because a User may update their own record; the per-actor rule and
-    ///     the role-change restriction (AF-08c) are enforced by the handler.
+    ///     the role-change restriction (AF-08c) are enforced by the handler. The response's
+    ///     <c>ownedScopeIds</c> follows FR-PE-19, as <c>GET /api/persons/{id}</c> does.
     /// </summary>
     /// <remarks>
     ///     A caller changing their own email presents <c>currentPassword</c>, and <c>twoFactorCode</c>
-    ///     when their second factor is active (FR-PE-14), so this action verifies a password like the
+    ///     when their second factor is active (FR-PE-14) — six digits for an authenticator-app code,
+    ///     or a recovery code, matched as <c>2fa/verify</c> matches one (<c>XXXX-XXXX-XXXX-XXXX</c>,
+    ///     hyphens, spaces and case ignored, the shorter <c>XXXX-XXXX</c> codes still accepted,
+    ///     FR-2F-20) — so this action verifies a password like the
     ///     credential endpoints do, and sits under their rate limit (NFR-18), as every
-    ///     password-verifying endpoint does.
+    ///     password-verifying endpoint does. An own email change mails the previous address, so it is
+    ///     charged to the person's account-email budget once the credentials are accepted: 429 "An
+    ///     email of this kind was sent to you recently. Try again in a few minutes." inside the
+    ///     cooldown, 429 "You have reached the limit for account emails. Try again later." once
+    ///     the window's five are spent (AF-08j), both with <c>Retry-After</c>; nothing changes then, and
+    ///     no recovery or email code is spent (an accepted authenticator code's time step is recorded,
+    ///     as for any accepted code). While the caller's email sign-in method is enabled, an own
+    ///     email change answers 409 "Turn off the email sign-in method before changing your email
+    ///     address." (AF-08k), once the credentials are accepted.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
@@ -201,7 +231,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Retrieves a single person by their public identifier (UC-07, FR-PE-03). Open to any
     ///     authenticated actor; the per-actor visibility rule (AF-07b) is data-dependent and is
-    ///     therefore enforced by the handler.
+    ///     therefore enforced by the handler. <c>ownedScopeIds</c> lists every scope the person owns
+    ///     for a System Admin and for the person themselves; a Scope Admin reading somebody else sees
+    ///     only the scopes they own too (FR-PE-19).
     /// </summary>
     [HttpGet("persons/{id:guid}")]
     public async Task<ActionResult<DataOutput<PersonOutput?>>> GetById(
@@ -218,7 +250,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Lists the <c>User</c> persons of a scope (UC-07, FR-PE-04). A System Admin or an owner of
     ///     the scope may call it; the ownership check (AF-07b) is enforced by the handler from the
-    ///     acting user.
+    ///     acting user. <c>ownedScopeIds</c> is trimmed for a Scope Admin as on
+    ///     <c>GET /api/persons/{id}</c> (FR-PE-19).
     /// </summary>
     [HttpGet("scopes/{scopeId:guid}/persons")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
@@ -237,7 +270,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Lists the owners of a scope (UC-07, FR-PE-04). A System Admin or an
     ///     owner of the scope may call it; the ownership check (AF-07b) is enforced by the handler
-    ///     from the acting user.
+    ///     from the acting user. For a Scope Admin each owner's <c>ownedScopeIds</c> lists only the
+    ///     scopes the caller owns too, this one among them; a System Admin sees them all (FR-PE-19).
     /// </summary>
     [HttpGet("scopes/{scopeId:guid}/owners")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]

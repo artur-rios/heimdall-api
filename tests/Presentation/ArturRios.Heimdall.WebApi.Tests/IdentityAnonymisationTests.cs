@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Data.Configuration;
+using ArturRios.Heimdall.Data.Persistence;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Retention;
@@ -52,7 +53,8 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
             passwordResetTokens,
             emailVerificationTokens,
             twoFactorAuths,
-            Retention);
+            Retention,
+            new AtomicWrites(context));
     }
 
     private static Person DeletedPerson(DateTime deletedAt, DeletionKinds kind) => new()
@@ -192,5 +194,75 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         // The stamp is what makes the pass idempotent: a second run must not rewrite the row
         Assert.Equal(firstPass, afterSecondPass.AnonymisedAt);
+    }
+
+    [FunctionalFact]
+    public async Task GivenADuePersonWithFactorBudgetsSpent_WhenAnonymising_ThenTheDatabaseHoldsNoCounters()
+    {
+        // Given — written by the targeted writes only, so the anonymising save cannot clear them
+        // on its own (NFR-20)
+        await using var context = fixture.CreateContext();
+        var person = DeletedPerson(DateTime.UtcNow.AddDays(-120), DeletionKinds.Administrative);
+        person.FailedSecondFactorAttempts = 4;
+        person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddHours(1);
+        person.SecondFactorLockouts = 2;
+        person.FailedReauthenticationAttempts = 3;
+        person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-5);
+        person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(5);
+        context.Persons.Add(person);
+        await context.SaveChangesAsync();
+
+        // When
+        var output = await Handler(context).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+
+        await using var verification = fixture.CreateContext();
+        var stored = await verification.Persons.SingleAsync(x => x.Id == person.Id);
+
+        Assert.NotNull(stored.AnonymisedAt);
+        Assert.Equal(0, stored.FailedSecondFactorAttempts);
+        Assert.Null(stored.SecondFactorLockedOutUntil);
+        Assert.Equal(0, stored.SecondFactorLockouts);
+        Assert.Equal(0, stored.FailedReauthenticationAttempts);
+        Assert.Null(stored.ReauthenticationWindowStartedAt);
+        Assert.Null(stored.ReauthenticationPausedUntil);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestoredIdentity_WhenErasureIsReapplied_ThenItsPasswordHashAndSaltAreEmptiedInTheDatabase()
+    {
+        // Given a live person a restore brought back. The password columns are written only by
+        // targeted writes once the row exists (FR-PR-08), so the reconciliation must clear them so
+        await using var context = fixture.CreateContext();
+        var restored = DeletedPerson(DateTime.UtcNow, DeletionKinds.SubjectRequested);
+        restored.IsDeleted = false;
+        restored.DeletedAt = null;
+        context.Persons.Add(restored);
+        await context.SaveChangesAsync();
+
+        var persons = new EfRepository<Person, long>(context);
+        var googleUsers = new EfRepository<GoogleUser, long>(context);
+        var handler = new ReapplyErasuresCommandHandler(
+            persons, persons, googleUsers, googleUsers,
+            new EfRepository<PasswordResetToken, long>(context),
+            new EfRepository<EmailVerificationToken, long>(context),
+            new EfRepository<TwoFactorAuth, long>(context),
+            new AtomicWrites(context));
+
+        // When
+        var output = await handler.HandleAsync(new ReapplyErasuresCommand
+        {
+            SubjectIds = [restored.PublicId], ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        });
+
+        // Then
+        Assert.True(output.Success);
+        await using var verification = fixture.CreateContext();
+        var stored = await verification.Persons.SingleAsync(x => x.Id == restored.Id);
+        Assert.NotNull(stored.AnonymisedAt);
+        Assert.Empty(stored.PasswordHash);
+        Assert.Empty(stored.Salt);
     }
 }

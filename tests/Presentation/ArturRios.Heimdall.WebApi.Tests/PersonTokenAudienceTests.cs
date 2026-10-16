@@ -205,6 +205,72 @@ public class PersonTokenAudienceTests
         Assert.Null(principal);
     }
 
+    [UnitTheory]
+    [InlineData("another-service", "heimdall-unit.2fa-challenge")]
+    [InlineData(Issuer, "another-service")]
+    public async Task GivenAChallengeFromAnotherIssuerOrAudience_WhenValidatedForVerification_ThenItIsRefused(
+        string issuer, string audience)
+    {
+        // Given — a correctly signed challenge-shaped token that Heimdall did not issue for itself (TB-5)
+        var configuration = Configuration() with
+        {
+            Issuer = issuer,
+            Audience = audience,
+            Claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+            {
+                MfaPending = true, ChallengeId = Guid.NewGuid()
+            })
+        };
+        var crafted = new JwtHandler().CreateToken(configuration);
+
+        // When
+        var principal = await ChallengeIssuer().ValidateAsync(crafted);
+
+        // Then
+        Assert.Null(principal);
+    }
+
+    [UnitTheory]
+    [InlineData(SecurityAlgorithms.HmacSha256, true)]
+    [InlineData(SecurityAlgorithms.HmacSha384, false)]
+    [InlineData(SecurityAlgorithms.HmacSha512, false)]
+    public async Task GivenAChallengeUnderAnHmacAlgorithm_WhenValidatedForVerification_ThenOnlyHs256IsAccepted(
+        string algorithm, bool accepted)
+    {
+        // Given — the challenge's issuer, audience and claims with the right key, signed under each
+        // algorithm from one descriptor, so only the algorithm differs. The key is long enough for HS512.
+        const string longSecret = "unit-tests-person-token-signing-secret-long-enough-for-hs512-0123456789";
+        var configuration = new JwtConfiguration(3600, Issuer, PersonAudience, longSecret, [])
+        {
+            Keys = [new JwtKey("current", longSecret)]
+        };
+        var reader = new JwtTwoFactorChallengeTokenIssuer(configuration, Audiences, new JwtHandler(), Mapper);
+        var identity = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+        {
+            MfaPending = true, ChallengeId = Guid.NewGuid(), SecurityStamp = Guid.NewGuid()
+        };
+        var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = Audiences.TwoFactorChallenge,
+            Claims = Mapper.ToClaims(identity).ToDictionary(claim => claim.Key, object (claim) => claim.Value),
+            Expires = DateTime.UtcNow.AddMinutes(10),
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm)
+        });
+        Assert.Equal(algorithm, new JsonWebToken(token).Alg);
+
+        // When
+        var principal = await reader.ValidateAsync(token);
+
+        // Then
+        Assert.Equal(
+            accepted
+                ? new TwoFactorChallengePrincipal(identity.Id, identity.ChallengeId!.Value, identity.SecurityStamp)
+                : null,
+            principal);
+    }
+
     /// <summary>
     ///     The permission reader a System Admin's full token never touches, since they act within no
     ///     scope. Every member throws, so a read would fail the test rather than pass unnoticed.

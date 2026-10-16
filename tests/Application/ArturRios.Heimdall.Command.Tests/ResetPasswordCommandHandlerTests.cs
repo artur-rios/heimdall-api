@@ -15,9 +15,9 @@ using Moq;
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for ResetPasswordCommandHandler (UC-13). Cover the main flow, AF-13a (expired),
-// AF-13b (used), AF-13c (unknown), and AF-13d (invalid input), plus the two decisions the
-// specification leaves open: every live token the person holds is consumed, and a logically deleted
-// person's password is still replaced.
+// AF-13b (used), AF-13c (unknown), AF-13d (invalid input) and AF-13e (the account may no longer be
+// acted on, answered as AF-13c), plus the decision the specification leaves open: every live token
+// the person holds is consumed.
 //
 // The password is only ever observable through Hash.TextMatches, so that — not the byte array — is
 // what these assert: the new password verifies, the old one no longer does.
@@ -34,7 +34,7 @@ public class ResetPasswordCommandHandlerTests
         Person Person)
     {
         public ResetPasswordCommandHandler Handler(IValidator<ResetPasswordCommand>? validator = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, Persons, InMemoryAtomicWrites.Instance);
+            new(validator ?? PassingValidator(), Tokens, Tokens, InMemoryAtomicWrites.Instance);
     }
 
     private static IValidator<ResetPasswordCommand> PassingValidator()
@@ -317,12 +317,98 @@ public class ResetPasswordCommandHandlerTests
         Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
     }
 
-    [UnitFact]
-    public async Task GivenLogicallyDeletedPerson_WhenHandlingResetPassword_ThenPasswordIsStillReplaced()
+    /// <summary>
+    ///     Puts <paramref name="person" /> in one of the states UC-12's rule no longer admits
+    ///     (<see cref="PasswordRecoveryEligibility" />), as if it changed after the link was mailed.
+    /// </summary>
+    internal static void MakeIneligible(Person person, string state)
     {
-        // Given a deletion that landed between the email and the click. UC-13 defines no alternative
-        // flow for it, and the new password grants nothing: UC-11 refuses the login by AF-11c.
+        switch (state)
+        {
+            case "deleted":
+                person.IsDeleted = true;
+                break;
+            case "restricted":
+                person.ProcessingRestrictedAt = Now;
+                break;
+            case "anonymised":
+                person.AnonymisedAt = Now;
+                break;
+            case "user of a deleted scope":
+                person.RoleId = (long)Roles.User;
+                person.ScopeMembership = new ScopeUser
+                {
+                    ScopeId = 7, Scope = new Scope { Id = 7, Name = "gone", IsDeleted = true }
+                };
+                break;
+            case "scope admin without a live scope":
+                person.RoleId = (long)Roles.ScopeAdmin;
+                person.ScopeOwnerships =
+                [
+                    new ScopeOwner { ScopeId = 8, Scope = new Scope { Id = 8, Name = "gone", IsDeleted = true } }
+                ];
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(state), state, null);
+        }
+    }
+
+    [UnitTheory]
+    [InlineData("deleted")]
+    [InlineData("restricted")]
+    [InlineData("anonymised")]
+    [InlineData("user of a deleted scope")]
+    [InlineData("scope admin without a live scope")]
+    public async Task GivenAPersonNoLongerEligible_WhenHandlingResetPassword_ThenAnsweredAsAnUnknownTokenAndNothingChanges(
+        string state)
+    {
+        // Given a link mailed while the person was eligible, and an account change since (AF-13e)
+        var fixture = await FixtureAsync();
+        var token = await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
+        MakeIneligible(fixture.Person, state);
+        var stamp = fixture.Person.SecurityStamp;
+        var updatedAt = fixture.Person.UpdatedAt;
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("live-token"));
+
+        // Then — the answer an unknown token gets, word for word (AF-13c)
+        var unknown = await fixture.Handler().HandleAsync(Command("never-issued"));
+        Assert.False(output.Success);
+        Assert.Equal(unknown.Errors, output.Errors);
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+
+        // Then — the record and the token are as they were (NFR-24)
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
+        Assert.Equal(updatedAt, fixture.Person.UpdatedAt);
+        Assert.False(token.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenAnExpiredTokenOfAPersonNoLongerEligible_WhenHandlingResetPassword_ThenAnsweredAsAnUnknownToken()
+    {
+        // Given — the account is checked before the token's own state, so it says nothing more
         var fixture = await FixtureAsync(isDeleted: true);
+        await TokenForAsync(fixture.Tokens, fixture.Person, "old-token", expiresAt: Now.AddMinutes(-5));
+
+        // When
+        var output = await fixture.Handler().HandleAsync(Command("old-token"));
+
+        // Then
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAUserOfALiveScope_WhenHandlingResetPassword_ThenPasswordIsReplaced()
+    {
+        // Given the eligible counterpart of the scope cases above
+        var fixture = await FixtureAsync();
+        fixture.Person.RoleId = (long)Roles.User;
+        fixture.Person.ScopeMembership = new ScopeUser
+        {
+            ScopeId = 7, Scope = new Scope { Id = 7, Name = "live", IsDeleted = false }
+        };
         await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 
         // When
@@ -368,34 +454,55 @@ public class ResetPasswordCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
+    public async Task GivenLiveToken_WhenHandlingResetPassword_ThenTheStampIsReplacedByTheWriteThatSetsThePassword()
     {
-        // Given a writer that records the stamp a concurrent sign-in with the old password would have
-        // read while the new password was being saved
+        // Given writes that record the stamp as the new password is about to be written
         var fixture = await FixtureAsync();
         await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
         var original = fixture.Person.SecurityStamp;
-        Guid? duringSave = null;
+        Guid? beforeTheWrite = null;
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns((Person person, CancellationToken ct) =>
-            {
-                duringSave = person.SecurityStamp;
-                return fixture.Persons.UpdateAsync(person, ct);
-            });
+        var atomicWrites = new InMemoryAtomicWrites { OnPasswordWrite = person => beforeTheWrite = person.SecurityStamp };
 
         var handler = new ResetPasswordCommandHandler(
-            PassingValidator(), fixture.Tokens, fixture.Tokens, writer.Object, InMemoryAtomicWrites.Instance);
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
 
         // When
         var output = await handler.HandleAsync(Command("race-token"));
 
-        // Then — rotated before the save, and again after it
+        // Then — nothing rotated it before (FR-PR-08: a refused write leaves it alone), and the
+        // write that set the password replaced it (FR-AU-11)
         Assert.True(output.Success);
-        Assert.NotNull(duringSave);
-        Assert.NotEqual(original, duringSave);
-        Assert.NotEqual(duringSave, fixture.Person.SecurityStamp);
+        Assert.Equal(original, beforeTheWrite);
+        Assert.NotEqual(original, fixture.Person.SecurityStamp);
+    }
+
+    [UnitTheory]
+    [InlineData("deleted")]
+    [InlineData("restricted")]
+    [InlineData("anonymised")]
+    public async Task GivenAnAccountChangeLandingBeforeTheWrite_WhenHandlingResetPassword_ThenInvalidTokenAndThePersonIsUnchanged(
+        string state)
+    {
+        // Given the person eligible when the token is found, and changed before the write
+        var fixture = await FixtureAsync();
+        await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
+        var stamp = fixture.Person.SecurityStamp;
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person => MakeIneligible(person, state)
+        };
+
+        var handler = new ResetPasswordCommandHandler(
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
+
+        // When
+        var output = await handler.HandleAsync(Command("race-token"));
+
+        // Then — answered as AF-13e, and the record keeps its password and its stamp (NFR-24)
+        Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.Equal(stamp, fixture.Person.SecurityStamp);
     }
 }

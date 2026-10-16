@@ -331,7 +331,7 @@ Then fill it in. These are **required** — the API fails to start without them:
 | --- | --- |
 | `HEIMDALL_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
 | `HEIMDALL_DATA_DATABASETYPE` | `PostgreSql` |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret. Startup throws if it is unset — without it every authenticated request would fail inside the token validator with an opaque `IDX10703` |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret: at least 32 bytes, ASCII only. Startup throws if it is unset, shorter or holds another character, naming the variable and never the value |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | The `aud` of application tokens (UC-56). Startup throws if it is unset, or equal to `HEIMDALL_AUTH_TOKEN_AUDIENCE`: a distinct audience is what stops a consumer taking an application token for a person's. `docker-compose.yml` defaults it to `heimdall-applications` and the `docker/*.env.example` templates preset that value; the Web API's `Environments/.env` holds only a placeholder |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
 
@@ -341,12 +341,12 @@ The rest are optional and fall back to a default:
 | --- | --- |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (set only while rotating the signing secret) |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (set only while rotating the signing secret, to a value held to the same rules as the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | `600` (10 minutes) |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — at most one administrator-initiated verification or reset email per person per window; `0` turns it off |
+| `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five per day-long window); `0` turns the cooldown off |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |
@@ -541,6 +541,10 @@ and only then starts the API, which is what lets a container be pointed at an em
 API itself never migrates, and refuses to start while migrations are pending. Set
 `HEIMDALL_RUN_MIGRATIONS=false` to apply them out of band instead (`python scripts/migrations.py`),
 which is required if the environment ever runs more than one replica.
+
+The bundle migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set and with the API's
+own connection string otherwise. Set it to the schema owner's, and the API can run as a database
+role that owns nothing; the operations guide's "Database roles" has the grants.
 
 ### Metrics
 

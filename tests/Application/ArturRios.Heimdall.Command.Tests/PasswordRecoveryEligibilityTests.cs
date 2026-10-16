@@ -168,4 +168,18 @@ public class PasswordRecoveryEligibilityTests
         // Then
         Assert.Equal(RecoveryEligibility.CannotSignIn, eligibility);
     }
+
+    [UnitFact]
+    public void GivenAnAnonymisedRecordStillFlaggedLive_WhenEvaluated_ThenDeleted()
+    {
+        // Given — anonymisation does not touch IsDeleted, and the record belongs to nobody
+        var person = Person(Roles.SystemAdmin);
+        person.AnonymisedAt = DateTime.UtcNow;
+
+        // When
+        var eligibility = PasswordRecoveryEligibility.Of(person);
+
+        // Then
+        Assert.Equal(RecoveryEligibility.Deleted, eligibility);
+    }
 }

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -9,7 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Handlers;
@@ -20,8 +17,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the same <see cref="ITwoFactorFactorVerifier" /> <c>VerifyTwoFactorAuthCommandHandler</c>
 ///     (UC-38) and <c>DisableTwoFactorAuthCommandHandler</c> (UC-39) use (AF-40b), and — only once
 ///     that check passes — permanently removes every existing recovery code row for the
-///     configuration, including any still unused, and issues ten fresh ones, hashed the same way
-///     <c>ConfirmTwoFactorAuthCommandHandler</c> (UC-37) hashes the codes it issues.
+///     configuration, including any still unused, and issues ten fresh ones through
+///     <see cref="RecoveryCodes" />, as <c>ConfirmTwoFactorAuthCommandHandler</c> (UC-37) does.
 /// </summary>
 /// <remarks>
 ///     Per the Use Case Specification Document's closing note on UC-40: regeneration replaces the
@@ -40,6 +37,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         was in before the request, which is the only safe direction to fail in for a credential
 ///         of last resort.
 ///     </para>
+///     <para>
+///         A missing, wrong or already-spent factor answers the one re-authentication refusal
+///         (<c>AuthMessages.PasswordOrCodeIncorrect</c>, 401), and every attempt is charged to the
+///         account's re-authentication budget (<see cref="ReauthenticationBudget" />, FR-AU-13).
+///     </para>
 /// </remarks>
 public class RegenerateRecoveryCodesCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -50,9 +52,6 @@ public class RegenerateRecoveryCodesCommandHandler(
     ITwoFactorFactorVerifier factorVerifier)
     : ICommandHandlerAsync<RegenerateRecoveryCodesCommand, RegenerateRecoveryCodesCommandOutput>
 {
-    private const int RecoveryCodeCount = 10;
-    private const int RecoveryCodeSegmentLength = 4;
-
     public async Task<DataOutput<RegenerateRecoveryCodesCommandOutput?>> HandleAsync(
         RegenerateRecoveryCodesCommand command, CancellationToken cancellationToken = default)
     {
@@ -74,12 +73,17 @@ public class RegenerateRecoveryCodesCommandHandler(
             return output.WithError(TwoFactorMessages.NotActive);
         }
 
-        // UC-40 step 2 (AF-40b): the same second-factor check UC-38 and UC-39 make.
+        // FR-AU-13: charged to the re-authentication budget before the factor is compared. A paused
+        // budget still has it compared, and refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
+        // UC-40 step 2 (AF-40b): the same second-factor check UC-38 and UC-39 make, refused as every
+        // re-authentication is.
         var verification = await factorVerifier.VerifyAsync(twoFactorAuth, command.Code, command.RecoveryCode);
 
-        if (!verification.Matched)
+        if (!verification.Matched || !admitted)
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         // An email code is single-use wherever it is accepted (FR-2F-03): the one that authorized
@@ -91,14 +95,16 @@ public class RegenerateRecoveryCodesCommandHandler(
         if (verification.ConsumedEmailCode is { } consumedEmailCode &&
             !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         if (verification.ConsumedRecoveryCode is { } consumedRecoveryCode &&
             !await atomicWrites.TryConsumeRecoveryCodeAsync(consumedRecoveryCode, DateTime.UtcNow))
         {
-            return output.WithError(TwoFactorMessages.FactorInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // FR-AU-11: a new set of recovery codes is a new second factor, and revokes every token issued
         // before it, the caller's own included — the codes are usually regenerated because the old
@@ -113,14 +119,15 @@ public class RegenerateRecoveryCodesCommandHandler(
             .Select(x => x.Id)
             .ToListAsync();
 
-        // UC-40 steps 4-5 (FR-2F-12): ten fresh recovery codes, hashed at rest, returned once,
-        // written in one insert before the old set is removed — see the write-order note below.
-        var recoveryCodes = GenerateRecoveryCodes();
+        // UC-40 steps 4-5 (FR-2F-12, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
+        // once, written in one insert before the old set is removed — see the write-order note below.
+        // Always the current shape, so regenerating is also how a set issued before it is replaced.
+        var recoveryCodes = RecoveryCodes.Issue();
 
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = recoveryCode.CodeHash, Used = false
             }));
 
         if (!creation.Success)
@@ -139,44 +146,10 @@ public class RegenerateRecoveryCodesCommandHandler(
         }
 
         return output
-            .WithData(new RegenerateRecoveryCodesCommandOutput { RecoveryCodes = recoveryCodes })
+            .WithData(new RegenerateRecoveryCodesCommandOutput
+            {
+                RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+            })
             .WithMessage(TwoFactorMessages.RecoveryCodesRegenerated);
     }
-
-    /// <summary>
-    ///     Generates <see cref="RecoveryCodeCount" /> random, human-typeable recovery codes, formatted
-    ///     exactly as <c>ConfirmTwoFactorAuthCommandHandler</c> formats the ones it issues — two
-    ///     <see cref="RecoveryCodeSegmentLength" />-character uppercase alphanumeric segments separated
-    ///     by a hyphen (e.g. <c>"A1B2-C3D4"</c>) — so a regenerated code is indistinguishable in shape
-    ///     from one issued at confirmation (FR-2F-12).
-    /// </summary>
-    private static List<string> GenerateRecoveryCodes()
-    {
-        var codes = new List<string>(RecoveryCodeCount);
-
-        for (var i = 0; i < RecoveryCodeCount; i++)
-        {
-            var raw = CustomRandom.Text(new RandomStringOptions
-            {
-                Length = RecoveryCodeSegmentLength * 2,
-                IncludeDigits = true,
-                IncludeUppercase = true,
-                IncludeLowercase = false,
-                IncludeSpecialCharacters = false
-            });
-
-            codes.Add($"{raw[..RecoveryCodeSegmentLength]}-{raw[RecoveryCodeSegmentLength..]}");
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    ///     Hashes a recovery code for storage, identically to
-    ///     <c>ConfirmTwoFactorAuthCommandHandler.HashRecoveryCode</c> — see its remarks for why a
-    ///     plain SHA-256 digest, with no per-code salt column, is consistent with §4.10 of the System
-    ///     Requirements Document.
-    /// </summary>
-    private static byte[] HashRecoveryCode(string recoveryCode) =>
-        SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode));
 }

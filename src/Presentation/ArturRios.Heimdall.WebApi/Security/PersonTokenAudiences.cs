@@ -28,8 +28,9 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         too.
 ///     </para>
 ///     <para>
-///         <b>Inside Heimdall.</b> The bearer-token middleware checks no audience, so
-///         <see cref="IdentityUserMapper" /> holds each audience to its claim instead: a token is mapped
+///         <b>Inside Heimdall.</b> <see cref="PersonTokenValidator" /> admits a bearer token only
+///         under the configured issuer and one of these three audiences (<see cref="TokenOrigin" />),
+///         and <see cref="IdentityUserMapper" /> holds each audience to its claim: a token is mapped
 ///         only when its audience and its <c>mfaPending</c> and <c>subjectRightsOnly</c> claims agree.
 ///     </para>
 /// </remarks>

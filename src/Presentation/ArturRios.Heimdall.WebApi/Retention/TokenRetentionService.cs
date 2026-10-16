@@ -40,6 +40,8 @@ public class TokenRetentionService(
               $"{purged.PasswordResetTokensPurged} password reset, " +
               $"{purged.EmailVerificationTokensPurged} email verification, " +
               $"{purged.TwoFactorEmailCodesPurged} two-factor email, " +
-              $"{purged.PendingRegistrationsPurged} pending registration";
+              $"{purged.PendingRegistrationsPurged} pending registration, " +
+              $"{purged.ApplicationCredentialsPurged} application credential, " +
+              $"{purged.AttemptNoticeBudgetsPurged} attempt-notice budget";
     }
 }

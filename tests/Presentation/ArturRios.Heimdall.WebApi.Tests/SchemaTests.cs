@@ -18,6 +18,7 @@ public class SchemaTests(PostgresFixture fixture)
         [
             "application",
             "application_credential",
+            "attempt_notice_budget",
             "audit_log",
             "data_protection_keys",
             "email_verification_token",

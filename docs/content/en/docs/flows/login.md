@@ -179,10 +179,11 @@ logs all three.
 > alone obtains, for a full sign-in. Set `HEIMDALL_AUTH_TOKEN_AUDIENCE` (it defaults to empty), so
 > there is an audience to pin.
 
-Inside Heimdall the bearer-token middleware checks no audience, so `IdentityUserMapper` holds each
-token to its own: it maps a token only when its audience and its `mfaPending` and `subjectRightsOnly`
-claims agree, and refuses one that carries either claim under the wrong audience or one of the derived
-audiences without its claim.
+Inside Heimdall every bearer token must name `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer and exactly
+one of these three audiences (NFR-30); anything else is refused with `401` "Invalid token", as a bad
+signature is. `IdentityUserMapper` then holds each token to its own audience: it maps a token only
+when its audience and its `mfaPending` and `subjectRightsOnly` claims agree, and refuses one that
+carries either claim under the wrong audience or one of the derived audiences without its claim.
 
 ## The 2FA branch
 

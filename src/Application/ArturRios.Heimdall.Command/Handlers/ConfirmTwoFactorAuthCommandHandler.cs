@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -9,8 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
-using ArturRios.Util.Random;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Handlers;
@@ -42,6 +38,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         endpoint has been presented, whatever the rest of the request went on to do.
 ///     </para>
 ///     <para>
+///         <b>One refusal, one budget.</b> A missing or wrong code for either method answers the one
+///         re-authentication refusal (<c>AuthMessages.PasswordOrCodeIncorrect</c>, 401), and every
+///         confirmation is charged to the account's re-authentication budget
+///         (<see cref="ReauthenticationBudget" />, FR-AU-13), so a bearer token alone cannot guess
+///         the pending factor's codes without bound, nor learn which of the two codes was wrong.
+///     </para>
+///     <para>
 ///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
 ///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
 ///         <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten separate inserts. The
@@ -65,9 +68,6 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ITotpCodeVerifier totpCodeVerifier)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {
-    private const int RecoveryCodeCount = 10;
-    private const int RecoveryCodeSegmentLength = 4;
-
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
         ConfirmTwoFactorAuthCommand command, CancellationToken cancellationToken = default)
     {
@@ -83,7 +83,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
             ? null
             : await twoFactorReader.Query().FirstOrDefaultAsync(x => x.PersonId == person.Id);
 
-        if (twoFactorAuth is null)
+        if (person is null || twoFactorAuth is null)
         {
             return output.WithError(TwoFactorMessages.NoPendingSetup);
         }
@@ -94,12 +94,17 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.AlreadyActive);
         }
 
+        // FR-AU-13: the codes are a re-authentication like any other made under a bearer token, so
+        // the check is charged to the account's budget before anything is compared. A paused budget
+        // still has the codes compared, and refuses them whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
         // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
         // ITwoFactorFactorVerifier.
         if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
         {
-            return output.WithError(TwoFactorMessages.AppCodeInvalid);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         // AF-37c: the Email method's code, if the method was selected.
@@ -109,24 +114,38 @@ public class ConfirmTwoFactorAuthCommandHandler(
         {
             consumedEmailCode = await FindMatchingEmailCodeAsync(twoFactorAuth.Id, command.EmailCode);
 
-            // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write
-            // only one request can win, so two confirmations racing on the same code cannot both
-            // issue a set of recovery codes and activate.
-            if (consumedEmailCode is null || !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+            if (consumedEmailCode is null)
             {
-                return output.WithError(TwoFactorMessages.EmailCodeInvalid);
+                return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
             }
         }
+
+        // Only now is the pause decided, so that it answers as a wrong code does, and before the
+        // email code is spent, so a paused request leaves it for the account holder.
+        if (!admitted)
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
+        // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write only
+        // one request can win, so two confirmations racing on the same code cannot both issue a set
+        // of recovery codes and activate.
+        if (consumedEmailCode is not null && !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         // FR-AU-11: every token issued before the second factor was required is revoked — including
         // the one confirming it, so the caller signs in again, this time through UC-38. A token that
         // predates the factor proves only the password, which is what the factor guards against.
         // Before the writes that activate it, so a failure among them costs one extra sign-in at most.
-        await atomicWrites.RotateSecurityStampAsync(person!);
+        await atomicWrites.RotateSecurityStampAsync(person);
 
-        // UC-37 steps 4-5 (FR-2F-05): ten fresh recovery codes, hashed at rest, returned once —
-        // written before the activation below, per the write-order note in the remarks.
-        var recoveryCodes = GenerateRecoveryCodes();
+        // UC-37 steps 4-5 (FR-2F-05, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
+        // once — written before the activation below, per the write-order note in the remarks.
+        var recoveryCodes = RecoveryCodes.Issue();
 
         var issuance = await IssueRecoveryCodesAsync(twoFactorAuth.Id, recoveryCodes);
 
@@ -147,7 +166,10 @@ public class ConfirmTwoFactorAuthCommandHandler(
         }
 
         return output
-            .WithData(new ConfirmTwoFactorAuthCommandOutput { Enabled = true, RecoveryCodes = recoveryCodes })
+            .WithData(new ConfirmTwoFactorAuthCommandOutput
+            {
+                Enabled = true, RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+            })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
     }
 
@@ -163,9 +185,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
             emailCodeReader, atomicWrites, twoFactorAuthId, emailCode);
 
     /// <summary>
-    ///     Persists <paramref name="recoveryCodes" /> as the configuration's whole recovery code set,
-    ///     replacing anything already stored against it, in one insert. Returns the persistence errors,
-    ///     or <c>null</c> on success.
+    ///     Persists the digests of <paramref name="recoveryCodes" /> as the configuration's whole
+    ///     recovery code set, replacing anything already stored against it, in one insert. Returns the
+    ///     persistence errors, or <c>null</c> on success.
     /// </summary>
     /// <remarks>
     ///     The delete is what makes a retry after a failed attempt safe: a prior run that stored its
@@ -174,7 +196,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ///     same "old codes valid alongside new ones" UC-40 exists to prevent.
     /// </remarks>
     private async Task<IEnumerable<string>?> IssueRecoveryCodesAsync(
-        long twoFactorAuthId, IReadOnlyCollection<string> recoveryCodes)
+        long twoFactorAuthId, IReadOnlyCollection<IssuedRecoveryCode> recoveryCodes)
     {
         var supersededIds = await recoveryCodeReader.Query()
             .Where(x => x.TwoFactorAuthId == twoFactorAuthId)
@@ -194,45 +216,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         var creation = await recoveryCodeWriter.CreateRangeAsync(recoveryCodes.Select(recoveryCode =>
             new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuthId, CodeHash = HashRecoveryCode(recoveryCode), Used = false
+                TwoFactorAuthId = twoFactorAuthId, CodeHash = recoveryCode.CodeHash, Used = false
             }));
 
         return creation.Success ? null : creation.Errors;
     }
-
-    /// <summary>
-    ///     Generates <see cref="RecoveryCodeCount" /> random, human-typeable recovery codes, formatted
-    ///     as two <see cref="RecoveryCodeSegmentLength" />-character uppercase alphanumeric segments
-    ///     separated by a hyphen (e.g. <c>"A1B2-C3D4"</c>), for FR-2F-05.
-    /// </summary>
-    private static List<string> GenerateRecoveryCodes()
-    {
-        var codes = new List<string>(RecoveryCodeCount);
-
-        for (var i = 0; i < RecoveryCodeCount; i++)
-        {
-            var raw = CustomRandom.Text(new RandomStringOptions
-            {
-                Length = RecoveryCodeSegmentLength * 2,
-                IncludeDigits = true,
-                IncludeUppercase = true,
-                IncludeLowercase = false,
-                IncludeSpecialCharacters = false
-            });
-
-            codes.Add($"{raw[..RecoveryCodeSegmentLength]}-{raw[RecoveryCodeSegmentLength..]}");
-        }
-
-        return codes;
-    }
-
-    /// <summary>
-    ///     Hashes a recovery code for storage. §4.10 of the System Requirements Document documents no
-    ///     per-code salt column for <see cref="TwoFactorRecoveryCode" /> — unlike a user-chosen
-    ///     password, a recovery code is already a high-entropy random string, so a plain SHA-256 digest
-    ///     is a one-way function consistent with that schema without inventing a column the design
-    ///     never called for.
-    /// </summary>
-    private static byte[] HashRecoveryCode(string recoveryCode) =>
-        SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode));
 }

@@ -46,7 +46,10 @@ One service, `api`, built from the repository's [`Dockerfile`](https://github.co
   a plain executable, so the runtime image never needs the SDK or `dotnet-ef`.
 - The entrypoint applies pending migrations and only then starts the API — which is what lets a
   container be pointed at an empty database. Set `HEIMDALL_RUN_MIGRATIONS=false` to apply them out of
-  band instead; see [Operations](../operations/#migrations).
+  band instead; see [Operations](../operations/#migrations). With
+  `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` set, the bundle migrates as that connection's role — the
+  schema's owner — and the API runs as a role that owns nothing; see
+  [Database roles](../operations/#database-roles--th-18).
 - The container drops to a non-root user, writes logs to a named volume, and answers a health check
   on `/healthcheck` — Compose reports the container healthy only once the API answers.
 
@@ -137,7 +140,7 @@ master user's credentials. Open it and fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | The login from step 2 |
 | `DB_NAME` | `heimdall_local` |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment: at least 32 bytes of ASCII, or the API will not start (`openssl rand -base64 48`) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
 
@@ -278,30 +281,44 @@ sudo systemctl restart postgresql
 
 ### 2. Create each environment's database and login
 
-One PostgreSQL instance, one database **and one login** per environment, so that a development or
-homologation container — or a leaked development password — cannot reach production's data.
-Production keeps the database it has always had, `heimdall`:
+One PostgreSQL instance, one database **and its own logins** per environment, so that a development
+or homologation container — or a leaked development password — cannot reach production's data.
+Production keeps the database it has always had, `heimdall`.
+
+The supported setup runs the migrations as an owner role and the API as a role that owns nothing
+(NFR-29), so each environment has two logins. For a new environment:
 
 ```bash
-sudo -u postgres createuser --pwprompt heimdall_svc
-sudo -u postgres createdb --owner heimdall_svc heimdall
-
+sudo -u postgres createuser --pwprompt heimdall_development_owner
 sudo -u postgres createuser --pwprompt heimdall_development_svc
-sudo -u postgres createdb --owner heimdall_development_svc heimdall_development
+sudo -u postgres createdb --owner heimdall_development_owner heimdall_development
 
+sudo -u postgres createuser --pwprompt heimdall_homologation_owner
 sudo -u postgres createuser --pwprompt heimdall_homologation_svc
-sudo -u postgres createdb --owner heimdall_homologation_svc heimdall_homologation
+sudo -u postgres createdb --owner heimdall_homologation_owner heimdall_homologation
 ```
 
-Skip the pair production already has. Then, in `/etc/postgresql/<version>/main/pg_hba.conf`, one rule
-per pair for the Docker range, below the loopback rules — each login reaches its own database and no
+then apply the grants and the rest of the steps in
+[Operations, "Database roles"](../operations/#database-roles--th-18) ("A new deployment").
+Production's pair is `heimdall_owner` and `heimdall_svc`. An environment whose database belongs to
+the API's own login is moved to this setup with the steps in the same section ("Switching an
+existing deployment over"). Skip what an environment already has.
+
+Then, in `/etc/postgresql/<version>/main/pg_hba.conf`, one rule
+per login for the Docker range, below the loopback rules — each login reaches its own database and no
 other:
 
 ```
-host    heimdall                 heimdall_svc                 172.16.0.0/12    scram-sha-256
-host    heimdall_development     heimdall_development_svc     172.16.0.0/12    scram-sha-256
-host    heimdall_homologation    heimdall_homologation_svc    172.16.0.0/12    scram-sha-256
+host    heimdall                 heimdall_svc                   172.16.0.0/12    scram-sha-256
+host    heimdall                 heimdall_owner                 172.16.0.0/12    scram-sha-256
+host    heimdall_development     heimdall_development_svc       172.16.0.0/12    scram-sha-256
+host    heimdall_development     heimdall_development_owner     172.16.0.0/12    scram-sha-256
+host    heimdall_homologation    heimdall_homologation_svc      172.16.0.0/12    scram-sha-256
+host    heimdall_homologation    heimdall_homologation_owner    172.16.0.0/12    scram-sha-256
 ```
+
+The owner rules are needed only while the container migrates; an environment that migrates out of
+band gives its owner a local rule instead.
 
 `172.16.0.0/12` rather than one network's subnet: yggdrasil's `edge` and `telemetry` networks, and
 any network Docker creates later, are all allocated from it. `pg_hba.conf` needs only a reload:
@@ -346,8 +363,9 @@ Replace `example.com` with the real domain, then fill in at least:
 
 | Variable | Value |
 | --- | --- |
-| `DB_USER` / `DB_PASSWORD` | That environment's login from step 2 |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`) — fortuna-api in the same environment is given the same value |
+| `DB_USER` / `DB_PASSWORD` | That environment's runtime login (`…_svc`) from step 2 |
+| `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | Optional: the owner role's whole connection string, when the environment has one ([Database roles](../operations/#database-roles--th-18)) |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`), at least 32 bytes of ASCII or the API will not start — every service that validates Heimdall's tokens with this key is given the same value |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |
@@ -360,6 +378,7 @@ What the templates already set, and how the three differ:
 | `PUBLIC_HOST` | `heimdall-api-dev.example.com` | `heimdall-api-hml.example.com` | `heimdall-api.example.com` |
 | `UI_HOST` | `heimdall-dev.example.com` | `heimdall-hml.example.com` | `heimdall.example.com` |
 | `ASPNETCORE_ENVIRONMENT` | `Development` | `Staging` | `Production` |
+| `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | empty | empty | empty |
 | `DB_NAME` | `heimdall_development` | `heimdall_homologation` | `heimdall` |
 | `HEIMDALL_EMAIL_VERIFICATION_URL` | `https://heimdall-dev.example.com/verify-email` | `https://heimdall-hml.example.com/verify-email` | `https://heimdall.example.com/verify-email` |
 | `HEIMDALL_PASSWORD_RESET_URL` | `https://heimdall-dev.example.com/password-reset` | `https://heimdall-hml.example.com/password-reset` | `https://heimdall.example.com/password-reset` |
@@ -417,7 +436,8 @@ Production follows the steps above with `docker/production.env.example`, and dif
 
 - `ASPNETCORE_ENVIRONMENT=Production` — no Swagger, no developer exception page, no EF parameter
   logging, and the API **refuses to start** without `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` rather
-  than silently swallowing every e-mail it owes a user.
+  than silently swallowing every e-mail it owes a user. It never needs
+  `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS`.
 - It is always on: `scripts/ygg.sh env stop production` refuses unless forced.
 - It is deployed only from a release pull request whose checks have all passed, and a failed deploy
   rolls back to the previous production image and leaves the pull request open.
@@ -435,6 +455,9 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | --- | --- | --- |
 | `set DB_USER in the env file` at `up` | Compose interpolation found the variable empty | Fill it in — the `:?` markers in the Compose file fail loudly rather than starting a container that cannot connect |
 | Container restarts; log ends at `entrypoint: applying EF Core migrations...` | The bundle cannot reach PostgreSQL | Re-run the two probes above; the address in the error names which side is wrong |
+| Container restarts; log ends with `Environment variable 'HEIMDALL_AUTH_TOKEN_SECRET…' is … bytes` or `… holds characters outside ASCII` | A signing secret, current or previous, shorter than 32 bytes or with a character outside ASCII (NFR-31) | Replace it with `openssl rand -base64 48`; the message names the variable, never the value. Leave the previous one empty when not rotating |
+| Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Re-run the grants in [Database roles](../operations/#database-roles--th-18) |
+| No developer exception page, and no EF parameter values in the log | Expected when the instance serves a public host: NFR-28 keeps them off, and start-up logs one warning naming the hosts | Set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` only if the environment holds made-up people and the diagnostics are wanted; see [Operations](../operations/#diagnostics-on-a-public-host--nfr-28) |
 | `no pg_hba.conf entry for host "..."` | The connection arrives from an address no rule covers | Add a `host` rule for that address, then `systemctl reload postgresql` |
 | `relation "role" already exists` on the second run | The login is named `heimdall`, so `"$user"` resolves to the entities' schema | Rename the login, or keep `Search Path=public` in every connection string |
 | Browser front end gets a CORS error | `HEIMDALL_CORS_ALLOWED_ORIGINS` is empty | List the front end's origin exactly as the browser sends it |

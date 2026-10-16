@@ -86,15 +86,21 @@ sequenceDiagram
     FE->>AC: POST /api/auth/password-reset {token, newPassword}
     AC->>H: HandleAsync
     H->>H: validate the new password's shape
-    H->>DB: SELECT token
-    alt unknown / expired / already spent
+    H->>DB: SELECT token, its person and their scopes
+    alt unknown, or the person may no longer be acted on (AF-13c / AF-13e)
+        H-->>FE: 400 — invalid token
+    end
+    alt expired / already spent
         H-->>FE: 400 — each rejection named
     end
     H->>DB: spend the token (UPDATE … WHERE NOT used AND unexpired)
     alt a parallel request spent it first
         H-->>FE: 400 — already used (AF-13b)
     end
-    H->>DB: UPDATE person — fresh Argon2id hash + new salt
+    H->>DB: UPDATE person SET hash, salt, security stamp<br/>WHERE address unchanged AND not restricted / deleted / anonymised
+    alt the person changed since it was read
+        H-->>FE: 400 — invalid token
+    end
     H->>DB: mark every other live reset token for this person Used
     H-->>FE: 200
 ```
@@ -104,6 +110,20 @@ token of any other kind.
 
 Spending a reset token retires every other live reset token the person holds. A second "forgot
 password" click cannot be replayed after the first has already changed the password.
+
+**The account is checked again when the link is followed** (**FR-PR-08**). A link lives for an hour,
+and the person may be restricted, deleted or anonymised, or lose the scope they sign in through,
+while it waits in a mailbox. UC-12's rule is run again, and a person it no longer admits gets exactly
+the unknown-token answer, `400` "Invalid token.", with nothing written — the token stays as it was,
+and a restricted record is preserved. The password itself is written by one conditional `UPDATE`,
+together with a fresh security stamp that revokes every earlier session, which repeats those checks
+and requires the address the person was read with. After the row is created nothing else writes the
+password columns, so an edit saved from an older copy of the person cannot put the old password back.
+
+**An email change retires the links** (**FR-PE-17**). Whoever changes a person's address, every live
+reset and verification link they hold is retired, before the new address is saved and again straight
+after.
+Following one afterwards answers `400` "Token already used.".
 
 ## Why login costs what it costs
 

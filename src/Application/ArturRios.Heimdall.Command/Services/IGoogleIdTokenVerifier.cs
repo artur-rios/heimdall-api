@@ -2,8 +2,9 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     The claims UC-25 trusts once a Google ID token has been verified (UC-25 step 3, FR-GO-11).
-///     Exactly the five fields a Google User is populated from (FR-GO-05) — nothing else on the
-///     token is read, so the application layer never sees an unverified claim.
+///     The five fields a Google User is populated from (FR-GO-05), and the <c>nonce</c> a client's
+///     own sign-in attempt is checked against (FR-GO-20) — nothing else on the token is read, so the application layer
+///     never sees an unverified claim.
 /// </summary>
 /// <param name="Subject">Google's stable <c>sub</c> claim, stored as the Google User's <c>GoogleId</c>.</param>
 /// <param name="Email">The <c>email</c> claim.</param>
@@ -16,12 +17,17 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </param>
 /// <param name="Name">The <c>name</c> claim, absent on tokens whose issuer withheld the profile scope.</param>
 /// <param name="PictureUrl">The <c>picture</c> claim; optional, as the Google User field is.</param>
+/// <param name="Nonce">
+///     The <c>nonce</c> claim, or <c>null</c> when the token carries none: Google copies it from
+///     the authentication request the client made, so it is present only when the client sent one.
+/// </param>
 public record GoogleIdTokenPayload(
     string Subject,
     string Email,
     bool? EmailVerified,
     string? Name,
-    string? PictureUrl);
+    string? PictureUrl,
+    string? Nonce = null);
 
 /// <summary>
 ///     Verifies a Google ID token and returns the claims it carries (UC-25 step 3, FR-GO-11,

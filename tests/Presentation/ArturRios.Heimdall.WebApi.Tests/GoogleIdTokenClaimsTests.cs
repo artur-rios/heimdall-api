@@ -12,7 +12,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Collapsing the two would let a client holding a token without the `email` scope downgrade a
 // stored EmailVerified = true, which is exactly what FR-GO-19 forbids.
 //
-// The four claim shapes are pinned deliberately, not defensively. TryGetPayloadValue<bool> reporting
+// The claim shapes are pinned deliberately, not defensively, the string forms among them: a sign-up
+// needs the claim to read as true (FR-GO-07). TryGetPayloadValue<bool> reporting
 // an explicit JSON null as present-and-false is measured behaviour of
 // Microsoft.IdentityModel.JsonWebTokens 8.19.2 rather than a documented contract, and the bool?
 // overload is what tells that case apart. A package bump that changes either should fail here rather
@@ -71,6 +72,38 @@ public class GoogleIdTokenClaimsTests
         // Given the shape TryGetPayloadValue<bool> alone gets wrong — it reports this as
         // present-and-false, which would downgrade a stored true
         var token = TokenWithPayload("""{"sub":"1","email":"a@b.test","email_verified":null}""");
+
+        // When / Then
+        Assert.Null(GoogleIdTokenClaims.EmailVerified(token));
+    }
+
+    [UnitFact]
+    public void GivenClaimIsTheStringTrue_WhenReadingEmailVerified_ThenReturnsTrue()
+    {
+        // Given the claim written as a JSON string, as some OIDC examples show it. Since a sign-up
+        // needs the claim to be true (FR-GO-07), reading this as "absent" would refuse every first
+        // sign-in from such a token
+        var token = TokenWithPayload("""{"sub":"1","email":"a@b.test","email_verified":"true"}""");
+
+        // When / Then
+        Assert.True(GoogleIdTokenClaims.EmailVerified(token));
+    }
+
+    [UnitFact]
+    public void GivenClaimIsTheStringFalse_WhenReadingEmailVerified_ThenReturnsFalse()
+    {
+        // Given
+        var token = TokenWithPayload("""{"sub":"1","email":"a@b.test","email_verified":"false"}""");
+
+        // When / Then
+        Assert.False(GoogleIdTokenClaims.EmailVerified(token));
+    }
+
+    [UnitFact]
+    public void GivenClaimIsAStringThatIsNotABoolean_WhenReadingEmailVerified_ThenReturnsNull()
+    {
+        // Given a value that asserts nothing this API can act on
+        var token = TokenWithPayload("""{"sub":"1","email":"a@b.test","email_verified":"yes"}""");
 
         // When / Then
         Assert.Null(GoogleIdTokenClaims.EmailVerified(token));

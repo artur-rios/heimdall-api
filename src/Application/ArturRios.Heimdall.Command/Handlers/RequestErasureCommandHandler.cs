@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Mediator.Command.Interfaces;
@@ -32,7 +33,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         that the person is present — one left open on a shared machine, or lifted from a log,
 ///         would otherwise be enough to destroy the account it belongs to. A person presents their
 ///         password; a Google User presents a fresh Google ID token, because they have no password.
-///         Both failures answer alike.
+///         A person's password is charged to their re-authentication budget (FR-AU-13) and refused
+///         with the message every re-authentication shares; a Google User's token, which cannot be
+///         guessed, is refused with <see cref="ErasureMessages.CredentialNotAccepted" />. Both are 401.
 ///     </para>
 ///     <para>
 ///         <b>Why the request is recorded before it can be carried out.</b> NFR-12 refuses to
@@ -67,7 +70,8 @@ public class RequestErasureCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
-    DataRetentionOptions retention)
+    DataRetentionOptions retention,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>
 {
     public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command, CancellationToken cancellationToken = default)
@@ -123,11 +127,20 @@ public class RequestErasureCommandHandler(
         // be used to exhaust the process's memory any more than login can (Threat Model TH-03). It
         // is therefore governed by NFR-18 rather than NFR-05, like every password-verifying
         // endpoint.
+        //
+        // FR-AU-13: charged to the re-authentication budget first, and refused with the message
+        // every re-authentication shares. A paused budget still has the password compared, and
+        // refuses whatever the result.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         if (string.IsNullOrWhiteSpace(command.Password) ||
-            !await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt))
+            !await PasswordHashGate.Shared.TextMatchesAsync(command.Password, person.PasswordHash, person.Salt) ||
+            !admitted)
         {
-            return output.WithError(ErasureMessages.CredentialNotAccepted);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
         var requestedAt = DateTime.UtcNow;
         var dueAt = requestedAt + retention.SubjectErasureDeadline;

@@ -12,6 +12,15 @@ public static class PersonMessages
     /// <summary>AF-06a: the email is already in use (within the scope for Users, system-wide for admins).</summary>
     public const string EmailAlreadyExists = "A person with this email already exists.";
 
+    /// <summary>
+    ///     AF-08k (FR-PE-18): the caller tried to change their own address while their email
+    ///     sign-in method is enabled, active or pending. Sign-in codes would then go to an address
+    ///     nobody has proved is theirs, so the method is turned off first and set up again at the new
+    ///     address, which proves it.
+    /// </summary>
+    public const string EmailSignInMethodEnabled =
+        "Turn off the email sign-in method before changing your email address.";
+
     /// <summary>AF-06b: the target scope does not exist or is logically deleted.</summary>
     public const string ScopeNotFound = "Scope not found.";
 

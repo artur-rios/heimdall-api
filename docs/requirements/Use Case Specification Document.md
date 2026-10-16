@@ -471,20 +471,20 @@ sequenceDiagram
    - The actor is the requested person — every actor may view their own record.
    - The actor is a Scope Admin and the requested person is a `User` of a scope the actor owns.
    - The actor is a Scope Admin and the requested person is another Scope Admin co-owning one of the actor's scopes.
-4. The system returns the person data (excluding `PasswordHash` and `Salt`).
+4. The system returns the person data (excluding `PasswordHash` and `Salt`). The scopes the person owns are listed in full to a System Admin and to the person themselves; to a Scope Admin reading somebody else, only the scopes the actor owns too (FR-PE-19).
 
 **Main Flow (read b — list the Users of a scope):**
 
 1. A System Admin or a Scope Admin requests the Users of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
 2. The system verifies the scope exists and is not logically deleted.
 3. The system verifies the actor may read the scope: a System Admin always may; a Scope Admin must own it.
-4. The system returns the scope's `User` persons, excluding logically deleted persons unless explicitly requested. The scope's owners are not part of this listing.
+4. The system returns the scope's `User` persons, excluding logically deleted persons unless explicitly requested. The scope's owners are not part of this listing. Each person's scope ownerships are reported as in read a (FR-PE-19).
 
 **Main Flow (read c — list the owners of a scope):**
 
 1. A System Admin or a Scope Admin requests the owners of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
 2. The system applies the same scope and authorization checks as read (b).
-3. The system returns the scope's owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
+3. The system returns the scope's owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing. Each owner's scope ownerships are reported as in read a (FR-PE-19): to a Scope Admin, the scopes the owner shares with them, this one among them.
 
 **Main Flow (read d — list the system's Scope Admins):**
 
@@ -537,7 +537,7 @@ sequenceDiagram
 | **Actors** | System Admin, Scope Admin, User |
 | **Description** | Modify person's name, email, or role |
 | **Preconditions** | Actor is authenticated; person exists and is not logically deleted |
-| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11) and the previous address has been sent a notice (FR-PE-15) |
+| **Postconditions** | Person record is updated. When the email changed, every token the person held is revoked (FR-AU-11), every live password-reset and verification link is retired (FR-PE-17), and the previous address has been sent a notice (FR-PE-15) |
 
 **Main Flow:**
 
@@ -565,6 +565,12 @@ sequenceDiagram
      `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
      after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
+   - The system retires every live password-reset link and verification link the person holds
+     (FR-PE-17): they were mailed to the address being replaced. It does so before the new address
+     is saved and again immediately after, before the notice below, for any mailed to the old
+     address in between; a reset or verification that read the person before the change writes only
+     while the address is the one it read, so it cannot write after the change (FR-PR-08, FR-EV-08).
+     Following a retired link answers UC-13's AF-13b or UC-14's AF-14b.
    - Just before the update is saved, the system replaces the person's security stamp, which revokes
      every token they hold (FR-AU-11) — whoever made the change — and replaces it once more after the
      save. The first replacement means a save that fails costs one extra sign-in rather than leaving
@@ -582,7 +588,7 @@ sequenceDiagram
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
 6. The system applies updates and sets `UpdatedAt`.
-7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
+7. The system returns the updated person (excluding `PasswordHash` and `Salt`), its scope ownerships reported as UC-07 read a reports them (FR-PE-19).
 
 > **On re-authenticating an email change.** An address change requires proof of identity, because
 > account recovery follows the address and a bearer token is not proof that the account holder is
@@ -605,8 +611,10 @@ sequenceDiagram
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
-| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is changed |
-| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The code or recovery code is missing, incorrect, or already used." (UC-39's AF-39c). Nothing is changed |
+| AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
+| AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
+| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
+| AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
 
 ---
 
@@ -857,6 +865,7 @@ requests; a person who receives nothing asks again, as for any email that does n
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-12a | Email not found, or the person is logically deleted, restricted (NFR-24), or cannot sign in because their scope or scopes are deleted | Return `200 OK` with the same generic message, in the same time (prevents enumeration). No token is issued and nothing is sent |
+| AF-12b | A reset token was issued for the person within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), by an earlier request or by UC-52, used or not (FR-PR-07) | Return `200 OK` with the same generic message. Nothing is issued or sent; the link already mailed keeps working |
 
 ---
 
@@ -874,13 +883,15 @@ requests; a person who receives nothing asks again, as for any email that does n
 **Main Flow:**
 
 1. Caller provides the reset token and a new password.
-2. The system validates the token (exists, not expired, not used).
+2. The system validates the token (exists, its person may still be acted on, not expired, not used).
+   The person is checked by UC-12's rule as they stand now (FR-PR-08, AF-13e).
 3. The system generates a new random `Salt` and hashes the new password using it.
-4. The system marks the token as used, replaces the person's security stamp, which revokes every token
-   issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike — then
-   saves the new `PasswordHash` and `Salt`, and replaces the stamp once more. The first replacement
-   means a save that fails leaves no old session live; the second ends any session opened with the old
-   password while the save was in flight.
+4. The system marks the token as used, then writes the new `PasswordHash` and `Salt` together with a
+   fresh security stamp, which revokes every token issued to the person before the reset (FR-AU-11) —
+   full, challenge and subject-rights-only alike. It is one conditional write that repeats step 2's
+   checks on the person and requires the address they were read with, so no sign-in can read the new
+   password beside the old stamp, and a write refused because the person changed meanwhile leaves the
+   person, stamp included, as it was (answered as AF-13e).
 5. The system returns success. The person signs in again with the new password; a session opened with
    the old one, by them or by anybody else, ends at its next request.
 
@@ -892,6 +903,7 @@ requests; a person who receives nothing asks again, as for any email that does n
 | AF-13b | Token already used — including by a request carrying the same token at the same time (NFR-27): exactly one of them sets a password | Return `400 Bad Request` — "Token already used" |
 | AF-13c | Token not found | Return `400 Bad Request` — "Invalid token" |
 | AF-13d | New password fails validation | Return `400 Bad Request` with validation errors |
+| AF-13e | The token's person may no longer be acted on: since the link was mailed they were put under a restriction on processing (NFR-24), logically deleted or anonymised, or can no longer sign in (FR-AU-06, FR-AU-07); checked before the token's expiry and use, and again by the write in step 4 (FR-PR-08) | As AF-13c: `400 Bad Request` — "Invalid token". Nothing is written, the token included, so a restricted record is preserved |
 
 ---
 
@@ -925,8 +937,10 @@ sequenceDiagram
 ```
 
 1. Person clicks the verification link which calls the API with the token.
-2. The system locates and validates the token.
-3. The system sets `EmailVerified = true` on the person record.
+2. The system locates and validates the token, and checks the person by UC-12's rule as they stand
+   now (FR-EV-08, AF-14d).
+3. The system sets `EmailVerified = true` on the person record, in one conditional write that repeats
+   step 2's checks and requires the address the person was read with.
 4. The system marks the token as used.
 5. The system returns success.
 
@@ -937,6 +951,7 @@ sequenceDiagram
 | AF-14a | Token expired | Return `400 Bad Request` — "Token expired" |
 | AF-14b | Token already used — including by a request carrying the same token at the same time (NFR-27) | Return `400 Bad Request` — "Token already used" |
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
+| AF-14d | The token's person may no longer be acted on, as UC-13's AF-13e (FR-EV-08) | As AF-14c: `400 Bad Request` — "Invalid token". Nothing is written, the token included |
 
 > **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
 
@@ -956,7 +971,7 @@ sequenceDiagram
 **Main Flow:**
 
 1. Authenticated person requests a new verification email.
-2. The system checks that the email is not already verified.
+2. The system checks that the email is not already verified, and reserves the send against the person's account-email budget (FR-PE-16).
 3. The system invalidates any existing verification tokens.
 4. The system generates a new time-limited verification token.
 5. The system sends the verification email.
@@ -967,6 +982,17 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-15a | Email already verified | Return `400 Bad Request` — "Email already verified" |
+| AF-15b | The person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — a resend, a setup code or an email-change notice (FR-PE-16) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
+| AF-15c | The person's own requests have had five account emails sent in the current day-long window (FR-PE-16) | Return `429 Too Many Requests` — "You have reached the limit for account emails. Try again later." Nothing is retired or sent |
+
+> **On the cooldown and the rate limit.** The endpoint mails the account's own address on every
+> successful call, and a bearer token is all it asks for, so without a bound whoever held one could
+> mail that address once per request — and the address may be one the account holder set without
+> proving it. The resend shares one budget with the person's other self-service account mail (FR-PE-16),
+> reserved by one write before anything is sent, so even a burst of simultaneous requests sends one.
+> A link an administrator sent (UC-06, UC-51) is not charged to it, so the person may still ask once
+> straight after. The endpoint is also under the credential endpoints' rate limit, whose own `429` is
+> "Too many requests." with a `Retry-After` header.
 
 ---
 
@@ -1177,6 +1203,9 @@ sequenceDiagram
 | AF-21c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-21d | Person is already an owner of the scope | Return `200 OK` (idempotent) |
 
+> **On the person added.** The person is not asked to accept; the ownership takes effect at once
+> (Threat Model TH-41).
+
 ---
 
 ### UC-22: Remove Scope Owner
@@ -1336,13 +1365,14 @@ sequenceDiagram
 
     Caller->>GIP: Authenticate with Google
     GIP-->>Caller: ID token { sub, email, email_verified, name, picture }
-    Caller->>API: POST /api/auth/google { scopeId, idToken }
+    Caller->>API: POST /api/auth/google { scopeId, idToken, nonce? }
     API->>GIP: Verify ID token signature, issuer, audience, expiration
     GIP-->>API: Token valid, claims
     API->>DB: Verify scope exists, is not logically deleted, and GoogleSignInEnabled = true
     DB-->>API: Scope found
     API->>DB: Find GOOGLE_USER by GoogleId (sub) and scopeId
     alt Google User does not exist
+        API->>API: Require email_verified == true
         API->>DB: Check email uniqueness in scope (jointly with User persons)
         DB-->>API: Email is unique
         API->>DB: Insert GOOGLE_USER row { GoogleId, Name, Email, EmailVerified, ProfilePictureUrl, ScopeId }
@@ -1357,11 +1387,11 @@ sequenceDiagram
 ```
 
 1. The caller authenticates with Google (outside this API) and obtains a signed ID token.
-2. The caller sends the ID token and target scope ID to the API.
-3. The system verifies the ID token's signature, issuer, audience, and expiration.
+2. The caller sends the ID token and target scope ID to the API, and optionally the `nonce` it sent Google when asking for the token.
+3. The system verifies the ID token's signature, issuer, audience, and expiration. When the request carries a `nonce`, the token's `nonce` claim must equal it (FR-GO-20, AF-25g).
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
-6. If none exists: the system verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
+6. If none exists: the system requires the token's `email_verified` claim to be `true` (AF-25f), verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
 7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
 8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
@@ -1374,6 +1404,8 @@ sequenceDiagram
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
 | AF-25e | Existing Google User is under a restriction on processing (NFR-24), whether or not logically deleted | Return `200 OK` with a subject-rights-only token and `processingRestricted: true`, as UC-11's AF-11i. Nothing is refreshed from the ID token, since that would be processing the record |
+| AF-25f | No Google User exists yet and the token's `email_verified` claim is not `true` — false or absent (FR-GO-07); checked before AF-25c | Return `403 Forbidden` — "Google sign-up requires a verified email address." Nothing is created |
+| AF-25g | The request carries a `nonce` and the token's `nonce` claim is absent or differs (FR-GO-20); checked with AF-25a, before the scope is read | As AF-25a: `401 Unauthorized` — "Google authentication failed." |
 
 ---
 
@@ -1384,14 +1416,14 @@ sequenceDiagram
 | **ID** | UC-26 |
 | **Name** | Sign Out via Google |
 | **Actors** | Google User |
-| **Description** | End a Google User's authenticated session |
+| **Description** | End a Google User's session in the client |
 | **Preconditions** | The caller holds a valid authentication token issued via UC-25 |
-| **Postconditions** | The token is invalidated/discarded and no longer usable |
+| **Postconditions** | The client has been told to discard the token. Heimdall keeps no Google session and records no issued token, so nothing server-side ends: a copy of the token kept elsewhere stays valid until it expires (FR-GO-18) |
 
 **Main Flow:**
 
 1. The Google User sends a sign-out request with their current token.
-2. The system invalidates the token (e.g., via a revocation list) or instructs the client to discard it, per the configured token strategy.
+2. The system confirms the token still names a live Google User and instructs the client to discard it. It revokes nothing: Heimdall's tokens are stateless (NFR-03), a Google User's token carries no security stamp (FR-AU-11), and Heimdall holds no session with Google to end.
 3. The system returns success.
 
 **Alternative Flows:**
@@ -1687,7 +1719,7 @@ sequenceDiagram
 ```
 
 1. Caller sends `POST /api/auth/2fa/enable` with the method(s) they want: `App`, `Email`, or both, and their `currentPassword` (FR-2F-18).
-2. The system confirms the caller has no already-active two-factor configuration and that `currentPassword` matches their password (AF-36e), then creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
+2. The system confirms the caller has no already-active two-factor configuration, that their account-email budget would admit a send when `Email` is selected (AF-36f, AF-36g), and that `currentPassword` matches their password (AF-36e); with `Email`, it then reserves the send (FR-2F-19), and creates (or reuses a not-yet-confirmed) `TWO_FACTOR_AUTH` row for them.
 3. If `App` was selected, the system generates a random TOTP secret (RFC 6238), stores it encrypted, and returns an `otpauth://` provisioning URI for QR scanning. The plaintext secret is never stored — only the encrypted form.
 4. If `Email` was selected, the system generates a random 6-digit code, stores it (hashed, 10-minute expiry), and sends it through the email service.
 5. The system returns success, confirming which method(s) are pending confirmation. Nothing is active yet — UC-37 finishes the job.
@@ -1706,8 +1738,10 @@ sequenceDiagram
 | AF-36a | Two-factor authentication is already active for the person | Return `409 Conflict` |
 | AF-36b | Caller is not a person eligible for two-factor authentication — a Google User, or a token naming no live person (either operation) | Return `403 Forbidden` — Google Users are not eligible (FR-2F-01) |
 | AF-36c | Neither `App` nor `Email` selected | Return `400 Bad Request` |
-| AF-36e | `currentPassword` missing or wrong (FR-2F-18) | Return `401 Unauthorized` — "The current password is incorrect." (UC-39's AF-39b). Nothing is created or sent |
+| AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
+| AF-36f | `Email` is selected and the person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), FR-PE-16, FR-2F-19 | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; a code already mailed still confirms. Selecting `App` alone is not affected |
+| AF-36g | As AF-36f, but five account emails have been sent in the current day-long window | Return `429 Too Many Requests` — "You have reached the limit for account emails. Try again later." As AF-36f otherwise |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
 > does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
@@ -1749,7 +1783,7 @@ sequenceDiagram
 3. Only once every required code checks out, the system replaces the person's security stamp, which
    revokes every token issued before the second factor was required, the caller's own included
    (FR-AU-11).
-4. The system generates ten random recovery codes, hashes each, and stores the hashes.
+4. The system generates ten random recovery codes, hashes each, and stores the hashes. Each is 80 bits, sixteen characters of Crockford's base32 shown as `XXXX-XXXX-XXXX-XXXX` (FR-2F-20).
 5. The system sets `IsActive = true`.
 6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
 
@@ -1758,8 +1792,8 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-37a | No pending setup exists for the person | Return `404 Not Found` |
-| AF-37b | `appCode` missing or incorrect, when `AppEnabled` | Return `400 Bad Request` |
-| AF-37c | `emailCode` missing, incorrect, expired, already used, or retired after five wrong guesses (FR-2F-13), when `EmailEnabled` | Return `400 Bad Request` |
+| AF-37b | `appCode` missing or incorrect, when `AppEnabled` — or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
+| AF-37c | `emailCode` missing, incorrect, expired, already used, or retired after five wrong guesses (FR-2F-13), when `EmailEnabled` | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-37b. The code is not spent |
 | AF-37d | Setup is already active (repeated confirm) | Return `409 Conflict` |
 
 > **On requiring every selected method's code.** If both `App` and `Email` were chosen in UC-36, both codes are required in the same confirmation request. Confirming with only one channel would activate a method whose configuration was never actually exercised — for the app, that a QR code was scanned into a real authenticator; for email, that the address reliably receives mail — leaving a silently broken second factor discovered only at the next login.
@@ -1796,7 +1830,7 @@ sequenceDiagram
 
 1. Caller sends the challenge token from UC-11's login response, together with either a current app/email code or a recovery code.
 2. The system validates the challenge token: signature, expiration, and that it carries the MFA-pending claim (FR-2F-10) — this endpoint is the only one that accepts such a token. The token must also still name the person's outstanding challenge: redeeming a challenge spends it, and a newer login replaces it, so a challenge is redeemable once (FR-2F-10).
-3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes. A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13).
+3. The system checks the supplied value: a TOTP code against the stored secret, an email code against its stored hash and expiry, or a recovery code against the stored hashes — ignoring its hyphens, whitespace and case, and reading an O, I or L in a sixteen-character code as 0, 1 and 1; a code of the shorter `XXXX-XXXX` shape issued before still matches as it was stored (FR-2F-20). A guess with an app code or a recovery code is first charged to the challenge, which allows five (FR-2F-17); an email code's guesses are charged to the code (FR-2F-13). Every guess is also charged to the person, across challenges, and a correct password does not reset that count: the tenth failure locks the second factor, for fifteen minutes and twice as long at each repeat, up to a day, and only a second factor that checks out resets it (FR-AU-12).
 4. If a recovery code was used, the system marks it consumed — it cannot be used again.
 5. The system marks the challenge redeemed, then generates and returns the full authentication token, identical in shape to a direct UC-11 success. A person whose processing is restricted (NFR-24) — including one restricted after the challenge was issued — gets UC-11's AF-11i subject-rights-only token instead, and AF-38d's scope check does not apply to them.
 
@@ -1805,7 +1839,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-38a | Challenge token expired or invalid, already redeemed — by an earlier request or a simultaneous one (NFR-27) — or superseded by a newer login (FR-2F-10), retired after five app-code or recovery-code guesses (FR-2F-17), issued before the person's last credential change, so its security stamp is no longer theirs (FR-AU-11), or naming a person who is anonymised, or logically deleted and not under a restriction on processing (NFR-24) | Return `401 Unauthorized` |
-| AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) | Return `401 Unauthorized` |
+| AF-38b | Code does not match any valid app code, email code, or unused recovery code — including an app code already accepted once (FR-2F-14) and an email code retired after five wrong guesses (FR-2F-13) — or the person's second factor is locked (FR-AU-12), whatever the code | Return `401 Unauthorized`. A locked second factor answers exactly as a wrong code does. The code is still checked, so a correct app code's time step is used up (FR-2F-14) and an email code's guess is counted (FR-2F-13), but no recovery or email code is spent and no token is issued |
 | AF-38c | Recovery code already used | Return `401 Unauthorized`, same message as AF-38b (does not reveal that the code existed) |
 | AF-38d | The submitted factor checks out, but the person's scope eligibility (AF-11d/AF-11e) no longer holds by the time this runs | Return `401 Unauthorized` with a distinct message, since — unlike AF-38a through AF-38c — nothing about the challenge token or the factor was wrong |
 
@@ -1855,8 +1889,8 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-39a | Two-factor authentication is not active for the person | Return `404 Not Found` |
-| AF-39b | Password mismatch | Return `401 Unauthorized` |
-| AF-39c | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+| AF-39b | Password mismatch, or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
+| AF-39c | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-39b, so it does not say which of the two was wrong |
 
 > **On requiring both factors to disable.** Password alone is not enough: an attacker holding only a stolen session or a leaked password should not be able to strip two-factor protection off an account they don't fully control. Requiring the second factor too makes disabling exactly as hard as a login.
 
@@ -1895,8 +1929,9 @@ sequenceDiagram
 3. The system replaces the person's security stamp, revoking every token issued before (FR-AU-11): the
    codes are usually replaced because the old set may be known to somebody else, and so may a session
    opened with one.
-4. The system generates ten new codes, hashes each, and stores them, then deletes every earlier
-   recovery code row for the person, including any still unused.
+4. The system generates ten new codes of the current shape (FR-2F-20), hashes each, and stores them,
+   then deletes every earlier recovery code row for the person, including any still unused. This is
+   also how a person holding the shorter codes issued before FR-2F-20 gets the stronger ones.
 5. The system returns the ten new codes in plaintext — the only response that will ever contain them. The client keeps them, then signs in again.
 
 **Alternative Flows:**
@@ -1904,7 +1939,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-40a | Two-factor authentication is not active for the person | Return `404 Not Found` |
-| AF-40b | Second factor invalid (per AF-38b/AF-38c) | Return `401 Unauthorized` |
+| AF-40b | Second factor invalid (per AF-38b/AF-38c), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." |
 
 > **On invalidating the whole set.** Regeneration replaces all ten codes at once rather than topping up the used ones back to ten: a partial refill would leave old, already-distributed codes valid alongside new ones, defeating the point of rotating them.
 
@@ -2026,8 +2061,17 @@ sequenceDiagram
 | AF-47h | The link is followed without the password chosen at sign-up | `422 Unprocessable Entity` — "Enter the password you chose when you signed up to finish creating your account." The registration is not consumed (FR-SR-09) |
 | AF-47i | The link is followed with a wrong password | `401 Unauthorized` — "That password does not match the one chosen when signing up." The registration is not consumed, but the guess is charged before it is compared (NFR-27): on the 10th wrong password the registration is discarded, that attempt is still answered `401`, and the link then answers UC-14 AF-14c (FR-SR-09) |
 | AF-47j | The link is followed again after the account exists | UC-14 AF-14c: `400 Bad Request` — "Invalid token". The registration was removed when the account was created, so there is nothing to claim and nothing is created |
+| AF-47k | The address already has three live pending registrations in the scope (FR-SR-13) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; the three links already sent keep working |
+| AF-47l | The address is held (AF-47b), and three attempt notices have gone to it within the current day, whichever scopes they were for (FR-SR-14) | `202 Accepted`, identical to the main flow. Nothing is created and no notice is sent |
 
 > **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
+
+> **On the mail an address can be sent.** Each request may mail the address it names, and the caller
+> cannot see whether it did, so the bound has to be on the recipient rather than the caller: the
+> per-IP rate limit does nothing against a sender with many source addresses. AF-47k bounds the
+> confirmation mail to three live links per scope; AF-47l bounds the notices to three a day per
+> address across every scope. Both are applied after the response, like everything else that depends
+> on the address, so they change nothing the caller sees.
 
 ---
 
@@ -2045,7 +2089,7 @@ sequenceDiagram
 **Main flow**
 
 1. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
-2. The system assembles the identity, the security state, the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject.
+2. The system assembles the identity, the security state — whether a password and second factor are set, and the counters and locks of the login lockout (FR-AU-09), the second-factor budget (FR-AU-12) and the re-authentication budget (FR-AU-13) — the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject.
 3. The system adds the context Art. 15 requires alongside the data: who else receives it, how long each category is kept, and what is held but not reproduced.
 4. The system returns the document with `Cache-Control: no-store`.
 
@@ -2092,7 +2136,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | --- | --- | --- |
-| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account | `CredentialNotAccepted` (401). Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
+| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
@@ -2704,14 +2748,14 @@ sequenceDiagram
 | UC-04: Logical Delete Scope | FR-SC-05, FR-SC-07 |
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
-| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
-| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-AU-11, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13, FR-PE-19 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-PE-17, FR-PE-19, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
 | UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
 | UC-12: Password Recovery | FR-PR-01, FR-PR-02 |
-| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-AU-11, NFR-27 |
-| UC-14: Email Verification | FR-EV-03, NFR-27 |
+| UC-13: Reset Password | FR-PR-03, FR-PR-04, FR-PR-08, FR-PE-17, FR-AU-11, NFR-24, NFR-27 |
+| UC-14: Email Verification | FR-EV-03, FR-EV-08, FR-PE-17, NFR-24, NFR-27 |
 | UC-15: Resend Verification Email | FR-EV-04 |
 | UC-16: Create Application | FR-AP-01, FR-AP-02, FR-AP-03 |
 | UC-17: View Application | FR-AP-04, FR-AP-05, FR-AP-09 |
@@ -2722,7 +2766,7 @@ sequenceDiagram
 | UC-22: Remove Scope Owner | FR-SC-08, FR-SC-10 |
 | UC-23: Promote User to Scope Owner | FR-SC-08, FR-SC-13, FR-RO-03 |
 | UC-24: Enable/Disable Google Sign-In | FR-GO-01, FR-GO-02 |
-| UC-25: Sign Up / Sign In via Google | FR-GO-03 through FR-GO-11 |
+| UC-25: Sign Up / Sign In via Google | FR-GO-03 through FR-GO-11, FR-GO-19, FR-GO-20 |
 | UC-26: Sign Out via Google | FR-GO-18 |
 | UC-27: View Google User | FR-GO-14, FR-GO-17 |
 | UC-28: Logical Delete Google User | FR-GO-15, FR-GO-17 |
@@ -2732,11 +2776,11 @@ sequenceDiagram
 | UC-33: Update Scope Permission | FR-SP-06 |
 | UC-34: Logical Delete Scope Permission | FR-SP-07, FR-SP-09 |
 | UC-35: Hard Delete Scope Permission | FR-SP-08 |
-| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18 |
-| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-AU-11 |
-| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-AU-11, NFR-27 |
-| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11 |
-| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-AU-11, NFR-27 |
+| UC-36: Enable Two-Factor Authentication | FR-2F-01, FR-2F-02, FR-2F-03, FR-2F-15, FR-2F-18, FR-AU-13 |
+| UC-37: Confirm Two-Factor Authentication Setup | FR-2F-04, FR-2F-05, FR-2F-20, FR-AU-11, FR-AU-13 |
+| UC-38: Verify Second Factor | FR-2F-06, FR-2F-08, FR-2F-09, FR-2F-10, FR-2F-17, FR-2F-20, FR-AU-11, FR-AU-12, NFR-27 |
+| UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11, FR-AU-13 |
+| UC-40: Regenerate Recovery Codes | FR-2F-12, FR-2F-20, FR-AU-11, FR-AU-13, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
 | UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
