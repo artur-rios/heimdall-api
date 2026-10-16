@@ -5,6 +5,7 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -16,7 +17,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // administrator's token, so without a bound one account — from one address — could keep the gate full
 // and starve every sign-in. The limit is per acting person, sized for real administration.
 //
-// The functional test spends the budget with malformed bodies: the limiter counts a request before MVC
+// The limit is per acting person and, because an administrator who can create administrators can
+// multiply actors, per address too. The functional tests spend the budget with malformed bodies: the limiter counts a request before MVC
 // sees it, so a 400 costs a slot as a created person does, without thirty derivations.
 [Collection(nameof(FunctionalCollection))]
 public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -35,7 +37,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         return admin.PublicId;
     }
 
-    private async Task<HttpResponseMessage> CreateAsync(Guid actor)
+    private async Task<HttpResponseMessage> CreateAsync(Guid actor, string clientAddress)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/persons")
         {
@@ -45,7 +47,20 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
             "Bearer", TestTokens.For(actor, (int)Roles.SystemAdmin));
 
+        // A trusted caller's named address, so each test chooses the address bucket it is counted in.
+        request.Headers.Add(AuthRateLimitPartition.CallerKeyHeader, PostgresFixture.TrustedCallerKey);
+        request.Headers.Add(AuthRateLimitPartition.ClientAddressHeader, clientAddress);
+
         return await Gateway.Client.SendAsync(request);
+    }
+
+    private async Task SpendAsync(Guid actor, string clientAddress, int requests)
+    {
+        for (var attempt = 1; attempt <= requests; attempt++)
+        {
+            using var allowed = await CreateAsync(actor, clientAddress);
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, allowed.StatusCode);
+        }
     }
 
     private static async Task<string?> FirstErrorAsync(HttpResponseMessage response)
@@ -58,26 +73,37 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     }
 
     [FunctionalFact]
-    public async Task GivenOneActorSpentTheMinutesBudget_WhenTheyCreateAgain_ThenTooManyRequestsAndAnotherActorIsServed()
+    public async Task GivenOneActorSpentTheMinutesBudget_WhenTheyCreateAgainFromAnotherAddress_ThenTooManyRequests()
     {
-        // Given two System Admins, acting from the same address
-        var first = await SeedSystemAdminAsync();
-        var second = await SeedSystemAdminAsync();
+        // Given an actor who spent thirty from one address
+        var actor = await SeedSystemAdminAsync();
+        await SpendAsync(actor, "203.0.113.70", Startup.AccountCreationPermitLimit);
 
-        for (var attempt = 1; attempt <= Startup.AccountCreationPermitLimit; attempt++)
-        {
-            using var allowed = await CreateAsync(first);
-            Assert.NotEqual(HttpStatusCode.TooManyRequests, allowed.StatusCode);
-        }
+        // When they move to an address of their own
+        using var limited = await CreateAsync(actor, "203.0.113.71");
 
-        // When
-        using var limited = await CreateAsync(first);
-        using var other = await CreateAsync(second);
-
-        // Then — per actor, whatever address both come from
+        // Then — the actor's own bound still holds
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.NotNull(limited.Headers.RetryAfter);
         Assert.Equal(RateLimitMessages.TooManyRequests, await FirstErrorAsync(limited));
-        Assert.NotEqual(HttpStatusCode.TooManyRequests, other.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenOneAddressSpentTheMinutesBudget_WhenAnotherActorCreatesFromIt_ThenTooManyRequestsAndAnotherAddressIsServed()
+    {
+        // Given — actors can be minted (an owner can create owners), so the address is bounded too:
+        // one actor spends thirty from an address
+        var first = await SeedSystemAdminAsync();
+        var second = await SeedSystemAdminAsync();
+        await SpendAsync(first, "203.0.113.72", Startup.AccountCreationPermitLimit);
+
+        // When a fresh actor creates from the same address, and from another
+        using var sameAddress = await CreateAsync(second, "203.0.113.72");
+        using var otherAddress = await CreateAsync(second, "203.0.113.73");
+
+        // Then
+        Assert.Equal(HttpStatusCode.TooManyRequests, sameAddress.StatusCode);
+        Assert.Equal(RateLimitMessages.TooManyRequests, await FirstErrorAsync(sameAddress));
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, otherAddress.StatusCode);
     }
 }

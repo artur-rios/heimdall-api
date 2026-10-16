@@ -243,13 +243,24 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
             return AccountEmailReservation.Reserved;
         }
 
-        // Refused: read the row as it now is, only to say which bound refused it. The daily one is
-        // the more useful answer when both do, since waiting out the cooldown would not help.
+        // Refused: read the row as it now is, to say which bound refused it and when it ends, and bring
+        // the instance in line with it. The daily one is the more useful answer when both apply, since
+        // waiting out the cooldown would not help. A row gone since it was loaded (a hard delete in
+        // between) is refused too: nothing may be sent to a person who no longer exists.
         var stored = await context.Persons
             .AsNoTracking()
             .Where(x => x.Id == person.Id)
-            .Select(x => new { x.AccountEmailsSent, x.AccountEmailWindowEndsAt })
-            .SingleAsync();
+            .Select(x => new { x.AccountEmailsSent, x.AccountEmailWindowEndsAt, x.AccountEmailLastSentAt })
+            .SingleOrDefaultAsync();
+
+        if (stored is null)
+        {
+            return AccountEmailReservation.CoolingDown;
+        }
+
+        Accept(person, x => x.AccountEmailsSent, stored.AccountEmailsSent);
+        Accept(person, x => x.AccountEmailWindowEndsAt, stored.AccountEmailWindowEndsAt);
+        Accept(person, x => x.AccountEmailLastSentAt, stored.AccountEmailLastSentAt);
 
         return stored.AccountEmailWindowEndsAt > now && stored.AccountEmailsSent >= maxPerWindow
             ? AccountEmailReservation.DailyLimitReached

@@ -23,8 +23,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     Restricted to System Admins (AF-06c).
     /// </summary>
     /// <remarks>
-    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
-    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
     /// </remarks>
     [HttpPost("persons")]
     [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
@@ -43,8 +44,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     may call it; the ownership check (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
     /// <remarks>
-    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
-    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/persons")]
     [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
@@ -67,8 +69,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     (AF-06e) is enforced by the handler from the acting user.
     /// </summary>
     /// <remarks>
-    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person; a
-    ///     rejection answers 429 "Too many requests." with a <c>Retry-After</c> header.
+    ///     Derives an Argon2id hash, so it is limited to thirty requests a minute per acting person and
+    ///     thirty per address; a rejection answers 429 "Too many requests." with a <c>Retry-After</c>
+    ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners")]
     [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
@@ -142,7 +145,10 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     charged to the person's account-email budget once the credentials are accepted: 429 "An
     ///     email of this kind was sent to you recently. Try again in a few minutes." inside the
     ///     cooldown, 429 "You have reached today's limit for account emails. Try again tomorrow." once
-    ///     the day is spent (AF-08j); nothing changes then, and the second factor is not spent.
+    ///     the window's five are spent (AF-08j), both with <c>Retry-After</c>; nothing changes then, and
+    ///     the second factor is not spent. While the caller's email sign-in method is enabled, an own
+    ///     email change answers 409 "Turn off the email sign-in method before changing your email
+    ///     address." (AF-08k), once the credentials are accepted.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
     [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]

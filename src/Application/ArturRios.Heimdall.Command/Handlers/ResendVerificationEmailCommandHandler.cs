@@ -52,7 +52,8 @@ public class ResendVerificationEmailCommandHandler(
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
     IEmailVerificationService emailVerification,
     AdminEmailOptions emailOptions,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>
 {
     public async Task<DataOutput<ResendVerificationEmailCommandOutput?>> HandleAsync(
@@ -82,7 +83,8 @@ public class ResendVerificationEmailCommandHandler(
         // AF-15b, AF-15c (FR-PE-16): reserve the send, or refuse it. Also before step 3, so a refused
         // request retires nothing and the link the person already has keeps working.
         var refusal = AccountEmailBudget.RefusalOf(
-            await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions));
+            await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter);
 
         if (refusal is not null)
         {

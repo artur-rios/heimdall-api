@@ -35,9 +35,12 @@ public class ResendVerificationEmailCommandHandlerTests
         Mock<IEmailVerificationService> EmailVerification,
         Person Person)
     {
+        /// <summary>The waits the handler advised, as the <c>Retry-After</c> of its refusals.</summary>
+        public RecordingRetryAfterAdvisor RetryAfter { get; } = new();
+
         public ResendVerificationEmailCommandHandler Handler(TimeSpan? cooldown = null) =>
             new(Persons, Tokens, Tokens, EmailVerification.Object,
-                new AdminEmailOptions { Cooldown = cooldown ?? Cooldown }, InMemoryAtomicWrites.Instance);
+                new AdminEmailOptions { Cooldown = cooldown ?? Cooldown }, InMemoryAtomicWrites.Instance, RetryAfter);
 
         /// <summary>The command the controller would build for this fixture's person.</summary>
         public ResendVerificationEmailCommand Command() => new()
@@ -383,5 +386,53 @@ public class ResendVerificationEmailCommandHandlerTests
         // Then
         Assert.Contains(AuthMessages.EmailAlreadyVerified, output.Errors);
         Assert.Equal(0, fixture.Person.AccountEmailsSent);
+    }
+
+    // The refusals advise how long to wait, as the 429's Retry-After: the window's end for the daily
+    // limit, the cooldown's end for the cooldown.
+
+    [UnitFact]
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenHandlingResendVerificationEmail_ThenTheWaitUntilTheWindowEndsIsAdvised()
+    {
+        // Given a window ending in ten hours
+        var fixture = await FixtureAsync();
+        fixture.Person.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        fixture.Person.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(10);
+        fixture.Person.AccountEmailLastSentAt = DateTime.UtcNow.AddHours(-2);
+
+        // When
+        await fixture.Handler().HandleAsync(fixture.Command());
+
+        // Then
+        var wait = Assert.Single(fixture.RetryAfter.Advised);
+        Assert.InRange(wait, TimeSpan.FromHours(10) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(10));
+    }
+
+    [UnitFact]
+    public async Task GivenASendInsideTheCooldown_WhenHandlingResendVerificationEmail_ThenTheWaitUntilTheCooldownEndsIsAdvised()
+    {
+        // Given a send a minute into a five-minute cooldown
+        var fixture = await FixtureAsync();
+        fixture.Person.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
+
+        // When
+        await fixture.Handler().HandleAsync(fixture.Command());
+
+        // Then
+        var wait = Assert.Single(fixture.RetryAfter.Advised);
+        Assert.InRange(wait, TimeSpan.FromMinutes(4) - TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(4));
+    }
+
+    [UnitFact]
+    public async Task GivenAResendIsSent_WhenHandlingResendVerificationEmail_ThenNoWaitIsAdvised()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+
+        // When
+        await fixture.Handler().HandleAsync(fixture.Command());
+
+        // Then
+        Assert.Empty(fixture.RetryAfter.Advised);
     }
 }

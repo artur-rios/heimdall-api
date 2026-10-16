@@ -251,6 +251,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
         Builder.Services.AddScoped<IActorAccessor, HttpContextActorAccessor>();
+        Builder.Services.AddScoped<IRetryAfterAdvisor, HttpResponseRetryAfterAdvisor>();
         Builder.Services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         Builder.Services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateScopeCommand, CreateScopeCommandOutput, CreateScopeCommandHandler>();
@@ -863,20 +864,36 @@ public class Startup : WebApiStartup
 
     /// <summary>
     ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
-    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) per acting
-    ///     person: <see cref="AccountCreationPermitLimit" /> a minute. Each derives an Argon2id hash
-    ///     through <c>PasswordHashGate</c>, and each needs only an administrator's token, so without a
-    ///     bound one account, from one address, could keep the gate full and starve every sign-in
-    ///     (Threat Model TH-03).
+    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) twice over:
+    ///     <see cref="AccountCreationPermitLimit" /> a minute per acting person, and as many per address.
+    ///     Each derives an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
+    ///     administrator's token, so without a bound one caller could keep the gate full and starve every
+    ///     sign-in (Threat Model TH-03).
     /// </summary>
     /// <remarks>
-    ///     Partitioned by the actor, not the address, because the threat is one account and the
-    ///     legitimate use is one administrator at a time: thirty a minute is more than anyone creates by
-    ///     hand. The limiter runs after authentication, so the actor is known; a request without one is
-    ///     refused by authentication before the action, and is counted by address meanwhile.
+    ///     <para>
+    ///         The actor bound is the endpoint policy. It alone is not enough: an owner of a scope can
+    ///         create co-owners, each a new actor with a budget of its own, so one caller could multiply
+    ///         actors from one address. The address bound — the partition the credential endpoints use
+    ///         (<see cref="AuthRateLimitPartition" />), in a namespace of its own — is the global limiter,
+    ///         which ASP.NET Core applies before the endpoint policy, and which answers "no limit" for
+    ///         every endpoint without that policy. What remains is a flood from many addresses, the
+    ///         distributed case TH-03 leaves to the edge.
+    ///     </para>
+    ///     <para>
+    ///         Thirty a minute is more than anyone creates by hand. The limiter runs after
+    ///         authentication, so the actor is known; a request without one is counted by address.
+    ///     </para>
     /// </remarks>
     private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
     {
+        FixedWindowRateLimiterOptions Window(string _) => new()
+        {
+            PermitLimit = AccountCreationPermitLimit,
+            Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
+            QueueLimit = 0
+        };
+
         options.AddPolicy(AccountCreationRateLimitPolicy, httpContext =>
         {
             var actor = httpContext.GetUser<IdentityUser>();
@@ -885,13 +902,15 @@ public class Startup : WebApiStartup
                 partitionKey: actor is null
                     ? AuthRateLimitPartition.KeyFor(httpContext, callers)
                     : $"actor:{actor.Id}",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = AccountCreationPermitLimit,
-                    Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
-                    QueueLimit = 0
-                });
+                factory: Window);
         });
+
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ==
+            AccountCreationRateLimitPolicy
+                ? RateLimitPartition.GetFixedWindowLimiter(
+                    "creation:" + AuthRateLimitPartition.KeyFor(httpContext, callers), Window)
+                : RateLimitPartition.GetNoLimiter(string.Empty));
     }
 
     private void AddAuthEndpointRateLimiting()

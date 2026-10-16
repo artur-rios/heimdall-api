@@ -189,4 +189,44 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
         Assert.Contains(AuthMessages.AccountEmailLimitReached, response.Body!.Errors);
         Assert.Equal(person.Email, (await ReloadAsync(person)).Email);
     }
+
+    [FunctionalFact]
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenPostResendVerification_ThenRetryAfterNamesTheWindowsEnd()
+    {
+        // Given a window ending in ten hours
+        var person = await SeedPersonAsync("daily-cap-retry");
+        await SetBudgetAsync(person, AccountEmailBudget.MaxPerDay, DateTime.UtcNow.AddHours(10), DateTime.UtcNow.AddHours(-2));
+        ActAs(person);
+
+        // When
+        using var response = await Gateway.Client.PostAsync(
+            "/api/auth/resend-verification", System.Net.Http.Json.JsonContent.Create(new { }));
+
+        // Then — the seconds until the window ends, so a client need not wait until "tomorrow"
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.NotNull(response.Headers.RetryAfter?.Delta);
+        Assert.InRange(response.Headers.RetryAfter!.Delta!.Value.TotalSeconds, 10 * 3600 - 120, 10 * 3600);
+    }
+
+    [FunctionalFact]
+    public async Task GivenThePersonVanishedBeforeTheReservation_WhenReserved_ThenItIsRefusedWithoutAnError()
+    {
+        // Given a copy of a person whose row is then hard deleted (UC-10) before the write
+        var person = await SeedPersonAsync("vanished");
+        await using var context = db.CreateContext();
+        var copy = await context.Persons.SingleAsync(x => x.Id == person.Id);
+
+        await using (var other = db.CreateContext())
+        {
+            await other.Persons.Where(x => x.Id == person.Id).ExecuteDeleteAsync();
+        }
+
+        // When
+        var now = DateTime.UtcNow;
+        var outcome = await new AtomicWrites(context).TryReserveAccountEmailAsync(
+            copy, AccountEmailBudget.MaxPerDay, now, now, now + AccountEmailBudget.Window);
+
+        // Then — a refusal, never a send, and no exception for the caller to turn into a 500
+        Assert.NotEqual(AccountEmailReservation.Reserved, outcome);
+    }
 }

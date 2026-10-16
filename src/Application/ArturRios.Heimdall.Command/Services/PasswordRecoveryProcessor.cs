@@ -51,11 +51,13 @@ public class PasswordRecoveryProcessor(
 
         // FR-PR-07 (AF-12b): one reset link per person per cooldown, whoever asks — asked exactly as
         // UC-52 asks it, so a link either sent counts. The caller was answered long ago, so a request
-        // inside it simply sends nothing, and the link already sent keeps working (it outlives the
-        // cooldown). Requests are worked one at a time per instance, so only a second instance could
-        // overlap one. No daily cap: recovery is anonymous, and a cap anyone could spend would deny
-        // the owner their own recovery.
-        if (await emailOptions.IsRunningAsync(tokenReader, person.Id, resetOptions.TokenLifetime, DateTime.UtcNow))
+        // inside it simply sends nothing, and the link already sent keeps working: the cooldown is
+        // held to the link's lifetime, so it never outlasts the last link sent. Requests are worked one
+        // at a time per instance, so only a second instance could overlap one. No daily cap: recovery
+        // is anonymous, and a cap anyone could spend would deny the owner their own recovery.
+        var cooldown = emailOptions.CappedAt(resetOptions.TokenLifetime);
+
+        if (await cooldown.IsRunningAsync(tokenReader, person.Id, resetOptions.TokenLifetime, DateTime.UtcNow))
         {
             // No address in the log (NFR-22).
             logger.LogInformation("A password reset was not sent: one went to the person within the cooldown");

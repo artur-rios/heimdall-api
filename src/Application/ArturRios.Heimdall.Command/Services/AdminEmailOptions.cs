@@ -51,6 +51,10 @@ public class AdminEmailOptions
     /// </summary>
     public string? RejectedCooldown { get; init; }
 
+    /// <summary>These options with the cooldown at most <paramref name="limit" />.</summary>
+    public AdminEmailOptions CappedAt(TimeSpan limit) =>
+        Cooldown <= limit ? this : new AdminEmailOptions { Cooldown = limit, RejectedCooldown = RejectedCooldown };
+
     public static AdminEmailOptions FromEnvironment() => From(Environment.GetEnvironmentVariable(CooldownVariable));
 
     /// <summary>Reads a configured number of seconds, falling back to the default when it is unusable.</summary>

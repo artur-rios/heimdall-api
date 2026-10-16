@@ -53,7 +53,8 @@ public class UpdatePersonCommandHandler(
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     ITwoFactorFactorVerifier factorVerifier,
     IEmailChangeNoticeSender emailChangeNoticeSender,
-    AdminEmailOptions emailOptions)
+    AdminEmailOptions emailOptions,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<UpdatePersonCommand, UpdatePersonCommandOutput>
 {
     /// <summary>The length of an authenticator-app or email code, which is all digits; a recovery code is not.</summary>
@@ -130,6 +131,18 @@ public class UpdatePersonCommandHandler(
             return output.WithError(reauthentication.Error);
         }
 
+        // FR-PE-18 (AF-08k): not while the email sign-in method is enabled, active or pending — every
+        // sign-in would then mail a code to an address nobody has proved is theirs. The person turns
+        // it off, changes the address, and sets it up again there, which proves it. Only once the
+        // credentials are accepted, so it tells nobody without them anything, and before the budget,
+        // the factor or the address are touched, so it costs nothing. An administrator's change is
+        // their authority and is not held back.
+        if (emailChanged && command.ActingPersonId == person.PublicId &&
+            await twoFactorReader.Query().AnyAsync(x => x.PersonId == person.Id && x.EmailEnabled))
+        {
+            return output.WithError(PersonMessages.EmailSignInMethodEnabled);
+        }
+
         // A role change re-checks it too, even on an unchanged address (FR-PE-09). The namespace the
         // address has to be unique in is chosen by the role, so promoting a User to System Admin
         // moves their address out of their scope's space and into the system-wide admin one, where a
@@ -150,7 +163,8 @@ public class UpdatePersonCommandHandler(
         // charged: it is their authority, not the person's own request.
         if (emailChanged && command.ActingPersonId == person.PublicId &&
             AccountEmailBudget.RefusalOf(
-                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions)) is { } mailRefusal)
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter) is { } mailRefusal)
         {
             return output.WithError(mailRefusal);
         }

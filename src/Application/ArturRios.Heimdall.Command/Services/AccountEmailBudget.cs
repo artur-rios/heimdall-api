@@ -7,7 +7,8 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     FR-PE-16: the per-person budget on the account emails a person's own requests can have sent —
 ///     a verification link asked for again (UC-15), a two-factor setup code (UC-36, email method) and
 ///     the notice an own email change sends to the previous address (UC-08, FR-PE-15). At most one per
-///     <see cref="AdminEmailOptions.Cooldown" />, and at most <see cref="MaxPerDay" /> a day.
+///     <see cref="AdminEmailOptions.Cooldown" />, and at most <see cref="MaxPerDay" /> in each day-long window, which
+///     starts at its first send.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -24,6 +25,13 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         check that read the token rows first let every request of a burst through.
 ///     </para>
 ///     <para>
+///         The window is fixed from its first send, so "a day" is a day-long window, not any 24 hours:
+///         five just before a window ends and five just after it are ten within a day. A refusal says
+///         when to come back through <see cref="IRetryAfterAdvisor" />. A send reserved and then not
+///         made, because a later step failed, is not given back: the cost is one slot, and it fails
+///         closed.
+///     </para>
+///     <para>
 ///         Administrator-initiated mail (UC-51, UC-52) is not charged here: it keeps
 ///         <see cref="AdminEmailOptions" />' own per-kind cooldown, and an administrator's mail must
 ///         stay possible when a person has spent their own day.
@@ -31,7 +39,7 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </remarks>
 public static class AccountEmailBudget
 {
-    /// <summary>The self-service account emails one person may have sent in a <see cref="Window" />.</summary>
+    /// <summary>The self-service account emails one person may have sent in one <see cref="Window" />.</summary>
     public const int MaxPerDay = 5;
 
     /// <summary>How long a window lasts, from the first send in it.</summary>
@@ -68,11 +76,32 @@ public static class AccountEmailBudget
             : AccountEmailReservation.Reserved;
     }
 
-    /// <summary>The refusal a reservation answers with, or <c>null</c> when it was reserved.</summary>
-    public static string? RefusalOf(AccountEmailReservation reservation) => reservation switch
+    /// <summary>
+    ///     The refusal a reservation answers with, or <c>null</c> when it was reserved. A refusal also
+    ///     advises how long to wait: until the window ends for the daily limit, until the cooldown ends
+    ///     for the cooldown — read from <paramref name="person" />, which a refused reservation has
+    ///     brought in line with the stored row.
+    /// </summary>
+    public static string? RefusalOf(
+        AccountEmailReservation reservation, Person person, AdminEmailOptions options, IRetryAfterAdvisor retryAfter)
     {
-        AccountEmailReservation.CoolingDown => Shared.Messages.AuthMessages.EmailSentRecently,
-        AccountEmailReservation.DailyLimitReached => Shared.Messages.AuthMessages.AccountEmailLimitReached,
-        _ => null
-    };
+        var retryAt = reservation switch
+        {
+            AccountEmailReservation.DailyLimitReached => person.AccountEmailWindowEndsAt,
+            AccountEmailReservation.CoolingDown => person.AccountEmailLastSentAt + options.Cooldown,
+            _ => null
+        };
+
+        if (retryAt is { } at)
+        {
+            retryAfter.Advise(at - DateTime.UtcNow);
+        }
+
+        return reservation switch
+        {
+            AccountEmailReservation.CoolingDown => Shared.Messages.AuthMessages.EmailSentRecently,
+            AccountEmailReservation.DailyLimitReached => Shared.Messages.AuthMessages.AccountEmailLimitReached,
+            _ => null
+        };
+    }
 }

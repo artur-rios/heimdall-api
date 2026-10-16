@@ -50,14 +50,18 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         return person;
     }
 
-    /// <summary>An active Email configuration holding one recovery code, which the test returns.</summary>
-    private async Task<string> SeedActiveTwoFactorAsync(Person person)
+    /// <summary>
+    ///     An active configuration holding one recovery code, which the test returns: the App method, or
+    ///     the Email method, which an own email change refuses (FR-PE-18).
+    /// </summary>
+    private async Task<string> SeedActiveTwoFactorAsync(Person person, bool emailMethod = false)
     {
         await using var context = db.CreateContext();
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+            PersonId = person.Id, IsActive = true, AppEnabled = !emailMethod, EmailEnabled = emailMethod,
+            TotpSecretEncrypted = emailMethod ? null : [1, 2, 3]
         };
         context.TwoFactorAuths.Add(twoFactorAuth);
         await context.SaveChangesAsync();
@@ -317,5 +321,27 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         var next = await Gateway.GetAsync<DataOutput<object?>>($"/api/persons/{person.PublicId}");
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheEmailSignInMethodIsActive_WhenChangingOwnEmailWithThePasswordAndACode_ThenConflictAndNothingChanges()
+    {
+        // Given — FR-PE-18 (AF-08k): sign-in codes would go to an address nobody has proved
+        var person = await SeedPersonAsync("reauth-email-method");
+        var recoveryCode = await SeedActiveTwoFactorAsync(person, emailMethod: true);
+        ActAs(person);
+
+        // When
+        var response = await UpdateAsync(person, person.Name, UniqueEmail("elsewhere"), Password, recoveryCode);
+
+        // Then — refused, nothing changed, and the recovery code is still good
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(PersonMessages.EmailSignInMethodEnabled, response.Body!.Errors);
+        await AssertUnchangedAsync(person);
+
+        await using var context = db.CreateContext();
+        Assert.False(await context.TwoFactorRecoveryCodes
+            .Where(code => code.TwoFactorAuth.PersonId == person.Id)
+            .AnyAsync(code => code.UsedAt != null));
     }
 }

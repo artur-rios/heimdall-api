@@ -63,7 +63,8 @@ public class EnableTwoFactorAuthCommandHandler(
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
     ITotpSecretProtector totpSecretProtector,
     IAtomicWrites atomicWrites,
-    AdminEmailOptions emailOptions)
+    AdminEmailOptions emailOptions,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
 {
     private const string Issuer = "Heimdall";
@@ -106,7 +107,8 @@ public class EnableTwoFactorAuthCommandHandler(
 
         // AF-36f, AF-36g (FR-2F-19): Email would mail a code the budget would refuse. Read from the
         // row already loaded, so it costs nothing; the reservation below is what decides.
-        if (wantsEmail && AccountEmailBudget.RefusalOf(AccountEmailBudget.Peek(person, emailOptions)) is { } early)
+        if (wantsEmail && AccountEmailBudget.RefusalOf(
+                AccountEmailBudget.Peek(person, emailOptions), person, emailOptions, retryAfter) is { } early)
         {
             return output.WithError(early);
         }
@@ -133,7 +135,8 @@ public class EnableTwoFactorAuthCommandHandler(
         // FR-2F-19: the password checked out, so the send is reserved now, by one conditional write —
         // of a burst that all passed the read above, exactly what the budget has left goes through.
         if (wantsEmail && AccountEmailBudget.RefusalOf(
-                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions)) is { } refusal)
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter) is { } refusal)
         {
             return output.WithError(refusal);
         }

@@ -15,6 +15,9 @@ public static class PersonMessageMap
             [PersonMessages.PersonCreatedSuccessfully] = HttpStatusCodes.Created,
             // AF-06a — email already exists.
             [PersonMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict,
+            // AF-08k — the email sign-in method is enabled; a state the caller must change first, as
+            // AF-36a's "already active" is.
+            [PersonMessages.EmailSignInMethodEnabled] = HttpStatusCodes.Conflict,
             // AF-06b — scope not found.
             [PersonMessages.ScopeNotFound] = HttpStatusCodes.NotFound,
             // AF-06e — actor is not an owner of the target scope.

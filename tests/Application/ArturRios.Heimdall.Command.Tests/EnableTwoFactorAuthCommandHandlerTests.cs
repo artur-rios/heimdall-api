@@ -41,6 +41,9 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Mock<ITwoFactorEmailSender> EmailSender,
         Person Person)
     {
+        /// <summary>The waits the handler advised, as the <c>Retry-After</c> of its refusals.</summary>
+        public RecordingRetryAfterAdvisor RetryAfter { get; } = new();
+
         public EnableTwoFactorAuthCommandHandler Handler() =>
             new(
                 new EnableTwoFactorAuthCommandValidator(),
@@ -53,7 +56,8 @@ public class EnableTwoFactorAuthCommandHandlerTests
                 new TwoFactorEmailCodeIssuer(EmailCodes, EmailCodes, EmailSender.Object),
                 Protector.Object,
                 InMemoryAtomicWrites.Instance,
-                new AdminEmailOptions { Cooldown = TimeSpan.FromMinutes(5) });
+                new AdminEmailOptions { Cooldown = TimeSpan.FromMinutes(5) },
+                RetryAfter);
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {
@@ -589,5 +593,20 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.NotNull(output.Data!.OtpAuthUri);
         Assert.Equal(0, fixture.Person.AccountEmailsSent);
+    }
+
+    [UnitFact]
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenSelectingEmail_ThenTheWaitUntilTheWindowEndsIsAdvised()
+    {
+        // Given — refused by the read before the password, and the wait advised all the same
+        var fixture = await FixtureAsync();
+        SpendDay(fixture.Person);
+
+        // When
+        await fixture.Handler().HandleAsync(fixture.Command("Email"));
+
+        // Then
+        var wait = Assert.Single(fixture.RetryAfter.Advised);
+        Assert.InRange(wait, TimeSpan.FromHours(10) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(10));
     }
 }

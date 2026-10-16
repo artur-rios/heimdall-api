@@ -111,6 +111,9 @@ public class UpdatePersonCommandHandlerTests
         public AsyncFakeRepository<TwoFactorRecoveryCode, long> RecoveryCodes { get; } = new();
         public List<string> NoticesSentTo { get; } = [];
 
+        /// <summary>The waits the handler advised, as the <c>Retry-After</c> of its refusals.</summary>
+        public RecordingRetryAfterAdvisor RetryAfter { get; } = new();
+
         public ITwoFactorFactorVerifier Verifier()
         {
             var protector = new Mock<ITotpSecretProtector>();
@@ -180,7 +183,8 @@ public class UpdatePersonCommandHandlerTests
             twoFactor.Configurations,
             twoFactor.Verifier(),
             twoFactor.NoticeSender(),
-            new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) });
+            new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) },
+            twoFactor.RetryAfter);
     }
 
     /// <summary>
@@ -437,7 +441,7 @@ public class UpdatePersonCommandHandlerTests
             PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
             Ownership(true), verificationTokens, await ResetTokensAsync(reset),
             InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions());
+            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -1295,7 +1299,7 @@ public class UpdatePersonCommandHandlerTests
             Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
             new AsyncFakeRepository<PasswordResetToken, long>(),
             InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions());
+            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -1561,5 +1565,127 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal(AccountEmailBudget.MaxPerDay, target.AccountEmailsSent);
+    }
+
+    // FR-PE-18 (AF-08k): an own email change is refused while the email sign-in method is enabled,
+    // active or pending — sign-in codes would otherwise go to an address nobody has proved. Decided
+    // once the credentials are accepted, so it tells nobody without them anything, and before the
+    // budget, the factor or the address are touched, so it costs nothing.
+
+    private static async Task<string> ActivateWithEmailAsync(TwoFactorState twoFactor, Person person)
+    {
+        var recoveryCode = await twoFactor.ActivateAsync(person);
+        twoFactor.Configurations.Query().Single(x => x.PersonId == person.Id).EmailEnabled = true;
+
+        return recoveryCode;
+    }
+
+    [UnitFact]
+    public async Task GivenTheEmailSignInMethodIsActive_WhenChangingOwnEmailWithValidCredentials_ThenRefusedAndNothingIsChargedOrSpent()
+    {
+        // Given
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        var recoveryCode = await ActivateWithEmailAsync(twoFactor, target);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        var original = target.Email;
+        command.Email = "moved@test.local";
+        command.TwoFactorCode = recoveryCode;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Contains(PersonMessages.EmailSignInMethodEnabled, output.Errors);
+        Assert.Equal(original, target.Email);
+        Assert.False(Assert.Single(twoFactor.RecoveryCodes.Query().ToList()).Used);
+        Assert.Equal(0, target.AccountEmailsSent);
+        Assert.Equal(0, target.FailedReauthenticationAttempts);
+        Assert.Empty(twoFactor.NoticesSentTo);
+    }
+
+    [UnitFact]
+    public async Task GivenAPendingEmailSetup_WhenChangingOwnEmail_ThenRefused()
+    {
+        // Given an Email setup not yet confirmed: its code went to the current address, and confirming
+        // it after the change would turn sign-in codes on at the new one
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        await twoFactor.Configurations.CreateAsync(new TwoFactorAuth { PersonId = target.Id, IsActive = false, EmailEnabled = true });
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Contains(PersonMessages.EmailSignInMethodEnabled, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenTheEmailSignInMethodIsActive_WhenChangingOwnEmailWithAWrongPassword_ThenTheCredentialRefusalAnswers()
+    {
+        // Given — without the credentials, the caller learns nothing about the account's methods
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        var recoveryCode = await ActivateWithEmailAsync(twoFactor, target);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+        command.CurrentPassword = "not-the-password";
+        command.TwoFactorCode = recoveryCode;
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
+        Assert.DoesNotContain(PersonMessages.EmailSignInMethodEnabled, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenTheEmailSignInMethodIsActive_WhenAnAdministratorChangesTheEmail_ThenItIsUpdated()
+    {
+        // Given — an administrator's change is unchanged by FR-PE-18
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var twoFactor = new TwoFactorState();
+        await ActivateWithEmailAsync(twoFactor, target);
+        var handler = HandlerFor(persons, twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "moved@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+    }
+
+    [UnitFact]
+    public async Task GivenTheDaysAccountEmailsAreSpent_WhenChangingOwnEmail_ThenTheWaitUntilTheWindowEndsIsAdvised()
+    {
+        // Given a window ending in ten hours
+        var target = User(10, Scope(1));
+        target.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
+        target.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(10);
+        target.AccountEmailLastSentAt = DateTime.UtcNow.AddHours(-2);
+        var twoFactor = new TwoFactorState();
+        var handler = HandlerFor(await PersonsWith(target), twoFactor: twoFactor);
+        var command = CommandFor(target, (int)Roles.User, actingPersonId: target.PublicId);
+        command.Email = "moved@test.local";
+
+        // When
+        await handler.HandleAsync(command);
+
+        // Then
+        var wait = Assert.Single(twoFactor.RetryAfter.Advised);
+        Assert.InRange(wait, TimeSpan.FromHours(10) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(10));
     }
 }

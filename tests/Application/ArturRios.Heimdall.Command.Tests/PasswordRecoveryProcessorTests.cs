@@ -83,9 +83,11 @@ public class PasswordRecoveryProcessorTests
     private static PasswordRecoveryProcessor ProcessorFor(
         AsyncFakeRepository<Person, long> persons,
         IPasswordResetService passwordReset,
-        AsyncFakeRepository<PasswordResetToken, long>? tokens = null) =>
+        AsyncFakeRepository<PasswordResetToken, long>? tokens = null,
+        TimeSpan? cooldown = null) =>
         new(persons, tokens ?? new AsyncFakeRepository<PasswordResetToken, long>(), passwordReset, ResetOptions,
-            new AdminEmailOptions { Cooldown = TimeSpan.FromMinutes(5) }, NullLogger<PasswordRecoveryProcessor>.Instance);
+            new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) },
+            NullLogger<PasswordRecoveryProcessor>.Instance);
 
     /// <summary>A reset token for <paramref name="person" /> issued <paramref name="age" /> ago.</summary>
     private static async Task<AsyncFakeRepository<PasswordResetToken, long>> TokensIssuedAsync(Person person, TimeSpan age)
@@ -336,6 +338,24 @@ public class PasswordRecoveryProcessorTests
         await ProcessorFor(persons, passwordReset, tokens).ProcessAsync(Request("admin@test.local"));
 
         // Then
+        Assert.Same(person, passwordReset.Recipient);
+    }
+
+    [UnitFact]
+    public async Task GivenACooldownLongerThanTheLinkLifetime_WhenTheLastLinkHasExpired_ThenANewOneIsIssued()
+    {
+        // Given a two-hour cooldown and a one-hour link issued 61 minutes ago — dead, so holding the
+        // cooldown to its full length would leave the owner with no working link at all
+        var person = ScopeAdmin(10, "admin@test.local", Scope(1));
+        var persons = await PersonsWith(person);
+        var tokens = await TokensIssuedAsync(person, TimeSpan.FromMinutes(61));
+        var passwordReset = new RecordingResetService();
+
+        // When
+        await ProcessorFor(persons, passwordReset, tokens, TimeSpan.FromHours(2))
+            .ProcessAsync(Request("admin@test.local"));
+
+        // Then — the cooldown is clamped to the link's lifetime
         Assert.Same(person, passwordReset.Recipient);
     }
 }
