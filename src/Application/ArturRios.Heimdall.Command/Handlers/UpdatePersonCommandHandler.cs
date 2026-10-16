@@ -161,9 +161,9 @@ public class UpdatePersonCommandHandler(
         // the person's account-email budget — after the password and factor were accepted, so a token
         // without them cannot spend it, and before a recovery or email code is spent or anything is
         // written, so a refusal spends neither and changes nothing. An accepted authenticator code has
-        // had its time step recorded already (FR-2F-14), as any accepted app code does. Switching an address back and forth therefore
-        // mails the address it leaves at most the budget's day. An administrator's change is not
-        // charged: it is their authority, not the person's own request.
+        // had its time step recorded already (FR-2F-14), as any accepted app code does. Switching an
+        // address back and forth therefore mails the address it leaves at most the budget's day. An
+        // administrator's change is not charged: it is their authority, not the person's own request.
         if (emailChanged && command.ActingPersonId == person.PublicId &&
             AccountEmailBudget.RefusalOf(
                 await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),

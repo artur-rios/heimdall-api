@@ -175,31 +175,79 @@ public class TokenOriginTests
     }
 
     [UnitTheory]
-    [InlineData(SecurityAlgorithms.HmacSha384)]
-    [InlineData(SecurityAlgorithms.HmacSha512)]
-    public async Task GivenTheRightKeyUnderAnotherHmacAlgorithm_WhenValidated_ThenItIsRefused(string algorithm)
+    [InlineData(SecurityAlgorithms.HmacSha256, true)]
+    [InlineData(SecurityAlgorithms.HmacSha384, false)]
+    [InlineData(SecurityAlgorithms.HmacSha512, false)]
+    public async Task GivenTheRightKeyUnderAnHmacAlgorithm_WhenValidated_ThenOnlyHs256IsAccepted(
+        string algorithm, bool accepted)
     {
-        // Given — ArturRios.Jwt 1.3.0 accepts HS256 alone, the one algorithm Heimdall signs with. The
-        // key is long enough for HS512, so only the algorithm is wrong.
+        // Given — ArturRios.Jwt 1.3.0 accepts HS256 alone, the one algorithm Heimdall signs with. One
+        // descriptor for every case, with a key long enough for HS512, so only the algorithm differs.
         const string longSecret = "unit-tests-token-origin-signing-secret-long-enough-for-hs512-0123456789";
         var configuration = new JwtConfiguration(3600, Issuer, PersonAudience, longSecret, [])
         {
             Keys = [new JwtKey("current", longSecret)]
         };
+        var user = FullIdentity();
         var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = Issuer,
             Audience = PersonAudience,
-            Claims = Mapper.ToClaims(FullIdentity()).ToDictionary(claim => claim.Key, object (claim) => claim.Value),
+            Claims = Mapper.ToClaims(user).ToDictionary(claim => claim.Key, object (claim) => claim.Value),
             Expires = DateTime.UtcNow.AddMinutes(10),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm)
         });
+        Assert.Equal(algorithm, new JsonWebToken(token).Alg);
 
         // When
         var result = await Validator(configuration).ValidateAsync(token, new DefaultHttpContext());
 
         // Then
-        Assert.Null(result.User);
+        if (accepted)
+        {
+            Assert.Equal(user.Id, result.User?.Id);
+            Assert.Null(result.Error);
+        }
+        else
+        {
+            Assert.Null(result.User);
+            Assert.Equal(PersonTokenValidator.InvalidToken, result.Error);
+        }
+    }
+
+    [UnitTheory]
+    [InlineData("")]
+    [InlineData(PersonTokenAudiences.TwoFactorChallengeSuffix)]
+    public async Task GivenAnEmptyPersonAudience_WhenValidatingATokenIssuedUnderIt_ThenTheUserIsResolved(string audience)
+    {
+        // Given — HEIMDALL_AUTH_TOKEN_AUDIENCE left empty, its documented default: a full token then
+        // carries no aud claim, and a challenge carries the bare suffix
+        var audiences = new PersonTokenAudiences(string.Empty);
+        var mapper = new IdentityUserMapper(audiences);
+        var configuration = new JwtConfiguration(3600, Issuer, string.Empty, Secret, [])
+        {
+            Keys = [new JwtKey("current", Secret)]
+        };
+        var challenge = audience == audiences.TwoFactorChallenge;
+        var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+        {
+            MfaPending = challenge,
+            ChallengeId = challenge ? Guid.NewGuid() : null
+        };
+        var token = new JwtHandler().CreateToken(
+            new JwtConfiguration(3600, Issuer, audience, Secret, mapper.ToClaims(user)));
+        Assert.Equal(challenge, new JsonWebToken(token).TryGetClaim(JwtRegisteredClaimNames.Aud, out _));
+
+        var options = new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly };
+        var validator = new PersonTokenValidator(
+            new JwtTokenValidator(configuration, new JwtHandler(), mapper, options), configuration, audiences);
+
+        // When
+        var result = await validator.ValidateAsync(token, new DefaultHttpContext());
+
+        // Then
+        Assert.Equal(user.Id, result.User?.Id);
+        Assert.Null(result.Error);
     }
 }

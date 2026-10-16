@@ -39,7 +39,10 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person, long> pe
         public PersonOutput Output { get; init; } = null!;
     }
 
-    /// <summary>One scope the person owns, by both ids: the internal one to compare, the public one to report.</summary>
+    /// <summary>
+    ///     One scope the person owns, by both ids: the internal one to compare, the public one to
+    ///     report.
+    /// </summary>
     private sealed class OwnedScope
     {
         public long ScopeId { get; init; }

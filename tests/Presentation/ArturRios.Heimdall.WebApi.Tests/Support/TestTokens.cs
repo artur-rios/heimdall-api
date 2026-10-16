@@ -93,7 +93,10 @@ public static class TestTokens
     public static string WithOrigin(IdentityUser user, string issuer, string audience) =>
         Create(user, audience: audience, issuer: issuer);
 
-    /// <summary>The issuer the host under test issues every token under, as <see cref="PostgresFixture" /> publishes it.</summary>
+    /// <summary>
+    ///     The issuer the host under test issues every token under, as <see cref="PostgresFixture" />
+    ///     publishes it.
+    /// </summary>
     public static string Issuer => Environment.GetEnvironmentVariable(IssuerVariable) ?? string.Empty;
 
     /// <summary>

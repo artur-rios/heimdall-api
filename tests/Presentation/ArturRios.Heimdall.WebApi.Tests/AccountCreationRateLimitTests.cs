@@ -18,8 +18,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // and starve every sign-in. The limit is per acting person, sized for real administration.
 //
 // The limit is per acting person and per address too; only an administrator's person access token
-// spends the address bound. The functional tests spend the budget with malformed bodies: the limiter counts a request
-// before MVC sees it, so a 400 costs a slot as a created person does, without thirty derivations.
+// spends the address bound. The functional tests spend the budget with malformed bodies: the
+// limiter counts a request before MVC sees it, so a 400 costs a slot as a created person does,
+// without thirty derivations.
 [Collection(nameof(FunctionalCollection))]
 public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -49,6 +50,19 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         await context.SaveChangesAsync();
 
         return user.PublicId;
+    }
+
+    private async Task<string> SubjectRightsTokenAsync()
+    {
+        var admin = await SeedSystemAdminAsync();
+
+        return TestTokens.WithAudience(
+            new IdentityUser(admin, (int)Roles.SystemAdmin)
+            {
+                SubjectRightsOnly = true,
+                SecurityStamp = TestTokens.StampOf(admin)
+            },
+            TestTokens.Audiences.SubjectRights);
     }
 
     private Task<HttpResponseMessage> CreateAsync(Guid? actor, string clientAddress) =>
@@ -142,16 +156,20 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     [FunctionalTheory]
     [InlineData("user")]
     [InlineData("challenge")]
+    [InlineData("subject-rights")]
     public async Task GivenNonAdministratorTokensSpentAnAddressesMinute_WhenAnAdministratorCreatesFromIt_ThenTheyAreServed(
         string kind)
     {
-        // Given thirty requests from one address with a token the endpoint refuses: a User's, or an
-        // administrator's two-factor challenge
+        // Given thirty requests from one address with a token the endpoint refuses: a User's, an
+        // administrator's two-factor challenge, or an administrator's subject-rights-only token
         var actor = await SeedSystemAdminAsync();
-        var address = kind == "user" ? "203.0.113.75" : "203.0.113.76";
-        var token = kind == "user"
-            ? TestTokens.For(await SeedUserAsync(), (int)Roles.User)
-            : TestTokens.ForMfaPending(await SeedSystemAdminAsync(), (int)Roles.SystemAdmin);
+        var (address, token) = kind switch
+        {
+            "user" => ("203.0.113.75", TestTokens.For(await SeedUserAsync(), (int)Roles.User)),
+            "challenge" => ("203.0.113.76",
+                TestTokens.ForMfaPending(await SeedSystemAdminAsync(), (int)Roles.SystemAdmin)),
+            _ => ("203.0.113.77", await SubjectRightsTokenAsync())
+        };
 
         for (var attempt = 1; attempt <= Startup.AccountCreationPermitLimit; attempt++)
         {

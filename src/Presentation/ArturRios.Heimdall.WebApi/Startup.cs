@@ -47,6 +47,7 @@ using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Rewrite;
+using Microsoft.Net.Http.Headers;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -739,13 +740,49 @@ public class Startup : WebApiStartup
         // Credentials are allowed because the front end sends the bearer token UC-11 issued. That is
         // also why the origin list has to be explicit: AllowAnyOrigin and AllowCredentials are
         // mutually exclusive by specification, precisely to stop this combination from existing.
+        // Retry-After is exposed because it is not a safelisted response header: without it a front
+        // end on another origin sees a 429 but cannot read how long to wait.
         Builder.Services.AddCors(cors => cors.AddPolicy(CorsPolicyName, policy => policy
             .WithOrigins(origins)
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials()));
+            .AllowCredentials()
+            .WithExposedHeaders(HeaderNames.RetryAfter)));
 
         Options.CorsPolicy = CorsPolicyName;
+    }
+
+    /// <summary>
+    ///     Puts <see cref="PersonTokenValidator" /> in the place of the <see cref="JwtTokenValidator" />
+    ///     that <c>AddTokenAuthentication</c> registers as an <see cref="ITokenValidator" />, keeping the
+    ///     library's validator as the inner one it wraps.
+    /// </summary>
+    /// <remarks>
+    ///     TB-5: the library's validator checks the signature and lifetime but not the issuer or the
+    ///     audience, and the signing key is not Heimdall's alone. PersonTokenValidator wraps it and
+    ///     takes its place, so a token reaches the middleware's user only if Heimdall issued it, for
+    ///     one of the person audiences. When the library registers its validator in some other way,
+    ///     start-up stops and says why, rather than running with the library's validator alone.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     The services hold no <see cref="ITokenValidator" /> registered as <see cref="JwtTokenValidator" />.
+    /// </exception>
+    public static void ReplaceLibraryTokenValidator(IServiceCollection services)
+    {
+        var libraryValidator = services.SingleOrDefault(descriptor =>
+            descriptor.ServiceType == typeof(ITokenValidator) &&
+            descriptor.ImplementationType == typeof(JwtTokenValidator));
+
+        if (libraryValidator is null)
+        {
+            throw new InvalidOperationException(
+                "ArturRios.Util.WebApi no longer registers JwtTokenValidator as an ITokenValidator; " +
+                "PersonTokenValidator cannot replace it. Refusing to start.");
+        }
+
+        services.Remove(libraryValidator);
+        services.AddSingleton<JwtTokenValidator>();
+        services.AddSingleton<ITokenValidator, PersonTokenValidator>();
     }
 
     private void ConfigureSecurity()
@@ -802,16 +839,7 @@ public class Startup : WebApiStartup
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
 
-        // TB-5: the library's validator checks the signature and lifetime but not the issuer or the
-        // audience, and the signing key is not Heimdall's alone. PersonTokenValidator wraps it and
-        // takes its place, so a token reaches the middleware's user only if Heimdall issued it, for
-        // one of the person audiences.
-        var libraryValidator = Builder.Services.Single(descriptor =>
-            descriptor.ServiceType == typeof(ITokenValidator) &&
-            descriptor.ImplementationType == typeof(JwtTokenValidator));
-        Builder.Services.Remove(libraryValidator);
-        Builder.Services.AddSingleton<JwtTokenValidator>();
-        Builder.Services.AddSingleton<ITokenValidator, PersonTokenValidator>();
+        ReplaceLibraryTokenValidator(Builder.Services);
 
         AddAuthEndpointRateLimiting();
 
@@ -943,6 +971,17 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
+    ///     Whether a request spends the account-creation address bound: only an administrator's
+    ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
+    ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
+    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
+    ///     away by the endpoint's own checks and must not use up a bound administrators share.
+    /// </summary>
+    private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
+        actor is { MfaPending: false, SubjectRightsOnly: false } &&
+        actor.RoleId is (int)Roles.SystemAdmin or (int)Roles.ScopeAdmin;
+
+    /// <summary>
     ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
     ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) twice over:
     ///     <see cref="AccountCreationPermitLimit" /> a minute per acting person, and as many per address.
@@ -967,17 +1006,6 @@ public class Startup : WebApiStartup
     ///         refused by the endpoint anyway and must not use up a bound administrators share.
     ///     </para>
     /// </remarks>
-    /// <summary>
-    ///     Whether a request spends the account-creation address bound: only an administrator's
-    ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
-    ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
-    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
-    ///     away by the endpoint's own checks and must not use up a bound administrators share.
-    /// </summary>
-    private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
-        actor is { MfaPending: false, SubjectRightsOnly: false } &&
-        actor.RoleId is (int)Roles.SystemAdmin or (int)Roles.ScopeAdmin;
-
     private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
     {
         FixedWindowRateLimiterOptions Window(string _) => new()
