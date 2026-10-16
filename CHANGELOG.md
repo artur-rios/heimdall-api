@@ -7,6 +7,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A person's lifecycle columns are no longer written by whole-row saves (#237). The address and its verified flag,
+  the role and scope, the login lockout, and the deletion, erasure-request, restriction and anonymisation columns are
+  each written by a conditional write of their own, so a request that read the person before another changed them
+  can no longer put the earlier values back: a profile edit no longer undoes a restriction, a deletion or a lockout
+  made meanwhile. Adding and removing a scope owner now write only the ownership row, and removing one re-checks
+  that a live co-owner remains in the same statement. **Clients:** only requests that race another change to the
+  same person answer differently. An address or role change through `PUT /api/persons/{id}` or a promotion through
+  `POST /api/scopes/{scopeId}/users/{personId}/promote` whose person changed meanwhile answers `409` with
+  "Concurrency conflict: the record was modified or removed by another process."; a restriction, lift, erasure
+  request, deletion or ownership change that lost such a race answers as the request that won leaves it, with the
+  existing message for that state.
+
 ## [1.6.0] - 2026-10-16
 
 ### Security

@@ -94,13 +94,13 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `POST /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-06 path a — create a `User` in a scope |
 | `POST /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-06 path c — create a new `ScopeAdmin` directly as a co-owner |
 | `POST /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-21 — add an existing `ScopeAdmin` or `SystemAdmin` as an owner |
-| `POST /scopes/{scopeId}/users/{personId}/promote` | System Admin + Scope Admin | UC-23 — promote a scope's `User` to owner |
+| `POST /scopes/{scopeId}/users/{personId}/promote` | System Admin + Scope Admin | UC-23 — promote a scope's `User` to owner; `409` "Concurrency conflict: the record was modified or removed by another process." when the person was changed, promoted or deleted after the request read them (AF-23f) — read them again before retrying |
 | `GET /persons/{id}` | Any authenticated | UC-07 — read one person (a person may read themselves) |
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
 | `GET /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-07 — list a scope's owners |
 | `GET /persons/scope-admins` | System Admin + Scope Admin | UC-07 read d — list who may own a scope (Scope Admins, plus System Admins for a System Admin caller) for an owner picker; optionally excludes a scope's current owners |
 | `GET /persons/system-admins` | System Admin | UC-07 read e — list the System Admins: who else holds full access |
-| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role. Changing your **own** email needs `currentPassword`, and `twoFactorCode` when your 2FA is active (`401` otherwise); any email change revokes the person's tokens and notifies the previous address |
+| `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role. Changing your **own** email needs `currentPassword`, and `twoFactorCode` when your 2FA is active (`401` otherwise); any email change revokes the person's tokens and notifies the previous address. An address or role change answers `409` "Concurrency conflict: the record was modified or removed by another process." when the person was changed or deleted after the request read them (AF-08l) — read them again before retrying |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
 | `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
 | `POST /persons/{id}/verification-email` | System Admin + Scope Admin | UC-51 — mail a fresh verification link to the person's own address; a Scope Admin only for Users of scopes they own; 429 within the cooldown |
