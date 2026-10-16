@@ -214,6 +214,70 @@ public class GetPersonByIdQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenCoOwnerOwningAnotherTenantsScope_WhenScopeAdminHandlesGetPersonById_ThenOnlyTheSharedScopeIsReturned()
+    {
+        // Given a co-owner of the actor's scope who also owns a scope the actor does not (FR-PE-19)
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var actor = ScopeAdmin(10, shared);
+        var target = ScopeAdmin(11, shared, elsewhere);
+        var repository = await RepositoryWith(actor, target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([shared.PublicId], output.Data!.OwnedScopeIds);
+    }
+
+    [UnitFact]
+    public async Task GivenScopeAdminOwningTwoScopes_WhenSystemAdminHandlesGetPersonById_ThenEveryScopeIsReturned()
+    {
+        // Given
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var target = ScopeAdmin(11, shared, elsewhere);
+        var repository = await RepositoryWith(target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { shared.PublicId, elsewhere.PublicId }, output.Data!.OwnedScopeIds, strict: true);
+    }
+
+    [UnitFact]
+    public async Task GivenScopeAdminOwningTwoScopes_WhenTheyHandleGetPersonByIdForThemselves_ThenEveryScopeIsReturned()
+    {
+        // Given
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var target = ScopeAdmin(11, shared, elsewhere);
+        var repository = await RepositoryWith(target);
+        var handler = new GetPersonByIdQueryHandler(repository);
+
+        // When
+        var output = await handler.HandleAsync(new GetPersonByIdQuery
+        {
+            Id = target.PublicId, ActingPersonId = target.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { shared.PublicId, elsewhere.PublicId }, output.Data!.OwnedScopeIds, strict: true);
+    }
+
+    [UnitFact]
     public async Task GivenScopeAdminRequestingSystemAdmin_WhenHandlingGetPersonById_ThenReturnsNotAuthorized()
     {
         // Given a ScopeAdmin and an unrelated SystemAdmin (AF-07b)

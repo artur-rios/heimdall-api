@@ -37,6 +37,16 @@ services:
       # variables below.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
 
+      # The host names Traefik routes to this instance (yggdrasil's overlay reads the same two). The
+      # API reads them only to tell whether it is reachable from outside: with either naming a host
+      # other than localhost, the diagnostics Development and Staging turn on -- EF parameter
+      # logging, detailed errors, the developer exception page -- refuse to start unless
+      # HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS is true, which states that the instance holds made-up
+      # people only (NFR-28). Production turns those diagnostics off, so it is never refused.
+      PUBLIC_HOST: ${PUBLIC_HOST:-}
+      UI_HOST: ${UI_HOST:-}
+      HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS: ${HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS:-}
+
       # The API resolves its whole configuration from the environment (Startup, and
       # AddDataConfigFromEnvironment("HEIMDALL_DATA")). The Environments/.env files are for running
       # from source; none is copied into the image.
@@ -107,6 +117,12 @@ services:
       # The entrypoint applies pending EF Core migrations before starting the API. false when they
       # are applied out of band -- scripts/migrations.py, or a deploy step of its own.
       HEIMDALL_RUN_MIGRATIONS: ${HEIMDALL_RUN_MIGRATIONS:-true}
+      # The connection string the entrypoint migrates with, when it should not be the API's own:
+      # the role that owns the schema, so DB_USER above can be a role that owns nothing (Threat
+      # Model TH-18; the operations guide, "Database roles"). A whole connection string, with the
+      # same Search Path as the one above. Empty, the entrypoint migrates with
+      # HEIMDALL_DATA_CONNECTIONSTRING, as it always has. The API itself never reads it.
+      HEIMDALL_MIGRATIONS_CONNECTIONSTRING: ${HEIMDALL_MIGRATIONS_CONNECTIONSTRING:-}
 
       # Refuses to start when the connection string does not require TLS, instead of warning
       # (NFR-25). Off by default so an upgrade cannot take down a deployment over a setting the

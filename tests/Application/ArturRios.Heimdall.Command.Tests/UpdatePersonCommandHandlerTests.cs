@@ -226,6 +226,69 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenScopeAdminOwningTwoScopes_WhenASystemAdminUpdatesThem_ThenEveryScopeIsReturned()
+    {
+        // Given
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var target = ScopeAdmin(10, "owner@test.local", shared, elsewhere);
+        var persons = await PersonsWith(target);
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { shared.PublicId, elsewhere.PublicId }, output.Data!.OwnedScopeIds, strict: true);
+    }
+
+    [UnitFact]
+    public async Task GivenScopeAdminOwningTwoScopes_WhenTheyUpdateThemselves_ThenEveryScopeIsReturned()
+    {
+        // Given
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var target = ScopeAdmin(10, "owner@test.local", shared, elsewhere);
+        var persons = await PersonsWith(target);
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: target.PublicId);
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { shared.PublicId, elsewhere.PublicId }, output.Data!.OwnedScopeIds, strict: true);
+    }
+
+    [UnitFact]
+    public async Task GivenAUserRecordedAsOwningAnotherScope_WhenTheirScopeAdminUpdatesThem_ThenNoOwnershipIsReturned()
+    {
+        // Given — nothing makes a User an owner (FR-SC-08); the output is trimmed whatever the data
+        // holds (FR-PE-19)
+        var shared = Scope(1);
+        var elsewhere = Scope(2);
+        var actor = ScopeAdmin(10, "owner@test.local", shared);
+        var target = User(11, shared);
+        target.ScopeOwnerships = [new ScopeOwner { ScopeId = elsewhere.Id, Scope = elsewhere }];
+        var persons = await PersonsWith(actor, target);
+        var handler = HandlerFor(persons);
+        var command = CommandFor(target, (int)Roles.ScopeAdmin, actingPersonId: actor.PublicId);
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Empty(output.Data!.OwnedScopeIds);
+    }
+
+    [UnitFact]
     public async Task GivenUserUpdatingSelf_WhenUpdatingName_ThenPersonIsUpdated()
     {
         // Given

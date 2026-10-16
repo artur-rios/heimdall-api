@@ -157,12 +157,13 @@ public static class AuthMessages
         "An email of this kind was sent to you recently. Try again in a few minutes.";
 
     /// <summary>
-    ///     AF-15c, AF-36g and AF-08j: the person's own requests have already had the day's account
+    ///     AF-15c, AF-36g and AF-08j: the person's own requests have already had the window's account
     ///     emails sent (FR-PE-16), so nothing was sent and, for an email change, nothing changed.
-    ///     The same status as <see cref="EmailSentRecently" />, with a wait measured in hours.
+    ///     The same status as <see cref="EmailSentRecently" />. The wait can be minutes or hours, so
+    ///     the message names none; the <c>Retry-After</c> header carries it.
     /// </summary>
     public const string AccountEmailLimitReached =
-        "You have reached today's limit for account emails. Try again tomorrow.";
+        "You have reached the limit for account emails. Try again later.";
 
     /// <summary>
     ///     UC-15: the bearer token names a person who no longer exists. Reachable because

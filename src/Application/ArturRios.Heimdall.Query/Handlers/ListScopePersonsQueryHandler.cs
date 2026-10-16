@@ -79,6 +79,14 @@ public class ListScopePersonsQueryHandler(
             persons = persons.Where(x => x.Email.ToLower().Contains(email));
         }
 
+        // FR-PE-19, as in ListScopeOwners: a Scope Admin sees only the ownerships of scopes they own
+        // too, a System Admin all of them. A User owns no scope (FR-SC-08), so this normally trims
+        // nothing; it is applied so the projection cannot say more than the rule allows.
+        var visibleScopeIds = await OwnedScopeVisibility.ScopesVisibleToAsync(
+            personReader, query.ActingRole, query.ActingPersonId);
+        var seesEveryOwnership = visibleScopeIds is null;
+        var visible = visibleScopeIds ?? [];
+
         var projected = persons.Select(x => new PersonOutput
         {
             Id = x.PublicId,
@@ -89,7 +97,10 @@ public class ListScopePersonsQueryHandler(
             TwoFactorEnabled = x.TwoFactorAuth != null && x.TwoFactorAuth.IsActive,
             IsDeleted = x.IsDeleted,
             ScopeId = x.ScopeMembership != null ? x.ScopeMembership.Scope.PublicId : null,
-            OwnedScopeIds = x.ScopeOwnerships.Select(ownership => ownership.Scope.PublicId).ToList(),
+            OwnedScopeIds = x.ScopeOwnerships
+                .Where(ownership => seesEveryOwnership || visible.Contains(ownership.ScopeId))
+                .Select(ownership => ownership.Scope.PublicId)
+                .ToList(),
             CreatedAt = x.CreatedAt,
             UpdatedAt = x.UpdatedAt
         });

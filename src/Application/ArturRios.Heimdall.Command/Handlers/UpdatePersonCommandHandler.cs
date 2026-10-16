@@ -134,9 +134,11 @@ public class UpdatePersonCommandHandler(
         // FR-PE-18 (AF-08k): not while the email sign-in method is enabled, active or pending — every
         // sign-in would then mail a code to an address nobody has proved is theirs. The person turns
         // it off, changes the address, and sets it up again there, which proves it. Only once the
-        // credentials are accepted, so it tells nobody without them anything, and before the budget,
-        // the factor or the address are touched, so it costs nothing. An administrator's change is
-        // their authority and is not held back.
+        // credentials are accepted, so it tells nobody without them anything, and before the budget
+        // or the address are touched and before a recovery or email code is spent. An authenticator
+        // code accepted on the way has had its time step recorded (FR-2F-14), as any accepted app
+        // code does, so a retry needs the next one. An administrator's change is their authority and
+        // is not held back.
         if (emailChanged && command.ActingPersonId == person.PublicId &&
             await twoFactorReader.Query().AnyAsync(x => x.PersonId == person.Id && x.EmailEnabled))
         {
@@ -258,7 +260,14 @@ public class UpdatePersonCommandHandler(
             }
         }
 
-        // UC-08 step 7: return the updated person.
+        // UC-08 step 7: return the updated person. Its ownerships as FR-PE-19 lets the actor see
+        // them: every one to a System Admin or the person themselves, otherwise only those of scopes
+        // the actor owns too. A Scope Admin can update only a User, who owns none (FR-SC-08), so the
+        // trim normally removes nothing; it keeps the output from saying more than a read would.
+        var visibleScopeIds = command.ActingPersonId == person.PublicId
+            ? null
+            : await OwnedScopeVisibility.ScopesVisibleToAsync(personReader, command.ActingRole, command.ActingPersonId);
+
         return output
             .WithData(new UpdatePersonCommandOutput
             {
@@ -268,7 +277,10 @@ public class UpdatePersonCommandHandler(
                 Role = (int)person.RoleId,
                 EmailVerified = person.EmailVerified,
                 ScopeId = person.ScopeMembership?.Scope.PublicId,
-                OwnedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.Scope.PublicId).ToList(),
+                OwnedScopeIds = person.ScopeOwnerships
+                    .Where(ownership => visibleScopeIds is null || visibleScopeIds.Contains(ownership.ScopeId))
+                    .Select(ownership => ownership.Scope.PublicId)
+                    .ToList(),
                 CreatedAt = person.CreatedAt,
                 UpdatedAt = person.UpdatedAt
             })

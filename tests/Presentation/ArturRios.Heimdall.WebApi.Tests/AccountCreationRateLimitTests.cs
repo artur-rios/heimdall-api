@@ -17,9 +17,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // administrator's token, so without a bound one account — from one address — could keep the gate full
 // and starve every sign-in. The limit is per acting person, sized for real administration.
 //
-// The limit is per acting person and, because an administrator who can create administrators can
-// multiply actors, per address too. The functional tests spend the budget with malformed bodies: the limiter counts a request before MVC
-// sees it, so a 400 costs a slot as a created person does, without thirty derivations.
+// The limit is per acting person and per address too; only authenticated requests spend the address
+// bound. The functional tests spend the budget with malformed bodies: the limiter counts a request
+// before MVC sees it, so a 400 costs a slot as a created person does, without thirty derivations.
 [Collection(nameof(FunctionalCollection))]
 public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -37,15 +37,18 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         return admin.PublicId;
     }
 
-    private async Task<HttpResponseMessage> CreateAsync(Guid actor, string clientAddress)
+    private async Task<HttpResponseMessage> CreateAsync(Guid? actor, string clientAddress)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/persons")
         {
             Content = JsonContent.Create(new { })
         };
 
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Bearer", TestTokens.For(actor, (int)Roles.SystemAdmin));
+        if (actor is { } id)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", TestTokens.For(id, (int)Roles.SystemAdmin));
+        }
 
         // A trusted caller's named address, so each test chooses the address bucket it is counted in.
         request.Headers.Add(AuthRateLimitPartition.CallerKeyHeader, PostgresFixture.TrustedCallerKey);
@@ -54,7 +57,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         return await Gateway.Client.SendAsync(request);
     }
 
-    private async Task SpendAsync(Guid actor, string clientAddress, int requests)
+    private async Task SpendAsync(Guid? actor, string clientAddress, int requests)
     {
         for (var attempt = 1; attempt <= requests; attempt++)
         {
@@ -91,8 +94,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     [FunctionalFact]
     public async Task GivenOneAddressSpentTheMinutesBudget_WhenAnotherActorCreatesFromIt_ThenTooManyRequestsAndAnotherAddressIsServed()
     {
-        // Given — actors can be minted (an owner can create owners), so the address is bounded too:
-        // one actor spends thirty from an address
+        // Given — the address is bounded too: one actor spends thirty from an address
         var first = await SeedSystemAdminAsync();
         var second = await SeedSystemAdminAsync();
         await SpendAsync(first, "203.0.113.72", Startup.AccountCreationPermitLimit);
@@ -105,5 +107,19 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         Assert.Equal(HttpStatusCode.TooManyRequests, sameAddress.StatusCode);
         Assert.Equal(RateLimitMessages.TooManyRequests, await FirstErrorAsync(sameAddress));
         Assert.NotEqual(HttpStatusCode.TooManyRequests, otherAddress.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnonymousRequestsSpentAnAddressesMinute_WhenAnAdministratorCreatesFromIt_ThenTheyAreServed()
+    {
+        // Given thirty requests without a token from one address
+        var actor = await SeedSystemAdminAsync();
+        await SpendAsync(null, "203.0.113.74", Startup.AccountCreationPermitLimit);
+
+        // When an administrator creates from the same address
+        using var response = await CreateAsync(actor, "203.0.113.74");
+
+        // Then — anonymous traffic does not spend the address bound administrators share
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
     }
 }

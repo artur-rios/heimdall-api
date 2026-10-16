@@ -78,8 +78,9 @@ public static class AccountEmailBudget
 
     /// <summary>
     ///     The refusal a reservation answers with, or <c>null</c> when it was reserved. A refusal also
-    ///     advises how long to wait: until the window ends for the daily limit, until the cooldown ends
-    ///     for the cooldown — read from <paramref name="person" />, which a refused reservation has
+    ///     advises how long to wait: until the cooldown ends for the cooldown, and for the daily limit
+    ///     until the window ends or the cooldown does, whichever is later, since a send is accepted
+    ///     only once both have — read from <paramref name="person" />, which a refused reservation has
     ///     brought in line with the stored row.
     /// </summary>
     public static string? RefusalOf(
@@ -87,7 +88,8 @@ public static class AccountEmailBudget
     {
         var retryAt = reservation switch
         {
-            AccountEmailReservation.DailyLimitReached => person.AccountEmailWindowEndsAt,
+            AccountEmailReservation.DailyLimitReached => Later(
+                person.AccountEmailWindowEndsAt, person.AccountEmailLastSentAt + options.Cooldown),
             AccountEmailReservation.CoolingDown => person.AccountEmailLastSentAt + options.Cooldown,
             _ => null
         };
@@ -104,4 +106,7 @@ public static class AccountEmailBudget
             _ => null
         };
     }
+
+    private static DateTime? Later(DateTime? first, DateTime? second) =>
+        first is null ? second : second is null ? first : first > second ? first : second;
 }

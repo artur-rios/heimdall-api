@@ -84,6 +84,51 @@ public class ListScopePersonsQueryHandlerTests
     };
 
     [UnitFact]
+    public async Task GivenAUserRecordedAsOwningAnotherScope_WhenAScopeAdminLists_ThenNoOwnershipIsReturned()
+    {
+        // Given a User whose data says they own a scope the actor does not (FR-PE-19). Nothing in
+        // the API makes a User an owner (FR-SC-08); the projection is trimmed whatever the data holds.
+        var scope = Scope(1);
+        var elsewhere = Scope(2);
+        var actor = Owner(10, scope);
+        var member = User(11, scope, "Ana", "ana@test.local");
+        member.ScopeOwnerships = [new ScopeOwner { ScopeId = elsewhere.Id, Scope = elsewhere }];
+        var scopes = await ScopesWith(scope, elsewhere);
+        var persons = await PersonsWith(actor, member);
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
+        var query = QueryFor(scope);
+        query.ActingPersonId = actor.PublicId;
+        query.ActingRole = (int)Roles.ScopeAdmin;
+
+        // When
+        var output = await handler.HandleAsync(query);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Empty(Assert.Single(output.Data!).OwnedScopeIds);
+    }
+
+    [UnitFact]
+    public async Task GivenAUserRecordedAsOwningAnotherScope_WhenASystemAdminLists_ThenTheOwnershipIsReturned()
+    {
+        // Given
+        var scope = Scope(1);
+        var elsewhere = Scope(2);
+        var member = User(11, scope, "Ana", "ana@test.local");
+        member.ScopeOwnerships = [new ScopeOwner { ScopeId = elsewhere.Id, Scope = elsewhere }];
+        var scopes = await ScopesWith(scope, elsewhere);
+        var persons = await PersonsWith(member);
+        var handler = new ListScopePersonsQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopePersonsQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(QueryFor(scope));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([elsewhere.PublicId], Assert.Single(output.Data!).OwnedScopeIds);
+    }
+
+    [UnitFact]
     public async Task GivenScopeWithUsers_WhenHandlingListScopePersons_ThenOnlyItsUsersAreReturned()
     {
         // Given a scope with two Users, an owner, and a User of another scope

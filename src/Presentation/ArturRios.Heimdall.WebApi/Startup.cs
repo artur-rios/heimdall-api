@@ -227,6 +227,8 @@ public class Startup : WebApiStartup
         // they stay off in production.
         var diagnosticsEnabled = !Builder.Environment.IsProduction();
 
+        GuardSensitiveDiagnostics(diagnosticsEnabled);
+
         Builder.Services.AddSingleton(new DbContextDiagnosticsOptions
         {
             SensitiveDataLogging = diagnosticsEnabled,
@@ -540,6 +542,41 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
+    ///     Whether <see cref="EdgePipeline" /> mounts the developer exception page: in Development and
+    ///     in Local.
+    /// </summary>
+    /// <remarks>
+    ///     Local is included alongside Development because it is what a developer machine now runs:
+    ///     the configuration loader resolves Environments/.env.&lt;environment&gt;, so the launch
+    ///     profiles name Local to reach .env.local rather than relying on the loader's fallback.
+    ///     Testing <c>IsDevelopment()</c> alone would have silently cost the developer exception page
+    ///     in the one environment that exists to have it.
+    /// </remarks>
+    private static bool UsesDeveloperExceptionPage(IWebHostEnvironment environment) =>
+        environment.IsDevelopment() || environment.IsEnvironment("Local");
+
+    /// <summary>
+    ///     NFR-28: refuses to start when the diagnostics that expose data are on and the instance
+    ///     serves a public host, unless <c>HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS</c> is <c>true</c>
+    ///     (see <see cref="SensitiveDiagnosticsGuard" />). Allowed, it warns at every start.
+    /// </summary>
+    private void GuardSensitiveDiagnostics(bool efDiagnosticsEnabled)
+    {
+        var decision = SensitiveDiagnosticsGuard.EvaluateFromEnvironment(
+            Builder.Environment.EnvironmentName,
+            efDiagnosticsEnabled,
+            UsesDeveloperExceptionPage(Builder.Environment));
+
+        if (decision == SensitiveDiagnosticsDecision.Allowed)
+        {
+            Log.Warning(
+                "Sensitive diagnostics are on in the {Environment} environment and this instance serves " +
+                "a public host; {Variable} is true, which states that it holds made-up people only",
+                Builder.Environment.EnvironmentName, SensitiveDiagnosticsGuard.AllowVariable);
+        }
+    }
+
+    /// <summary>
     ///     The middlewares that must run ahead of the standard pipeline. A startup filter is how they
     ///     get there: ASP.NET Core wraps the application's whole pipeline in it, so what it adds runs
     ///     before anything <c>Build</c> adds.
@@ -555,12 +592,7 @@ public class Startup : WebApiStartup
             // the public port falls straight through, /metrics included.
             app.UseHeimdallMetrics(metrics);
 
-            // Local is included alongside Development because it is what a developer machine now
-            // runs: the configuration loader resolves Environments/.env.<environment>, so the launch
-            // profiles name Local to reach .env.local rather than relying on the loader's fallback.
-            // Testing IsDevelopment() alone would have silently cost the developer exception page in
-            // the one environment that exists to have it.
-            if (environment.IsDevelopment() || environment.IsEnvironment("Local"))
+            if (UsesDeveloperExceptionPage(environment))
             {
                 app.UseDeveloperExceptionPage();
             }
@@ -872,17 +904,19 @@ public class Startup : WebApiStartup
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The actor bound is the endpoint policy. It alone is not enough: an owner of a scope can
-    ///         create co-owners, each a new actor with a budget of its own, so one caller could multiply
-    ///         actors from one address. The address bound — the partition the credential endpoints use
-    ///         (<see cref="AuthRateLimitPartition" />), in a namespace of its own — is the global limiter,
-    ///         which ASP.NET Core applies before the endpoint policy, and which answers "no limit" for
-    ///         every endpoint without that policy. What remains is a flood from many addresses, the
-    ///         distributed case TH-03 leaves to the edge.
+    ///         The actor bound is the endpoint policy. The address bound — the partition the
+    ///         credential endpoints use (<see cref="AuthRateLimitPartition" />), in a namespace of its
+    ///         own — is the global limiter, which ASP.NET Core applies before the endpoint policy, and
+    ///         which answers "no limit" for every endpoint without that policy. Both apply to every
+    ///         authenticated request, so neither can be stepped around by changing only the other
+    ///         (Threat Model TH-03).
     ///     </para>
     ///     <para>
     ///         Thirty a minute is more than anyone creates by hand. The limiter runs after
-    ///         authentication, so the actor is known; a request without one is counted by address.
+    ///         authentication, so the actor is known. A request without one that reaches the limiter
+    ///         is counted by address in the endpoint policy's own bucket, never in the global one: the
+    ///         global address bucket is spent by authenticated administrators only, so anonymous
+    ///         requests sent from an address an administrator shares cannot use it up.
     ///     </para>
     /// </remarks>
     private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
@@ -907,7 +941,7 @@ public class Startup : WebApiStartup
 
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ==
-            AccountCreationRateLimitPolicy
+            AccountCreationRateLimitPolicy && httpContext.GetUser<IdentityUser>() is not null
                 ? RateLimitPartition.GetFixedWindowLimiter(
                     "creation:" + AuthRateLimitPartition.KeyFor(httpContext, callers), Window)
                 : RateLimitPartition.GetNoLimiter(string.Empty));

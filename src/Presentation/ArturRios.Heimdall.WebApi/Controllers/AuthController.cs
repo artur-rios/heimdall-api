@@ -164,8 +164,9 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c> (five minutes by default) and five per
     ///     day-long window from the first. Inside the cooldown it answers 429 "An email of this kind
     ///     was sent to you recently. Try again in a few minutes." (AF-15b); once the window's five are
-    ///     spent, 429 "You have reached today's limit for account emails. Try again tomorrow."
-    ///     (AF-15c). Both carry <c>Retry-After</c>, the seconds until the cooldown or the window ends.
+    ///     spent, 429 "You have reached the limit for account emails. Try again later."
+    ///     (AF-15c). Both carry <c>Retry-After</c>, the seconds until a send would be accepted: the
+    ///     cooldown's end, or for the limit the later of the window's end and the cooldown's.
     ///     Nothing is sent either way. The
     ///     endpoint is also under the credential endpoints' rate limit, whose 429 is "Too many
     ///     requests." with a <c>Retry-After</c> header.
@@ -262,7 +263,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     limit, as <c>2fa/confirm</c> and <c>2fa/disable</c> do. Selecting <c>Email</c> mails a code,
     ///     charged to the account-email budget the verification resend uses: 429 "An email of this
     ///     kind was sent to you recently. Try again in a few minutes." inside the cooldown (AF-36f),
-    ///     429 "You have reached today's limit for account emails. Try again tomorrow." once the
+    ///     429 "You have reached the limit for account emails. Try again later." once the
     ///     window's five are spent (AF-36g), both with <c>Retry-After</c>; it is checked before the
     ///     password and charged only after it. Selecting
     ///     <c>App</c> alone is never held back by it. A missing
