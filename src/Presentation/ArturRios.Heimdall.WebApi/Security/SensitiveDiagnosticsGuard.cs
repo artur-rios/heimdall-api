@@ -85,8 +85,10 @@ public sealed record PublicHostSettings(
 
     /// <summary>
     ///     Every setting that names a public host, as <c>VARIABLE=host</c>. The two host variables are
-    ///     read as host names; the URLs and the origins only when they parse as absolute
-    ///     <c>http</c> or <c>https</c> URLs, so a template placeholder is not taken for a host.
+    ///     read as host names. A URL or an origin counts by its host when it is an absolute
+    ///     <c>http</c> or <c>https</c> URL, and is read as a host name when it has no scheme at all, so
+    ///     <c>ui.example.com/verify</c> is public too. A template placeholder (<c>[[...]]</c>) is not
+    ///     taken for a host.
     /// </summary>
     public IReadOnlyList<string> PublicHosts()
     {
@@ -107,11 +109,21 @@ public sealed record PublicHostSettings(
 
         foreach (var (variable, value) in urls)
         {
-            if (Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) &&
-                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
-                SensitiveDiagnosticsGuard.IsPublicHost(uri.Host))
+            var trimmed = value?.Trim() ?? string.Empty;
+
+            if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
-                found.Add($"{variable}={uri.Host}");
+                if (SensitiveDiagnosticsGuard.IsPublicHost(uri.Host))
+                {
+                    found.Add($"{variable}={uri.Host}");
+                }
+            }
+            else if (!trimmed.Contains("://", StringComparison.Ordinal) &&
+                     !trimmed.StartsWith("[[", StringComparison.Ordinal) &&
+                     SensitiveDiagnosticsGuard.IsPublicHost(trimmed))
+            {
+                found.Add($"{variable}={SensitiveDiagnosticsGuard.HostOf(trimmed)}");
             }
         }
 
@@ -184,12 +196,29 @@ public static class SensitiveDiagnosticsGuard
     /// </summary>
     public static bool IsPublicHost(string? value)
     {
-        var host = (value ?? string.Empty).Trim();
+        var host = HostOf(value);
 
         if (host.Length == 0)
         {
             return false;
         }
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !(IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+    }
+
+    /// <summary>
+    ///     The host a host variable or a URL names, without its scheme, port, path, IPv6 brackets or
+    ///     trailing dot; empty when there is none.
+    /// </summary>
+    internal static string HostOf(string? value)
+    {
+        var host = (value ?? string.Empty).Trim();
 
         var scheme = host.IndexOf("://", StringComparison.Ordinal);
 
@@ -217,19 +246,6 @@ public static class SensitiveDiagnosticsGuard
             host = host[..host.IndexOf(':')];
         }
 
-        host = host.TrimEnd('.');
-
-        if (host.Length == 0)
-        {
-            return false;
-        }
-
-        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return !(IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+        return host.TrimEnd('.');
     }
 }

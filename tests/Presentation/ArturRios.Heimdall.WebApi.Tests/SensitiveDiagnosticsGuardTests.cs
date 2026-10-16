@@ -125,6 +125,40 @@ public class SensitiveDiagnosticsGuardTests
     }
 
     [UnitTheory]
+    [InlineData("heimdall-dev.example.com/verify-email", null, null, PublicHostSettings.VerificationUrlVariable)]
+    [InlineData(null, "heimdall-dev.example.com:8443/password-reset", null, PublicHostSettings.PasswordResetUrlVariable)]
+    [InlineData(null, null, "localhost:8081, heimdall-dev.example.com", PublicHostSettings.CorsAllowedOriginsVariable)]
+    public void GivenAUrlOrAnOriginWithoutAScheme_WhenEvaluating_ThenItsHostCounts(
+        string? verificationUrl, string? resetUrl, string? corsOrigins, string variable)
+    {
+        // Given a value written without http:// or https://
+        var hosts = Hosts(verificationUrl: verificationUrl, resetUrl: resetUrl, corsOrigins: corsOrigins);
+
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, hosts, null);
+
+        // Then — read as a host name, and only the host is named
+        Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
+        Assert.Equal(new[] { $"{variable}={UiHost}" }, diagnostics.PublicHosts);
+    }
+
+    [UnitFact]
+    public void GivenLocalUrlsAndOriginsWithoutAScheme_WhenEvaluating_ThenTheInstanceIsPrivate()
+    {
+        // Given
+        var hosts = Hosts(
+            verificationUrl: "localhost:8081/verify-email",
+            resetUrl: "127.0.0.1:8081/password-reset",
+            corsOrigins: "localhost:8081, [::1]:8082");
+
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, hosts, null);
+
+        // Then
+        Assert.Equal(SensitiveDiagnosticsDecision.Private, diagnostics.Decision);
+    }
+
+    [UnitTheory]
     [InlineData("false")]
     [InlineData("1")]
     [InlineData("yes")]

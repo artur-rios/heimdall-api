@@ -38,6 +38,7 @@ using ArturRios.Mediator.Query;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
 using ArturRios.Util.WebApi.Security.Authentication;
@@ -125,9 +126,11 @@ public class Startup : WebApiStartup
     private MetricsOptions _metrics = MetricsOptions.Disabled;
 
     /// <summary>
-    ///     Decided once in <see cref="AddDependencies" /> (NFR-28) and read by both places that turn a
-    ///     sensitive diagnostic on — EF Core's options and <see cref="EdgePipeline" />'s developer
-    ///     exception page — so the two can never disagree. Everything off until it is decided.
+    ///     Decided once in <see cref="AddDependencies" /> (NFR-28) and read by every place that turns a
+    ///     sensitive diagnostic on — EF Core's options, <see cref="EdgePipeline" />'s developer exception
+    ///     page and, for the page the host adds by itself in Development,
+    ///     <see cref="SuppressedDeveloperPageFilter" /> — so they can never disagree. Everything off until
+    ///     it is decided.
     /// </summary>
     private SensitiveDiagnostics _diagnostics = SensitiveDiagnostics.None;
 
@@ -239,6 +242,14 @@ public class Startup : WebApiStartup
         DecideSensitiveDiagnostics();
 
         Builder.Services.AddSingleton(_diagnostics);
+
+        // The developer exception page the host adds by itself in Development answers to the same
+        // decision: where the page is off, a failure that reaches it gets the API's own 500 envelope.
+        if (!_diagnostics.DeveloperExceptionPage)
+        {
+            Builder.Services.AddSingleton<IDeveloperPageExceptionFilter, SuppressedDeveloperPageFilter>();
+        }
+
         Builder.Services.AddSingleton(new DbContextDiagnosticsOptions
         {
             SensitiveDataLogging = _diagnostics.DataLogging,
@@ -615,7 +626,9 @@ public class Startup : WebApiStartup
             app.UseHeimdallMetrics(metrics);
 
             // The shared decision, never the environment directly: on a public host without the
-            // override it is off in Development too (NFR-28).
+            // override it is off in Development too (NFR-28). This call is what Local needs; in
+            // Development the host adds its own page further in, which SuppressedDeveloperPageFilter
+            // holds to the same decision.
             if (diagnostics.DeveloperExceptionPage)
             {
                 app.UseDeveloperExceptionPage();
