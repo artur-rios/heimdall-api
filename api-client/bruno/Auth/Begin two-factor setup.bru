@@ -30,5 +30,5 @@ docs {
 
   methods is any of "App", "Email", or both. Setup stays inactive until confirmed. When App is selected the answer carries an otpauth:// URI to enrol in an authenticator app.
 
-  Selecting Email mails a code, so it is charged to the account-email budget shared with the verification resend and the email-change notice (one per HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS, five a day): 429 "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, 429 "You have reached today's limit for account emails. Try again tomorrow." once the day is spent. Checked before the password and charged only after it, and nothing changes when refused. App alone is not affected.
+  Selecting Email mails a code, so it is charged to the account-email budget shared with the verification resend and the email-change notice (one per HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS, five per day-long window): 429 "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, 429 "You have reached today's limit for account emails. Try again tomorrow." once the day-long window's five are spent (both with Retry-After, in seconds). Checked before the password and charged only after it, and nothing changes when refused. App alone is not affected.
 }

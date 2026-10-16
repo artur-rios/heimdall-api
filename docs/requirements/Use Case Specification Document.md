@@ -612,7 +612,8 @@ sequenceDiagram
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
-| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five today. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached today's limit for account emails. Try again tomorrow." Nothing is changed or sent, and the second factor is not spent |
+| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached today's limit for account emails. Try again tomorrow." Nothing is changed or sent, and the second factor is not spent |
+| AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, spent, changed or sent. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
 
 ---
 
@@ -981,7 +982,7 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-15a | Email already verified | Return `400 Bad Request` — "Email already verified" |
 | AF-15b | The person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — a resend, a setup code or an email-change notice (FR-PE-16) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
-| AF-15c | The person's own requests have had five account emails sent today (FR-PE-16) | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." Nothing is retired or sent |
+| AF-15c | The person's own requests have had five account emails sent in the current day-long window (FR-PE-16) | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." Nothing is retired or sent |
 
 > **On the cooldown and the rate limit.** The endpoint mails the account's own address on every
 > successful call, and a bearer token is all it asks for, so without a bound whoever held one could
@@ -1736,7 +1737,7 @@ sequenceDiagram
 | AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
 | AF-36f | `Email` is selected and the person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), FR-PE-16, FR-2F-19 | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; a code already mailed still confirms. Selecting `App` alone is not affected |
-| AF-36g | As AF-36f, but five account emails have been sent today | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." As AF-36f otherwise |
+| AF-36g | As AF-36f, but five account emails have been sent in the current day-long window | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." As AF-36f otherwise |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
 > does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token

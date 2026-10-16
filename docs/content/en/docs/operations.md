@@ -239,9 +239,12 @@ because every call mails the account's address.
 **Per administrator — account creation.** The three endpoints that create a person with a password —
 `POST /api/persons`, `POST /api/scopes/{id}/persons` and `POST /api/scopes/{id}/owners` — each derive
 an Argon2id hash, and need nothing but an administrator's token. They are limited to **30 requests a
-minute per acting person**, whatever address the requests come from, so one administrator account
-cannot keep the password-hash gate full; a rejection is the same `429` with `Retry-After`. Thirty a
-minute is more than anyone creates by hand, and a bulk import should pace itself to it.
+minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
+with `Retry-After`. The address bound is there because an owner of a scope can create co-owners, each
+a new actor with a budget of its own: per actor alone, one caller could multiply the bound from one
+address. What neither bounds is a flood spread over many addresses — the distributed case the edge
+has to take (see below). Thirty a minute is more than anyone creates by hand, and a bulk import
+should pace itself to it.
 
 **Per account — a failure budget**, which is what an attacker spread across many source addresses
 defeats the limiter with:
@@ -350,8 +353,9 @@ labels:
 
   # A client system that signs its users in through Heimdall (Fortuna) reaches it from one source,
   # so under the limit above all of its users would share one bucket of 10 a minute. It gets a
-  # router and a bucket of its own, matched on that source; Heimdall still counts each of its users
-  # apart, by the address it names with HEIMDALL_TRUSTED_CALLER_KEYS.
+  # router and a bucket of its own, matched on that source. Inside the API its users are counted
+  # apart only when it names each one's address with HEIMDALL_TRUSTED_CALLER_KEYS; until it does,
+  # they share one bucket there too.
   - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.rule=Host(`${PUBLIC_HOST}`) && PathRegexp(`(?i)^/api/auth/`) && ClientIP(`<fortuna-source>`)
   - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.priority=1000
   - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.entrypoints=websecure
@@ -370,6 +374,12 @@ labels:
   by every consumer, and never the public bucket for a relaying system. Replace `<fortuna-source>`
   with Fortuna's address as Traefik sees it: the `ClientHost` of its requests in Traefik's access
   log. Size `average` for the sign-ins Fortuna's users make in a minute at their busiest.
+- **Only a source that is Fortuna's alone.** If Fortuna's `ClientHost` is a Docker bridge gateway or
+  a NAT router's address — which it can be when it reaches Traefik through the public host, and which
+  other traffic then shows too (hairpinned clients, or IPv6 clients that Docker's port proxy
+  forwards) — do not use `ClientIP` for the exemption: everything behind that address would land in
+  the relay's large bucket. Route Fortuna by a source only it has, such as a private network to
+  Traefik or a host name of its own.
 - **Check the addresses first.** Before relying on any of this, confirm in Traefik's access log that
   `ClientHost` shows real client addresses, IPv6 ones included, rather than a proxy's or Docker's. A
   limiter keyed on the wrong address puts everybody in one bucket.
@@ -390,15 +400,17 @@ labels:
 
 Heimdall sends mail from the operator's Mailgun domain, so mail an attacker can trigger costs the
 operator quota and sender reputation as well as annoying its recipient. A per-caller limit does not
-bound what one recipient receives from many callers, so every send a caller can repeat is bounded
-per recipient or per account as well:
+bound what one recipient receives from many callers. The sends a caller can repeat are bounded as
+follows; mail an administrator causes — the links of UC-51 and UC-52, a new account's verification
+link, the notice when they change someone's address — is trusted to administrators, as their other
+powers over the accounts they manage are:
 
 | Mail | Bound |
 | --- | --- |
-| A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16): one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five a day, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached today's limit for account emails. Try again tomorrow." once the day is spent |
-| Verification link or password reset sent by an administrator (UC-51, UC-52) | One of each kind per person per cooldown, counting every link of that kind issued for them; not charged to the person's own budget, so an administrator can still help someone who has spent theirs |
-| Password recovery requested anonymously (UC-12) | One reset link per person per cooldown, whoever asks; further requests send nothing and are answered as before |
-| Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16) |
+| A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16): one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five in each day-long window, which starts at the first send, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached today's limit for account emails. Try again tomorrow." once the window's five are spent; both carry `Retry-After`, the seconds until the cooldown or the window ends |
+| Verification link or password reset an administrator asks for (UC-51, UC-52) | One of each kind per person per cooldown, counting every link of that kind issued for them; not charged to the person's own budget, so an administrator can still help someone who has spent theirs |
+| Password recovery requested anonymously (UC-12) | One reset link per person per cooldown — never longer than the link's lifetime — whoever asks; further requests send nothing and are answered as before |
+| Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), and only ever to an address that confirmed a code: an own email change is refused while the email method is on (FR-PE-18) |
 | Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
 | "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
 
@@ -900,8 +912,11 @@ instance clocks synchronised (NTP).
 The account-email cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`) began as the administrators'
 (UC-51/UC-52) and keeps that name, but it now also sets the cooldown of a person's own account-email
 budget (FR-PE-16) — resend, email setup code, email-change notice — and of anonymous password recovery
-(UC-12). A shorter value lets people retry sooner; `0` removes the cooldown, leaving the budget's five
-a day and the per-IP limit, so keep it on wherever the API faces the internet.
+(UC-12). A shorter value lets people retry sooner. `0` removes the cooldown: a person's own sends are
+then bounded only by the budget's five per window and the per-IP limit, and recovery only by the
+per-IP limit, so keep it on wherever the API faces the internet. For recovery the cooldown is held to
+the reset link's lifetime (`HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS`), so a long cooldown
+can never leave the owner without a working link.
 
 For the administrators' sends and for recovery, the cooldown is derived from the issued token rows
 (`ExpiresAt` minus the token lifetime), not from a separate record. Two consequences:

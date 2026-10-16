@@ -38,8 +38,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A person's own requests now share one account-email budget (FR-PE-16): asking for the verification link again
   (`POST /api/auth/resend-verification`), starting two-factor setup with the `Email` method (`POST /api/auth/2fa/enable`)
   and an own email change (`PUT /api/persons/{id}`, whose notice goes to the previous address). At most one such email
-  per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five a day, reserved by one conditional
-  write before anything is sent, so simultaneous requests cannot exceed it. A refusal is `429` and changes and sends
+  per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five in each day-long window starting at
+  the first send, reserved by one conditional write before anything is sent, so simultaneous requests cannot exceed
+  it. Both refusals carry `Retry-After`, the seconds until the cooldown or the window ends. A refusal is `429` and changes and sends
   nothing: "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, "You
   have reached today's limit for account emails. Try again tomorrow." once the day is spent. Two-factor setup checks
   it before the password and charges it only after, and `App` alone is never charged; an email change charges it
@@ -50,11 +51,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and
   try again", not as a session end or a refused credential; the second asks the person to wait until tomorrow.
 - Anonymous password recovery (`POST /api/auth/password-recovery`) sends at most one reset link per person per
-  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, counting links sent by an administrator too (FR-PR-07). The answer is
-  unchanged.
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, held to the reset link's lifetime, counting links sent by an
+  administrator too (FR-PR-07). The answer is unchanged.
+- A person can no longer change their own email while their email sign-in method is enabled, active or pending
+  (FR-PE-18): `PUT /api/persons/{id}` answers `409` "Turn off the email sign-in method before changing your email
+  address." once the password and second factor are accepted, and nothing is charged or changed. **Clients:** offer
+  to turn the method off first; it can be set up again at the new address. An administrator's change is unaffected.
 - Creating a person with a password (`POST /api/persons`, `POST /api/scopes/{id}/persons`,
-  `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator; a rejection is `429`
-  "Too many requests." with `Retry-After`.
+  `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator and 30 a minute per
+  address; a rejection is `429` "Too many requests." with `Retry-After`.
 - Self-registration bounds the mail one address can be sent (FR-SR-13, FR-SR-14): at most three live pending
   registrations per address in a scope, and at most three "someone tried to register your address" notices per
   address a day, across every scope. A request beyond either stores and sends nothing, and is answered `202` exactly

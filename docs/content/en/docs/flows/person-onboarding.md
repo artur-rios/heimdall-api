@@ -113,9 +113,9 @@ do nothing when clicked.
 
 A resend is charged to the person's account-email budget (FR-PE-16), which it shares with a
 two-factor setup code and the notice an own email change sends: one per
-`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five a day, reserved by one
+`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five per day-long window from the first, reserved by one
 write before anything is sent. Inside the cooldown the answer is **429** "An email of this kind was
-sent to you recently. Try again in a few minutes." (AF-15b); once the day is spent, **429** "You have
+sent to you recently. Try again in a few minutes." (AF-15b); once the window's five are spent, **429** "You have
 reached today's limit for account emails. Try again tomorrow." (AF-15c). Nothing is sent or retired
 either way. A link an administrator sent, at creation or through UC-51, is not charged, so the
 person may still ask once straight after. The endpoint is under the credential endpoints' rate limit
