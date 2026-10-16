@@ -32,8 +32,12 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Registration-attempt notice budgets whose window had ended removed (FR-SR-14).</summary>
     public int AttemptNoticeBudgetsPurged { get; set; }
 
-    /// <summary>Rows removed across all six tables.</summary>
+    /// <summary>Records of used Google ID tokens removed (FR-GO-21).</summary>
+    public int GoogleIdTokenUsesPurged { get; set; }
+
+    /// <summary>Rows removed across all seven tables.</summary>
     public int TotalPurged =>
         PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +
-        PendingRegistrationsPurged + ApplicationCredentialsPurged + AttemptNoticeBudgetsPurged;
+        PendingRegistrationsPurged + ApplicationCredentialsPurged + AttemptNoticeBudgetsPurged +
+        GoogleIdTokenUsesPurged;
 }

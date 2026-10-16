@@ -84,11 +84,13 @@ public class PurgeExpiredTokensCommandHandlerTests
         DataRetentionOptions? retention = null,
         AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null,
         AsyncFakeRepository<ApplicationCredential, long>? credentials = null,
-        AsyncFakeRepository<AttemptNoticeBudget, long>? noticeBudgets = null)
+        AsyncFakeRepository<AttemptNoticeBudget, long>? noticeBudgets = null,
+        AsyncFakeRepository<GoogleIdTokenUse, string>? googleIdTokenUses = null)
     {
         pendingRegistrations ??= new AsyncFakeRepository<PendingRegistration, long>();
         credentials ??= new AsyncFakeRepository<ApplicationCredential, long>();
         noticeBudgets ??= new AsyncFakeRepository<AttemptNoticeBudget, long>();
+        googleIdTokenUses ??= new AsyncFakeRepository<GoogleIdTokenUse, string>();
 
         return new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
@@ -96,6 +98,7 @@ public class PurgeExpiredTokensCommandHandlerTests
             pendingRegistrations, pendingRegistrations,
             credentials, credentials,
             noticeBudgets, noticeBudgets,
+            googleIdTokenUses, googleIdTokenUses,
             retention ?? Retention());
     }
 
@@ -295,6 +298,34 @@ public class PurgeExpiredTokensCommandHandlerTests
         Assert.DoesNotContain(longExpired.Id, remaining);
         Assert.Contains(recentlyExpired.Id, remaining);
         Assert.Contains(live.Id, remaining);
+    }
+
+    [UnitFact]
+    public async Task GivenUsedGoogleIdTokensThatExpiredBeforeTheGrace_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given (FR-GO-21) a used token that expired before the grace period, one that expired inside
+        // it, and one still live
+        var uses = new AsyncFakeRepository<GoogleIdTokenUse, string>();
+        var stale = new GoogleIdTokenUse { Id = "a", ExpiresAt = DateTime.UtcNow - Grace - TimeSpan.FromDays(1) };
+        var recent = new GoogleIdTokenUse { Id = "b", ExpiresAt = DateTime.UtcNow.AddHours(-1) };
+        var live = new GoogleIdTokenUse { Id = "c", ExpiresAt = DateTime.UtcNow.AddMinutes(30) };
+        await uses.CreateAsync(stale);
+        await uses.CreateAsync(recent);
+        await uses.CreateAsync(live);
+
+        // When
+        var output = await Handler(
+                new AsyncFakeRepository<PasswordResetToken, long>(),
+                new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+                googleIdTokenUses: uses)
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — the tokens' cutoff, counted on its own and in the total
+        Assert.True(output.Success);
+        Assert.Equal(1, output.Data!.GoogleIdTokenUsesPurged);
+        Assert.Equal(1, output.Data.TotalPurged);
+        Assert.Equal(["b", "c"], uses.Query().Select(x => x.Id).OrderBy(x => x).ToList());
     }
 
     [UnitFact]
