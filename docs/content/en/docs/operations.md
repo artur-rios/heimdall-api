@@ -96,8 +96,8 @@ and `DELETE` on the `heimdall` tables, except that `audit_log` gets no `DELETE`;
 migrations history, which the start-up seeder reads; no `TRUNCATE` anywhere and no `CREATE` on the
 database or a schema. `audit_log` keeps `UPDATE` because the retention pass writes the rows it
 clears whole; the triggers accept an update only when it clears the attribution or a person target
-once due (NFR-21). That covers everything the API does at runtime, `attempt_notice_budget` and the
-budget columns on `person` included.
+once due (NFR-21). That covers everything the API does at runtime, `attempt_notice_budget`,
+`google_id_token_use` and the budget columns on `person` included.
 
 Use one pair per environment, as the deployment guide does for logins: `heimdall_owner` and
 `heimdall_svc` for production, `heimdall_development_owner` and `heimdall_development_svc`, and so on.
@@ -709,7 +709,8 @@ of a setting here.
 **Single-use tokens are purged on a schedule.** A hosted service dispatches a purge hourly by
 default, removing password reset tokens, email verification tokens, and two-factor email codes that
 are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
-application credentials, and self-registration attempt-notice budgets whose day has ended. Each run removes at most a bounded batch per table,
+application credentials, self-registration attempt-notice budgets whose day has ended, and the
+records of used Google ID tokens past their expiry by the grace period. Each run removes at most a bounded batch per table,
 oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).

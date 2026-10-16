@@ -238,7 +238,8 @@ graph LR
 | FR-GO-17 | Logically deleted Google Users shall not appear in default query results unless explicitly requested | Medium |
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out. Heimdall keeps no Google session and no record of issued tokens, so signing out ends the client's session: the client discards its token, which otherwise stays valid until it expires (UC-26) | High |
 | FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
-| FR-GO-20 | A Google sign-in request may carry an optional `nonce`, the value the client sent Google when it asked for the ID token. When it is present and not empty, the verified token's `nonce` claim shall equal it exactly (ordinal comparison), and a token with another nonce or none shall be refused as AF-25a: `401 Unauthorized`, "Google authentication failed.". When it is absent or empty, nothing is compared. The nonce binds the token to the client's own sign-in attempt, so a client can refuse a token that was not issued for its request; whether a token is accepted rests on its signature, issuer, audience and expiry (NFR-13, Threat Model TH-19) | Medium |
+| FR-GO-20 | A Google sign-in request may carry an optional `nonce`, the value the client sent Google when it asked for the ID token. When it is present and not empty, the verified token's `nonce` claim shall equal it exactly (ordinal comparison), and a token with another nonce or none shall be refused as AF-25a: `401 Unauthorized`, "Google authentication failed.". When it is absent or empty, nothing is compared. The nonce binds the token to the client's own sign-in attempt, so a client can refuse a token that was not issued for its request; whether a token is accepted rests on its signature, issuer, audience and expiry (NFR-13, Threat Model TH-19) and on its not having been used before (FR-GO-21) | Medium |
+| FR-GO-21 | A Google ID token shall be accepted once. Once a token has been verified (NFR-13, FR-GO-20), and before anything is created, written or issued on its strength — at sign-in, before any scope or account is read; for an erasure request, once the Google User it must name has been read and its subject compared (AF-42a, AF-42c) — its use shall be recorded under the SHA-256 digest of its `jti` claim, or, when it carries none, of its signed part (the `header.payload` its signature covers, so that a respelling of the signature segment is the same token), by one write that also finds an earlier use; a token already recorded shall be refused exactly as an invalid one — `401 Unauthorized`, "Google authentication failed." at sign-in (AF-25a), "The credential presented was not accepted." as an erasure request's proof of presence (AF-42a) — and nothing shall be written. Of simultaneous presentations of one token exactly one is accepted. A token is spent once its use is recorded, even when the request then fails for another reason (AF-25b, AF-25c, AF-25d, AF-25f, or an error), so a client shall obtain a new one for every attempt, a retry included. The record is kept until the token's own expiry plus the single-use grace period, then purged (NFR-19) | High |
 
 ### 3.8a Self-Registration
 
@@ -432,6 +433,11 @@ erDiagram
         string AddressHash "SHA-256 of the trimmed, lower-cased address; unique (FR-SR-14)"
         int NoticesSent "Registration-attempt notices sent in the current window"
         datetime WindowEndsAt "End of the current one-day window"
+    }
+
+    GOOGLE_ID_TOKEN_USE {
+        string TokenHash PK "SHA-256 of an accepted Google ID token's jti, or of its signed part when it has none (FR-GO-21)"
+        datetime ExpiresAt "The token's own expiry, which the purge counts from"
     }
 
     APPLICATION {
@@ -1191,7 +1197,7 @@ Notes on cascading behavior:
 | Authentication | FR-AU-01 through FR-AU-13 |
 | Password Recovery | FR-PR-01 through FR-PR-08 |
 | Email Verification | FR-EV-01 through FR-EV-08 |
-| Google Sign-In | FR-GO-01 through FR-GO-20 |
+| Google Sign-In | FR-GO-01 through FR-GO-21 |
 | Self-Registration | FR-SR-01 through FR-SR-14 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-20 |

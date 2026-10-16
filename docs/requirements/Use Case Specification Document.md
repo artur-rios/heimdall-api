@@ -1401,7 +1401,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-25a | ID token invalid, expired, or fails verification | Return `401 Unauthorized` |
+| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification | Return `401 Unauthorized` |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
@@ -2138,7 +2138,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | --- | --- | --- |
-| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
+| AF-42a | The credential is absent, wrong, unverifiable, a Google ID token already used (FR-GO-21), or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |

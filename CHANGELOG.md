@@ -21,6 +21,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   request, deletion or ownership change that lost such a race answers as the request that won leaves it, with the
   existing message for that state.
 
+### Security
+
+- A Google ID token is accepted once (FR-GO-21). After it is verified, and before anything is created or issued on its
+  strength (at sign-in, before any scope or account is read; for an erasure request, once its subject has been
+  compared with the Google User's), its use is recorded under the SHA-256 digest of its `jti` claim (of its signed
+  part, the header and payload, when it has none) in the new `google_id_token_use` table; a token already recorded is
+  refused exactly as an invalid one, and of two simultaneous presentations one is refused. The records are purged with
+  the single-use tokens once the token has expired and the grace period has passed. This closes the replay of a copied
+  token within its hour of validity (Threat Model TH-19). **Clients:** obtain a new ID token from Google for every
+  call that takes one, a retry included: a verified token is spent even when the call then fails, for example with a
+  `403` (scope unavailable, unverified address), a `409` or a `5xx`. Presenting a token a second time — to
+  `POST /api/auth/google`, or as the proof of presence of `POST /api/auth/erasure-request` — now answers `401` with
+  "Google authentication failed." or "The credential presented was not accepted." respectively. The optional `nonce`
+  is unchanged. **Operators:** the migration adds one table; the runtime role's schema-wide grants and default
+  privileges cover it, so no grant changes.
+
 ## [1.6.0] - 2026-10-16
 
 ### Security
