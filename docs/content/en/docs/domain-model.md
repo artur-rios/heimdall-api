@@ -218,7 +218,7 @@ registrations by it (UC-49, UC-50). The registrant never sees it — their refer
 | TOTP secret | Encrypted via ASP.NET Core Data Protection (`ITotpSecretProtector`) | Once, at provisioning, so the authenticator app can be enrolled |
 | Recovery codes | SHA-256 of the canonical code, no per-code salt (80 random bits, FR-2F-20) | Once, in the response that generates them |
 | 2FA email code | Hash + per-code salt (only 10⁶ possible values, so it is treated as a user-grade secret) | Never — it is mailed |
-| Email verification / password reset token | Plain random string | Once, by email |
+| Email verification / password reset token | SHA-256 digest only (`SingleUseTokenHash`) | Once, by email |
 
 That split is **NFR-16**. The email code gets a salt and the recovery code does not for a concrete
 reason: a six-digit code has a million possible values and would fall to a rainbow table without one,

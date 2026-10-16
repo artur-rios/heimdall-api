@@ -567,9 +567,10 @@ sequenceDiagram
      fresh token is UC-14 / UC-15's responsibility.
    - The system retires every live password-reset link and verification link the person holds
      (FR-PE-17): they were mailed to the address being replaced. It does so before the new address
-     is saved and again after, for any mailed to the old address in between; a reset or verification
-     already under way writes only while the address is the one it read, so it cannot land after the
-     change (FR-PR-08, FR-EV-08). Following a retired link answers UC-13's AF-13b or UC-14's AF-14b.
+     is saved and again immediately after, before the notice below, for any mailed to the old
+     address in between; a reset or verification that read the person before the change writes only
+     while the address is the one it read, so it cannot write after the change (FR-PR-08, FR-EV-08).
+     Following a retired link answers UC-13's AF-13b or UC-14's AF-14b.
    - Just before the update is saved, the system replaces the person's security stamp, which revokes
      every token they hold (FR-AU-11) — whoever made the change — and replaces it once more after the
      save. The first replacement means a save that fails costs one extra sign-in rather than leaving
@@ -885,12 +886,12 @@ requests; a person who receives nothing asks again, as for any email that does n
 2. The system validates the token (exists, its person may still be acted on, not expired, not used).
    The person is checked by UC-12's rule as they stand now (FR-PR-08, AF-13e).
 3. The system generates a new random `Salt` and hashes the new password using it.
-4. The system marks the token as used, replaces the person's security stamp, which revokes every token
-   issued to them before the reset (FR-AU-11) — full, challenge and subject-rights-only alike — then
-   writes the new `PasswordHash` and `Salt`, in one conditional write that repeats step 2's checks on
-   the person and requires the address they were read with, and replaces the stamp once more. The first replacement
-   means a save that fails leaves no old session live; the second ends any session opened with the old
-   password while the save was in flight.
+4. The system marks the token as used, then writes the new `PasswordHash` and `Salt` together with a
+   fresh security stamp, which revokes every token issued to the person before the reset (FR-AU-11) —
+   full, challenge and subject-rights-only alike. It is one conditional write that repeats step 2's
+   checks on the person and requires the address they were read with, so no sign-in can read the new
+   password beside the old stamp, and a write refused because the person changed meanwhile leaves the
+   person, stamp included, as it was (answered as AF-13e).
 5. The system returns success. The person signs in again with the new password; a session opened with
    the old one, by them or by anybody else, ends at its next request.
 

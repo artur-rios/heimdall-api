@@ -97,7 +97,7 @@ sequenceDiagram
     alt a parallel request spent it first
         H-->>FE: 400 — already used (AF-13b)
     end
-    H->>DB: UPDATE person SET hash, salt<br/>WHERE address unchanged AND not restricted / deleted / anonymised
+    H->>DB: UPDATE person SET hash, salt, security stamp<br/>WHERE address unchanged AND not restricted / deleted / anonymised
     alt the person changed since it was read
         H-->>FE: 400 — invalid token
     end
@@ -115,11 +115,14 @@ password" click cannot be replayed after the first has already changed the passw
 and the person may be restricted, deleted or anonymised, or lose the scope they sign in through,
 while it waits in a mailbox. UC-12's rule is run again, and a person it no longer admits gets exactly
 the unknown-token answer, `400` "Invalid token.", with nothing written — the token stays as it was,
-and a restricted record is preserved. The password itself is written by one conditional `UPDATE`
-that repeats those checks and requires the address the person was read with.
+and a restricted record is preserved. The password itself is written by one conditional `UPDATE`,
+together with a fresh security stamp that revokes every earlier session, which repeats those checks
+and requires the address the person was read with. After the row is created nothing else writes the
+password columns, so an edit saved from an older copy of the person cannot put the old password back.
 
 **An email change retires the links** (**FR-PE-17**). Whoever changes a person's address, every live
-reset and verification link they hold is retired, before the new address is saved and again after.
+reset and verification link they hold is retired, before the new address is saved and again straight
+after.
 Following one afterwards answers `400` "Token already used.".
 
 ## Why login costs what it costs
