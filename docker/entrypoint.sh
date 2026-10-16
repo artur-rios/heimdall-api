@@ -11,8 +11,13 @@ set -e
 #
 # The bundle connects with HEIMDALL_MIGRATIONS_CONNECTIONSTRING when it is set, and with the API's own
 # HEIMDALL_DATA_CONNECTIONSTRING otherwise. Set, it names the role that owns the schema, so the API
-# itself can run as a role that owns nothing and cannot alter the tables or their triggers (Threat
-# Model TH-18; the operations guide, "Database roles"). Unset, everything works as it always has.
+# itself can run as a role that owns nothing (NFR-29; the operations guide, "Database roles"). Unset,
+# everything works as it always has.
+#
+# The connection string reaches the bundle through its environment, never its command line: a
+# process's arguments can be listed by any user on the host, its environment only by its owner. The bundle reads
+# HEIMDALL_DATA_CONNECTIONSTRING through DesignTimeDbContextFactory, so that is the name it is given,
+# for the bundle's process alone -- the API below still gets its own.
 if [ "${HEIMDALL_RUN_MIGRATIONS:-true}" = "true" ]; then
     if [ -n "$HEIMDALL_MIGRATIONS_CONNECTIONSTRING" ]; then
         migrations_connection="$HEIMDALL_MIGRATIONS_CONNECTIONSTRING"
@@ -25,7 +30,7 @@ if [ "${HEIMDALL_RUN_MIGRATIONS:-true}" = "true" ]; then
         exit 1
     fi
 
-    /app/heimdall-migrate --connection "$migrations_connection"
+    HEIMDALL_DATA_CONNECTIONSTRING="$migrations_connection" /app/heimdall-migrate
     unset migrations_connection
     echo "entrypoint: migrations up to date."
 fi

@@ -9,6 +9,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Data.Persistence;
@@ -123,6 +124,13 @@ public class Startup : WebApiStartup
     /// </summary>
     private MetricsOptions _metrics = MetricsOptions.Disabled;
 
+    /// <summary>
+    ///     Decided once in <see cref="AddDependencies" /> (NFR-28) and read by both places that turn a
+    ///     sensitive diagnostic on — EF Core's options and <see cref="EdgePipeline" />'s developer
+    ///     exception page — so the two can never disagree. Everything off until it is decided.
+    /// </summary>
+    private SensitiveDiagnostics _diagnostics = SensitiveDiagnostics.None;
+
     public Startup(string[] args) : base(args, ConfigureStandardSequence)
     {
         // Before anything else, so every later step has somewhere to log — which is why
@@ -214,7 +222,7 @@ public class Startup : WebApiStartup
 
         AddMetrics();
 
-        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, builder.Environment));
+        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, _diagnostics));
 
         ConfigureSecurity();
         ConfigureCors();
@@ -226,15 +234,15 @@ public class Startup : WebApiStartup
     private void AddDependencies()
     {
         // EF diagnostics expose parameter and column values — password hashes, salts, e-mails — so
-        // they stay off in production.
-        var diagnosticsEnabled = !Builder.Environment.IsProduction();
+        // they stay off in production, and off wherever the instance serves a public host unless the
+        // operator keeps them on (NFR-28).
+        DecideSensitiveDiagnostics();
 
-        GuardSensitiveDiagnostics(diagnosticsEnabled);
-
+        Builder.Services.AddSingleton(_diagnostics);
         Builder.Services.AddSingleton(new DbContextDiagnosticsOptions
         {
-            SensitiveDataLogging = diagnosticsEnabled,
-            DetailedErrors = diagnosticsEnabled
+            SensitiveDataLogging = _diagnostics.DataLogging,
+            DetailedErrors = _diagnostics.DataLogging
         });
 
         Builder.Services.AddPostgreSqlProvider();
@@ -544,8 +552,8 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
-    ///     Whether <see cref="EdgePipeline" /> mounts the developer exception page: in Development and
-    ///     in Local.
+    ///     Whether the environment asks for the developer exception page: Development and Local. What
+    ///     is served is <see cref="_diagnostics" />, which may turn it off.
     /// </summary>
     /// <remarks>
     ///     Local is included alongside Development because it is what a developer machine now runs:
@@ -554,27 +562,39 @@ public class Startup : WebApiStartup
     ///     Testing <c>IsDevelopment()</c> alone would have silently cost the developer exception page
     ///     in the one environment that exists to have it.
     /// </remarks>
-    private static bool UsesDeveloperExceptionPage(IWebHostEnvironment environment) =>
+    private static bool AsksForDeveloperExceptionPage(IWebHostEnvironment environment) =>
         environment.IsDevelopment() || environment.IsEnvironment("Local");
 
     /// <summary>
-    ///     NFR-28: refuses to start when the diagnostics that expose data are on and the instance
-    ///     serves a public host, unless <c>HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS</c> is <c>true</c>
-    ///     (see <see cref="SensitiveDiagnosticsGuard" />). Allowed, it warns at every start.
+    ///     NFR-28: settles <see cref="_diagnostics" />. On an instance that serves a public host the
+    ///     sensitive diagnostics are turned off, unless <c>HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS</c> is
+    ///     <c>true</c> (see <see cref="SensitiveDiagnosticsGuard" />). Either way it warns, once.
     /// </summary>
-    private void GuardSensitiveDiagnostics(bool efDiagnosticsEnabled)
+    private void DecideSensitiveDiagnostics()
     {
-        var decision = SensitiveDiagnosticsGuard.EvaluateFromEnvironment(
-            Builder.Environment.EnvironmentName,
-            efDiagnosticsEnabled,
-            UsesDeveloperExceptionPage(Builder.Environment));
+        _diagnostics = SensitiveDiagnosticsGuard.EvaluateFromEnvironment(
+            !Builder.Environment.IsProduction(),
+            AsksForDeveloperExceptionPage(Builder.Environment));
 
-        if (decision == SensitiveDiagnosticsDecision.Allowed)
+        switch (_diagnostics.Decision)
         {
-            Log.Warning(
-                "Sensitive diagnostics are on in the {Environment} environment and this instance serves " +
-                "a public host; {Variable} is true, which states that it holds made-up people only",
-                Builder.Environment.EnvironmentName, SensitiveDiagnosticsGuard.AllowVariable);
+            case SensitiveDiagnosticsDecision.Suppressed:
+                Log.Warning(
+                    "This instance serves a public host ({Hosts}), so EF Core sensitive data logging, " +
+                    "detailed errors and the developer exception page are off in the {Environment} " +
+                    "environment. Set {Variable}=true to keep them on where the instance holds made-up " +
+                    "people only",
+                    string.Join(", ", _diagnostics.PublicHosts), Builder.Environment.EnvironmentName,
+                    SensitiveDiagnosticsGuard.AllowVariable);
+                break;
+
+            case SensitiveDiagnosticsDecision.Allowed:
+                Log.Warning(
+                    "Sensitive diagnostics are on in the {Environment} environment and this instance serves " +
+                    "a public host ({Hosts}); {Variable} is true, which states that it holds made-up people only",
+                    Builder.Environment.EnvironmentName, string.Join(", ", _diagnostics.PublicHosts),
+                    SensitiveDiagnosticsGuard.AllowVariable);
+                break;
         }
     }
 
@@ -583,7 +603,7 @@ public class Startup : WebApiStartup
     ///     get there: ASP.NET Core wraps the application's whole pipeline in it, so what it adds runs
     ///     before anything <c>Build</c> adds.
     /// </summary>
-    private sealed class EdgePipeline(MetricsOptions metrics, IWebHostEnvironment environment) : IStartupFilter
+    private sealed class EdgePipeline(MetricsOptions metrics, SensitiveDiagnostics diagnostics) : IStartupFilter
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
         {
@@ -594,7 +614,9 @@ public class Startup : WebApiStartup
             // the public port falls straight through, /metrics included.
             app.UseHeimdallMetrics(metrics);
 
-            if (UsesDeveloperExceptionPage(environment))
+            // The shared decision, never the environment directly: on a public host without the
+            // override it is off in Development too (NFR-28).
+            if (diagnostics.DeveloperExceptionPage)
             {
                 app.UseDeveloperExceptionPage();
             }
@@ -921,17 +943,28 @@ public class Startup : WebApiStartup
     ///         credential endpoints use (<see cref="AuthRateLimitPartition" />), in a namespace of its
     ///         own — is the global limiter, which ASP.NET Core applies before the endpoint policy, and
     ///         which answers "no limit" for every endpoint without that policy. Both apply to every
-    ///         authenticated request, so neither can be stepped around by changing only the other
+    ///         administrator's request, so neither can be stepped around by changing only the other
     ///         (Threat Model TH-03).
     ///     </para>
     ///     <para>
     ///         Thirty a minute is more than anyone creates by hand. The limiter runs after
-    ///         authentication, so the actor is known. A request without one that reaches the limiter
-    ///         is counted by address in the endpoint policy's own bucket, never in the global one: the
-    ///         global address bucket is spent by authenticated administrators only, so anonymous
-    ///         requests sent from an address an administrator shares cannot use it up.
+    ///         authentication, so the actor is known. The global address bucket is spent only by an
+    ///         administrator's person access token (<see cref="CountsAgainstCreationAddress" />): a
+    ///         request without a token, or with a User's, a challenge or a subject-rights token, is
+    ///         refused by the endpoint anyway and must not use up a bound administrators share.
     ///     </para>
     /// </remarks>
+    /// <summary>
+    ///     Whether a request spends the account-creation address bound: only an administrator's
+    ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
+    ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
+    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
+    ///     away by the endpoint's own checks and must not use up a bound administrators share.
+    /// </summary>
+    private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
+        actor is { MfaPending: false, SubjectRightsOnly: false } &&
+        actor.RoleId is (int)Roles.SystemAdmin or (int)Roles.ScopeAdmin;
+
     private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
     {
         FixedWindowRateLimiterOptions Window(string _) => new()
@@ -954,7 +987,7 @@ public class Startup : WebApiStartup
 
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ==
-            AccountCreationRateLimitPolicy && httpContext.GetUser<IdentityUser>() is not null
+            AccountCreationRateLimitPolicy && CountsAgainstCreationAddress(httpContext.GetUser<IdentityUser>())
                 ? RateLimitPartition.GetFixedWindowLimiter(
                     "creation:" + AuthRateLimitPartition.KeyFor(httpContext, callers), Window)
                 : RateLimitPartition.GetNoLimiter(string.Empty));

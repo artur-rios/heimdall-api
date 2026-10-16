@@ -3,126 +3,178 @@ using System.Net;
 namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
-///     What <see cref="SensitiveDiagnosticsGuard.Evaluate" /> decided about an instance's
-///     diagnostics. A refusal is not a value: it is an exception.
+///     How <see cref="SensitiveDiagnosticsGuard.Evaluate" /> settled an instance's diagnostics.
 /// </summary>
 public enum SensitiveDiagnosticsDecision
 {
-    /// <summary>No sensitive diagnostic is on, so there is nothing to decide.</summary>
+    /// <summary>The environment turns no sensitive diagnostic on, so there is nothing to decide.</summary>
     Off,
 
-    /// <summary>Diagnostics are on and no public host is configured: a developer machine or the test suite.</summary>
+    /// <summary>Diagnostics are on and nothing names a public host: a developer machine or the test suite.</summary>
     Private,
 
     /// <summary>
-    ///     Diagnostics are on, the instance serves a public host, and the operator has said so with
-    ///     <see cref="SensitiveDiagnosticsGuard.AllowVariable" />. Start-up warns.
+    ///     The instance serves a public host and the operator has set
+    ///     <see cref="SensitiveDiagnosticsGuard.AllowVariable" />, so the diagnostics stay on. Start-up
+    ///     warns.
     /// </summary>
-    Allowed
+    Allowed,
+
+    /// <summary>
+    ///     The instance serves a public host without the override, so every sensitive diagnostic is
+    ///     turned off. Start-up warns.
+    /// </summary>
+    Suppressed
 }
 
 /// <summary>
-///     NFR-28: refuses to start an instance that serves a public host with the diagnostics that
-///     expose data — EF Core's sensitive data logging and detailed errors, and the developer
-///     exception page — unless the operator sets <see cref="AllowVariable" /> to <c>true</c>.
+///     The one decision about the diagnostics that expose data, read by everything that turns one
+///     on: EF Core's sensitive data logging and detailed errors (<see cref="DataLogging" />) and the
+///     developer exception page (<see cref="DeveloperExceptionPage" />).
 /// </summary>
-/// <remarks>
-///     <para>
-///         Those diagnostics are on in every environment but Production: EF writes query parameter
-///         values to the log, password hashes and addresses among them, and the developer exception
-///         page shows any caller a stack trace and the request. That is what a developer wants on
-///         their own machine. On an instance the internet can reach it is acceptable only while the
-///         instance holds made-up people (Operations &amp; Infrastructure Document §0.2), and nothing
-///         in the API knew which instances those were.
-///     </para>
-///     <para>
-///         A host is public when <see cref="PublicHostVariable" /> or <see cref="UiHostVariable" />
-///         names anything but a loopback name or address. They are the variables a deployment
-///         already sets to route traffic to the API, so an instance behind Traefik is recognised
-///         without new configuration. Unset or empty, the instance is taken as private. The override
-///         is a statement by the operator that the instance holds no real person's data, made where
-///         the deployment's configuration can be read and checked; the API cannot verify it.
-///     </para>
-/// </remarks>
-public static class SensitiveDiagnosticsGuard
+/// <param name="DataLogging">Whether EF Core logs parameter values and adds detail to its errors.</param>
+/// <param name="DeveloperExceptionPage">Whether the developer exception page is served.</param>
+/// <param name="Decision">How the two were settled.</param>
+/// <param name="PublicHosts">
+///     The settings that named a public host, as <c>VARIABLE=host</c>, for the start-up warning.
+///     Host names only; no other part of a value.
+/// </param>
+public sealed record SensitiveDiagnostics(
+    bool DataLogging,
+    bool DeveloperExceptionPage,
+    SensitiveDiagnosticsDecision Decision,
+    IReadOnlyList<string> PublicHosts)
 {
-    /// <summary>Set to <c>true</c> to start with sensitive diagnostics on a public host.</summary>
-    public const string AllowVariable = "HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS";
+    /// <summary>Everything off: the safe value before anything has been decided.</summary>
+    public static readonly SensitiveDiagnostics None = new(false, false, SensitiveDiagnosticsDecision.Off, []);
+}
 
+/// <summary>
+///     The configuration that says where an instance is reached from: the host names Traefik routes
+///     to it, and the public addresses the API already writes into mail and accepts browser calls
+///     from.
+/// </summary>
+public sealed record PublicHostSettings(
+    string? PublicHost,
+    string? UiHost,
+    string? VerificationUrl,
+    string? PasswordResetUrl,
+    string? CorsAllowedOrigins)
+{
     /// <summary>The host name the mobile and desktop clients reach the API under.</summary>
     public const string PublicHostVariable = "PUBLIC_HOST";
 
     /// <summary>The web UI's host name, under which the API serves its <c>/api/</c> routes.</summary>
     public const string UiHostVariable = "UI_HOST";
 
+    /// <summary>Where a verification link points (the web UI).</summary>
+    public const string VerificationUrlVariable = "HEIMDALL_EMAIL_VERIFICATION_URL";
+
+    /// <summary>Where a password-reset link points (the web UI).</summary>
+    public const string PasswordResetUrlVariable = "HEIMDALL_PASSWORD_RESET_URL";
+
+    /// <summary>The browser origins allowed to call the API, comma-separated.</summary>
+    public const string CorsAllowedOriginsVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
+
+    public static PublicHostSettings FromEnvironment() => new(
+        Environment.GetEnvironmentVariable(PublicHostVariable),
+        Environment.GetEnvironmentVariable(UiHostVariable),
+        Environment.GetEnvironmentVariable(VerificationUrlVariable),
+        Environment.GetEnvironmentVariable(PasswordResetUrlVariable),
+        Environment.GetEnvironmentVariable(CorsAllowedOriginsVariable));
+
     /// <summary>
-    ///     Reads the host variables and the override from the environment and decides.
+    ///     Every setting that names a public host, as <c>VARIABLE=host</c>. The two host variables are
+    ///     read as host names; the URLs and the origins only when they parse as absolute
+    ///     <c>http</c> or <c>https</c> URLs, so a template placeholder is not taken for a host.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The instance must not start.</exception>
-    public static SensitiveDiagnosticsDecision EvaluateFromEnvironment(
-        string environmentName, bool sensitiveDataLogging, bool developerExceptionPage) =>
+    public IReadOnlyList<string> PublicHosts()
+    {
+        var found = new List<string>();
+
+        foreach (var (variable, value) in new[] { (PublicHostVariable, PublicHost), (UiHostVariable, UiHost) })
+        {
+            if (SensitiveDiagnosticsGuard.IsPublicHost(value))
+            {
+                found.Add($"{variable}={value!.Trim()}");
+            }
+        }
+
+        var urls = new[] { (VerificationUrlVariable, VerificationUrl), (PasswordResetUrlVariable, PasswordResetUrl) }
+            .Concat((CorsAllowedOrigins ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(origin => (CorsAllowedOriginsVariable, (string?)origin)));
+
+        foreach (var (variable, value) in urls)
+        {
+            if (Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+                SensitiveDiagnosticsGuard.IsPublicHost(uri.Host))
+            {
+                found.Add($"{variable}={uri.Host}");
+            }
+        }
+
+        return found.Distinct().ToList();
+    }
+}
+
+/// <summary>
+///     NFR-28: decides the diagnostics that expose data — EF Core's sensitive data logging and
+///     detailed errors, and the developer exception page. On an instance that serves a public host
+///     they are turned off, unless the operator sets <see cref="AllowVariable" /> to <c>true</c>.
+/// </summary>
+/// <remarks>
+///     <para>
+///         Those diagnostics are on in every environment but Production: EF writes query parameter
+///         values to the log, and the developer exception page answers a failed request with its
+///         details. That is what a developer wants on their own machine. On an instance reachable from
+///         outside they stay on only when the operator says the instance holds made-up people
+///         (Operations &amp; Infrastructure Document §0.2).
+///     </para>
+///     <para>
+///         The instance never refuses to start over this: it starts with the diagnostics off and
+///         says so, so an environment that is deployed automatically keeps running. A host is public
+///         when any setting in <see cref="PublicHostSettings" /> names anything but a loopback name
+///         or address. With nothing set, the instance is taken as private.
+///     </para>
+/// </remarks>
+public static class SensitiveDiagnosticsGuard
+{
+    /// <summary>Set to <c>true</c> to keep sensitive diagnostics on with a public host.</summary>
+    public const string AllowVariable = "HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS";
+
+    /// <summary>Reads the host settings and the override from the environment and decides.</summary>
+    public static SensitiveDiagnostics EvaluateFromEnvironment(bool dataLogging, bool developerExceptionPage) =>
         Evaluate(
-            environmentName,
-            sensitiveDataLogging,
+            dataLogging,
             developerExceptionPage,
-            Environment.GetEnvironmentVariable(PublicHostVariable),
-            Environment.GetEnvironmentVariable(UiHostVariable),
+            PublicHostSettings.FromEnvironment(),
             Environment.GetEnvironmentVariable(AllowVariable));
 
     /// <summary>
-    ///     Decides whether an instance may start with the given diagnostics. Split from
+    ///     Decides what an instance runs with, given what its environment asks for. Split from
     ///     <see cref="EvaluateFromEnvironment" /> so it can be tested without mutating the process
     ///     environment the functional suite's hosts read.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    ///     A diagnostic is on, a host is public, and <paramref name="allow" /> is not <c>true</c>.
-    /// </exception>
-    public static SensitiveDiagnosticsDecision Evaluate(
-        string environmentName,
-        bool sensitiveDataLogging,
-        bool developerExceptionPage,
-        string? publicHost,
-        string? uiHost,
-        string? allow)
+    public static SensitiveDiagnostics Evaluate(
+        bool dataLogging, bool developerExceptionPage, PublicHostSettings hosts, string? allow)
     {
-        if (!sensitiveDataLogging && !developerExceptionPage)
+        if (!dataLogging && !developerExceptionPage)
         {
-            return SensitiveDiagnosticsDecision.Off;
+            return SensitiveDiagnostics.None;
         }
 
-        var publicHosts = new[] { (PublicHostVariable, publicHost), (UiHostVariable, uiHost) }
-            .Where(host => IsPublicHost(host.Item2))
-            .Select(host => $"{host.Item1}={host.Item2!.Trim()}")
-            .ToList();
+        var publicHosts = hosts.PublicHosts();
 
         if (publicHosts.Count == 0)
         {
-            return SensitiveDiagnosticsDecision.Private;
+            return new SensitiveDiagnostics(dataLogging, developerExceptionPage, SensitiveDiagnosticsDecision.Private, []);
         }
 
-        if (string.Equals(allow?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            return SensitiveDiagnosticsDecision.Allowed;
-        }
-
-        var enabled = new List<string>();
-
-        if (sensitiveDataLogging)
-        {
-            enabled.Add("EF Core sensitive data logging and detailed errors");
-        }
-
-        if (developerExceptionPage)
-        {
-            enabled.Add("the developer exception page");
-        }
-
-        throw new InvalidOperationException(
-            $"The {environmentName} environment turns on {string.Join(" and ", enabled)}, and this " +
-            $"instance serves a public host ({string.Join(", ", publicHosts)}). They put query " +
-            "parameter values, password hashes and addresses among them, in the log and show stack " +
-            "traces to any caller. Refusing to start. Run the instance as Production, or set " +
-            $"{AllowVariable}=true to state that it holds made-up people only.");
+        return string.Equals(allow?.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+            ? new SensitiveDiagnostics(dataLogging, developerExceptionPage, SensitiveDiagnosticsDecision.Allowed, publicHosts)
+            : new SensitiveDiagnostics(false, false, SensitiveDiagnosticsDecision.Suppressed, publicHosts);
     }
 
     /// <summary>

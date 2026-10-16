@@ -32,12 +32,12 @@ RUN dotnet publish src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall
 
 # Framework-dependent on purpose: the runtime image already ships the .NET runtime the bundle needs,
 # so there is no reason to duplicate it. DesignTimeDbContextFactory reads the connection string from
-# HEIMDALL_DATA_CONNECTIONSTRING, which the entrypoint passes through from the container's
-# environment -- the same variable the API itself uses.
+# HEIMDALL_DATA_CONNECTIONSTRING when the bundle runs, and the entrypoint sets it, for the bundle's
+# process alone, to the migrations' connection string (docker/entrypoint.sh).
 #
 # The placeholder connection string is what DesignTimeDbContextFactory needs to hand `dotnet ef` a
-# DbContext while the bundle is built; nothing connects here, and the bundle uses the --connection
-# the entrypoint passes it instead.
+# DbContext while the bundle is built; nothing connects here, and the bundle reads the real one from
+# its environment when it runs.
 RUN HEIMDALL_DATA_CONNECTIONSTRING="Host=localhost;Port=5432;Database=heimdall;Username=postgres;Password=postgres" \
     dotnet ef migrations bundle \
         --project src/Infrastructure/ArturRios.Heimdall.Data \

@@ -150,7 +150,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     email of this kind was sent to you recently. Try again in a few minutes." inside the
     ///     cooldown, 429 "You have reached the limit for account emails. Try again later." once
     ///     the window's five are spent (AF-08j), both with <c>Retry-After</c>; nothing changes then, and
-    ///     the second factor is not spent. While the caller's email sign-in method is enabled, an own
+    ///     no recovery or email code is spent (an accepted authenticator code's time step is recorded,
+    ///     as for any accepted code). While the caller's email sign-in method is enabled, an own
     ///     email change answers 409 "Turn off the email sign-in method before changing your email
     ///     address." (AF-08k), once the credentials are accepted.
     /// </remarks>

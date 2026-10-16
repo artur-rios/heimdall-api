@@ -17,8 +17,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // administrator's token, so without a bound one account — from one address — could keep the gate full
 // and starve every sign-in. The limit is per acting person, sized for real administration.
 //
-// The limit is per acting person and per address too; only authenticated requests spend the address
-// bound. The functional tests spend the budget with malformed bodies: the limiter counts a request
+// The limit is per acting person and per address too; only an administrator's person access token
+// spends the address bound. The functional tests spend the budget with malformed bodies: the limiter counts a request
 // before MVC sees it, so a 400 costs a slot as a created person does, without thirty derivations.
 [Collection(nameof(FunctionalCollection))]
 public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -37,17 +37,33 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         return admin.PublicId;
     }
 
-    private async Task<HttpResponseMessage> CreateAsync(Guid? actor, string clientAddress)
+    private async Task<Guid> SeedUserAsync()
+    {
+        await using var context = db.CreateContext();
+        var user = new Person
+        {
+            PublicId = Guid.NewGuid(), Name = "Plain User", Email = $"user-{Guid.NewGuid():N}@test.local",
+            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.User, EmailVerified = true
+        };
+        context.Persons.Add(user);
+        await context.SaveChangesAsync();
+
+        return user.PublicId;
+    }
+
+    private Task<HttpResponseMessage> CreateAsync(Guid? actor, string clientAddress) =>
+        CreateWithTokenAsync(actor is { } id ? TestTokens.For(id, (int)Roles.SystemAdmin) : null, clientAddress);
+
+    private async Task<HttpResponseMessage> CreateWithTokenAsync(string? token, string clientAddress)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/persons")
         {
             Content = JsonContent.Create(new { })
         };
 
-        if (actor is { } id)
+        if (token is not null)
         {
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", TestTokens.For(id, (int)Roles.SystemAdmin));
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         }
 
         // A trusted caller's named address, so each test chooses the address bucket it is counted in.
@@ -120,6 +136,33 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         using var response = await CreateAsync(actor, "203.0.113.74");
 
         // Then — anonymous traffic does not spend the address bound administrators share
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
+    }
+
+    [FunctionalTheory]
+    [InlineData("user")]
+    [InlineData("challenge")]
+    public async Task GivenNonAdministratorTokensSpentAnAddressesMinute_WhenAnAdministratorCreatesFromIt_ThenTheyAreServed(
+        string kind)
+    {
+        // Given thirty requests from one address with a token the endpoint refuses: a User's, or an
+        // administrator's two-factor challenge
+        var actor = await SeedSystemAdminAsync();
+        var address = kind == "user" ? "203.0.113.75" : "203.0.113.76";
+        var token = kind == "user"
+            ? TestTokens.For(await SeedUserAsync(), (int)Roles.User)
+            : TestTokens.ForMfaPending(await SeedSystemAdminAsync(), (int)Roles.SystemAdmin);
+
+        for (var attempt = 1; attempt <= Startup.AccountCreationPermitLimit; attempt++)
+        {
+            using var refused = await CreateWithTokenAsync(token, address);
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        }
+
+        // When an administrator creates from the same address
+        using var response = await CreateAsync(actor, address);
+
+        // Then — only administrators' access tokens spend the address bound they share
         Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
     }
 }

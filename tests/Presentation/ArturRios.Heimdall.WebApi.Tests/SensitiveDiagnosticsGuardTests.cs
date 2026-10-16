@@ -3,22 +3,30 @@ using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for SensitiveDiagnosticsGuard (NFR-28): an instance that serves a public host refuses to
-// start with the diagnostics that expose data unless HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS is true.
+// Unit tests for SensitiveDiagnosticsGuard (NFR-28): on an instance that serves a public host, EF
+// Core's sensitive data logging and detailed errors and the developer exception page are turned off
+// together, unless HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS is true. Nothing here refuses to start.
 // Through Evaluate rather than the environment, which the functional suite's hosts read.
 public class SensitiveDiagnosticsGuardTests
 {
     private const string PublicHost = "heimdall-api-dev.example.com";
     private const string UiHost = "heimdall-dev.example.com";
 
+    private static PublicHostSettings Hosts(
+        string? publicHost = null, string? uiHost = null, string? verificationUrl = null,
+        string? resetUrl = null, string? corsOrigins = null) =>
+        new(publicHost, uiHost, verificationUrl, resetUrl, corsOrigins);
+
     [UnitFact]
     public void GivenNoDiagnostics_WhenEvaluatingWithPublicHosts_ThenTheyAreOff()
     {
-        // When
-        var decision = SensitiveDiagnosticsGuard.Evaluate("Production", false, false, PublicHost, UiHost, null);
+        // When — Production asks for none
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(false, false, Hosts(PublicHost, UiHost), null);
 
         // Then
-        Assert.Equal(SensitiveDiagnosticsDecision.Off, decision);
+        Assert.Equal(SensitiveDiagnosticsDecision.Off, diagnostics.Decision);
+        Assert.False(diagnostics.DataLogging);
+        Assert.False(diagnostics.DeveloperExceptionPage);
     }
 
     [UnitTheory]
@@ -27,65 +35,123 @@ public class SensitiveDiagnosticsGuardTests
     [InlineData("localhost", "localhost:8081")]
     [InlineData("127.0.0.1", "[::1]:8080")]
     [InlineData("api.localhost", "http://localhost:8081/")]
-    public void GivenDiagnosticsAndOnlyLocalHosts_WhenEvaluating_ThenTheInstanceIsPrivate(string? publicHost, string? uiHost)
+    public void GivenDiagnosticsAndOnlyLocalHosts_WhenEvaluating_ThenTheyStayOn(string? publicHost, string? uiHost)
     {
         // When
-        var decision = SensitiveDiagnosticsGuard.Evaluate("Development", true, true, publicHost, uiHost, null);
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, Hosts(publicHost, uiHost), null);
 
         // Then
-        Assert.Equal(SensitiveDiagnosticsDecision.Private, decision);
+        Assert.Equal(SensitiveDiagnosticsDecision.Private, diagnostics.Decision);
+        Assert.True(diagnostics.DataLogging);
+        Assert.True(diagnostics.DeveloperExceptionPage);
     }
 
     [UnitFact]
-    public void GivenSensitiveDataLoggingOnAPublicHost_WhenEvaluatingWithoutTheOverride_ThenStartUpIsRefused()
+    public void GivenTheLocalTemplatesUrlsAndOrigins_WhenEvaluating_ThenTheInstanceIsPrivate()
     {
-        // When — Staging: EF diagnostics, no developer exception page
-        var error = Assert.Throws<InvalidOperationException>(
-            () => SensitiveDiagnosticsGuard.Evaluate("Staging", true, false, PublicHost, null, null));
+        // Given what docker/local.env.example sets
+        var hosts = Hosts(
+            verificationUrl: "http://localhost:8081/verify-email",
+            resetUrl: "http://localhost:8081/password-reset",
+            corsOrigins: "http://localhost:8081, http://127.0.0.1:8082");
 
-        // Then — it names the setting, the host and the way out
-        Assert.Contains("Refusing to start", error.Message);
-        Assert.Contains("Staging", error.Message);
-        Assert.Contains("sensitive data logging", error.Message);
-        Assert.DoesNotContain("developer exception page", error.Message);
-        Assert.Contains($"{SensitiveDiagnosticsGuard.PublicHostVariable}={PublicHost}", error.Message);
-        Assert.Contains($"{SensitiveDiagnosticsGuard.AllowVariable}=true", error.Message);
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, hosts, null);
+
+        // Then
+        Assert.Equal(SensitiveDiagnosticsDecision.Private, diagnostics.Decision);
     }
 
     [UnitFact]
-    public void GivenTheDeveloperExceptionPageOnThePublicUiHost_WhenEvaluatingWithoutTheOverride_ThenStartUpIsRefused()
+    public void GivenTemplatePlaceholders_WhenEvaluating_ThenTheyAreNotTakenForHosts()
     {
-        // When — the UI's host alone is enough
-        var error = Assert.Throws<InvalidOperationException>(
-            () => SensitiveDiagnosticsGuard.Evaluate("Development", false, true, "localhost", UiHost, ""));
+        // Given the tracked Environments/.env template, whose values are placeholders
+        var hosts = Hosts(
+            verificationUrl: "[[email-verification-url]]",
+            resetUrl: "[[password-reset-url]]",
+            corsOrigins: "[[cors-allowed-origins]]");
+
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, hosts, null);
 
         // Then
-        Assert.Contains("developer exception page", error.Message);
-        Assert.Contains($"{SensitiveDiagnosticsGuard.UiHostVariable}={UiHost}", error.Message);
-        Assert.DoesNotContain(SensitiveDiagnosticsGuard.PublicHostVariable + "=", error.Message);
+        Assert.Equal(SensitiveDiagnosticsDecision.Private, diagnostics.Decision);
+    }
+
+    [UnitFact]
+    public void GivenDevelopmentOnAPublicHost_WhenEvaluatingWithoutTheOverride_ThenEveryDiagnosticIsOff()
+    {
+        // When — Development asks for EF diagnostics and the developer exception page
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, Hosts(PublicHost, UiHost), null);
+
+        // Then — both off, by the one decision
+        Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
+        Assert.False(diagnostics.DataLogging);
+        Assert.False(diagnostics.DeveloperExceptionPage);
+        Assert.Equal(
+            new[] { $"{PublicHostSettings.PublicHostVariable}={PublicHost}", $"{PublicHostSettings.UiHostVariable}={UiHost}" },
+            diagnostics.PublicHosts);
+    }
+
+    [UnitFact]
+    public void GivenStagingOnThePublicUiHostOnly_WhenEvaluatingWithoutTheOverride_ThenDataLoggingIsOff()
+    {
+        // When — Staging: EF diagnostics, no developer exception page; the UI's host alone is enough
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, false, Hosts("localhost", UiHost), "");
+
+        // Then
+        Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
+        Assert.False(diagnostics.DataLogging);
+        Assert.False(diagnostics.DeveloperExceptionPage);
+        Assert.Equal(new[] { $"{PublicHostSettings.UiHostVariable}={UiHost}" }, diagnostics.PublicHosts);
+    }
+
+    [UnitTheory]
+    [InlineData("https://heimdall-dev.example.com/verify-email", null, null, PublicHostSettings.VerificationUrlVariable)]
+    [InlineData(null, "https://heimdall-dev.example.com/password-reset", null, PublicHostSettings.PasswordResetUrlVariable)]
+    [InlineData(null, null, "http://localhost:8081,https://heimdall-dev.example.com", PublicHostSettings.CorsAllowedOriginsVariable)]
+    public void GivenOnlyAUrlOrAnOriginNamesAPublicHost_WhenEvaluating_ThenDiagnosticsAreOff(
+        string? verificationUrl, string? resetUrl, string? corsOrigins, string variable)
+    {
+        // Given no host variable at all — an instance started without the two Traefik names
+        var hosts = Hosts(verificationUrl: verificationUrl, resetUrl: resetUrl, corsOrigins: corsOrigins);
+
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, hosts, null);
+
+        // Then — the host is named, and nothing else of the value
+        Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
+        Assert.Equal(new[] { $"{variable}={UiHost}" }, diagnostics.PublicHosts);
     }
 
     [UnitTheory]
     [InlineData("false")]
     [InlineData("1")]
     [InlineData("yes")]
-    public void GivenAnOverrideOtherThanTrue_WhenEvaluatingOnAPublicHost_ThenStartUpIsRefused(string allow)
+    public void GivenAnOverrideOtherThanTrue_WhenEvaluatingOnAPublicHost_ThenEveryDiagnosticIsOff(string allow)
     {
-        Assert.Throws<InvalidOperationException>(
-            () => SensitiveDiagnosticsGuard.Evaluate("Development", true, true, PublicHost, UiHost, allow));
+        // When
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, Hosts(PublicHost, UiHost), allow);
+
+        // Then
+        Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
+        Assert.False(diagnostics.DataLogging);
+        Assert.False(diagnostics.DeveloperExceptionPage);
     }
 
     [UnitTheory]
     [InlineData("true")]
     [InlineData("TRUE")]
     [InlineData(" True ")]
-    public void GivenTheOverride_WhenEvaluatingOnAPublicHost_ThenTheInstanceIsAllowed(string allow)
+    public void GivenTheOverride_WhenEvaluatingOnAPublicHost_ThenTheDiagnosticsStayOn(string allow)
     {
         // When
-        var decision = SensitiveDiagnosticsGuard.Evaluate("Development", true, true, PublicHost, UiHost, allow);
+        var diagnostics = SensitiveDiagnosticsGuard.Evaluate(true, true, Hosts(PublicHost, UiHost), allow);
 
         // Then
-        Assert.Equal(SensitiveDiagnosticsDecision.Allowed, decision);
+        Assert.Equal(SensitiveDiagnosticsDecision.Allowed, diagnostics.Decision);
+        Assert.True(diagnostics.DataLogging);
+        Assert.True(diagnostics.DeveloperExceptionPage);
     }
 
     [UnitTheory]
@@ -99,6 +165,7 @@ public class SensitiveDiagnosticsGuardTests
     [InlineData("LOCALHOST.", false)]
     [InlineData("127.0.0.2", false)]
     [InlineData("::1", false)]
+    [InlineData("[::1]", false)]
     [InlineData("", false)]
     public void GivenAHostValue_WhenCheckingWhetherItIsPublic_ThenOnlyLoopbackAndEmptyAreNot(string value, bool expected)
     {
