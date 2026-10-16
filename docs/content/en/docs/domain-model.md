@@ -100,6 +100,15 @@ classDiagram
         +bool EmailVerified
         +int FailedLoginAttempts
         +DateTime? LockedOutUntil
+        +int FailedSecondFactorAttempts
+        +DateTime? SecondFactorLockedOutUntil
+        +int SecondFactorLockouts
+        +int FailedReauthenticationAttempts
+        +DateTime? ReauthenticationWindowStartedAt
+        +DateTime? ReauthenticationPausedUntil
+        +int AccountEmailsSent
+        +DateTime? AccountEmailWindowEndsAt
+        +DateTime? AccountEmailLastSentAt
         +long? ScopeId
     }
     class TwoFactorAuth {
@@ -207,14 +216,15 @@ registrations by it (UC-49, UC-50). The registrant never sees it — their refer
 | --- | --- | --- |
 | Password | Argon2id hash + per-person random salt | Never |
 | TOTP secret | Encrypted via ASP.NET Core Data Protection (`ITotpSecretProtector`) | Once, at provisioning, so the authenticator app can be enrolled |
-| Recovery codes | Hash only, no per-code salt (high-entropy random strings) | Once, in the response that generates them |
+| Recovery codes | SHA-256 of the canonical code, no per-code salt (80 random bits, FR-2F-20) | Once, in the response that generates them |
 | 2FA email code | Hash + per-code salt (only 10⁶ possible values, so it is treated as a user-grade secret) | Never — it is mailed |
-| Email verification / password reset token | Plain random string | Once, by email |
+| Email verification / password reset token | SHA-256 digest only (`SingleUseTokenHash`) | Once, by email |
 
 That split is **NFR-16**. The email code gets a salt and the recovery code does not for a concrete
 reason: a six-digit code has a million possible values and would fall to a rainbow table without one,
-while a recovery code is long random text where a plain one-way hash already makes the plaintext
-unrecoverable.
+while a recovery code is 80 random bits, where a plain one-way hash already makes the plaintext
+unrecoverable: finding one from its digest takes about 2^79 SHA-256 evaluations, and even a search
+over a million stored codes at once leaves about 2^60 (Threat Model TH-16).
 
 ## Deletion cascades
 

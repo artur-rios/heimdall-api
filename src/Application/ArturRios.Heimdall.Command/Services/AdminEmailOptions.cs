@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
-///     The per-person cooldown on administrator-initiated account email (FR-EV-07, FR-PR-06): at most
-///     one email of each kind per person per <see cref="Cooldown" />, whoever asks. Read from
+///     The per-person cooldown on account email (FR-EV-07, FR-PR-06, FR-PR-07, FR-PE-16): at most one
+///     email of each kind per person per <see cref="Cooldown" />, whoever asks. Read from
 ///     <c>HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS</c>; five minutes by default.
 /// </summary>
 /// <remarks>
@@ -18,6 +18,13 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         comparison on token rows that already exist — self-service sends (UC-12, UC-15) included,
 ///         and whether or not the token has since been used. Changing a token lifetime shifts the
 ///         derived times of tokens already issued; on a five-minute window that is accepted.
+///     </para>
+///     <para>
+///         It began as the administrators' cooldown (UC-51, UC-52) and keeps that variable name, so no
+///         deployment has to change its configuration. Anonymous password recovery (UC-12) asks it the
+///         same way. A person's own sends — a verification link again, a setup code, an email-change
+///         notice — use its <see cref="Cooldown" /> too, but through <see cref="AccountEmailBudget" />,
+///         a conditional write on the person row, because a bearer token can send a burst of them.
 ///     </para>
 ///     <para>
 ///         Values from 0 to 86400 seconds are accepted, and 0 switches the cooldown off. Anything
@@ -43,6 +50,10 @@ public class AdminEmailOptions
     ///     pass for the value the operator meant.
     /// </summary>
     public string? RejectedCooldown { get; init; }
+
+    /// <summary>These options with the cooldown at most <paramref name="limit" />.</summary>
+    public AdminEmailOptions CappedAt(TimeSpan limit) =>
+        Cooldown <= limit ? this : new AdminEmailOptions { Cooldown = limit, RejectedCooldown = RejectedCooldown };
 
     public static AdminEmailOptions FromEnvironment() => From(Environment.GetEnvironmentVariable(CooldownVariable));
 

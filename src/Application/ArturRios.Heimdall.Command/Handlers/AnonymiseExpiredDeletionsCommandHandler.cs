@@ -5,6 +5,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Mediator.Command.Interfaces;
@@ -60,7 +61,8 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
-    DataRetentionOptions retention)
+    DataRetentionOptions retention,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
     /// <summary>
@@ -165,6 +167,16 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         foreach (var person in persons)
         {
             IdentityAnonymiser.Anonymise(person, now);
+
+            // The factor budgets are behavioural data too, and a whole-row save never writes them
+            // (FR-AU-12, FR-AU-13): they are cleared by their own targeted writes.
+            await atomicWrites.ClearSecondFactorAttemptsAsync(person);
+            await atomicWrites.ClearReauthenticationAttemptsAsync(person);
+            await atomicWrites.ClearAccountEmailsAsync(person);
+
+            // The password hash and salt likewise: a whole-row save never writes them once the row
+            // exists, so the anonymiser's in-memory clear reaches the row only through this.
+            await atomicWrites.ClearPasswordAsync(person);
 
             // Nothing blocks it any more; it is done.
             person.ErasureBlockedReason = null;

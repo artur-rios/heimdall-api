@@ -44,7 +44,8 @@ public class GoogleIdTokenVerifier(
                 payload.Email,
                 GoogleIdTokenClaims.EmailVerified(idToken, logger),
                 payload.Name,
-                payload.Picture);
+                payload.Picture,
+                string.IsNullOrEmpty(payload.Nonce) ? null : payload.Nonce);
         }
         catch (InvalidJwtException exception)
         {

@@ -15,6 +15,9 @@ public static class PersonMessageMap
             [PersonMessages.PersonCreatedSuccessfully] = HttpStatusCodes.Created,
             // AF-06a — email already exists.
             [PersonMessages.EmailAlreadyExists] = HttpStatusCodes.Conflict,
+            // AF-08k — the email sign-in method is enabled; a state the caller must change first, as
+            // AF-36a's "already active" is.
+            [PersonMessages.EmailSignInMethodEnabled] = HttpStatusCodes.Conflict,
             // AF-06b — scope not found.
             [PersonMessages.ScopeNotFound] = HttpStatusCodes.NotFound,
             // AF-06e — actor is not an owner of the target scope.
@@ -40,11 +43,10 @@ public static class PersonMessageMap
             // UC-08 — caller may not update the person; AF-08c for the role-change case.
             [PersonMessages.NotAuthorizedToUpdatePerson] = HttpStatusCodes.Forbidden,
             [PersonMessages.RoleChangeRequiresSystemAdmin] = HttpStatusCodes.Forbidden,
-            // AF-08h / AF-08i (FR-PE-14) — an own email change without the current password, or without
-            // the second factor when it is active. UC-39's own refusals (AF-39b, AF-39c), and UC-39's
-            // status for them.
-            [TwoFactorMessages.PasswordMismatch] = HttpStatusCodes.Unauthorized,
-            [TwoFactorMessages.FactorInvalid] = HttpStatusCodes.Unauthorized,
+            // AF-08h / AF-08i (FR-PE-14, FR-AU-13) — an own email change without the current password,
+            // or without the second factor when it is active, or while the re-authentication budget is
+            // paused. UC-39's one refusal, and UC-39's status for it.
+            [AuthMessages.PasswordOrCodeIncorrect] = HttpStatusCodes.Unauthorized,
             // UC-08 — the transition needs a scope the request does not carry, or the role is unknown.
             [PersonMessages.UnsupportedRoleTransition] = HttpStatusCodes.BadRequest,
             [PersonMessages.UnknownRole] = HttpStatusCodes.BadRequest,
@@ -88,6 +90,9 @@ public static class PersonMessageMap
             [AuthMessages.EmailAlreadyVerified] = HttpStatusCodes.BadRequest,
             // AF-51e / AF-52e — the per-person cooldown is running (FR-EV-07, FR-PR-06).
             [PersonMessages.AccountEmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            // AF-08j — an own email change the person's account-email budget refused (FR-PE-16).
+            [AuthMessages.EmailSentRecently] = HttpStatusCodes.TooManyRequests,
+            [AuthMessages.AccountEmailLimitReached] = HttpStatusCodes.TooManyRequests,
             // UC-52 main flow — the reset email was handed to the sender. AF-52a reuses PersonNotFound
             // (404); AF-52b, AF-52c and AF-52e share UC-51's entries above.
             [PersonMessages.PasswordResetSentToPerson] = HttpStatusCodes.Ok,

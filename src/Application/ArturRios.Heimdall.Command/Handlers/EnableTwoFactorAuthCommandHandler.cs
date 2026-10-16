@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -15,7 +16,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="EnableTwoFactorAuthCommand" /> (UC-36, FR-2F-01…FR-2F-03): validates input
 ///     (AF-36c), confirms the caller is a live person eligible to opt in (AF-36b), refuses a caller
-///     whose configuration is already active (AF-36a), verifies their current password (AF-36e,
+///     whose configuration is already active (AF-36a), refuses an Email selection the person's
+///     account-email budget would refuse (AF-36f, AF-36g), verifies their current password (AF-36e,
 ///     FR-2F-18), then creates or overwrites (AF-36d) a pending
 ///     <see cref="TwoFactorAuth" /> row for the method(s) selected — generating and encrypting a TOTP
 ///     secret for the App method, and issuing a fresh 6-digit email code for the Email method.
@@ -38,6 +40,20 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         caller's not-yet-active row (if any) and updating it in place rather than inserting a
 ///         second one, since §4.9 allows at most one row per person.
 ///     </para>
+///     <para>
+///         The password check is charged to the account's re-authentication budget
+///         (<see cref="ReauthenticationBudget" />, FR-AU-13), and a missing or wrong password, or a
+///         paused budget, is refused with the one message every re-authentication shares.
+///     </para>
+///     <para>
+///         Selecting the Email method mails a code, so it is charged to the person's account-email
+///         budget (<see cref="AccountEmailBudget" />, FR-2F-19), whatever else was selected with it.
+///         The budget is read before the password, as AF-36a is, so a request that could not send costs
+///         neither an Argon2id derivation nor a re-authentication charge (AF-36f, AF-36g); the send is
+///         reserved — atomically, so a burst gets one — only once the password has checked out, so a
+///         token without the password cannot spend the owner's day. App alone mails nothing and is
+///         never held back by it.
+///     </para>
 /// </remarks>
 public class EnableTwoFactorAuthCommandHandler(
     IValidator<EnableTwoFactorAuthCommand> validator,
@@ -45,7 +61,10 @@ public class EnableTwoFactorAuthCommandHandler(
     IAsyncReadOnlyRepository<TwoFactorAuth, long> twoFactorReader,
     IAsyncRepository<TwoFactorAuth, long> twoFactorWriter,
     ITwoFactorEmailCodeIssuer emailCodeIssuer,
-    ITotpSecretProtector totpSecretProtector)
+    ITotpSecretProtector totpSecretProtector,
+    IAtomicWrites atomicWrites,
+    AdminEmailOptions emailOptions,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<EnableTwoFactorAuthCommand, EnableTwoFactorAuthCommandOutput>
 {
     private const string Issuer = "Heimdall";
@@ -86,15 +105,40 @@ public class EnableTwoFactorAuthCommandHandler(
             return output.WithError(TwoFactorMessages.AlreadyActive);
         }
 
+        // AF-36f, AF-36g (FR-2F-19): Email would mail a code the budget would refuse. Read from the
+        // row already loaded, so it costs nothing; the reservation below is what decides.
+        if (wantsEmail && AccountEmailBudget.RefusalOf(
+                AccountEmailBudget.Peek(person, emailOptions), person, emailOptions, retryAfter) is { } early)
+        {
+            return output.WithError(early);
+        }
+
         // AF-36e (FR-2F-18): the current password, missing or wrong alike, through the gate every
         // password check goes through (TH-03). Adding a factor requires proof of identity, as removing
         // one does (UC-39): the factor chosen here is the one UC-38 will demand of the account holder,
         // and a bearer token is not proof that they are present. After AF-36a, so a repeat
         // request costs no Argon2id derivation — the same order UC-42 keeps.
+        //
+        // FR-AU-13: charged to the re-authentication budget first. A paused budget still has the
+        // password compared, and refuses it whatever the result, with the answer a wrong one gets.
+        var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
+
         if (string.IsNullOrWhiteSpace(command.CurrentPassword) ||
-            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt))
+            !await PasswordHashGate.Shared.TextMatchesAsync(command.CurrentPassword, person.PasswordHash, person.Salt) ||
+            !admitted)
         {
-            return output.WithError(TwoFactorMessages.PasswordMismatch);
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
+        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
+
+        // FR-2F-19: the password checked out, so the send is reserved now, by one conditional write —
+        // of a burst that all passed the read above, exactly what the budget has left goes through.
+        if (wantsEmail && AccountEmailBudget.RefusalOf(
+                await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter) is { } refusal)
+        {
+            return output.WithError(refusal);
         }
 
         // UC-36 step 2: create a pending row, or reuse the existing not-yet-confirmed one (AF-36d).

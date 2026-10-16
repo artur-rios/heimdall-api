@@ -273,4 +273,52 @@ public class ExportMyDataCommandHandlerTests
         Assert.Equal(person.PublicId, document.Subject.Id);
         Assert.NotEqual("Grace Hopper", document.Subject.Name);
     }
+
+    [UnitFact]
+    public async Task GivenAPersonWithFactorBudgetsSpent_WhenExporting_ThenTheCountersAndLocksAreIncluded()
+    {
+        // UC-41 is a copy of everything held, and these are held: the subject is also the one who
+        // can tell from them why a correct code was refused (FR-AU-12, FR-AU-13)
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(fakes);
+        var lockedUntil = DateTime.UtcNow.AddHours(1);
+        var windowStarted = DateTime.UtcNow.AddMinutes(-3);
+        var pausedUntil = DateTime.UtcNow.AddMinutes(12);
+        person.FailedSecondFactorAttempts = 4;
+        person.SecondFactorLockedOutUntil = lockedUntil;
+        person.SecondFactorLockouts = 2;
+        person.FailedReauthenticationAttempts = 3;
+        person.ReauthenticationWindowStartedAt = windowStarted;
+        person.ReauthenticationPausedUntil = pausedUntil;
+
+        var security = (await fakes.Handler().HandleAsync(Command(person.PublicId))).Data!.Security;
+
+        Assert.Equal(4, security.FailedSecondFactorAttempts);
+        Assert.Equal(lockedUntil, security.SecondFactorLockedOutUntil);
+        Assert.Equal(2, security.SecondFactorLockouts);
+        Assert.Equal(3, security.FailedReauthenticationAttempts);
+        Assert.Equal(windowStarted, security.ReauthenticationWindowStartedAt);
+        Assert.Equal(pausedUntil, security.ReauthenticationPausedUntil);
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonWithAccountEmailsSent_WhenExporting_ThenTheBudgetIsIncluded()
+    {
+        // Given the account-email budget (FR-PE-16), which is held about the subject too
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(fakes);
+        var windowEnds = DateTime.UtcNow.AddHours(20);
+        var lastSent = DateTime.UtcNow.AddMinutes(-30);
+        person.AccountEmailsSent = 2;
+        person.AccountEmailWindowEndsAt = windowEnds;
+        person.AccountEmailLastSentAt = lastSent;
+
+        // When
+        var security = (await fakes.Handler().HandleAsync(Command(person.PublicId))).Data!.Security;
+
+        // Then
+        Assert.Equal(2, security.AccountEmailsSent);
+        Assert.Equal(windowEnds, security.AccountEmailWindowEndsAt);
+        Assert.Equal(lastSent, security.AccountEmailLastSentAt);
+    }
 }

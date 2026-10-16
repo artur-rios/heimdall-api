@@ -35,10 +35,10 @@ Two rules apply everywhere and are not repeated per row:
 | `POST /password-recovery` | Anonymous | UC-12 — request a reset link |
 | `POST /password-reset` | Anonymous | UC-13 — set a new password from the token |
 | `POST /verify-email` | Anonymous | UC-14 — confirm an address from the mailed token |
-| `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one |
+| `POST /resend-verification` | Authenticated (self) | UC-15 — retire outstanding links, mail a fresh one; `429` when the account-email budget refuses it (cooldown or daily limit); rate-limited |
 | `POST /google` | Anonymous | UC-25 — Google sign-up/sign-in against a scope |
 | `POST /google/sign-out` | Authenticated (Google User) | UC-26 — end a Google session |
-| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise) |
+| `POST /2fa/enable` | Authenticated (self) | UC-36 — begin 2FA setup; needs `currentPassword` (`401` otherwise); with `Email`, `429` when the account-email budget refuses it |
 | `POST /2fa/confirm` | Authenticated (self) | UC-37 — confirm setup, receive recovery codes |
 | `POST /2fa/verify` | Anonymous | UC-38 — redeem the challenge token with a second factor |
 | `POST /2fa/disable` | Authenticated (self) | UC-39 — turn 2FA off |
@@ -257,8 +257,11 @@ Some responses tell the caller less than the API knows, on purpose:
   anyone — in the same time, too: it only queues the request, and the lookup, the token and the email
   happen after the response. A Mailgun failure is logged rather than surfaced — an email outage must
   not turn into a 500 that confirms an anonymous caller's guess.
-- **`POST /api/auth/google`** answers alike for an unverifiable token and a Google User whose account
-  is gone (AF-25a, AF-25d).
+- **`POST /api/auth/google`** answers alike for an unverifiable token, a token that does not carry
+  the `nonce` the request sent, and a Google User whose account is gone (AF-25a, AF-25g, AF-25d).
+- **`POST /api/auth/password-reset`** and **`POST /api/auth/verify-email`** answer "Invalid token."
+  both for a token nobody issued and for one whose person has since been restricted, deleted or
+  anonymised, or can no longer sign in (AF-13e, AF-14d).
 
 ## The specification
 

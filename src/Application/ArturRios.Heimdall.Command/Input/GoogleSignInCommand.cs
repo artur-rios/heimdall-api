@@ -21,4 +21,13 @@ public class GoogleSignInCommand : BaseCommand
 
     /// <summary>The Google ID token the caller obtained from Google, verified before it is trusted.</summary>
     public string IdToken { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Optional: the nonce the client sent Google when it asked for <see cref="IdToken" />. When
+    ///     present, the token's <c>nonce</c> claim must equal it exactly (FR-GO-20), which binds the
+    ///     token to the client's own sign-in attempt: a client can refuse a token that was not issued
+    ///     for its request. Absent or empty, nothing is compared. Whether a token is accepted rests on
+    ///     its signature, issuer, audience and expiry.
+    /// </summary>
+    public string? Nonce { get; set; }
 }

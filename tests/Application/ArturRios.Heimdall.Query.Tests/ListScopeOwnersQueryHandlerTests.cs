@@ -108,6 +108,51 @@ public class ListScopeOwnersQueryHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAnOwnerOfAnotherTenantsScope_WhenAScopeAdminListsTheOwners_ThenOnlyTheSharedScopeIsReturned()
+    {
+        // Given the actor and a co-owner of scope 1; the co-owner also owns scope 2 (FR-PE-19)
+        var scope = Scope(1);
+        var elsewhere = Scope(2);
+        var actor = Owner(10, scope, "Ana", "ana@test.local");
+        var coOwner = Owner(11, scope, "Bruno", "bruno@test.local");
+        coOwner.ScopeOwnerships.Add(new ScopeOwner { ScopeId = elsewhere.Id, Scope = elsewhere });
+        var scopes = await ScopesWith(scope, elsewhere);
+        var persons = await PersonsWith(actor, coOwner);
+        var handler = new ListScopeOwnersQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopeOwnersQueryValidator());
+        var query = QueryFor(scope);
+        query.ActingPersonId = actor.PublicId;
+        query.ActingRole = (int)Roles.ScopeAdmin;
+
+        // When
+        var output = await handler.HandleAsync(query);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.All(output.Data!, owner => Assert.Equal([scope.PublicId], owner.OwnedScopeIds));
+    }
+
+    [UnitFact]
+    public async Task GivenAnOwnerOfAnotherTenantsScope_WhenASystemAdminListsTheOwners_ThenEveryScopeIsReturned()
+    {
+        // Given
+        var scope = Scope(1);
+        var elsewhere = Scope(2);
+        var coOwner = Owner(11, scope, "Bruno", "bruno@test.local");
+        coOwner.ScopeOwnerships.Add(new ScopeOwner { ScopeId = elsewhere.Id, Scope = elsewhere });
+        var scopes = await ScopesWith(scope, elsewhere);
+        var persons = await PersonsWith(coOwner);
+        var handler = new ListScopeOwnersQueryHandler(scopes, persons, Ownership(allowed: true), new ListScopeOwnersQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(QueryFor(scope));
+
+        // Then
+        Assert.True(output.Success);
+        var listed = Assert.Single(output.Data!);
+        Assert.Equivalent(new[] { scope.PublicId, elsewhere.PublicId }, listed.OwnedScopeIds, strict: true);
+    }
+
+    [UnitFact]
     public async Task GivenARestrictedOwner_WhenHandlingListScopeOwners_ThenTheyAreWithheld()
     {
         // Given two owners, one under a restriction of processing (NFR-24)

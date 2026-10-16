@@ -232,7 +232,11 @@ Six things about this pipeline are worth knowing before reading any handler:
 
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
-token's claims alone, and nothing is looked up while the token is validated.
+token's claims alone, and nothing is looked up while the token is validated. The library's validator
+checks the signature (HS256 only) and lifetime; `PersonTokenValidator` takes its place, wrapping it,
+and also requires `HEIMDALL_AUTH_TOKEN_ISSUER` and exactly one of the three person audiences
+(**NFR-30**), so a correctly signed token Heimdall did not issue for itself is refused like a forged
+one.
 
 **But the identity it names is checked.** `ActorLivenessFilter` runs globally, right after the
 challenge-token guard, and refuses a token whose person or Google User is absent or logically

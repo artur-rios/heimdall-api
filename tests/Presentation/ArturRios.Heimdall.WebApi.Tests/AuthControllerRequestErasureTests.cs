@@ -108,6 +108,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
             "/api/auth/erasure-request", new { password = "wrong" });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], response.Body!.Errors);
 
         var stored = await ReloadAsync(person);
 

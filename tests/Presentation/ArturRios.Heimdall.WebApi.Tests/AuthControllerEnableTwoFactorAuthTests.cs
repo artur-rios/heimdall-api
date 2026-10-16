@@ -19,8 +19,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Functional tests for POST /api/auth/2fa/enable (UC-36, FR-2F-01…FR-2F-03): the main flow for each
 // method combination, AF-36a (409, already active), AF-36b (403 — the caller is a live Google User,
 // who is never a Person and so is never eligible), AF-36c (400, no method selected), AF-36d
-// (re-initiating over a pending setup overwrites it), the 401 an unauthenticated caller gets, and
-// the 401 ActorLivenessFilter gives a token naming an identity that is absent or deleted.
+// (re-initiating over a pending setup overwrites it), AF-36f (429, a setup code was mailed within
+// the per-person cooldown), the 401 an unauthenticated caller gets, and the 401 ActorLivenessFilter
+// gives a token naming an identity that is absent or deleted.
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
@@ -298,7 +299,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Null(await ConfigurationForAsync(person));
     }
 
@@ -316,7 +317,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         Assert.Null(await ConfigurationForAsync(person));
     }
 
@@ -334,5 +335,43 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains(TwoFactorMessages.SetupInitiated, response.Body!.Messages);
         Assert.NotNull(await ConfigurationForAsync(person));
+    }
+
+    [FunctionalFact]
+    public async Task GivenACodeWasJustMailed_WhenPostEnable2faWithEmailAgain_ThenTooManyRequestsAndNoNewCode()
+    {
+        // Given — AF-36f: an Email setup whose code went out a moment ago
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("enable-cooldown"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+
+        var first = await EnableAsync("Email");
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        // When
+        var second = await EnableAsync("Email");
+
+        // Then — refused with the cooldown's own answer, and the first code is still the live one
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+        Assert.Contains(AuthMessages.EmailSentRecently, second.Body!.Errors);
+
+        var stored = await ConfigurationForAsync(person);
+        var code = Assert.Single(stored!.EmailCodes);
+        Assert.False(code.Used);
+    }
+
+    [FunctionalFact]
+    public async Task GivenACodeWasJustMailed_WhenPostEnable2faWithAppOnly_ThenSetupProceeds()
+    {
+        // Given
+        var person = await SeedPersonAsync(Roles.User, UniqueEmail("enable-cooldown-app"));
+        Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
+        Assert.Equal(HttpStatusCode.OK, (await EnableAsync("Email")).StatusCode);
+
+        // When App alone is chosen instead, which mails nothing
+        var response = await EnableAsync("App");
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(response.Body!.Data!.OtpAuthUri);
     }
 }

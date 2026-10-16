@@ -179,6 +179,35 @@ public class JwtApplicationTokenServiceTests
     }
 
     [UnitFact]
+    public async Task GivenNoIssuerConfigured_WhenATokenNamesOne_ThenItIsRefused()
+    {
+        // Given — Heimdall issues no iss when none is configured, so a token naming one is not its own
+        var token = Mint(ApplicationClaims(), issuer: "someone-else");
+
+        // When
+        var principal = await Service(issuer: string.Empty).ValidateAsync(token);
+
+        // Then
+        Assert.Null(principal);
+    }
+
+    [UnitFact]
+    public async Task GivenTheApplicationAudienceBesideAnother_WhenValidated_ThenItIsRefused()
+    {
+        // Given — a token for the application audience and another service at once, which Heimdall
+        // never issues
+        var claims = ApplicationClaims();
+        claims[JwtRegisteredClaimNames.Aud] = new[] { ApplicationAudience, "another-service" };
+        var token = Mint(claims, audience: null!);
+
+        // When
+        var principal = await Service().ValidateAsync(token);
+
+        // Then
+        Assert.Null(principal);
+    }
+
+    [UnitFact]
     public async Task GivenNoApplicationKind_WhenValidated_ThenItIsRefused()
     {
         // Given — right audience and key, but not an application token

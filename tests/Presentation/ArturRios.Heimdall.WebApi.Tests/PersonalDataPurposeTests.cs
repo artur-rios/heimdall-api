@@ -25,9 +25,14 @@ public class PersonalDataPurposeTests
     ///     address and password hash before any account exists. `ErasedSubject` is here because its
     ///     key is a removed person's `PublicId`, the very id the audit trail is cleared of (#195);
     ///     the key itself is skipped like every `Id`, so its record names it as `PublicId`.
+    ///     `AttemptNoticeBudget` is here because its digest of an address is pseudonymous, not
+    ///     anonymous: whoever suspects an address can hash it and find its row.
     /// </summary>
     private static readonly Type[] PersonalDataEntities =
-        [typeof(Person), typeof(GoogleUser), typeof(AuditLog), typeof(PendingRegistration), typeof(ErasedSubject)];
+    [
+        typeof(Person), typeof(GoogleUser), typeof(AuditLog), typeof(PendingRegistration), typeof(ErasedSubject),
+        typeof(AttemptNoticeBudget)
+    ];
 
     /// <summary>
     ///     Navigation properties and the internal key. The record covers what is stored about a

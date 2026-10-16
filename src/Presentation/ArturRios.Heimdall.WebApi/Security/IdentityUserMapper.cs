@@ -134,9 +134,9 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
 
     public IAuthenticatedUser? FromClaims(IReadOnlyDictionary<string, string> claims)
     {
-        // TH-35: an application token is never a person, whatever else it carries. The middleware
-        // validates signature and lifetime only — not the audience — so this is the check that
-        // keeps one off every endpoint but UC-57's, which validates application tokens itself.
+        // TH-35: an application token is never a person, whatever else it carries. PersonTokenValidator
+        // also refuses the application audience; this check keeps one off every endpoint but UC-57's,
+        // which validates application tokens itself, whatever audience it names.
         if (claims.ContainsKey(ApplicationTokenClaims.TokenKind))
         {
             return null;
@@ -188,11 +188,11 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
     ///     other token.
     /// </summary>
     /// <remarks>
-    ///     The middleware checks no audience, so without this a full-audience token carrying a mark
-    ///     would be read as marked, and a challenge-audience token without one as a sign-in. No issuer
-    ///     writes either, so either is refused rather than read as whichever half is believed. An
-    ///     audience that is neither derived one is held to the full token's rule, as before: Heimdall
-    ///     did not check the person audience and still does not.
+    ///     <see cref="PersonTokenValidator" /> admits only the three person audiences, but not which
+    ///     one goes with which marks. Without this a full-audience token carrying a mark would be read
+    ///     as marked, and a challenge-audience token without one as a sign-in. No issuer writes either,
+    ///     so either is refused rather than read as whichever half is believed. Any other audience is
+    ///     held to the full token's rule here; it never gets this far through the bearer path.
     /// </remarks>
     private bool AudienceAgrees(IReadOnlyDictionary<string, string> claims, IdentityUser identity)
     {

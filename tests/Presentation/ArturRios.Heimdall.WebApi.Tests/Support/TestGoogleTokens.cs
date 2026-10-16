@@ -31,13 +31,15 @@ public static class TestGoogleTokens
     /// <param name="name">The <c>name</c> claim; omitted from the token when null.</param>
     /// <param name="pictureUrl">The <c>picture</c> claim; omitted from the token when null.</param>
     /// <param name="expiresIn">Lifetime, so a test can mint an expired token for AF-25a.</param>
+    /// <param name="nonce">The <c>nonce</c> claim (FR-GO-20); omitted from the token when null.</param>
     public static string For(
         string? subject = null,
         string? email = null,
         bool? emailVerified = true,
         string? name = "Google Signer",
         string? pictureUrl = "https://lh3.googleusercontent.test/a/photo",
-        TimeSpan? expiresIn = null)
+        TimeSpan? expiresIn = null,
+        string? nonce = null)
     {
         var claims = new List<Claim>
         {
@@ -58,6 +60,11 @@ public static class TestGoogleTokens
         if (pictureUrl is not null)
         {
             claims.Add(new Claim("picture", pictureUrl));
+        }
+
+        if (nonce is not null)
+        {
+            claims.Add(new Claim("nonce", nonce));
         }
 
         return Handler.CreateToken(new SecurityTokenDescriptor

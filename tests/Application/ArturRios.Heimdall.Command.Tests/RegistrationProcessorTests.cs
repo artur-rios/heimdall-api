@@ -1,5 +1,6 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Output;
@@ -11,7 +12,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace ArturRios.Heimdall.Command.Tests;
 
 // Unit tests for RegistrationProcessor (UC-47 steps 4 to 6, run after the caller has been answered).
-// What separates the flows is what was created and what was mailed, so each test asserts both.
+// What separates the flows is what was created and what was mailed, so each test asserts both. The
+// mail each address can be sent through registering is bounded twice: at most three live pending
+// registrations per scope and address (FR-SR-13), and at most three attempt notices per address a
+// day (FR-SR-14).
 public class RegistrationProcessorTests
 {
     private sealed class RecordingLinkSender : IRegistrationLinkSender
@@ -61,13 +65,25 @@ public class RegistrationProcessorTests
         public AsyncFakeRepository<PendingRegistration, long> Pending { get; } = new();
         public RecordingLinkSender Links { get; } = new();
         public RecordingAttemptSender Attempts { get; } = new();
+        public InMemoryAttemptNoticeBudgets NoticeBudgets { get; } = new();
         public EmailVerificationOptions Options { get; } = new() { TokenLifetime = TimeSpan.FromHours(24) };
 
         public RegistrationProcessor Processor(
             IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
             ILogger<RegistrationProcessor>? logger = null) =>
-            new(Scopes, Persons, GoogleUsers, pendingWriter ?? Pending, Links, Attempts, Options,
-                logger ?? NullLogger<RegistrationProcessor>.Instance);
+            new(Scopes, Persons, GoogleUsers, Pending, pendingWriter ?? Pending, Links, Attempts,
+                NoticeBudgets, Options, logger ?? NullLogger<RegistrationProcessor>.Instance);
+
+        public async Task<PendingRegistration> PendingAsync(Scope scope, string email, DateTime expiresAt)
+        {
+            var pending = new PendingRegistration
+            {
+                ScopeId = scope.Id, Name = "Earlier", Email = email, PasswordHash = [1], Salt = [2],
+                TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = expiresAt, CreatedAt = DateTime.UtcNow
+            };
+            await Pending.CreateAsync(pending);
+            return pending;
+        }
 
         public async Task<Scope> ScopeAsync(
             bool open = true, bool isDeleted = false, string? emailVerificationUrl = null)
@@ -290,5 +306,179 @@ public class RegistrationProcessorTests
         await fixture.Processor().ProcessAsync(Request(scope));
 
         Assert.Null(Assert.Single(fixture.Links.LinkBases));
+    }
+
+    // FR-SR-13: at most three live pending registrations per scope and address.
+
+    [UnitFact]
+    public async Task GivenThreeLiveRegistrationsForTheAddress_WhenProcessing_ThenNoFourthIsWrittenOrMailed()
+    {
+        // Given three live registrations, one of them in another case
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(scope, "new@test.local", DateTime.UtcNow.AddHours(1));
+        await fixture.PendingAsync(scope, "new@test.local", DateTime.UtcNow.AddHours(2));
+        await fixture.PendingAsync(scope, "NEW@Test.Local", DateTime.UtcNow.AddHours(3));
+
+        // When
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Equal(3, fixture.Pending.Query().Count());
+        Assert.Empty(fixture.Links.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenTwoLiveRegistrationsForTheAddress_WhenProcessing_ThenAThirdIsWrittenAndMailed()
+    {
+        // Given
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(scope, "new@test.local", DateTime.UtcNow.AddHours(1));
+        await fixture.PendingAsync(scope, "new@test.local", DateTime.UtcNow.AddHours(2));
+
+        // When
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Equal(3, fixture.Pending.Query().Count());
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenThreeExpiredRegistrationsForTheAddress_WhenProcessing_ThenANewOneIsWrittenAndMailed()
+    {
+        // Given three that expired and await the purge — they hold nothing and mail nothing more
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+
+        for (var i = 1; i <= 3; i++)
+        {
+            await fixture.PendingAsync(scope, "new@test.local", DateTime.UtcNow.AddMinutes(-i));
+        }
+
+        // When
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenThreeLiveRegistrationsForTheAddressInAnotherScope_WhenProcessing_ThenOneIsWrittenHere()
+    {
+        // Given — the cap is per scope, as the address's uniqueness is
+        var fixture = new Fixture();
+        var other = await fixture.ScopeAsync();
+        var scope = await fixture.ScopeAsync();
+
+        for (var i = 1; i <= 3; i++)
+        {
+            await fixture.PendingAsync(other, "new@test.local", DateTime.UtcNow.AddHours(i));
+        }
+
+        // When
+        await fixture.Processor().ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Single(fixture.Pending.Query().Where(x => x.ScopeId == scope.Id).ToList());
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    // FR-SR-14: at most three attempt notices per address a day, whichever scope was named.
+
+    [UnitFact]
+    public async Task GivenAHolderAlreadyToldThreeTimes_WhenProcessingAFourthAttempt_ThenNoNoticeIsSent()
+    {
+        // Given
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.UserAsync(scope, "taken@test.local");
+        var processor = fixture.Processor();
+
+        // When four attempts are processed
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            await processor.ProcessAsync(Request(scope, "taken@test.local"));
+        }
+
+        // Then
+        Assert.Equal(3, fixture.Attempts.Sent.Count);
+        Assert.Empty(fixture.Pending.Query().ToList());
+    }
+
+    [UnitFact]
+    public async Task GivenOneAddressHeldInTwoScopes_WhenAttemptsNameBoth_ThenThreeNoticesInAllAreSent()
+    {
+        // Given — the budget belongs to the inbox, not to the account in one scope
+        var fixture = new Fixture();
+        var first = await fixture.ScopeAsync();
+        var second = await fixture.ScopeAsync();
+        await fixture.UserAsync(first, "taken@test.local");
+        await fixture.UserAsync(second, "Taken@Test.Local");
+        var processor = fixture.Processor();
+
+        // When
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            await processor.ProcessAsync(Request(first, "taken@test.local"));
+            await processor.ProcessAsync(Request(second, "taken@test.local"));
+        }
+
+        // Then
+        Assert.Equal(3, fixture.Attempts.Sent.Count);
+        Assert.Equal(3, fixture.NoticeBudgets.SentTo(AttemptNoticeBudget.AddressHashOf("taken@test.local")));
+    }
+
+    [UnitFact]
+    public async Task GivenAGoogleHolderAlreadyToldThreeTimes_WhenProcessingAFourthAttempt_ThenNoNoticeIsSent()
+    {
+        // Given
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.GoogleUsers.CreateAsync(new GoogleUser
+        {
+            PublicId = Guid.NewGuid(), GoogleId = "google-1", Name = "Google", Email = "google@test.local",
+            EmailVerified = true, ScopeId = scope.Id
+        });
+        var processor = fixture.Processor();
+
+        // When
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            await processor.ProcessAsync(Request(scope, "google@test.local"));
+        }
+
+        // Then
+        Assert.Equal(3, fixture.Attempts.Sent.Count);
+        Assert.All(fixture.Attempts.Sent, sent => Assert.True(sent.GoogleAccount));
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedHolder_WhenProcessingAnAttempt_ThenNothingIsChargedToTheAddress()
+    {
+        // Given — no notice is sent to a restricted holder (NFR-24), so none is counted either
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.UserAsync(scope, "restricted@test.local", DateTime.UtcNow);
+
+        // When
+        await fixture.Processor().ProcessAsync(Request(scope, "restricted@test.local"));
+
+        // Then
+        Assert.Equal(0, fixture.NoticeBudgets.SentTo(AttemptNoticeBudget.AddressHashOf("restricted@test.local")));
+    }
+
+    [UnitFact]
+    public async Task GivenAnAddressInAnyCaseOrSpacing_WhenItsDigestIsTaken_ThenItIsTheSameDigest()
+    {
+        // Given / When
+        var plain = AttemptNoticeBudget.AddressHashOf("taken@test.local");
+        var varied = AttemptNoticeBudget.AddressHashOf("  Taken@TEST.local ");
+
+        // Then — one inbox, one budget; and the digest is 64 hex characters, never the address
+        Assert.Equal(plain, varied);
+        Assert.Equal(64, plain.Length);
+        Assert.DoesNotContain("test.local", plain);
     }
 }

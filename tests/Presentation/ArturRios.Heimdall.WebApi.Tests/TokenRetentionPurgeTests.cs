@@ -40,6 +40,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var twoFactorEmailCodes = new EfRepository<TwoFactorEmailCode, long>(context);
         var pendingRegistrations = new EfRepository<PendingRegistration, long>(context);
         var applicationCredentials = new EfRepository<ApplicationCredential, long>(context);
+        var attemptNoticeBudgets = new EfRepository<AttemptNoticeBudget, long>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,
@@ -47,6 +48,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
             twoFactorEmailCodes, twoFactorEmailCodes,
             pendingRegistrations, pendingRegistrations,
             applicationCredentials, applicationCredentials,
+            attemptNoticeBudgets, attemptNoticeBudgets,
             Retention);
     }
 
@@ -150,6 +152,41 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         // And the person the tokens belonged to is not itself a purge target
         Assert.True(await verification.Persons.AnyAsync(x => x.Id == person.Id));
+    }
+
+    [FunctionalFact]
+    public async Task GivenNoticeBudgetsWhoseWindowEndedLongAgo_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given (FR-SR-14) one budget whose window ended a month ago and one still counting
+        await using var context = fixture.CreateContext();
+
+        var ended = new AttemptNoticeBudget
+        {
+            AddressHash = AttemptNoticeBudget.AddressHashOf($"ended-{Guid.NewGuid():N}@functional.test"),
+            NoticesSent = 3,
+            WindowEndsAt = DateTime.UtcNow.AddDays(-30)
+        };
+        var open = new AttemptNoticeBudget
+        {
+            AddressHash = AttemptNoticeBudget.AddressHashOf($"open-{Guid.NewGuid():N}@functional.test"),
+            NoticesSent = 1,
+            WindowEndsAt = DateTime.UtcNow.AddHours(12)
+        };
+
+        context.AttemptNoticeBudgets.AddRange(ended, open);
+        await context.SaveChangesAsync();
+
+        // When
+        var output = await Handler(context).HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.AttemptNoticeBudgetsPurged >= 1);
+
+        await using var verification = fixture.CreateContext();
+
+        Assert.False(await verification.AttemptNoticeBudgets.AnyAsync(x => x.Id == ended.Id));
+        Assert.True(await verification.AttemptNoticeBudgets.AnyAsync(x => x.Id == open.Id));
     }
 
     [FunctionalFact]

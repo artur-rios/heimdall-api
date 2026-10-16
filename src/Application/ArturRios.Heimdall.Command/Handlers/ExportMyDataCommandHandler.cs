@@ -135,7 +135,16 @@ public class ExportMyDataCommandHandler(
                 TwoFactorEmailEnabled = twoFactor?.EmailEnabled ?? false,
                 UnusedRecoveryCodes = unusedRecoveryCodes,
                 FailedLoginAttempts = person.FailedLoginAttempts,
-                LockedOutUntil = person.LockedOutUntil
+                LockedOutUntil = person.LockedOutUntil,
+                FailedSecondFactorAttempts = person.FailedSecondFactorAttempts,
+                SecondFactorLockedOutUntil = person.SecondFactorLockedOutUntil,
+                SecondFactorLockouts = person.SecondFactorLockouts,
+                FailedReauthenticationAttempts = person.FailedReauthenticationAttempts,
+                ReauthenticationWindowStartedAt = person.ReauthenticationWindowStartedAt,
+                ReauthenticationPausedUntil = person.ReauthenticationPausedUntil,
+                AccountEmailsSent = person.AccountEmailsSent,
+                AccountEmailWindowEndsAt = person.AccountEmailWindowEndsAt,
+                AccountEmailLastSentAt = person.AccountEmailLastSentAt
             },
             Processing = Processing(person.LegalBasis, person.PrivacyNoticeVersion, person.BasisRecordedAt),
             Erasure = new DataExportErasure

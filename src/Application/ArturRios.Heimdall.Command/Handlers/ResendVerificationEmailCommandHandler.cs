@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -12,8 +13,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="ResendVerificationEmailCommand" /> (UC-15): refuses an address that is
-///     already verified (AF-15a), retires every verification link the caller still holds, and has a
-///     fresh one issued and mailed (FR-EV-04).
+///     already verified (AF-15a) and a request the person's account-email budget refuses (AF-15b,
+///     AF-15c, FR-PE-16), retires every verification link the caller still holds, and has a fresh one
+///     issued and mailed (FR-EV-04).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -29,8 +31,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         <see cref="DeletePersonCommand" /> does not.
 ///     </para>
 ///     <para>
-///         A person who has since been logically deleted is still served. UC-15 defines exactly one
-///         alternative flow, so a second refusal would be one this handler invented, and a verified
+///         The send is reserved against the person's account-email budget (<see cref="AccountEmailBudget" />)
+///         by one conditional write, before anything is retired or issued: without it, whoever holds a
+///         token could loop this endpoint and mail the account's address — which may be one they set
+///         themselves — once per request, and a check that read the token rows first let a whole burst
+///         through. A link an administrator sent (UC-06, UC-51) is not charged to it.
+///     </para>
+///     <para>
+///         A person who has since been logically deleted is still served. UC-15 defines no
+///         alternative flow for it, so a refusal would be one this handler invented, and a verified
 ///         address grants nothing on its own — UC-11 refuses the login by AF-11c regardless. This
 ///         deliberately differs from UC-12, which withholds a reset link from a deleted person: UC-12
 ///         must answer identically either way for anti-enumeration reasons, so withholding costs it
@@ -41,7 +50,10 @@ public class ResendVerificationEmailCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
-    IEmailVerificationService emailVerification)
+    IEmailVerificationService emailVerification,
+    AdminEmailOptions emailOptions,
+    IAtomicWrites atomicWrites,
+    IRetryAfterAdvisor retryAfter)
     : ICommandHandlerAsync<ResendVerificationEmailCommand, ResendVerificationEmailCommandOutput>
 {
     public async Task<DataOutput<ResendVerificationEmailCommandOutput?>> HandleAsync(
@@ -68,9 +80,22 @@ public class ResendVerificationEmailCommandHandler(
             return output.WithError(AuthMessages.EmailAlreadyVerified);
         }
 
+        // AF-15b, AF-15c (FR-PE-16): reserve the send, or refuse it. Also before step 3, so a refused
+        // request retires nothing and the link the person already has keeps working.
+        var refusal = AccountEmailBudget.RefusalOf(
+            await AccountEmailBudget.TryReserveAsync(atomicWrites, person, emailOptions),
+                person, emailOptions, retryAfter);
+
+        if (refusal is not null)
+        {
+            return output.WithError(refusal);
+        }
+
+        var now = DateTime.UtcNow;
+
         // UC-15 step 3: retire every live link, so the new one is the only one that works.
         var retirement = await EmailVerificationTokenRetirement.RetireLiveAsync(
-            tokenReader, tokenWriter, person.Id, DateTime.UtcNow);
+            tokenReader, tokenWriter, person.Id, now);
 
         if (retirement is not null)
         {

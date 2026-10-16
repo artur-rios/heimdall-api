@@ -90,7 +90,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
 
     private async Task<string> SeedRecoveryCodeAsync(long twoFactorAuthId, bool used = false)
     {
-        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9];
+        var plaintext = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext));
 
         await using var context = db.CreateContext();
@@ -201,6 +201,54 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         await using var context = db.CreateContext();
         Assert.Equal(1, await context.TwoFactorRecoveryCodes.CountAsync(
             x => x.TwoFactorAuthId == twoFactorAuth.Id && !x.Used));
+    }
+
+    [FunctionalFact]
+    public async Task GivenACurrentRecoveryCode_WhenTypedInLowerCaseWithSpaces_ThenTheLoginCompletes()
+    {
+        // Given a code of the current shape, stored as UC-37 and UC-40 store it (FR-2F-20)
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("typed-recovery"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var issued = ArturRios.Heimdall.Command.Services.RecoveryCodes.Issue()[0];
+
+        await using (var context = db.CreateContext())
+        {
+            context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
+            {
+                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = issued.CodeHash, Used = false
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var login = await LoginAsync(person.Email);
+
+        // When
+        var response = await VerifyAsync(
+            login.Body!.Data!.ChallengeToken!, recoveryCode: issued.Code.Replace('-', ' ').ToLowerInvariant());
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(response.Body!.Data!.Token);
+    }
+
+    [FunctionalFact]
+    public async Task GivenALegacyRecoveryCode_WhenTypedInLowerCaseWithoutTheHyphen_ThenTheLoginCompletes()
+    {
+        // Given a code of the shape issued before, which keeps working until used or regenerated
+        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("legacy-recovery"));
+        var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
+            totpSecretEncrypted: [1, 2, 3, 4]);
+        var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
+
+        var login = await LoginAsync(person.Email);
+
+        // When
+        var response = await VerifyAsync(
+            login.Body!.Data!.ChallengeToken!, recoveryCode: recoveryCode.Replace("-", string.Empty).ToLowerInvariant());
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [FunctionalFact]

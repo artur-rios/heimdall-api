@@ -69,11 +69,14 @@ sequenceDiagram
     P->>FE: click link
     FE->>AC: POST /api/auth/verify-email {token}
     AC->>H: HandleAsync
-    H->>DB: SELECT token
-    alt unknown (AF-14c) / expired (AF-14a) / spent (AF-14b)
+    H->>DB: SELECT token, its person and their scopes
+    alt unknown (AF-14c), or the person may no longer be acted on (AF-14d)
+        H-->>FE: 400 — invalid token
+    end
+    alt expired (AF-14a) / spent (AF-14b)
         H-->>FE: 400 — each rejection named distinctly
     end
-    H->>DB: UPDATE person.EmailVerified = true
+    H->>DB: UPDATE person.EmailVerified = true<br/>WHERE address unchanged AND not restricted / deleted / anonymised
     H->>DB: mark every live token for this person Used
     H-->>FE: 200
 ```
@@ -84,7 +87,9 @@ any other kind.
 Spending a token retires every other live token the person holds of that kind, so a verification link
 left in an inbox stops working once the address is verified. An address that was **already** verified
 answers 200 rather than an error: UC-14 defines no alternative flow for it, and the caller's intent
-has been satisfied either way.
+has been satisfied either way. A person restricted, deleted or anonymised since the link was mailed,
+or who can no longer sign in through their scope, gets `400` "Invalid token." and nothing is written
+(**FR-EV-08**), as UC-13 answers them.
 
 ## Replacing a lost link — UC-15
 
@@ -95,7 +100,9 @@ the bearer token, so a caller can only ever ask for their own link.
 flowchart TD
     A[POST /api/auth/resend-verification<br/>bearer token only] --> B{Already verified?}
     B -->|Yes| C["400 — AF-15a<br/>a link mailed to it could do nothing"]
-    B -->|No| D[Retire outstanding tokens]
+    B -->|No| G{Account-email budget<br/>reserves a send?}
+    G -->|"No — cooldown or daily limit"| H["429 — AF-15b / AF-15c<br/>nothing sent; the last link still works"]
+    G -->|Yes| D[Retire outstanding tokens]
     D --> E[Issue + mail a fresh one]
     E --> F[200 — only the newest link works]
 ```
@@ -103,6 +110,17 @@ flowchart TD
 Note the asymmetry with UC-14: verifying an already-verified address answers **200**, but *resending*
 to one answers **400**. Verification's job is done either way; a resend would mail a link that could
 do nothing when clicked.
+
+A resend is charged to the person's account-email budget (FR-PE-16), which it shares with a
+two-factor setup code and the notice an own email change sends: one per
+`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five per day-long window from the first, reserved by one
+write before anything is sent. Inside the cooldown the answer is **429** "An email of this kind was
+sent to you recently. Try again in a few minutes." (AF-15b); once the window's five are spent, **429** "You have
+reached the limit for account emails. Try again later." (AF-15c). Both carry `Retry-After`, the
+seconds until a send would be accepted. Nothing is sent or retired
+either way. A link an administrator sent, at creation or through UC-51, is not charged, so the
+person may still ask once straight after. The endpoint is under the credential endpoints' rate limit
+too, whose own 429 says "Too many requests." and carries a `Retry-After` header.
 
 ### An administrator resending it — UC-51
 

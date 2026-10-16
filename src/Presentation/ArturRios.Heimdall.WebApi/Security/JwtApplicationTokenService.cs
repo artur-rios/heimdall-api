@@ -22,9 +22,12 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         <b>Validating</b> cannot go through <see cref="JwtHandler.IsTokenValidAsync(string, IEnumerable{JwtKey})" />,
 ///         which checks only the signature and lifetime. Here the issuer, the audience and the kind
 ///         are the point (TH-35), so the token is validated with every parameter set and no clock
-///         skew. Keys are read as ASCII, as <c>ArturRios.Jwt</c> writes them. The issuer is checked
-///         only when one is configured: <c>HEIMDALL_AUTH_TOKEN_ISSUER</c> defaults to empty, and
-///         an empty expected issuer would refuse every token.
+///         skew. Keys are read as ASCII, as <c>ArturRios.Jwt</c> writes them. The standard issuer
+///         check runs only when one is configured: <c>HEIMDALL_AUTH_TOKEN_ISSUER</c> defaults to
+///         empty, and an empty expected issuer would refuse every token. <see cref="TokenOrigin" />
+///         then holds the token to exactly what Heimdall issues — the configured issuer, or none when
+///         none is configured, and the application audience as its only audience — so a token signed
+///         with the shared key under another issuer is refused either way (TB-5).
 ///     </para>
 /// </remarks>
 public class JwtApplicationTokenService(
@@ -79,6 +82,7 @@ public class JwtApplicationTokenService(
         });
 
         if (!result.IsValid ||
+            !TokenOrigin.IsIssuedFor(token, configuration.Issuer, options.Audience) ||
             Claim(result, ApplicationTokenClaims.TokenKind) != ApplicationTokenClaims.ApplicationKind ||
             !Guid.TryParse(Claim(result, ApplicationTokenClaims.Id), out var applicationId) ||
             !Guid.TryParse(Claim(result, ApplicationTokenClaims.ScopeId), out var scopeId) ||

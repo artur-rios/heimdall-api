@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -43,7 +44,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,
-                retention ?? Retention());
+                retention ?? Retention(),
+                InMemoryAtomicWrites.Instance);
     }
 
     private static async Task<Person> SeedPersonAsync(
@@ -464,5 +466,37 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.True(output.Success);
         Assert.Empty(output.Errors);
         Assert.Equal(0, output.Data!.TotalAnonymised);
+    }
+
+    [UnitFact]
+    public async Task GivenADuePersonWithFactorBudgetsSpent_WhenAnonymising_ThenTheCountersAreCleared()
+    {
+        // NFR-20: behavioural counters describe the person as surely as their name does
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            (int)DeletionKinds.Administrative);
+        person.FailedSecondFactorAttempts = 4;
+        person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddHours(1);
+        person.SecondFactorLockouts = 2;
+        person.FailedReauthenticationAttempts = 3;
+        person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-5);
+        person.ReauthenticationPausedUntil = DateTime.UtcNow.AddMinutes(5);
+        person.AccountEmailsSent = 4;
+        person.AccountEmailWindowEndsAt = DateTime.UtcNow.AddHours(5);
+        person.AccountEmailLastSentAt = DateTime.UtcNow.AddMinutes(-1);
+
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.True(output.Success);
+        Assert.Equal(0, person.FailedSecondFactorAttempts);
+        Assert.Null(person.SecondFactorLockedOutUntil);
+        Assert.Equal(0, person.SecondFactorLockouts);
+        Assert.Equal(0, person.FailedReauthenticationAttempts);
+        Assert.Null(person.ReauthenticationWindowStartedAt);
+        Assert.Null(person.ReauthenticationPausedUntil);
+        Assert.Equal(0, person.AccountEmailsSent);
+        Assert.Null(person.AccountEmailWindowEndsAt);
+        Assert.Null(person.AccountEmailLastSentAt);
     }
 }

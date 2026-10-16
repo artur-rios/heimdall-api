@@ -46,6 +46,15 @@ public static class AuthMessages
     /// </summary>
     public const string InvalidCredentials = "Invalid credentials.";
 
+    /// <summary>
+    ///     FR-AU-13: a re-authentication under a bearer token was refused — enabling, confirming or
+    ///     disabling two-factor authentication, regenerating recovery codes, changing one's own email,
+    ///     or a person requesting erasure. Deliberately one message, and one status, for a wrong or
+    ///     missing password, a wrong, missing or already-used code, and a paused budget, so the answer
+    ///     says neither which of the two credentials was wrong nor whether any was compared at all.
+    /// </summary>
+    public const string PasswordOrCodeIncorrect = "The password or code is incorrect.";
+
     /// <summary>AF-11f: email was not supplied.</summary>
     public const string EmailRequired = "Email is required.";
 
@@ -133,11 +142,28 @@ public static class AuthMessages
 
     /// <summary>
     ///     AF-15a: the address is already verified, so there is nothing a new link could do when
-    ///     clicked. UC-15's only alternative flow, and the counterpart of UC-14's decision to verify an
-    ///     already-verified address idempotently — that is about spending a token, this is about asking
-    ///     for one.
+    ///     clicked. The counterpart of UC-14's decision to verify an already-verified address
+    ///     idempotently — that is about spending a token, this is about asking for one.
     /// </summary>
     public const string EmailAlreadyVerified = "Email already verified.";
+
+    /// <summary>
+    ///     AF-15b, AF-36f and AF-08j: the person's own requests had an account email sent within the
+    ///     cooldown (FR-PE-16) — a verification link, a two-factor setup code, or an email-change
+    ///     notice — so nothing was sent and, for an email change, nothing changed. The self-service
+    ///     wording of <see cref="PersonMessages.AccountEmailSentRecently" />, with the same status.
+    /// </summary>
+    public const string EmailSentRecently =
+        "An email of this kind was sent to you recently. Try again in a few minutes.";
+
+    /// <summary>
+    ///     AF-15c, AF-36g and AF-08j: the person's own requests have already had the window's account
+    ///     emails sent (FR-PE-16), so nothing was sent and, for an email change, nothing changed.
+    ///     The same status as <see cref="EmailSentRecently" />. The wait can be minutes or hours, so
+    ///     the message names none; the <c>Retry-After</c> header carries it.
+    /// </summary>
+    public const string AccountEmailLimitReached =
+        "You have reached the limit for account emails. Try again later.";
 
     /// <summary>
     ///     UC-15: the bearer token names a person who no longer exists. Reachable because
@@ -183,6 +209,16 @@ public static class AuthMessages
     ///     may, and no one else learns anything.
     /// </summary>
     public const string GoogleSignInUnavailable = "Google sign-in is not available for this scope.";
+
+    /// <summary>
+    ///     UC-25 AF-25f: the token is genuine but Google does not vouch for its address — the
+    ///     <c>email_verified</c> claim is <c>false</c> or absent — and no Google User exists for it in
+    ///     the scope yet, so none is created (FR-GO-07). An address nobody has proved may not hold a
+    ///     place in a scope. Checked before the address is compared with the scope's, so such a
+    ///     token learns nothing about which addresses a scope holds. A Google User that already
+    ///     exists still signs in.
+    /// </summary>
+    public const string GoogleEmailNotVerified = "Google sign-up requires a verified email address.";
 
     /// <summary>
     ///     UC-25 AF-25c: the address on the verified token is already used within the scope, by

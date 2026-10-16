@@ -26,7 +26,9 @@ body:json {
 docs {
   UC-36. Authenticated, always on the caller themselves.
 
-  currentPassword is the caller's own password and is required: a missing or wrong one answers 401 "The current password is incorrect.".
+  currentPassword is the caller's own password and is required: a missing or wrong one answers 401 "The password or code is incorrect.", the answer every re-authentication shares. Five failures within fifteen minutes pause these checks for the account for fifteen minutes, with the same answer.
 
   methods is any of "App", "Email", or both. Setup stays inactive until confirmed. When App is selected the answer carries an otpauth:// URI to enrol in an authenticator app.
+
+  Selecting Email mails a code, so it is charged to the account-email budget shared with the verification resend and the email-change notice (one per HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS, five per day-long window): 429 "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, 429 "You have reached the limit for account emails. Try again later." once the day-long window's five are spent (both with Retry-After, in seconds). Checked before the password and charged only after it, and nothing changes when refused. App alone is not affected.
 }

@@ -50,19 +50,23 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         return person;
     }
 
-    /// <summary>An active Email configuration holding one recovery code, which the test returns.</summary>
-    private async Task<string> SeedActiveTwoFactorAsync(Person person)
+    /// <summary>
+    ///     An active configuration holding one recovery code, which the test returns: the App method, or
+    ///     the Email method, which an own email change refuses (FR-PE-18).
+    /// </summary>
+    private async Task<string> SeedActiveTwoFactorAsync(Person person, bool emailMethod = false)
     {
         await using var context = db.CreateContext();
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true
+            PersonId = person.Id, IsActive = true, AppEnabled = !emailMethod, EmailEnabled = emailMethod,
+            TotpSecretEncrypted = emailMethod ? null : [1, 2, 3]
         };
         context.TwoFactorAuths.Add(twoFactorAuth);
         await context.SaveChangesAsync();
 
-        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9];
+        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
             TwoFactorAuthId = twoFactorAuth.Id, CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode))
@@ -112,7 +116,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -128,7 +132,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -145,7 +149,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(person);
     }
 
@@ -190,6 +194,40 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(newEmail, (await ReloadAsync(person)).Email);
+    }
+
+    [FunctionalFact]
+    public async Task GivenALiveResetLink_WhenTheOwnEmailChanges_ThenTheLinkNoLongerSetsAPassword()
+    {
+        // Given a reset link mailed to the current address (FR-PE-17), of a person who could use it
+        var person = await SeedPersonAsync("reset-link", Roles.SystemAdmin);
+        var plaintext = $"token-{Guid.NewGuid():N}";
+
+        await using (var context = db.CreateContext())
+        {
+            context.PasswordResetTokens.Add(new PasswordResetToken
+            {
+                PersonId = person.Id,
+                TokenHash = ArturRios.Heimdall.Command.Services.SingleUseTokenHash.Of(plaintext),
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        ActAs(person);
+        var changed = await UpdateAsync(person, person.Name, UniqueEmail("reset-link-new"), Password);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        // When the link is followed afterwards
+        var reset = await Gateway.PostAsync<DataOutput<ResetPasswordCommandOutput?>>(
+            "/api/auth/password-reset",
+            new ResetPasswordCommand { Token = plaintext, NewPassword = "An0ther-Str0ng-Pass!" });
+
+        // Then — the link was retired with the address, and the password is the one it was
+        Assert.Equal(HttpStatusCode.BadRequest, reset.StatusCode);
+        Assert.Contains(AuthMessages.TokenAlreadyUsed, reset.Body!.Errors);
+        var stored = await ReloadAsync(person);
+        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt));
     }
 
     [FunctionalFact]
@@ -240,7 +278,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         // Then
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, response.Body!.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, response.Body!.Errors);
         await AssertUnchangedAsync(admin);
     }
 
@@ -283,5 +321,27 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         var next = await Gateway.GetAsync<DataOutput<object?>>($"/api/persons/{person.PublicId}");
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheEmailSignInMethodIsActive_WhenChangingOwnEmailWithThePasswordAndACode_ThenConflictAndNothingChanges()
+    {
+        // Given — FR-PE-18 (AF-08k): sign-in codes would go to an address nobody has proved
+        var person = await SeedPersonAsync("reauth-email-method");
+        var recoveryCode = await SeedActiveTwoFactorAsync(person, emailMethod: true);
+        ActAs(person);
+
+        // When
+        var response = await UpdateAsync(person, person.Name, UniqueEmail("elsewhere"), Password, recoveryCode);
+
+        // Then — refused, nothing changed, and the recovery code is still good
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(PersonMessages.EmailSignInMethodEnabled, response.Body!.Errors);
+        await AssertUnchangedAsync(person);
+
+        await using var context = db.CreateContext();
+        Assert.False(await context.TwoFactorRecoveryCodes
+            .Where(code => code.TwoFactorAuth.PersonId == person.Id)
+            .AnyAsync(code => code.UsedAt != null));
     }
 }

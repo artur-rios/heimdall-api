@@ -31,6 +31,7 @@ public class AppDbContext(
     public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes { get; init; }
     public DbSet<AuditLog> AuditLogs { get; init; }
     public DbSet<ErasedSubject> ErasedSubjects { get; init; }
+    public DbSet<AttemptNoticeBudget> AttemptNoticeBudgets { get; init; }
 
     /// <summary>
     ///     ASP.NET Core's Data Protection key ring, kept in the database rather than on a local
@@ -77,5 +78,6 @@ public class AppDbContext(
         modelBuilder.Entity<TwoFactorRecoveryCode>().Configure();
         modelBuilder.Entity<AuditLog>().Configure();
         modelBuilder.Entity<ErasedSubject>().Configure();
+        modelBuilder.Entity<AttemptNoticeBudget>().Configure();
     }
 }

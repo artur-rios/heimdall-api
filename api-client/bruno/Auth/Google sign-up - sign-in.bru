@@ -30,5 +30,7 @@ script:post-response {
 docs {
   UC-25. Anonymous.
 
-  idToken is the ID token the client application obtained from Google, not anything this API issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403. The first call for a given Google account in a given scope creates the Google User; every later one authenticates it.
+  idToken is the ID token the client application obtained from Google, not anything this API issues. The scope must have Google Sign-In enabled (UC-24) or this answers 403. The first call for a given Google account in a given scope creates the Google User; every later one authenticates it. A first call whose token does not carry email_verified: true answers 403 "Google sign-up requires a verified email address." and creates nothing.
+
+  Optional "nonce": the value the client sent Google when asking for the ID token. When present, the token's nonce claim must equal it, or the answer is 401 "Google authentication failed.". Leave it out to compare nothing.
 }

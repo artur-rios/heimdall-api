@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Services;
 
@@ -28,7 +29,11 @@ namespace ArturRios.Heimdall.Command.Services;
 /// </remarks>
 public class PasswordRecoveryProcessor(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IPasswordResetService passwordReset)
+    IAsyncReadOnlyRepository<PasswordResetToken, long> tokenReader,
+    IPasswordResetService passwordReset,
+    PasswordResetOptions resetOptions,
+    AdminEmailOptions emailOptions,
+    ILogger<PasswordRecoveryProcessor> logger)
 {
     public async Task ProcessAsync(PasswordRecoveryRequest request)
     {
@@ -39,10 +44,28 @@ public class PasswordRecoveryProcessor(
 
         // UC-12 steps 3 and 4. Skipped entirely for AF-12a and for accounts that could not log in
         // anyway — sending a reset link to a deleted person's address would restore nothing.
-        if (person is not null && PasswordRecoveryEligibility.Of(person) == RecoveryEligibility.Eligible)
+        if (person is null || PasswordRecoveryEligibility.Of(person) != RecoveryEligibility.Eligible)
         {
-            await passwordReset.IssueAndSendAsync(person);
+            return;
         }
+
+        // FR-PR-07 (AF-12b): one reset link per person per cooldown, whoever asks — asked exactly as
+        // UC-52 asks it, so a link either sent counts. The caller was answered long ago, so a request
+        // inside it simply sends nothing, and the link already sent keeps working: the cooldown is
+        // held to the link's lifetime, so it never outlasts the last link sent. Requests are worked one
+        // at a time per instance, so only a second instance could overlap one. No daily cap: recovery
+        // is anonymous, and a cap anyone could spend would deny the owner their own recovery.
+        var cooldown = emailOptions.CappedAt(resetOptions.TokenLifetime);
+
+        if (await cooldown.IsRunningAsync(tokenReader, person.Id, resetOptions.TokenLifetime, DateTime.UtcNow))
+        {
+            // No address in the log (NFR-22).
+            logger.LogInformation("A password reset was not sent: one went to the person within the cooldown");
+
+            return;
+        }
+
+        await passwordReset.IssueAndSendAsync(person);
     }
 
     /// <summary>

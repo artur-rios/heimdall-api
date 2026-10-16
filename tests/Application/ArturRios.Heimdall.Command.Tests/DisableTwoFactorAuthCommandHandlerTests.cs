@@ -239,7 +239,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenWrongPassword_WhenHandlingDisable_ThenReturnsPasswordMismatchErrorAndRowSurvives()
+    public async Task GivenWrongPassword_WhenHandlingDisable_ThenReturnsTheSharedRefusalAndRowSurvives()
     {
         // Given — AF-39b
         var fixture = await FixtureAsync();
@@ -251,12 +251,12 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.PasswordMismatch, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Single(fixture.TwoFactorAuths.Query().ToList());
     }
 
     [UnitFact]
-    public async Task GivenCorrectPasswordAndWrongAppCode_WhenHandlingDisable_ThenReturnsFactorInvalidErrorAndRowSurvives()
+    public async Task GivenCorrectPasswordAndWrongAppCode_WhenHandlingDisable_ThenReturnsTheSharedRefusalAndRowSurvives()
     {
         // Given — AF-39c
         var fixture = await FixtureAsync();
@@ -267,12 +267,12 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Single(fixture.TwoFactorAuths.Query().ToList());
     }
 
     [UnitFact]
-    public async Task GivenCorrectPasswordAndAlreadyUsedRecoveryCode_WhenHandlingDisable_ThenReturnsFactorInvalidError()
+    public async Task GivenCorrectPasswordAndAlreadyUsedRecoveryCode_WhenHandlingDisable_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-39c's recovery-code shape
         var fixture = await FixtureAsync();
@@ -285,12 +285,12 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
         Assert.Single(fixture.TwoFactorAuths.Query().ToList());
     }
 
     [UnitFact]
-    public async Task GivenCorrectPasswordAndNoCodeOrRecoveryCode_WhenHandlingDisable_ThenReturnsFactorInvalidError()
+    public async Task GivenCorrectPasswordAndNoCodeOrRecoveryCode_WhenHandlingDisable_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-39c: neither a code nor a recovery code submitted
         var fixture = await FixtureAsync();
@@ -301,7 +301,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.False(output.Success);
-        Assert.Contains(TwoFactorMessages.FactorInvalid, output.Errors);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
     }
 
     // FR-AU-11: disabling the second factor revokes every token issued before it.
@@ -336,5 +336,102 @@ public class DisableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
+
+    // FR-AU-13: the re-authentication budget
+
+    [UnitFact]
+    public async Task GivenAWrongPasswordAndAWrongCode_WhenEachIsPresented_ThenTheAnswersAreIdentical()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        var wrongPassword = await fixture.Handler().HandleAsync(
+            fixture.Command(password: "wrong-password", code: CurrentTotpCode()));
+        var wrongCode = await fixture.Handler().HandleAsync(fixture.Command(code: "000000"));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], wrongPassword.Errors);
+        Assert.Equal(wrongPassword.Errors, wrongCode.Errors);
+        Assert.Equal(wrongPassword.Messages, wrongCode.Messages);
+    }
+
+    [UnitFact]
+    public async Task GivenFiveFailures_WhenTheRightPasswordAndCodeFollow_ThenTheyAreRefusedAndTwoFactorStays()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        for (var attempt = 0; attempt < ReauthenticationBudget.MaxFailures; attempt++)
+        {
+            await fixture.Handler().HandleAsync(fixture.Command(password: "wrong-password"));
+        }
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.NotNull(fixture.Person.ReauthenticationPausedUntil);
+    }
+
+    [UnitFact]
+    public async Task GivenFailedReauthentications_WhenCounted_ThenTheSignInBudgetsAreUntouched()
+    {
+        // Given — a stolen token must not be a way to lock the owner out of signing in
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+
+        // When
+        for (var attempt = 0; attempt < ReauthenticationBudget.MaxFailures; attempt++)
+        {
+            await fixture.Handler().HandleAsync(fixture.Command(code: "000000"));
+        }
+
+        // Then
+        Assert.NotNull(fixture.Person.ReauthenticationPausedUntil);
+        Assert.Equal(0, fixture.Person.FailedLoginAttempts);
+        Assert.Null(fixture.Person.LockedOutUntil);
+        Assert.Equal(0, fixture.Person.FailedSecondFactorAttempts);
+        Assert.Null(fixture.Person.SecondFactorLockedOutUntil);
+    }
+
+    [UnitFact]
+    public async Task GivenEarlierFailures_WhenTheRightPasswordAndCodeArePresented_ThenTheyAreCleared()
+    {
+        // Given
+        var fixture = await FixtureAsync();
+        await SeedActiveAsync(fixture, appEnabled: true, emailEnabled: false);
+        fixture.Person.FailedReauthenticationAttempts = 3;
+        fixture.Person.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-1);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(code: CurrentTotpCode()));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(0, fixture.Person.FailedReauthenticationAttempts);
+        Assert.Null(fixture.Person.ReauthenticationWindowStartedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongPassword_WhenDisabling_ThenTheFactorIsStillChecked()
+    {
+        // Given — the factor check runs whatever the password, so a wrong password does not answer
+        // sooner than a right one with a wrong factor
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedActiveAsync(fixture, appEnabled: false, emailEnabled: true);
+        var emailCode = await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+
+        // When
+        var output = await fixture.Handler().HandleAsync(fixture.Command(password: "wrong-password", code: "000000"));
+
+        // Then the email code's own budget saw the guess, as it does after a right password
+        Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
+        Assert.Equal(1, emailCode.FailedAttempts);
     }
 }

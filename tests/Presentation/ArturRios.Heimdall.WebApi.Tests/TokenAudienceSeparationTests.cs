@@ -75,7 +75,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
         context.TwoFactorAuths.Add(twoFactorAuth);
         await context.SaveChangesAsync();
 
-        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9];
+        var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
 
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {

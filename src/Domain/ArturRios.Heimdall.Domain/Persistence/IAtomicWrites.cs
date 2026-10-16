@@ -18,8 +18,9 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         database applies the two together.
 ///     </para>
 ///     <para>
-///         <b>Charge first, then check.</b> Every budget here — login attempts (FR-AU-09), guesses at
-///         an email code (FR-2F-13) or at a challenge, guesses at the password of a pending
+///         <b>Charge first, then check.</b> Every budget here — login attempts (FR-AU-09), second
+///         factors at sign-in (FR-AU-12), re-authentications under a bearer token (FR-AU-13), guesses
+///         at an email code (FR-2F-13) or at a challenge, guesses at the password of a pending
 ///         registration (FR-SR-09), reissues of a challenge's code (FR-2F-16) — is reserved before the
 ///         expensive or secret comparison runs, not counted after it fails.
 ///         Counting afterwards let a burst of parallel guesses all pass the "under the cap" check
@@ -74,6 +75,91 @@ public interface IAtomicWrites
     Task ClearLoginAttemptsAsync(Person person);
 
     /// <summary>
+    ///     FR-AU-12: reserves one second-factor verification at sign-in — increments the account's
+    ///     second-factor failure counter, but only while the second factor is not locked out at
+    ///     <paramref name="now" /> and the counter is below <paramref name="maxAttempts" />.
+    ///     <c>false</c> means the second factor is locked and no factor may be accepted.
+    /// </summary>
+    /// <param name="person">The account the verification is charged to.</param>
+    /// <param name="maxAttempts">The failures that lock the second factor.</param>
+    /// <param name="now">The time the lock is compared against.</param>
+    /// <param name="lockedOutUntil">
+    ///     When each lock ends, by how many the account has had before it: the first entry for the
+    ///     first lock, the second for the next, and the last for every lock from then on. Must not
+    ///     be empty.
+    /// </param>
+    /// <remarks>
+    ///     As <see cref="TryReserveLoginAttemptAsync" /> does, the reservation that brings the counter
+    ///     to <paramref name="maxAttempts" /> locks in the same write — choosing the end by the
+    ///     stored lockout count, which it then increments — and resets the counter, so the lock does
+    ///     not depend on the caller surviving to compare the factor. A row at or past the limit with
+    ///     no live lock — none, or one that has run out — is admitted and locked the same way. A
+    ///     refused reservation still writes the row, unchanged, so it costs what an admitted one does.
+    /// </remarks>
+    Task<bool> TryReserveSecondFactorAttemptAsync(
+        Person person, int maxAttempts, DateTime now, IReadOnlyList<DateTime> lockedOutUntil);
+
+    /// <summary>
+    ///     FR-AU-12: after a second factor checks out at sign-in, clears the failure counter, any lock,
+    ///     and the lockout count that sets how long the next lock lasts. Also how anonymisation clears
+    ///     them (NFR-20).
+    /// </summary>
+    Task ClearSecondFactorAttemptsAsync(Person person);
+
+    /// <summary>
+    ///     FR-AU-13: reserves one re-authentication — a password or a factor checked under a bearer
+    ///     token — while the account's re-authentication is not paused at <paramref name="now" />.
+    ///     <c>false</c> means it is paused and no credential may be accepted.
+    /// </summary>
+    /// <param name="person">The account the re-authentication is charged to.</param>
+    /// <param name="maxFailures">The failures within one window that pause re-authentication.</param>
+    /// <param name="now">The time the pause is compared against, and a new window starts at.</param>
+    /// <param name="windowStartedBy">
+    ///     The earliest a window may have started and still be open; one that started at or before
+    ///     it has run out, and the reservation starts a new one.
+    /// </param>
+    /// <param name="pausedUntil">When the pause the reservation may set ends.</param>
+    /// <remarks>
+    ///     The reservation counts as a failure until <see cref="ClearReauthenticationAttemptsAsync" />
+    ///     says otherwise. The one that brings the window's count to <paramref name="maxFailures" />
+    ///     pauses re-authentication until <paramref name="pausedUntil" /> and closes the window, in the
+    ///     same write. Nothing here touches the login lockout or the second-factor budget. A refused
+    ///     reservation still writes the row, unchanged, so it costs what an admitted one does.
+    /// </remarks>
+    Task<bool> TryReserveReauthenticationAsync(
+        Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil);
+
+    /// <summary>
+    ///     FR-AU-13: after a re-authentication succeeds, clears the window's count and any pause. Also
+    ///     how anonymisation clears them (NFR-20).
+    /// </summary>
+    Task ClearReauthenticationAttemptsAsync(Person person);
+
+    /// <summary>
+    ///     FR-PE-16: reserves one account email the person's own request would send — while none was
+    ///     reserved after <paramref name="lastSentBefore" /> (the cooldown) and fewer than
+    ///     <paramref name="maxPerWindow" /> were in a window still open at <paramref name="now" />.
+    /// </summary>
+    /// <param name="person">The account the email is charged to.</param>
+    /// <param name="maxPerWindow">The sends one window admits.</param>
+    /// <param name="now">The time the window is compared against, and the send is stamped with.</param>
+    /// <param name="lastSentBefore">
+    ///     The latest the previous send may have been reserved and still be out of the cooldown:
+    ///     <paramref name="now" /> minus the cooldown.
+    /// </param>
+    /// <param name="windowEndsAt">When the window this send opens ends, if it opens one.</param>
+    /// <remarks>
+    ///     A send in an ended window, or the first ever, opens a new window with itself as the first
+    ///     send. On success the instance's three columns are set to what was written. A refusal reads
+    ///     the row back only to say which bound refused it; when both do, the daily one is reported.
+    /// </remarks>
+    Task<AccountEmailReservation> TryReserveAccountEmailAsync(
+        Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt);
+
+    /// <summary>FR-PE-16: clears the account-email budget — how anonymisation clears it (NFR-20).</summary>
+    Task ClearAccountEmailsAsync(Person person);
+
+    /// <summary>
     ///     FR-2F-10: makes <paramref name="challengeId" /> the configuration's one outstanding
     ///     challenge, with all of its reissues (FR-2F-16) and guesses available.
     /// </summary>
@@ -126,6 +212,47 @@ public interface IAtomicWrites
 
     /// <summary>UC-14: spends an email verification token that is unexpired at <paramref name="now" />. Once.</summary>
     Task<bool> TryConsumeEmailVerificationTokenAsync(EmailVerificationToken token, DateTime now);
+
+    /// <summary>
+    ///     UC-13 (FR-PR-08, FR-AU-11): writes the reset password — <paramref name="passwordHash" />,
+    ///     <paramref name="salt" />, a fresh <see cref="Person.SecurityStamp" /> and <c>UpdatedAt</c>,
+    ///     and no other column — while the person still holds the address they were read with and is
+    ///     neither logically deleted, under a restriction (NFR-24), nor anonymised. <c>false</c> means
+    ///     one of those changed after the caller read the person, and nothing was written, the stamp
+    ///     included.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Targeted rather than a whole-row save for the reason <see cref="RotateSecurityStampAsync" />
+    ///         is: a save of the copy read when the token was found would write back every other
+    ///         column as it was then, and so undo an address change, or a restriction, that landed
+    ///         meanwhile. The address in the condition is what orders a reset against an address
+    ///         change (FR-PE-17): a token read before the change cannot set a password after it.
+    ///     </para>
+    ///     <para>
+    ///         The stamp is replaced in the same statement, so no sign-in can read the new password
+    ///         beside the old stamp or the old password beside the new one, and a refused write
+    ///         leaves the stamp — which a restricted person's subject-rights token carries — as it
+    ///         was. The password columns are written by nothing else once the row exists: the
+    ///         mapping keeps every whole-row save off them, as it does the stamp.
+    ///     </para>
+    /// </remarks>
+    Task<bool> TrySetPasswordAsync(Person person, byte[] passwordHash, byte[] salt, DateTime now);
+
+    /// <summary>
+    ///     UC-14 (FR-EV-08): marks the person's address verified and stamps <c>UpdatedAt</c>, writing
+    ///     no other column, under the same condition as <see cref="TrySetPasswordAsync" />: the
+    ///     address is the one the person was read with, and the record is not deleted, restricted or
+    ///     anonymised. <c>false</c> means nothing was written.
+    /// </summary>
+    Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now);
+
+    /// <summary>
+    ///     NFR-20: empties the person's password hash and salt, writing no other column, for
+    ///     anonymisation. Like the stamp, the two are written only by targeted writes once the row
+    ///     exists, so a whole-row save of an anonymised copy does not clear them.
+    /// </summary>
+    Task ClearPasswordAsync(Person person);
 
     /// <summary>
     ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes

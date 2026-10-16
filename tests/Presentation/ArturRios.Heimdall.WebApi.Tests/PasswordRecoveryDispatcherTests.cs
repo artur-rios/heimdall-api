@@ -72,7 +72,11 @@ public class PasswordRecoveryDispatcherTests
 
             return new PasswordRecoveryProcessor(
                 provider.GetRequiredService<IAsyncReadOnlyRepository<Person, long>>(),
-                provider.GetRequiredService<IPasswordResetService>());
+                new AsyncFakeRepository<PasswordResetToken, long>(),
+                provider.GetRequiredService<IPasswordResetService>(),
+                new PasswordResetOptions(),
+                new AdminEmailOptions(),
+                NullLogger<PasswordRecoveryProcessor>.Instance);
         });
 
         var provider = services.BuildServiceProvider();

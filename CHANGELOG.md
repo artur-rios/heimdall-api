@@ -7,6 +7,157 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-16
+
+### Security
+
+- Second-factor failures at sign-in are now counted per account, across every challenge (FR-AU-12). App codes, email
+  codes and recovery codes all count, a correct password no longer resets the count, and only a successful second
+  factor does. The tenth failure locks second-factor verification for 15 minutes, twice as long at each repeat, up to
+  24 hours; the repeat count resets after a successful second factor. While locked, `POST /api/auth/2fa/verify`
+  refuses every code, the right one included, with its usual `401` and "The code or recovery code is missing,
+  incorrect, or already used.", so a client sees nothing new.
+- Re-authentication under a bearer token has a per-account budget of its own (FR-AU-13): `POST /api/auth/2fa/enable`,
+  `2fa/confirm`, `2fa/disable`, `2fa/recovery-codes/regenerate`, `erasure-request` (a person's password) and an own
+  email change through `PUT /api/persons/{id}`. Five failures within 15 minutes pause these checks for the account
+  for 15 minutes. The budget never touches the login lockout or the second-factor budget, so the owner can still
+  sign in. A wrong or missing password, a wrong, missing or used code, and a paused budget all answer `401` with one
+  message, "The password or code is incorrect.". **Clients:** this replaces "The current password is incorrect." and
+  "The code or recovery code is missing, incorrect, or already used." on those endpoints, and on `2fa/confirm` it
+  replaces the `400` answers "The authenticator app code is missing or incorrect." and "The email code is missing,
+  incorrect, expired, or already used." with the same `401`. A client that treats a `401` as the end of its session
+  must recognise the new message as a refused credential instead. A Google User's erasure request still answers
+  "The credential presented was not accepted.", but a person who sends no credential at all now gets the new message
+  and is charged like a wrong password. A new migration, `AddFactorBudgets`, adds six columns to `person`, all
+  starting empty; only targeted writes change them, and anonymisation clears them. The data export
+  (`POST /api/auth/data-export`) now includes all six in `security`, beside `failedLoginAttempts` and
+  `lockedOutUntil`. **Deploy order:** deploy the heimdall-ui release that recognises "The password or code is
+  incorrect." and the `401` from `2fa/confirm` **before this API, or together with it**. Against an older UI, a
+  mistyped password or code on any of these endpoints signs the user out. That UI release only adds the message, so
+  it is safe to deploy first. Third-party clients need the same change before upgrading. **Operators:** no setting
+  changes; the operations guide has SQL to release a second-factor lock or a re-authentication pause for a verified
+  person.
+- A person's own requests now share one account-email budget (FR-PE-16): asking for the verification link again (`POST
+  /api/auth/resend-verification`), starting two-factor setup with the `Email` method (`POST /api/auth/2fa/enable`) and
+  an own email change (`PUT /api/persons/{id}`, whose notice goes to the previous address). At most one such email per
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five in each day-long window starting at
+  the first send, reserved by one conditional write before anything is sent, so simultaneous requests cannot exceed
+  it. Both refusals carry `Retry-After`, the seconds until a send would be accepted. A refusal is `429` and changes
+  and sends nothing: "An email of this kind was sent to you recently. Try again in a few minutes." inside the
+  cooldown, "You have reached the limit for account emails. Try again later." once the window's five are spent.
+  Two-factor setup checks it before the password and charges it only after, and `App` alone is never charged; an email
+  change charges it after the password and second factor, and a refusal spends no recovery or email code (an accepted
+  authenticator code's time step is recorded, as for any accepted code). Administrator-initiated mail (UC-51, UC-52)
+  is not charged, so a person whose account was just created by an administrator, or whose budget is spent, can still
+  be helped. `resend-verification` is now also under the credential endpoints' rate limit, whose `429` is "Too many
+  requests." with `Retry-After`. A new migration, `AddAccountEmailBudget`, adds three columns to `person`, starting
+  empty; they are in the data export and cleared by anonymisation. **Clients:** treat both new `429`s as "wait and try
+  again", not as a session end or a refused credential; the wait can be hours, and `Retry-After` gives it. An own
+  email change counts toward the budget too, so asking for the new address's verification link straight after the
+  change waits out the cooldown.
+- Anonymous password recovery (`POST /api/auth/password-recovery`) sends at most one reset link per person per
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, held to the reset link's lifetime, counting links sent by an
+  administrator too (FR-PR-07). The answer is unchanged.
+- A person can no longer change their own email while their email sign-in method is enabled, active or pending
+  (FR-PE-18): `PUT /api/persons/{id}` answers `409` "Turn off the email sign-in method before changing your email
+  address." once the password and second factor are accepted. The re-authentication budget is cleared, as after any
+  accepted check, and an accepted authenticator code's time step is recorded; no account-email budget is charged, no
+  recovery or email code is spent, and the email does not change. **Clients:** offer to turn the method off first;
+  it can be set up again at the new address. An administrator's change is unaffected.
+- Creating a person with a password (`POST /api/persons`, `POST /api/scopes/{id}/persons`,
+  `POST /api/scopes/{id}/owners`) is limited to 30 requests a minute per acting administrator and 30 a minute per
+  address; a rejection is `429` "Too many requests." with `Retry-After`. Only administrators' access tokens count
+  against the address, so requests without a token, or with a User's, a two-factor challenge or a subject-rights
+  token, from an address administrators share cannot use it up.
+- Self-registration bounds the mail one address can be sent (FR-SR-13, FR-SR-14): at most three live pending
+  registrations per address in a scope, and at most three "someone tried to register your address" notices per
+  address a day, across every scope. A request beyond either stores and sends nothing, and is answered `202` exactly
+  as before. The notice count is kept under a SHA-256 digest of the address in a new table, `attempt_notice_budget`
+  (migration `AddAttemptNoticeBudget`), and purged with the single-use tokens once its day has ended.
+- The credential endpoints' rate limiter counts an IPv6 caller by its `/56` rather than its `/64`, so a subscriber
+  handed a `/56` is one caller instead of 256. Trusted callers' named IPv6 addresses are counted the same way.
+  **Operators:** the operations guide now shows how to add a rate limit for the credential routes at Traefik,
+  alongside the API's own limits.
+- Two-factor recovery codes now carry 80 bits (FR-2F-20): ten random bytes written as sixteen characters of
+  Crockford's base32 (the digits and the uppercase letters without I, L, O and U) and returned by
+  `POST /api/auth/2fa/confirm` and `POST /api/auth/2fa/recovery-codes/regenerate` as `XXXX-XXXX-XXXX-XXXX`. Each is
+  stored as the SHA-256 of its sixteen characters. Wherever a recovery code is accepted (`2fa/verify`, `2fa/disable`,
+  `2fa/recovery-codes/regenerate`, the `twoFactorCode` of an own email change) it is matched ignoring hyphens,
+  whitespace and case, and an O, I or L in a sixteen-character code reads as 0, 1 and 1. Codes of the earlier
+  `XXXX-XXXX` shape keep working, in any case and with or without the hyphen, until used or regenerated.
+  **Users:** everyone who enabled two-factor authentication before this release should regenerate their recovery
+  codes to get the stronger ones; the old set stops working once you do.
+  **Clients:** accept and show codes of 19 characters as well as 9, and do not restrict their alphabet beyond letters,
+  digits, hyphens and spaces. No migration: the column already holds a digest.
+- A first Google sign-in (`POST /api/auth/google`) now requires the ID token's `email_verified` to be `true`
+  (FR-GO-07). A token where it is `false` or absent creates no Google User and is answered `403` with the new
+  message "Google sign-up requires a verified email address.", before the address is compared with the scope's.
+  A Google User that already exists signs in as before, whatever the claim says.
+- `POST /api/auth/google` accepts an optional `nonce` (FR-GO-20): the value the client sent Google when it asked for
+  the ID token. When it is present and not empty, the token's `nonce` claim must equal it exactly, or the request is
+  answered `401` "Google authentication failed.", as for any token that fails verification. Without it nothing is
+  compared. The nonce is a client-side check that the token it presents was issued for its own sign-in request;
+  whether a token is accepted rests on its signature, issuer, audience and expiry. **Clients:** generate a fresh
+  random nonce for each Google sign-in, pass it to Google, and send the same value here.
+- A password-reset or verification link is checked against its account again when it is followed (FR-PR-08,
+  FR-EV-08): if the person has since been restricted, deleted or anonymised, or can no longer sign in through their
+  scope, `POST /api/auth/password-reset` and `POST /api/auth/verify-email` answer `400` "Invalid token.", exactly
+  as for an unknown token, and nothing is written. The new password and the verified flag are written only while
+  the person still holds the address they were read with; the new password and a fresh security stamp are written by
+  one statement, and once a person row exists its password hash and salt are written only by such targeted writes, so
+  no whole-row save of an older copy can put an old password back. An email change, by the person or an
+  administrator, now retires every live reset link as well as every verification link the person holds, before the
+  new address is saved and again straight after (FR-PE-17); following one afterwards answers `400` "Token already
+  used.". **Clients:** no new messages; "Invalid token." and "Token already
+  used." keep their meaning of "this link no longer works, ask for a new one".
+- A Scope Admin reading another person now sees only the scope ownerships the two share (FR-PE-19). In
+  `GET /api/persons/{id}`, `GET /api/scopes/{id}/owners`, `GET /api/scopes/{id}/persons` and the response of
+  `PUT /api/persons/{id}`, `ownedScopeIds` lists, for a Scope Admin reading somebody else, only the scopes the
+  Scope Admin owns too; a scope's owners are each listed with that scope among them. A System Admin, and a person
+  reading themselves, still see every scope. `GET /api/persons/scope-admins` is unchanged: identifier, name and
+  email. **Clients:** no status or message changes; do not read another person's `ownedScopeIds` as the full list
+  of what they own.
+- On an instance that serves a public host, EF Core's sensitive data logging and detailed errors and the developer
+  exception page are off, whatever the environment, unless `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true`
+  (NFR-28). One decision at start-up sets all three, the exception page the host adds by itself in Development
+  included, and the instance starts as usual with one warning naming the hosts. A host is public when `PUBLIC_HOST`
+  or `UI_HOST`, the host of `HEIMDALL_EMAIL_VERIFICATION_URL` or `HEIMDALL_PASSWORD_RESET_URL`, or a
+  `HEIMDALL_CORS_ALLOWED_ORIGINS` entry, with or without a scheme, names anything but `localhost` or a loopback
+  address; `docker-compose.yml` now passes `PUBLIC_HOST`, `UI_HOST` and the new variable into the container.
+  **Operators:** nothing to change; set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` in an environment's env file
+  only where it holds made-up people and its diagnostics are wanted. Production and a local run are unaffected.
+  **Clients:** a public-host instance does not answer with the developer exception page unless the override is
+  `true`; a failed request gets the usual `500` "Internal server error, please try again later".
+- The supported database setup runs the migrations as an owner role and the API as a role that owns nothing
+  (NFR-29). The container entrypoint migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set, and with
+  `HEIMDALL_DATA_CONNECTIONSTRING` as before when it is not. It hands the connection string to the migration
+  bundle through the bundle's environment rather than its command line, and removes the migrations string before
+  the API starts, which never reads it. **Operators:** optional, and applied by you: the operations guide's
+  "Database roles" has the grants, the default privileges for tables later migrations add, the steps for a new
+  database and for switching an existing one over, and the checks. Deploy this release before switching. The env
+  templates list the new variable; `docker-compose.yml` passes it through.
+- Every token the API reads is now checked for its issuer and audience as well as its signature and lifetime
+  (NFR-30). A bearer token must name `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer and exactly one of the person,
+  `.2fa-challenge` and `.subject-rights` audiences; the challenge token at `POST /api/auth/2fa/verify` and
+  `2fa/challenge/resend`, the challenge audience; an application token at `GET /api/applications/self`, the
+  application audience. A token Heimdall did not issue for that reader is refused however it is signed, with the
+  answer the endpoint already gives a token it cannot use: as a bearer token, `401` "Invalid token", as for a bad
+  signature; at `2fa/verify`, `401` "The two-factor challenge is invalid or has expired. Log in again."; at
+  `2fa/challenge/resend`, the usual `200` "If the challenge is still valid, a new code has been sent.", with nothing
+  sent; at `GET /api/applications/self`, `401` "The application token was not accepted.". **Clients:** tokens
+  Heimdall issues are unaffected, and no new message is introduced.
+- Tokens are accepted under HS256 only, the algorithm they are signed with, now that the API is on
+  `ArturRios.Jwt` 1.3.0, declared directly in the Web API project. A token under HS384 or HS512 is refused as a
+  bearer token with `401` "Invalid token", and at the two challenge endpoints and `GET /api/applications/self` as
+  above.
+- A browser front end on an origin in `HEIMDALL_CORS_ALLOWED_ORIGINS` can now read `Retry-After`: the API lists it in
+  `Access-Control-Expose-Headers`, so the wait a `429` gives reaches a cross-origin client too.
+- Start-up checks the signing secrets (NFR-31): `HEIMDALL_AUTH_TOKEN_SECRET`, and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`
+  when it is set, must each be at least 32 bytes and ASCII only, or the API refuses to start with a message that
+  names the variable and never the value. A previous secret that is unset, blank or `""` means no previous key.
+  **Operators:** before deploying, check that every environment's secrets meet the rule; `openssl rand -base64 48`
+  gives 64 bytes.
+
 ## [1.5.0] - 2026-10-15
 
 ### Added
@@ -382,7 +533,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/artur-rios/heimdall-api/compare/v1.2.0...v1.3.0

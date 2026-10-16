@@ -40,15 +40,6 @@ public static class TwoFactorMessages
     /// </summary>
     public const string NoPendingSetup = "No pending two-factor authentication setup exists.";
 
-    /// <summary>AF-37b: the App method is enabled and the submitted <c>appCode</c> is missing or incorrect.</summary>
-    public const string AppCodeInvalid = "The authenticator app code is missing or incorrect.";
-
-    /// <summary>
-    ///     AF-37c: the Email method is enabled and the submitted <c>emailCode</c> is missing,
-    ///     incorrect, expired, or already used.
-    /// </summary>
-    public const string EmailCodeInvalid = "The email code is missing, incorrect, expired, or already used.";
-
     /// <summary>
     ///     UC-38 main flow: the challenge token was valid and a second factor checked out, so the
     ///     full authentication token was issued (FR-2F-09).
@@ -81,9 +72,12 @@ public static class TwoFactorMessages
 
     /// <summary>
     ///     AF-38b and AF-38c: neither a valid app/email code nor an unused recovery code was
-    ///     submitted. Deliberately the same message for a wrong/missing code and an already-used
-    ///     recovery code (AF-38c), so a caller cannot tell a reused recovery code from one that was
-    ///     never real — the same reasoning UC-11's AF-11a…AF-11e collapse into one message for.
+    ///     submitted, or the account's second factor is locked (FR-AU-12). Deliberately the same
+    ///     message for a wrong/missing code, an already-used recovery code (AF-38c) and a lock, so a
+    ///     caller cannot tell a reused recovery code from one that was never real, nor a locked
+    ///     account from a wrong guess — the same reasoning UC-11's AF-11a…AF-11e collapse into one
+    ///     message for. Sign-in only: a factor checked under a bearer token (UC-37, UC-39, UC-40,
+    ///     UC-08) is refused with <c>AuthMessages.PasswordOrCodeIncorrect</c>.
     /// </summary>
     public const string FactorInvalid = "The code or recovery code is missing, incorrect, or already used.";
 
@@ -101,17 +95,10 @@ public static class TwoFactorMessages
     public const string NotActive = "Two-factor authentication is not active for this account.";
 
     /// <summary>
-    ///     AF-39b: the submitted password does not match the caller's current password. Also AF-36e
-    ///     (FR-2F-18) and UC-08's AF-08h (FR-PE-14), where a missing password is answered the same way.
-    /// </summary>
-    public const string PasswordMismatch = "The current password is incorrect.";
-
-    /// <summary>
     ///     UC-40 main flow: the second factor checked out, so every existing recovery code was
-    ///     replaced and ten new ones were issued in plaintext (FR-2F-12). AF-40a and AF-40b reuse
-    ///     <see cref="NotActive" /> and <see cref="FactorInvalid" /> respectively — UC-40's own
-    ///     preconditions are exactly UC-39's "not active" check and UC-38's second-factor check, so no
-    ///     new refusal message is invented for either.
+    ///     replaced and ten new ones were issued in plaintext (FR-2F-12). AF-40a reuses
+    ///     <see cref="NotActive" />, UC-39's "not active" check, and AF-40b the refusal every
+    ///     re-authentication shares, <c>AuthMessages.PasswordOrCodeIncorrect</c>.
     /// </summary>
     public const string RecoveryCodesRegenerated = "Recovery codes have been regenerated.";
 

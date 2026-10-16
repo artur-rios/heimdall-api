@@ -209,7 +209,15 @@ API logs verification tokens, reset tokens and 2FA codes instead of sending them
 parameter values outside Production — which is what TH-23 in the
 [Threat Model Document](Threat%20Model%20Document.md) accepts for non-production deployments, on the
 condition that no real person's data is in them. They are tested with made-up people, and production
-data is never copied into them.
+data is never copied into them. Because both serve public hosts, the API runs there with EF Core's
+parameter logging and the developer exception page off (NFR-28), unless the env file sets
+`HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true`; the templates leave it empty.
+
+The supported database setup gives each environment an owner role of its own for the migrations
+(`HEIMDALL_MIGRATIONS_CONNECTIONSTRING`) and an API login that owns nothing and has only the row
+privileges it needs (NFR-29, Threat Model TH-18). The operations guide, "Database roles", has the
+grants, the checks and the steps for a new environment and for switching one over; the operator
+applies them.
 
 The step-by-step setup of each environment is on the documentation site, under
 [Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/).

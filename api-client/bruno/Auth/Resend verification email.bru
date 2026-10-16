@@ -14,4 +14,6 @@ docs {
   UC-15. Authenticated.
 
   No body: the person is read from the bearer token, so a caller can only ever ask for their own link. An address that is already verified answers 400.
+
+  Charged to the person's account-email budget, shared with the two-factor setup code and the email-change notice: one per HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS (five minutes by default) and five per day-long window. 429 "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, 429 "You have reached the limit for account emails. Try again later." once the day-long window's five are spent (both with Retry-After, in seconds); nothing is sent either way. A link an administrator sent is not charged. The endpoint is also rate-limited per client address: its 429 says "Too many requests." and carries Retry-After.
 }

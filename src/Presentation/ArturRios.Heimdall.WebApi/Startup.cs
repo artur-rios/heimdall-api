@@ -9,6 +9,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Data.Persistence;
@@ -37,12 +38,16 @@ using ArturRios.Mediator.Query;
 using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
+using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
+using ArturRios.Util.WebApi.Security.Interfaces;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Rewrite;
+using Microsoft.Net.Http.Headers;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -77,8 +82,8 @@ public class Startup : WebApiStartup
     private const string TokenAudienceEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
     private const string TokenExpirationEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS";
     private const string TokenIssuerEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
-    private const string TokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
-    private const string PreviousTokenSecretEnvironmentVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
+    private const string TokenSecretEnvironmentVariable = TokenSigningSecrets.SecretVariable;
+    private const string PreviousTokenSecretEnvironmentVariable = TokenSigningSecrets.PreviousSecretVariable;
     private const double DefaultTokenExpirationInSeconds = 3600;
 
     private const string CorsAllowedOriginsEnvironmentVariable = "HEIMDALL_CORS_ALLOWED_ORIGINS";
@@ -92,6 +97,16 @@ public class Startup : WebApiStartup
     public const string AuthEndpointRateLimitPolicy = "AuthAnonymous";
 
     /// <summary>
+    ///     Rate-limiting policy name for the endpoints that create a person with a password — each of
+    ///     which derives an Argon2id hash — partitioned by the acting person rather than by address
+    ///     (see <see cref="AddAccountCreationRateLimiting" />).
+    /// </summary>
+    public const string AccountCreationRateLimitPolicy = "AccountCreation";
+
+    /// <summary>Requests per minute one actor may make to the account-creation endpoints.</summary>
+    public const int AccountCreationPermitLimit = 30;
+
+    /// <summary>
     ///     Length, in seconds, of the <c>AuthAnonymous</c> fixed window. One value for the limiter's
     ///     <c>Window</c> and for the <c>Retry-After</c> a rejection falls back to, so the two cannot
     ///     drift apart.
@@ -99,11 +114,26 @@ public class Startup : WebApiStartup
     private const int AuthEndpointRateLimitWindowSeconds = 60;
 
     /// <summary>
+    ///     The IPv6 prefix one rate-limit partition covers (see <see cref="RateLimitPartitionKey" />).
+    ///     A whole number of bytes.
+    /// </summary>
+    private const int RateLimitIPv6PrefixLength = 56;
+
+    /// <summary>
     ///     Read in <see cref="AddMetrics" />, after <c>LoadConfiguration</c> has put the .env file's
     ///     values in the environment, and used again by <see cref="EdgePipeline" /> to mount the scrape
     ///     endpoint — one reading for both, so the exporter and its endpoint cannot disagree.
     /// </summary>
     private MetricsOptions _metrics = MetricsOptions.Disabled;
+
+    /// <summary>
+    ///     Decided once in <see cref="AddDependencies" /> (NFR-28) and read by every place that turns a
+    ///     sensitive diagnostic on — EF Core's options, <see cref="EdgePipeline" />'s developer exception
+    ///     page and, for the page the host adds by itself in Development,
+    ///     <see cref="SuppressedDeveloperPageFilter" /> — so they can never disagree. Everything off until
+    ///     it is decided.
+    /// </summary>
+    private SensitiveDiagnostics _diagnostics = SensitiveDiagnostics.None;
 
     public Startup(string[] args) : base(args, ConfigureStandardSequence)
     {
@@ -196,7 +226,7 @@ public class Startup : WebApiStartup
 
         AddMetrics();
 
-        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, builder.Environment));
+        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, _diagnostics));
 
         ConfigureSecurity();
         ConfigureCors();
@@ -208,13 +238,24 @@ public class Startup : WebApiStartup
     private void AddDependencies()
     {
         // EF diagnostics expose parameter and column values — password hashes, salts, e-mails — so
-        // they stay off in production.
-        var diagnosticsEnabled = !Builder.Environment.IsProduction();
+        // they stay off in production, and off wherever the instance serves a public host unless the
+        // operator keeps them on (NFR-28).
+        DecideSensitiveDiagnostics();
+
+        Builder.Services.AddSingleton(_diagnostics);
+
+        // The developer exception page the host adds in Development answers to the same decision:
+        // where the environment asks for the page but it is off, a failure that reaches it gets the
+        // API's own 500 envelope. Elsewhere there is no page, so there is nothing to filter.
+        if (AsksForDeveloperExceptionPage(Builder.Environment) && !_diagnostics.DeveloperExceptionPage)
+        {
+            Builder.Services.AddSingleton<IDeveloperPageExceptionFilter, SuppressedDeveloperPageFilter>();
+        }
 
         Builder.Services.AddSingleton(new DbContextDiagnosticsOptions
         {
-            SensitiveDataLogging = diagnosticsEnabled,
-            DetailedErrors = diagnosticsEnabled
+            SensitiveDataLogging = _diagnostics.DataLogging,
+            DetailedErrors = _diagnostics.DataLogging
         });
 
         Builder.Services.AddPostgreSqlProvider();
@@ -229,10 +270,13 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IApplicationCredentialSlots, ApplicationCredentialSlots>();
         // NFR-21 (#195): the tombstones a hard delete writes first, idempotently, as one upsert.
         Builder.Services.AddScoped<IErasedSubjects, ErasedSubjects>();
+        // FR-SR-14: the per-address budget of registration-attempt notices, charged as one upsert.
+        Builder.Services.AddScoped<IAttemptNoticeBudgets, AttemptNoticeBudgets>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
         Builder.Services.AddScoped<IActorAccessor, HttpContextActorAccessor>();
+        Builder.Services.AddScoped<IRetryAfterAdvisor, HttpResponseRetryAfterAdvisor>();
         Builder.Services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         Builder.Services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();
         Builder.Services.AddAuditedCommandHandler<CreateScopeCommand, CreateScopeCommandOutput, CreateScopeCommandHandler>();
@@ -521,11 +565,58 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
+    ///     Whether the environment asks for the developer exception page: Development and Local. What
+    ///     is served is <see cref="_diagnostics" />, which may turn it off.
+    /// </summary>
+    /// <remarks>
+    ///     Local is included alongside Development because it is what a developer machine now runs:
+    ///     the configuration loader resolves Environments/.env.&lt;environment&gt;, so the launch
+    ///     profiles name Local to reach .env.local rather than relying on the loader's fallback.
+    ///     Testing <c>IsDevelopment()</c> alone would have silently cost the developer exception page
+    ///     in the one environment that exists to have it.
+    /// </remarks>
+    private static bool AsksForDeveloperExceptionPage(IWebHostEnvironment environment) =>
+        environment.IsDevelopment() || environment.IsEnvironment("Local");
+
+    /// <summary>
+    ///     NFR-28: settles <see cref="_diagnostics" />. On an instance that serves a public host the
+    ///     sensitive diagnostics are turned off, unless <c>HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS</c> is
+    ///     <c>true</c> (see <see cref="SensitiveDiagnosticsGuard" />). Either way it warns, once.
+    /// </summary>
+    private void DecideSensitiveDiagnostics()
+    {
+        _diagnostics = SensitiveDiagnosticsGuard.EvaluateFromEnvironment(
+            !Builder.Environment.IsProduction(),
+            AsksForDeveloperExceptionPage(Builder.Environment));
+
+        switch (_diagnostics.Decision)
+        {
+            case SensitiveDiagnosticsDecision.Suppressed:
+                Log.Warning(
+                    "This instance serves a public host ({Hosts}), so EF Core sensitive data logging, " +
+                    "detailed errors and the developer exception page are off in the {Environment} " +
+                    "environment. Set {Variable}=true to keep them on where the instance holds made-up " +
+                    "people only",
+                    string.Join(", ", _diagnostics.PublicHosts), Builder.Environment.EnvironmentName,
+                    SensitiveDiagnosticsGuard.AllowVariable);
+                break;
+
+            case SensitiveDiagnosticsDecision.Allowed:
+                Log.Warning(
+                    "Sensitive diagnostics are on in the {Environment} environment and this instance serves " +
+                    "a public host ({Hosts}); {Variable} is true, which states that it holds made-up people only",
+                    Builder.Environment.EnvironmentName, string.Join(", ", _diagnostics.PublicHosts),
+                    SensitiveDiagnosticsGuard.AllowVariable);
+                break;
+        }
+    }
+
+    /// <summary>
     ///     The middlewares that must run ahead of the standard pipeline. A startup filter is how they
     ///     get there: ASP.NET Core wraps the application's whole pipeline in it, so what it adds runs
     ///     before anything <c>Build</c> adds.
     /// </summary>
-    private sealed class EdgePipeline(MetricsOptions metrics, IWebHostEnvironment environment) : IStartupFilter
+    private sealed class EdgePipeline(MetricsOptions metrics, SensitiveDiagnostics diagnostics) : IStartupFilter
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
         {
@@ -536,12 +627,11 @@ public class Startup : WebApiStartup
             // the public port falls straight through, /metrics included.
             app.UseHeimdallMetrics(metrics);
 
-            // Local is included alongside Development because it is what a developer machine now
-            // runs: the configuration loader resolves Environments/.env.<environment>, so the launch
-            // profiles name Local to reach .env.local rather than relying on the loader's fallback.
-            // Testing IsDevelopment() alone would have silently cost the developer exception page in
-            // the one environment that exists to have it.
-            if (environment.IsDevelopment() || environment.IsEnvironment("Local"))
+            // The shared decision, never the environment directly: on a public host without the
+            // override it is off in Development too (NFR-28). This call is what Local needs; in
+            // Development the host adds its own page further in, which SuppressedDeveloperPageFilter
+            // holds to the same decision.
+            if (diagnostics.DeveloperExceptionPage)
             {
                 app.UseDeveloperExceptionPage();
             }
@@ -651,13 +741,49 @@ public class Startup : WebApiStartup
         // Credentials are allowed because the front end sends the bearer token UC-11 issued. That is
         // also why the origin list has to be explicit: AllowAnyOrigin and AllowCredentials are
         // mutually exclusive by specification, precisely to stop this combination from existing.
+        // Retry-After is exposed because it is not a safelisted response header: without it a front
+        // end on another origin sees a 429 but cannot read how long to wait.
         Builder.Services.AddCors(cors => cors.AddPolicy(CorsPolicyName, policy => policy
             .WithOrigins(origins)
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials()));
+            .AllowCredentials()
+            .WithExposedHeaders(HeaderNames.RetryAfter)));
 
         Options.CorsPolicy = CorsPolicyName;
+    }
+
+    /// <summary>
+    ///     Puts <see cref="PersonTokenValidator" /> in the place of the <see cref="JwtTokenValidator" />
+    ///     that <c>AddTokenAuthentication</c> registers as an <see cref="ITokenValidator" />, keeping the
+    ///     library's validator as the inner one it wraps.
+    /// </summary>
+    /// <remarks>
+    ///     TB-5: the library's validator checks the signature and lifetime but not the issuer or the
+    ///     audience, and the signing key is not Heimdall's alone. PersonTokenValidator wraps it and
+    ///     takes its place, so a token reaches the middleware's user only if Heimdall issued it, for
+    ///     one of the person audiences. When the library registers its validator in some other way,
+    ///     start-up stops and says why, rather than running with the library's validator alone.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     The services hold no <see cref="ITokenValidator" /> registered as <see cref="JwtTokenValidator" />.
+    /// </exception>
+    public static void ReplaceLibraryTokenValidator(IServiceCollection services)
+    {
+        var libraryValidator = services.SingleOrDefault(descriptor =>
+            descriptor.ServiceType == typeof(ITokenValidator) &&
+            descriptor.ImplementationType == typeof(JwtTokenValidator));
+
+        if (libraryValidator is null)
+        {
+            throw new InvalidOperationException(
+                "ArturRios.Util.WebApi no longer registers JwtTokenValidator as an ITokenValidator; " +
+                "PersonTokenValidator cannot replace it. Refusing to start.");
+        }
+
+        services.Remove(libraryValidator);
+        services.AddSingleton<JwtTokenValidator>();
+        services.AddSingleton<ITokenValidator, PersonTokenValidator>();
     }
 
     private void ConfigureSecurity()
@@ -714,6 +840,8 @@ public class Startup : WebApiStartup
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
 
+        ReplaceLibraryTokenValidator(Builder.Services);
+
         AddAuthEndpointRateLimiting();
 
         // TH-03: bound how many Argon2id derivations run at once. Read here, with the rest of the
@@ -769,12 +897,13 @@ public class Startup : WebApiStartup
     ///     password or a second factor (2FA confirm, disable and recovery-code regeneration, and the
     ///     erasure request) carry it too: a bearer token is not the password, and without a limit
     ///     whoever holds one could test passwords or six-digit codes against them as fast as they
-    ///     could send requests, outside the login lockout. Policy name matches the
+    ///     could send requests, outside the login lockout. The verification-link resend carries it
+    ///     as well, since each request there mails the account's address. Policy name matches the
     ///     <see cref="Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute" /> applied to
     ///     each endpoint in <c>AuthController</c>.
     /// </summary>
     /// <remarks>
-    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /64 —
+    ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /56 —
     ///     see <see cref="RateLimitPartitionKey" />), which is the caller's own
     ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
     ///     every caller shares the proxy's partition. A client system that is itself one caller to
@@ -785,13 +914,22 @@ public class Startup : WebApiStartup
     /// </remarks>
     /// <summary>
     ///     The partition a caller's requests are counted in: the whole address for IPv4, and the
-    ///     <c>/64</c> it belongs to for IPv6.
+    ///     <c>/56</c> it belongs to for IPv6.
     /// </summary>
     /// <remarks>
-    ///     A /64 is what one IPv6 subscriber is routinely handed, and every address inside it is
-    ///     theirs to use — 2<sup>64</sup> of them. Counted per address, a single caller could give
-    ///     every request a fresh partition and never meet the limit at all. An IPv4-mapped IPv6
-    ///     address is one IPv4 caller, and is counted as that address.
+    ///     <para>
+    ///         A /64 is the least one IPv6 subscriber is handed, and every address inside it is theirs
+    ///         to use — 2<sup>64</sup> of them. Counted per address, a single caller could give every
+    ///         request a fresh partition and never meet the limit at all. Counted per /64 it is no
+    ///         better for the many subscribers routinely handed a /56: 256 partitions each, enough on
+    ///         their own to keep the password-hash gate full. A /56 is one caller here.
+    ///     </para>
+    ///     <para>
+    ///         Coarser is not safer: a /48 is a whole site, often many unrelated people behind one
+    ///         provider, and they would share one budget of ten a minute. A flood from many unrelated
+    ///         networks is not bounded here at all — that is for the edge (Threat Model TH-03). An
+    ///         IPv4-mapped IPv6 address is one IPv4 caller, and is counted as that address.
+    ///     </para>
     /// </remarks>
     public static string RateLimitPartitionKey(IPAddress? address)
     {
@@ -811,9 +949,9 @@ public class Startup : WebApiStartup
         }
 
         var bytes = address.GetAddressBytes();
-        Array.Clear(bytes, 8, 8);
+        Array.Clear(bytes, RateLimitIPv6PrefixLength / 8, 16 - RateLimitIPv6PrefixLength / 8);
 
-        return $"{new IPAddress(bytes)}/64";
+        return $"{new IPAddress(bytes)}/{RateLimitIPv6PrefixLength}";
     }
 
     /// <summary>
@@ -831,6 +969,70 @@ public class Startup : WebApiStartup
         Log.Warning(
             "Ignoring unusable {Variable}={Value}; using the default of {Default} seconds",
             variable, rejectedValue, defaultSeconds);
+    }
+
+    /// <summary>
+    ///     Whether a request spends the account-creation address bound: only an administrator's
+    ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
+    ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
+    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
+    ///     away by the endpoint's own checks and must not use up a bound administrators share.
+    /// </summary>
+    private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
+        actor is { MfaPending: false, SubjectRightsOnly: false } &&
+        actor.RoleId is (int)Roles.SystemAdmin or (int)Roles.ScopeAdmin;
+
+    /// <summary>
+    ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
+    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) twice over:
+    ///     <see cref="AccountCreationPermitLimit" /> a minute per acting person, and as many per address.
+    ///     Each derives an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
+    ///     administrator's token, so without a bound one caller could keep the gate full and starve every
+    ///     sign-in (Threat Model TH-03).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The actor bound is the endpoint policy. The address bound — the partition the
+    ///         credential endpoints use (<see cref="AuthRateLimitPartition" />), in a namespace of its
+    ///         own — is the global limiter, which ASP.NET Core applies before the endpoint policy, and
+    ///         which answers "no limit" for every endpoint without that policy. Both apply to every
+    ///         administrator's request, so neither can be stepped around by changing only the other
+    ///         (Threat Model TH-03).
+    ///     </para>
+    ///     <para>
+    ///         Thirty a minute is more than anyone creates by hand. The limiter runs after
+    ///         authentication, so the actor is known. The global address bucket is spent only by an
+    ///         administrator's person access token (<see cref="CountsAgainstCreationAddress" />): a
+    ///         request without a token, or with a User's, a challenge or a subject-rights token, is
+    ///         refused by the endpoint anyway and must not use up a bound administrators share.
+    ///     </para>
+    /// </remarks>
+    private static void AddAccountCreationRateLimiting(RateLimiterOptions options, TrustedCallerOptions callers)
+    {
+        FixedWindowRateLimiterOptions Window(string _) => new()
+        {
+            PermitLimit = AccountCreationPermitLimit,
+            Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
+            QueueLimit = 0
+        };
+
+        options.AddPolicy(AccountCreationRateLimitPolicy, httpContext =>
+        {
+            var actor = httpContext.GetUser<IdentityUser>();
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: actor is null
+                    ? AuthRateLimitPartition.KeyFor(httpContext, callers)
+                    : $"actor:{actor.Id}",
+                factory: Window);
+        });
+
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ==
+            AccountCreationRateLimitPolicy && CountsAgainstCreationAddress(httpContext.GetUser<IdentityUser>())
+                ? RateLimitPartition.GetFixedWindowLimiter(
+                    "creation:" + AuthRateLimitPartition.KeyFor(httpContext, callers), Window)
+                : RateLimitPartition.GetNoLimiter(string.Empty));
     }
 
     private void AddAuthEndpointRateLimiting()
@@ -876,6 +1078,8 @@ public class Startup : WebApiStartup
                         Window = TimeSpan.FromSeconds(AuthEndpointRateLimitWindowSeconds),
                         QueueLimit = 0
                     }));
+
+            AddAccountCreationRateLimiting(options, callers);
         });
     }
 
@@ -984,9 +1188,10 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
-    ///     Reads the token settings from the environment. The signing secret is required: with an
-    ///     empty one every authenticated request dies inside the token validator with an opaque
-    ///     <c>IDX10703</c>, so a missing secret fails startup instead.
+    ///     Reads the token settings from the environment. The signing secret is required, and it and
+    ///     any previous secret must be at least 32 bytes of ASCII (<see cref="TokenSigningSecrets" />):
+    ///     an unusable one fails start-up rather than signing with a weak key, or failing every
+    ///     request inside the token validator.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -995,7 +1200,8 @@ public class Startup : WebApiStartup
     ///         to <c>JwtConfiguration.Keys</c>, so a token signed with either is accepted, while new
     ///         tokens are signed with the current one. Rotating is then: set the previous variable to
     ///         the secret in use, set the current variable to a new one, restart; and an hour later —
-    ///         one token lifetime — clear the previous variable and restart again.
+    ///         one token lifetime — clear the previous variable and restart again. An empty previous
+    ///         variable is never passed to the library as a key.
     ///     </para>
     ///     <para>
     ///         The keys carry ids because <c>JwtKey</c> requires them, but no <c>kid</c> is written to
@@ -1013,12 +1219,10 @@ public class Startup : WebApiStartup
     {
         var secret = Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable);
 
-        if (string.IsNullOrWhiteSpace(secret))
-        {
-            throw new InvalidOperationException(
-                $"Environment variable '{TokenSecretEnvironmentVariable}' is unset. The API cannot " +
-                "validate tokens without a signing secret.");
-        }
+        // The current secret is always accepted; the previous one only while it is configured, and
+        // only when it is genuinely a different key.
+        var keys = TokenSigningSecrets.Parse(
+            secret, Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable));
 
         var lifetime = TokenLifetimeSetting.Parse(
             Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
@@ -1026,25 +1230,11 @@ public class Startup : WebApiStartup
 
         WarnOnFallback(TokenExpirationEnvironmentVariable, lifetime.RejectedValue, DefaultTokenExpirationInSeconds);
 
-        var expiration = lifetime.Seconds;
-
-        var previousSecret = Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable);
-
-        // The current secret is always accepted; the previous one only while it is configured, and
-        // only when it is genuinely a different key — the same value under two ids would be two ways
-        // of saying nothing has been rotated yet.
-        List<JwtKey> keys = [new("current", secret)];
-
-        if (!string.IsNullOrWhiteSpace(previousSecret) && previousSecret != secret)
-        {
-            keys.Add(new JwtKey("previous", previousSecret));
-        }
-
         return new JwtConfiguration(
-            expiration,
+            lifetime.Seconds,
             Environment.GetEnvironmentVariable(TokenIssuerEnvironmentVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
-            secret,
+            secret!,
             [])
         {
             Keys = keys
