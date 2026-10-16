@@ -542,6 +542,10 @@ API itself never migrates, and refuses to start while migrations are pending. Se
 `HEIMDALL_RUN_MIGRATIONS=false` to apply them out of band instead (`python scripts/migrations.py`),
 which is required if the environment ever runs more than one replica.
 
+The bundle migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set and with the API's
+own connection string otherwise. Set it to the schema owner's, and the API can run as a database
+role that owns nothing; the operations guide's "Database roles" has the grants.
+
 ### Metrics
 
 The container serves Prometheus metrics at `/metrics` on **port 9464**, and only there — on the

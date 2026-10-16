@@ -116,7 +116,8 @@ two-factor setup code and the notice an own email change sends: one per
 `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes by default) and five per day-long window from the first, reserved by one
 write before anything is sent. Inside the cooldown the answer is **429** "An email of this kind was
 sent to you recently. Try again in a few minutes." (AF-15b); once the window's five are spent, **429** "You have
-reached today's limit for account emails. Try again tomorrow." (AF-15c). Nothing is sent or retired
+reached the limit for account emails. Try again later." (AF-15c). Both carry `Retry-After`, the
+seconds until a send would be accepted. Nothing is sent or retired
 either way. A link an administrator sent, at creation or through UC-51, is not charged, so the
 person may still ask once straight after. The endpoint is under the credential endpoints' rate limit
 too, whose own 429 says "Too many requests." and carries a `Retry-After` header.

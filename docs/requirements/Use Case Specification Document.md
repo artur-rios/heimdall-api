@@ -471,20 +471,20 @@ sequenceDiagram
    - The actor is the requested person — every actor may view their own record.
    - The actor is a Scope Admin and the requested person is a `User` of a scope the actor owns.
    - The actor is a Scope Admin and the requested person is another Scope Admin co-owning one of the actor's scopes.
-4. The system returns the person data (excluding `PasswordHash` and `Salt`).
+4. The system returns the person data (excluding `PasswordHash` and `Salt`). The scopes the person owns are listed in full to a System Admin and to the person themselves; to a Scope Admin reading somebody else, only the scopes the actor owns too (FR-PE-19).
 
 **Main Flow (read b — list the Users of a scope):**
 
 1. A System Admin or a Scope Admin requests the Users of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
 2. The system verifies the scope exists and is not logically deleted.
 3. The system verifies the actor may read the scope: a System Admin always may; a Scope Admin must own it.
-4. The system returns the scope's `User` persons, excluding logically deleted persons unless explicitly requested. The scope's owners are not part of this listing.
+4. The system returns the scope's `User` persons, excluding logically deleted persons unless explicitly requested. The scope's owners are not part of this listing. Each person's scope ownerships are reported as in read a (FR-PE-19).
 
 **Main Flow (read c — list the owners of a scope):**
 
 1. A System Admin or a Scope Admin requests the owners of a scope, optionally filtering by name or email and paging the result (FR-PE-04).
 2. The system applies the same scope and authorization checks as read (b).
-3. The system returns the scope's owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing.
+3. The system returns the scope's owners, excluding logically deleted persons unless explicitly requested. The scope's Users are not part of this listing. Each owner's scope ownerships are reported as in read a (FR-PE-19): to a Scope Admin, the scopes the owner shares with them, this one among them.
 
 **Main Flow (read d — list the system's Scope Admins):**
 
@@ -588,7 +588,7 @@ sequenceDiagram
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
 6. The system applies updates and sets `UpdatedAt`.
-7. The system returns the updated person (excluding `PasswordHash` and `Salt`).
+7. The system returns the updated person (excluding `PasswordHash` and `Salt`), its scope ownerships reported as UC-07 read a reports them (FR-PE-19).
 
 > **On re-authenticating an email change.** An address change requires proof of identity, because
 > account recovery follows the address and a bearer token is not proof that the account holder is
@@ -613,8 +613,8 @@ sequenceDiagram
 | AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
-| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached today's limit for account emails. Try again tomorrow." Nothing is changed or sent, and the second factor is not spent |
-| AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, spent, changed or sent. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
+| AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before the factor is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and the second factor is not spent |
+| AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
 
 ---
 
@@ -983,7 +983,7 @@ sequenceDiagram
 | ---- | ----------- | --------- |
 | AF-15a | Email already verified | Return `400 Bad Request` — "Email already verified" |
 | AF-15b | The person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default) — a resend, a setup code or an email-change notice (FR-PE-16) | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Nothing is retired or sent, so the link already mailed keeps working |
-| AF-15c | The person's own requests have had five account emails sent in the current day-long window (FR-PE-16) | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." Nothing is retired or sent |
+| AF-15c | The person's own requests have had five account emails sent in the current day-long window (FR-PE-16) | Return `429 Too Many Requests` — "You have reached the limit for account emails. Try again later." Nothing is retired or sent |
 
 > **On the cooldown and the rate limit.** The endpoint mails the account's own address on every
 > successful call, and a bearer token is all it asks for, so without a bound whoever held one could
@@ -1202,6 +1202,11 @@ sequenceDiagram
 | AF-21b | Person not found, logically deleted, or neither a `ScopeAdmin` nor a `SystemAdmin` | Return `400 Bad Request` |
 | AF-21c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-21d | Person is already an owner of the scope | Return `200 OK` (idempotent) |
+
+> **On the person added.** The person is not asked to accept: the ownership takes effect at once.
+> From then on the actor may read them as a co-owner (UC-07 read a), seeing the scopes the two share
+> and none of the others (FR-PE-19). An acceptance step is not built; the Threat Model records it
+> under TH-41.
 
 ---
 
@@ -1738,7 +1743,7 @@ sequenceDiagram
 | AF-36e | `currentPassword` missing or wrong (FR-2F-18), or the re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is created or sent |
 | AF-36d | Re-initiating setup while a prior, unconfirmed setup exists | Overwrite the pending configuration with the new selection (regenerates the TOTP secret and/or resends the email code); return `200 OK` exactly as the main flow |
 | AF-36f | `Email` is selected and the person's own requests had an account email sent within the cooldown (`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, five minutes by default), FR-PE-16, FR-2F-19 | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." Checked after AF-36a and before the password, so it costs no password check and no re-authentication charge. Nothing is changed or sent; a code already mailed still confirms. Selecting `App` alone is not affected |
-| AF-36g | As AF-36f, but five account emails have been sent in the current day-long window | Return `429 Too Many Requests` — "You have reached today's limit for account emails. Try again tomorrow." As AF-36f otherwise |
+| AF-36g | As AF-36f, but five account emails have been sent in the current day-long window | Return `429 Too Many Requests` — "You have reached the limit for account emails. Try again later." As AF-36f otherwise |
 
 > **On requiring the password.** Adding a second factor requires proof of identity, as removing one
 > does (UC-39): the method chosen here is what UC-38 demands at every later login, and a bearer token
@@ -2745,8 +2750,8 @@ sequenceDiagram
 | UC-04: Logical Delete Scope | FR-SC-05, FR-SC-07 |
 | UC-05: Hard Delete Scope | FR-SC-06 |
 | UC-06: Create Person | FR-PE-01, FR-PE-02, FR-PE-09, FR-PE-10, FR-PE-11, FR-RO-01, FR-RO-02, FR-RO-03, FR-SC-12, FR-EV-01, FR-EV-02 |
-| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13 |
-| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-PE-17, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
+| UC-07: View Person | FR-PE-03, FR-PE-04, FR-PE-08, FR-PE-12, FR-PE-13, FR-PE-19 |
+| UC-08: Update Person | FR-PE-05, FR-PE-14, FR-PE-15, FR-PE-17, FR-PE-19, FR-AU-11, FR-AU-13, FR-RO-02, FR-RO-03, FR-RO-05 |
 | UC-09: Logical Delete Person | FR-PE-06, FR-PE-08 |
 | UC-10: Hard Delete Person | FR-PE-07 |
 | UC-11: Login | FR-AU-01, FR-AU-02, FR-AU-03, FR-AU-04, FR-AU-05, FR-AU-06, FR-AU-07, FR-AU-09, FR-AU-11, FR-2F-07, NFR-27 |
