@@ -244,9 +244,10 @@ public class Startup : WebApiStartup
 
         Builder.Services.AddSingleton(_diagnostics);
 
-        // The developer exception page the host adds by itself in Development answers to the same
-        // decision: where the page is off, a failure that reaches it gets the API's own 500 envelope.
-        if (!_diagnostics.DeveloperExceptionPage)
+        // The developer exception page the host adds in Development answers to the same decision:
+        // where the environment asks for the page but it is off, a failure that reaches it gets the
+        // API's own 500 envelope. Elsewhere there is no page, so there is nothing to filter.
+        if (AsksForDeveloperExceptionPage(Builder.Environment) && !_diagnostics.DeveloperExceptionPage)
         {
             Builder.Services.AddSingleton<IDeveloperPageExceptionFilter, SuppressedDeveloperPageFilter>();
         }
