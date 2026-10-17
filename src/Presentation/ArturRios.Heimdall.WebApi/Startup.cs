@@ -465,6 +465,12 @@ public class Startup : WebApiStartup
         WarnOnFallback(AdminEmailOptions.CooldownVariable, adminEmail.RejectedCooldown,
             AdminEmailOptions.DefaultCooldownSeconds);
         Builder.Services.AddSingleton(adminEmail);
+
+        // UC-21 (FR-SC-18): how long a scope owner invitation stays acceptable, read once at start-up.
+        var scopeInvitation = ScopeInvitationOptions.FromEnvironment();
+        WarnOnFallback(ScopeInvitationOptions.LifetimeVariable, scopeInvitation.RejectedLifetime,
+            ScopeInvitationOptions.DefaultLifetimeSeconds);
+        Builder.Services.AddSingleton(scopeInvitation);
         // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
         Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
         // UC-52: no validator either — the route's person id is the whole of the input.

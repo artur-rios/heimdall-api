@@ -276,4 +276,19 @@ public class DataRetentionOptionsTests
 
         ClearAll();
     }
+
+    [UnitFact]
+    public void GivenUnsetVariables_WhenReadFromEnvironment_ThenScopeInvitationsAreKeptNinetyDays()
+    {
+        // Given
+        ClearAll();
+
+        // When
+        // FR-SC-18: an ended or expired invitation is purged 90 days later
+        var options = DataRetentionOptions.FromEnvironment();
+
+        // Then
+        Assert.Equal(TimeSpan.FromDays(90), options.ScopeInvitationRetention);
+        Assert.Equal(DataRetentionOptions.DefaultScopeInvitationRetention, options.ScopeInvitationRetention);
+    }
 }
