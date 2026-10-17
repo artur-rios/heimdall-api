@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -33,9 +34,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class RestrictProcessingCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter)
+    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>
 {
     public async Task<DataOutput<RestrictProcessingCommandOutput?>> HandleAsync(RestrictProcessingCommand command, CancellationToken cancellationToken = default)
@@ -64,16 +65,12 @@ public class RestrictProcessingCommandHandler(
                 return output.WithError(ErasureMessages.ProcessingAlreadyRestricted);
             }
 
-            person.ProcessingRestrictedAt = restrictedAt;
-            person.RestrictionGround = command.Ground;
-            person.RestrictionLiftNotifiedAt = null;
-            person.UpdatedAt = restrictedAt;
-
-            var update = await personWriter.UpdateAsync(person);
-
-            return update.Success
+            // A targeted write of the restriction's columns alone (#237), and only while there is
+            // none: a restriction imposed since the read stands, and this one is refused as the
+            // check above would have refused it.
+            return await atomicWrites.TryRestrictProcessingAsync(person, command.Ground, restrictedAt)
                 ? Restricted(output, person.PublicId, restrictedAt, command.Ground)
-                : output.WithErrors(update.Errors);
+                : output.WithError(ErasureMessages.ProcessingAlreadyRestricted);
         }
 
         var googleUser = await googleUserReader.Query()

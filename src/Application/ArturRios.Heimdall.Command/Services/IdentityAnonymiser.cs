@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 
 namespace ArturRios.Heimdall.Command.Services;
 
@@ -50,36 +51,42 @@ public static class IdentityAnonymiser
 
     /// <summary>
     ///     Overwrites the identifying values on <paramref name="person" /> and stamps
-    ///     <paramref name="at" />. Does not touch <c>IsDeleted</c>, the role, the scope, or any
-    ///     foreign key.
+    ///     <paramref name="at" />, through <see cref="IAtomicWrites.TryAnonymiseAsync" />: the name and
+    ///     address are replaced by placeholders, and the password hash and salt, the login lockout, the
+    ///     factor budgets, the account-email budget and the verification flag are cleared with them.
+    ///     Does not touch <c>IsDeleted</c>, the role, the scope, or any foreign key.
     /// </summary>
-    public static void Anonymise(Person person, DateTime at)
-    {
-        person.Name = AnonymisedName;
-        person.Email = PlaceholderEmail(person.PublicId);
+    /// <returns>
+    ///     <c>false</c> when the person is no longer deleted, is anonymised already, or has had
+    ///     processing restricted (NFR-24) since they were selected; nothing is written then.
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         One targeted write rather than a whole-row save (#237). Every column it clears is
+    ///         ignored by a whole-row save once the row exists, so none of them could be cleared
+    ///         otherwise — and a record is anonymised whole or not at all.
+    ///     </para>
+    ///     <para>
+    ///         Why each goes. A hash and its salt are the material an offline attack works on, and
+    ///         keeping them for a record nobody can log into serves nothing; both columns are NOT NULL,
+    ///         so they are emptied rather than nulled. How often this person mistyped their password,
+    ///         or a second factor, and whether they were locked out, describes them as surely as their
+    ///         name does. An anonymised address is not a verified one, and leaving the flag set would
+    ///         let a restored record skip verification for an address that no longer belongs to
+    ///         anybody.
+    ///     </para>
+    /// </remarks>
+    public static Task<bool> AnonymiseAsync(IAtomicWrites atomicWrites, Person person, DateTime at) =>
+        atomicWrites.TryAnonymiseAsync(person, AnonymisedName, PlaceholderEmail(person.PublicId), at);
 
-        // Zeroed rather than left alone: a hash and its salt are the material an offline attack
-        // works on, and keeping them for a record nobody can log into serves nothing. Both columns
-        // are NOT NULL, so they are emptied rather than nulled. A whole-row save does not write
-        // them once the row exists (FR-PR-08), so the callers also clear them through
-        // IAtomicWrites.ClearPasswordAsync, as they clear the factor budgets.
-        person.PasswordHash = [];
-        person.Salt = [];
-
-        // Behavioural data: how often this person mistyped their password, and whether they were
-        // locked out, describes them as surely as their name does.
-        // The factor budgets (FR-AU-12, FR-AU-13) are behavioural data of the same kind, but only
-        // targeted writes reach their columns, so the callers clear them through IAtomicWrites.
-        person.FailedLoginAttempts = 0;
-        person.LockedOutUntil = null;
-
-        // An anonymised address is not a verified one, and leaving the flag set would let a restored
-        // record skip verification for an address that no longer belongs to anybody.
-        person.EmailVerified = false;
-
-        person.AnonymisedAt = at;
-        person.UpdatedAt = at;
-    }
+    /// <summary>
+    ///     NFR-25: anonymises a person a restore brought back, as <see cref="AnonymiseAsync" /> does,
+    ///     through <see cref="IAtomicWrites.TryReapplyErasureAsync" />, which also marks them a
+    ///     subject-requested deletion whatever state the restore left them in.
+    /// </summary>
+    /// <returns><c>false</c> when they were anonymised already, possibly since they were read.</returns>
+    public static Task<bool> ReapplyAsync(IAtomicWrites atomicWrites, Person person, DateTime at) =>
+        atomicWrites.TryReapplyErasureAsync(person, AnonymisedName, PlaceholderEmail(person.PublicId), at);
 
     /// <summary>
     ///     Overwrites the identifying values on <paramref name="googleUser" /> and stamps

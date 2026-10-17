@@ -37,7 +37,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class ReapplyErasuresCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
@@ -79,28 +78,7 @@ public class ReapplyErasuresCommandHandler(
                 continue;
             }
 
-            // Marked as a subject-requested deletion dated now, so the record's own state says why
-            // it is gone and the audit trail reads correctly afterwards.
-            person.IsDeleted = true;
-            person.DeletedAt = person.DeletedAt ?? now;
-            person.DeletionKind = (int)DeletionKinds.SubjectRequested;
-
-            IdentityAnonymiser.Anonymise(person, now);
-
-            // The factor budgets, as the scheduled pass clears them: by their own targeted writes.
-            await atomicWrites.ClearSecondFactorAttemptsAsync(person);
-            await atomicWrites.ClearReauthenticationAttemptsAsync(person);
-            await atomicWrites.ClearAccountEmailsAsync(person);
-
-            // The password hash and salt likewise: a whole-row save never writes them once the row
-            // exists, so the anonymiser's in-memory clear reaches the row only through this.
-            await atomicWrites.ClearPasswordAsync(person);
-
-            // Nothing blocks it any more; it is done — as the scheduled pass leaves it.
-            person.ErasureBlockedReason = null;
-
             toWrite.Add(person);
-            anonymised++;
         }
 
         var googleUsersToWrite = new List<GoogleUser>();
@@ -139,17 +117,23 @@ public class ReapplyErasuresCommandHandler(
             return output.WithErrors(dependentErrors);
         }
 
-        var errors = new List<string>();
-
-        if (toWrite.Count > 0)
+        // Then each person, by one targeted write (#237): marked as a subject-requested deletion, so
+        // the record's own state says why it is gone and the audit trail reads correctly afterwards,
+        // and anonymised with its password and budgets in the same statement. One anonymised since it
+        // was read is counted as such.
+        foreach (var person in toWrite)
         {
-            var update = await personWriter.UpdateRangeAsync(toWrite);
-
-            if (!update.Success)
+            if (await IdentityAnonymiser.ReapplyAsync(atomicWrites, person, now))
             {
-                errors.AddRange(update.Errors);
+                anonymised++;
+            }
+            else
+            {
+                alreadyAnonymised++;
             }
         }
+
+        var errors = new List<string>();
 
         if (googleUsersToWrite.Count > 0)
         {

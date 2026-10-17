@@ -239,9 +239,9 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
         // The deadline is stored rather than derived, so bringing it forward stands in for the wait
         await using (var context = db.CreateContext())
         {
-            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
-            stored.ErasureDueAt = DateTime.UtcNow.AddMinutes(-1);
-            await context.SaveChangesAsync();
+            // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ErasureDueAt, DateTime.UtcNow.AddMinutes(-1)));
         }
 
         await using (var context = db.CreateContext())
@@ -286,15 +286,14 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
 
         await using (var context = db.CreateContext())
         {
-            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
-
-            stored.ErasureRequestedAt = DateTime.UtcNow.AddDays(-40);
-            stored.ErasureDueAt = DateTime.UtcNow.AddDays(-10);
-            stored.IsDeleted = true;
-            stored.DeletedAt = DateTime.UtcNow.AddDays(-40);
-            stored.DeletionKind = (int)DeletionKinds.SubjectRequested;
-
-            await context.SaveChangesAsync();
+            // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(x => x.ErasureRequestedAt, DateTime.UtcNow.AddDays(-40))
+                    .SetProperty(x => x.ErasureDueAt, DateTime.UtcNow.AddDays(-10))
+                    .SetProperty(x => x.IsDeleted, true)
+                    .SetProperty(x => x.DeletedAt, DateTime.UtcNow.AddDays(-40))
+                    .SetProperty(x => x.DeletionKind, (int)DeletionKinds.SubjectRequested));
         }
 
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));

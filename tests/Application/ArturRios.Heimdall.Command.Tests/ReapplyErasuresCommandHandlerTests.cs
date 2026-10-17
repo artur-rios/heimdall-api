@@ -24,7 +24,7 @@ public class ReapplyErasuresCommandHandlerTests
         AsyncFakeRepository<PasswordResetToken, long>? passwordResetTokens = null,
         AsyncFakeRepository<EmailVerificationToken, long>? emailVerificationTokens = null,
         AsyncFakeRepository<TwoFactorAuth, long>? twoFactorAuths = null) =>
-        new(persons, persons, googleUsers, googleUsers,
+        new(persons, googleUsers, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),

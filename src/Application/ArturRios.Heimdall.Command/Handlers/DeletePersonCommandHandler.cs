@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -21,8 +22,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </summary>
 public class DeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>
 {
     public async Task<DataOutput<DeletePersonCommandOutput?>> HandleAsync(DeletePersonCommand command, CancellationToken cancellationToken = default)
@@ -80,20 +81,18 @@ public class DeletePersonCommandHandler(
         // anonymisation is measured from the deletion, and UpdatedAt cannot serve as that mark
         // because any later write moves it and would silently restart the window. The kind is
         // Administrative because this is an administrator's decision — no data subject asked — and
-        // that carries the longer of the schedule's two deadlines. UC-42 (#91) is what will write
-        // SubjectRequested.
-        var deletedAt = DateTime.UtcNow;
+        // that carries the longer of the schedule's two deadlines; UC-42 writes SubjectRequested.
+        //
+        // A targeted write of those four columns alone (#237), and only while the person is live:
+        // a deletion that landed since the read stands as it was, and this one answers as AF-09b
+        // does, since the outcome the caller asked for is already the case.
+        var deleted = await atomicWrites.TryMarkDeletedAsync(person, DeletionKinds.Administrative, DateTime.UtcNow);
 
-        person.IsDeleted = true;
-        person.DeletedAt = deletedAt;
-        person.DeletionKind = (int)DeletionKinds.Administrative;
-        person.UpdatedAt = deletedAt;
-
-        var update = await personWriter.UpdateAsync(person);
-
-        if (!update.Success)
+        if (!deleted)
         {
-            return output.WithErrors(update.Errors);
+            return output
+                .WithData(new DeletePersonCommandOutput { Id = person.PublicId, AlreadyDeleted = true })
+                .WithMessage(PersonMessages.PersonDeletedSuccessfully);
         }
 
         // UC-09 step 4.

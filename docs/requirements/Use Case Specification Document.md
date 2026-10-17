@@ -615,6 +615,7 @@ sequenceDiagram
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
 | AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
 | AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
+| AF-08l | The email or role changes, and the person no longer holds the address and role the request read — another request changed, deleted or anonymised them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when the new address was taken meanwhile (FR-PE-09). Neither the change nor the name is written. As for a failed save, the steps before the write stand: the person's tokens are revoked and their reset and verification links retired, and for an own change the account-email budget is charged and any recovery or email code presented is spent. The client reads the person again before retrying |
 
 ---
 
@@ -1284,6 +1285,7 @@ sequenceDiagram
 | AF-23c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 | AF-23d | Person is already a `ScopeAdmin` | Return `409 Conflict` — "Person already holds the ScopeAdmin role" |
 | AF-23e | Person's email collides with an existing `ScopeAdmin`/`SystemAdmin` elsewhere in the system (FR-PE-09) — the promoted person moves from the scope-local `User` email namespace to the global admin namespace | Return `409 Conflict` |
+| AF-23f | The person is no longer the `User` the request read — another request changed their role, promoted or deleted them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when an administrator took the address meanwhile (FR-PE-09). Nothing is written. The client reads the person again before retrying |
 
 > **On AF-23e.** A `User`'s email is unique only within their scope; a `ScopeAdmin`'s is unique
 > system-wide (FR-PE-09). Promotion moves the person between those two namespaces, so the same email
@@ -1399,7 +1401,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-25a | ID token invalid, expired, or fails verification | Return `401 Unauthorized` |
+| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification | Return `401 Unauthorized` |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
@@ -2136,7 +2138,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | --- | --- | --- |
-| AF-42a | The credential is absent, wrong, unverifiable, or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
+| AF-42a | The credential is absent, wrong, unverifiable, a Google ID token already used (FR-GO-21), or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |

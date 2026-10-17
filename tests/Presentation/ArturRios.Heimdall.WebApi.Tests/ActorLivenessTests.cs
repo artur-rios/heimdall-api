@@ -59,9 +59,9 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     private async Task DeleteAsync(Person person)
     {
         await using var context = db.CreateContext();
-        var stored = await context.Persons.FirstAsync(x => x.PublicId == person.PublicId);
-        stored.IsDeleted = true;
-        await context.SaveChangesAsync();
+        // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+        await context.Persons.Where(x => x.PublicId == person.PublicId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.IsDeleted, true));
     }
 
     [FunctionalFact]
@@ -204,9 +204,9 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     private async Task DemoteAsync(Person person, Roles to)
     {
         await using var context = db.CreateContext();
-        var stored = await context.Persons.FirstAsync(x => x.PublicId == person.PublicId);
-        stored.RoleId = (long)to;
-        await context.SaveChangesAsync();
+        // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+        await context.Persons.Where(x => x.PublicId == person.PublicId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.RoleId, (long)to));
     }
 
     [FunctionalFact]

@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Handlers;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +7,7 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Hashing;
@@ -167,7 +169,8 @@ public class UpdatePersonCommandHandlerTests
         AsyncFakeRepository<EmailVerificationToken, long>? verificationTokens = null,
         TwoFactorState? twoFactor = null,
         TimeSpan? cooldown = null,
-        AsyncFakeRepository<PasswordResetToken, long>? resetTokens = null)
+        AsyncFakeRepository<PasswordResetToken, long>? resetTokens = null,
+        IAtomicWrites? atomicWrites = null)
     {
         twoFactor ??= new TwoFactorState();
 
@@ -179,7 +182,7 @@ public class UpdatePersonCommandHandlerTests
             Ownership(ownershipAllowed),
             verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             resetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
-            InMemoryAtomicWrites.Instance,
+            atomicWrites ?? InMemoryAtomicWrites.Instance,
             twoFactor.Configurations,
             twoFactor.Verifier(),
             twoFactor.NoticeSender(),
@@ -223,6 +226,30 @@ public class UpdatePersonCommandHandlerTests
         Assert.Equal("renamed@test.local", output.Data.Email);
         Assert.False(output.Data.EmailVerified);
         Assert.Contains(PersonMessages.PersonUpdatedSuccessfully, output.Messages);
+    }
+
+    [UnitFact]
+    public async Task GivenTheAddressChangedSinceTheRead_WhenChangingIt_ThenTheOtherChangeStands()
+    {
+        // Given another request that changes the address between this one's checks and its write
+        var scope = Scope(1);
+        var target = User(10, scope);
+        var persons = await PersonsWith(target);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row => row.Email = "other-change@test.local"
+        };
+        var handler = HandlerFor(persons, atomicWrites: atomicWrites);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Email = "renamed@test.local";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then it is refused as a conflict, and the change that landed first is not overwritten
+        Assert.False(output.Success);
+        Assert.Contains(RelationalErrors.ConcurrencyMessage, output.Errors);
+        Assert.Equal("other-change@test.local", target.Email);
     }
 
     [UnitFact]

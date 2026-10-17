@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -23,11 +24,11 @@ public class DeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncRepository<Scope, long> scopeWriter,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
-    IAsyncRepository<Application, long> applicationWriter)
+    IAsyncRepository<Application, long> applicationWriter,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>
 {
     public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -75,11 +76,15 @@ public class DeleteScopeCommandHandler(
                 return output.WithErrors(scopeUpdate.Errors);
             }
 
-            // Step 5: cascade to the members that are not already deleted.
-            var cascadeErrors = (await CascadeAsync(users, p => p.IsDeleted,
-                    p => { p.IsDeleted = true; p.DeletedAt = now; p.DeletionKind = administrative; p.UpdatedAt = now; },
-                    personWriter))
-                .Concat(await CascadeAsync(googleUsers, g => g.IsDeleted,
+            // Step 5: cascade to the members that are not already deleted. A User's deletion is a
+            // targeted write of the deletion's columns alone (#237), made only while they are live,
+            // so one deleted meanwhile keeps the time and kind of its own deletion.
+            foreach (var user in users.Where(p => !p.IsDeleted))
+            {
+                await atomicWrites.TryMarkDeletedAsync(user, DeletionKinds.Administrative, now);
+            }
+
+            var cascadeErrors = (await CascadeAsync(googleUsers, g => g.IsDeleted,
                     g => { g.IsDeleted = true; g.DeletedAt = now; g.DeletionKind = administrative; g.UpdatedAt = now; },
                     googleUserWriter))
                 .Concat(await CascadeAsync(applications, a => a.IsDeleted,

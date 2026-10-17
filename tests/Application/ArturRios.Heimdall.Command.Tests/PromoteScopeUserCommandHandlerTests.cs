@@ -1,7 +1,10 @@
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -85,8 +88,9 @@ public class PromoteScopeUserCommandHandlerTests
     };
 
     private static PromoteScopeUserCommandHandler Handler(
-        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true) =>
-        new(scopes, persons, persons, OwnershipChecker(allowed));
+        AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
+        IAtomicWrites? atomicWrites = null) =>
+        new(scopes, persons, persons, OwnershipChecker(allowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
@@ -438,5 +442,28 @@ public class PromoteScopeUserCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal((long)Roles.ScopeAdmin, (await StoredAsync(persons, person)).RoleId);
+    }
+
+    [UnitFact]
+    public async Task GivenThePersonDeletedSinceTheRead_WhenPromoting_ThenNothingIsWritten()
+    {
+        // Given a deletion another request makes between this one's checks and its write
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var user = await SeedUserAsync(persons, scope);
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = row => row.IsDeleted = true };
+
+        // When
+        var output = await Handler(scopes, persons, atomicWrites: atomicWrites)
+            .HandleAsync(Command(scope.PublicId, user.PublicId));
+
+        // Then it is refused as a conflict, and the person is still the User they were
+        Assert.False(output.Success);
+        Assert.Contains(RelationalErrors.ConcurrencyMessage, output.Errors);
+        Assert.Equal((long)Roles.User, user.RoleId);
+        Assert.Equal(scope.Id, user.ScopeId);
+        Assert.NotNull(user.ScopeMembership);
+        Assert.Empty(user.ScopeOwnerships);
     }
 }

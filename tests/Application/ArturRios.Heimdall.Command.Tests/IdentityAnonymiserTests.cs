@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Util.Test.Attributes;
@@ -50,12 +51,12 @@ public class IdentityAnonymiserTests
     };
 
     [UnitFact]
-    public void GivenADeletedPerson_WhenAnonymised_ThenNoIdentifyingValueRemains()
+    public async Task GivenADeletedPerson_WhenAnonymised_ThenNoIdentifyingValueRemains()
     {
         var person = LivePerson();
         var at = DateTime.UtcNow;
 
-        IdentityAnonymiser.Anonymise(person, at);
+        Assert.True(await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, person, at));
 
         // The name and the address are gone, and gone specifically — not merely different
         Assert.NotEqual(RealName, person.Name);
@@ -80,12 +81,33 @@ public class IdentityAnonymiserTests
     }
 
     [UnitFact]
-    public void GivenADeletedPerson_WhenAnonymised_ThenEveryStructuralValueSurvives()
+    public async Task GivenAPersonRestrictedSinceSelection_WhenAnonymised_ThenNothingIsWritten()
+    {
+        // Given a record a subject restricted after the pass selected it (NFR-24)
+        var person = LivePerson();
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row => row.ProcessingRestrictedAt = DateTime.UtcNow
+        };
+
+        // When
+        var anonymised = await IdentityAnonymiser.AnonymiseAsync(atomicWrites, person, DateTime.UtcNow);
+
+        // Then it is preserved as it stands
+        Assert.False(anonymised);
+        Assert.Equal(RealName, person.Name);
+        Assert.Equal(RealEmail, person.Email);
+        Assert.NotEmpty(person.PasswordHash);
+        Assert.Null(person.AnonymisedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenADeletedPerson_WhenAnonymised_ThenEveryStructuralValueSurvives()
     {
         var person = LivePerson();
         var publicId = person.PublicId;
 
-        IdentityAnonymiser.Anonymise(person, DateTime.UtcNow);
+        await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, person, DateTime.UtcNow);
 
         // NFR-07: the row keeps every key anything else points at or joins on. Removing the row is
         // what breaks that, and is why anonymisation overwrites in place instead.
@@ -152,13 +174,13 @@ public class IdentityAnonymiserTests
     }
 
     [UnitFact]
-    public void GivenAnAnonymisedIdentity_WhenItsAddressIsRead_ThenItCanNeverBeDelivered()
+    public async Task GivenAnAnonymisedIdentity_WhenItsAddressIsRead_ThenItCanNeverBeDelivered()
     {
         // RFC 2606 reserves .invalid and guarantees it never resolves. An erased person must not be
         // reachable by an email this system sends.
         var person = LivePerson();
 
-        IdentityAnonymiser.Anonymise(person, DateTime.UtcNow);
+        await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, person, DateTime.UtcNow);
 
         Assert.EndsWith(".invalid", person.Email);
     }

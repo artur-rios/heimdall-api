@@ -85,7 +85,9 @@ public class LocalGoogleIdTokenVerifier(
             EmailVerified(result),
             Claim(result, "name"),
             Claim(result, "picture"),
-            Claim(result, "nonce"));
+            Claim(result, "nonce"),
+            Claim(result, "jti"),
+            result.SecurityToken.ValidTo);
     }
 
     /// <summary>

@@ -41,6 +41,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var pendingRegistrations = new EfRepository<PendingRegistration, long>(context);
         var applicationCredentials = new EfRepository<ApplicationCredential, long>(context);
         var attemptNoticeBudgets = new EfRepository<AttemptNoticeBudget, long>(context);
+        var googleIdTokenUses = new EfRepository<GoogleIdTokenUse, string>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,
@@ -49,6 +50,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
             pendingRegistrations, pendingRegistrations,
             applicationCredentials, applicationCredentials,
             attemptNoticeBudgets, attemptNoticeBudgets,
+            googleIdTokenUses, googleIdTokenUses,
             Retention);
     }
 
@@ -187,6 +189,37 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
 
         Assert.False(await verification.AttemptNoticeBudgets.AnyAsync(x => x.Id == ended.Id));
         Assert.True(await verification.AttemptNoticeBudgets.AnyAsync(x => x.Id == open.Id));
+    }
+
+    [FunctionalFact]
+    public async Task GivenUsedGoogleIdTokensThatExpiredLongAgo_WhenPurging_ThenOnlyThoseAreRemoved()
+    {
+        // Given (FR-GO-21) the record of a token that expired a month ago, and of one still live
+        await using var context = fixture.CreateContext();
+
+        var expired = new GoogleIdTokenUse
+        {
+            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"), ExpiresAt = DateTime.UtcNow.AddDays(-30)
+        };
+        var live = new GoogleIdTokenUse
+        {
+            Id = GoogleIdTokenUse.KeyOf(Guid.NewGuid().ToString("N"), "unused"), ExpiresAt = DateTime.UtcNow.AddMinutes(30)
+        };
+
+        context.GoogleIdTokenUses.AddRange(expired, live);
+        await context.SaveChangesAsync();
+
+        // When
+        var output = await Handler(context).HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.GoogleIdTokenUsesPurged >= 1);
+
+        await using var verification = fixture.CreateContext();
+
+        Assert.False(await verification.GoogleIdTokenUses.AnyAsync(x => x.Id == expired.Id));
+        Assert.True(await verification.GoogleIdTokenUses.AnyAsync(x => x.Id == live.Id));
     }
 
     [FunctionalFact]

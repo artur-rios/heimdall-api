@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -23,8 +24,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class AddScopeOwnerCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<AddScopeOwnerCommand, AddScopeOwnerCommandOutput>
 {
     public async Task<DataOutput<AddScopeOwnerCommandOutput?>> HandleAsync(AddScopeOwnerCommand command, CancellationToken cancellationToken = default)
@@ -67,28 +68,27 @@ public class AddScopeOwnerCommandHandler(
         }
 
         // AF-21d: already an owner, so there is nothing to write — UC-21 step 4 calls the insert a
-        // no-op in that case. Writing anyway would violate the (ScopeId, PersonId) composite key.
+        // no-op in that case.
         if (person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id))
         {
-            return output
-                .WithData(new AddScopeOwnerCommandOutput
-                {
-                    ScopeId = scope.PublicId, PersonId = person.PublicId, AlreadyOwner = true
-                })
-                .WithMessage(PersonMessages.AlreadyScopeOwner);
+            return AlreadyOwner(output, scope, person);
         }
 
-        // UC-21 step 4: insert the SCOPE_OWNER row. ScopeOwner is a join entity with no repository of
-        // its own, so the row is written through the person aggregate — the symmetric operation to
-        // UC-08 clearing ScopeOwnerships to delete rows. FR-PE-11 needs no guard here: the person is
-        // already an administrator and this only ever increases the scopes they own.
-        person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
-
-        var update = await personWriter.UpdateAsync(person);
-
-        if (!update.Success)
+        // UC-21 step 4: insert the SCOPE_OWNER row, by a targeted write of that row alone (#237) rather
+        // than a save of the person aggregate, which would write the person's profile back as read.
+        // Made only while the person is still a live administrator, so a deletion or a role change
+        // that landed since the check above is not overruled. FR-PE-11 needs no guard here: the person
+        // is already an administrator and this only ever increases the scopes they own.
+        if (!await atomicWrites.TryAddScopeOwnerAsync(person, scope.Id))
         {
-            return output.WithErrors(update.Errors);
+            // Refused: either another request made them an owner meanwhile, which is AF-21d's outcome,
+            // or they stopped being a live administrator, which is AF-21b's. The row tells which.
+            var ownsNow = await personReader.Query()
+                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
+
+            return ownsNow
+                ? AlreadyOwner(output, scope, person)
+                : output.WithError(PersonMessages.PersonNotValidScopeAdmin);
         }
 
         // UC-21 step 5.
@@ -99,4 +99,13 @@ public class AddScopeOwnerCommandHandler(
             })
             .WithMessage(PersonMessages.ScopeOwnerAddedSuccessfully);
     }
+
+    private static DataOutput<AddScopeOwnerCommandOutput?> AlreadyOwner(
+        DataOutput<AddScopeOwnerCommandOutput?> output, Scope scope, Person person) =>
+        output
+            .WithData(new AddScopeOwnerCommandOutput
+            {
+                ScopeId = scope.PublicId, PersonId = person.PublicId, AlreadyOwner = true
+            })
+            .WithMessage(PersonMessages.AlreadyScopeOwner);
 }

@@ -135,7 +135,7 @@ graph LR
 | FR-PE-14 | A person changing their own email shall prove they are the account holder: the request shall carry their current password (`currentPassword`) and, when their two-factor authentication is active, a current second factor (`twoFactorCode`: an authenticator-app or email code, or an unused recovery code, which is spent; since no endpoint sends an email code to a signed-in caller, a person whose only method is Email uses a recovery code). A missing or wrong password, or a missing or wrong second factor when one is required, shall be refused with `401 Unauthorized` and "The password or code is incorrect." (FR-AU-13), the refusal UC-39 gives for the same failures, before the new address is checked for uniqueness, and nothing shall change. The password is verified through the password-hash gate (TH-03), and the endpoint is under the credential endpoints' rate limit (NFR-18). An administrator changing another person's email presents no credential of that person, and a change that leaves the email as it is asks for none. The email counts as changed unless the trimmed values are equal ordinally, so a change of case is a change, and a changed address is stored trimmed | High |
 | FR-PE-15 | On every change of a person's email, whoever made it, the system shall send a notice to the previous address saying that the account's email was changed and that, if the person did not make the change, they should contact an administrator. The notice shall contain neither the new address nor any link. A failed delivery shall be logged and shall not fail the update | High |
 | FR-PE-16 | The account emails a person's own requests can have sent — a verification link asked for again (FR-EV-04), a two-factor setup code (FR-2F-03) and the notice an own email change sends to the previous address (FR-PE-15) — shall share one per-person budget: at most one within the cooldown of FR-PR-06 and at most five in each day-long window, which the first send after the previous window ends opens (so up to ten can fall within any 24 hours). Each send shall be reserved by one conditional write before anything is issued, changed or mailed, so that simultaneous requests cannot exceed it (NFR-27), and a refused request shall change and send nothing: `429 Too Many Requests` with "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, and "You have reached the limit for account emails. Try again later." once the window's five are spent; each with a `Retry-After` header giving the seconds until a send would be accepted — the end of the cooldown, or for the window's limit the later of the window's end and the cooldown's. Administrator-initiated mail (FR-EV-06, FR-PR-05) is not charged to it. The budget shall be returned in the data export and cleared by anonymisation | Medium |
-| FR-PE-17 | On every change of a person's email, whoever made it, every live password-reset link (FR-PR-02) and email-verification link (FR-EV-02) the person holds shall be retired, so nothing mailed to the previous address can act on the account afterwards. They shall be retired before the new address is written and again immediately after it is saved, before anything slower such as the notice of FR-PE-15, for any mailed to the previous address in between. A reset or verification that read the person before the change shall write only while the person still holds the address it read (FR-PR-08, FR-EV-08), so it cannot write after the change, and a whole-row save of a copy read before a reset shall not write the password columns (FR-PR-08) | High |
+| FR-PE-17 | On every change of a person's email, whoever made it, every live password-reset link (FR-PR-02) and email-verification link (FR-EV-02) the person holds shall be retired, so nothing mailed to the previous address can act on the account afterwards. They shall be retired before the new address is written and again immediately after it is saved, before anything slower such as the notice of FR-PE-15, for any mailed to the previous address in between. A reset or verification that read the person before the change shall write only while the person still holds the address it read (FR-PR-08, FR-EV-08), so it cannot write after the change, and a whole-row save of a copy read before a reset or an address change shall write neither the password columns (FR-PR-08) nor the address and its verified flag (§4.2) | High |
 | FR-PE-18 | A person shall not change their own email while their email two-factor method is enabled, active or pending: the change shall be refused with `409 Conflict` and "Turn off the email sign-in method before changing your email address.", after the credentials of FR-PE-14 are accepted and before anything is charged or changed and before a recovery or email code is spent (an accepted authenticator-app code's time step is recorded, as FR-2F-14 records any accepted one's). The method sends sign-in codes to the person's registered address; to move it, the person turns it off, changes the address and sets it up again at the new one, which mails a code there that must be confirmed. A change made by an administrator is not affected | Medium |
 | FR-PE-19 | A person's scope ownerships, wherever a projection of the person reports them (`ownedScopeIds`: reading a person by ID, listing a scope's Users or owners, the result of updating a person), shall be reported in full to a `SystemAdmin` and to the person themselves, and to anyone else only as far as the reader owns the same scopes: a `ScopeAdmin` reading a co-owner learns the scopes the two share, and nothing of the scopes the co-owner owns in other tenants | High |
 
@@ -238,7 +238,8 @@ graph LR
 | FR-GO-17 | Logically deleted Google Users shall not appear in default query results unless explicitly requested | Medium |
 | FR-GO-18 | The system shall allow a signed-in Google User to sign out. Heimdall keeps no Google session and no record of issued tokens, so signing out ends the client's session: the client discards its token, which otherwise stays valid until it expires (UC-26) | High |
 | FR-GO-19 | On each sign-in with an existing Google User, the system shall refresh the stored `EmailVerified` from the verified Google ID token claims; when the token carries no `email_verified` claim, the stored value shall be left unchanged | Medium |
-| FR-GO-20 | A Google sign-in request may carry an optional `nonce`, the value the client sent Google when it asked for the ID token. When it is present and not empty, the verified token's `nonce` claim shall equal it exactly (ordinal comparison), and a token with another nonce or none shall be refused as AF-25a: `401 Unauthorized`, "Google authentication failed.". When it is absent or empty, nothing is compared. The nonce binds the token to the client's own sign-in attempt, so a client can refuse a token that was not issued for its request; whether a token is accepted rests on its signature, issuer, audience and expiry (NFR-13, Threat Model TH-19) | Medium |
+| FR-GO-20 | A Google sign-in request may carry an optional `nonce`, the value the client sent Google when it asked for the ID token. When it is present and not empty, the verified token's `nonce` claim shall equal it exactly (ordinal comparison), and a token with another nonce or none shall be refused as AF-25a: `401 Unauthorized`, "Google authentication failed.". When it is absent or empty, nothing is compared. The nonce binds the token to the client's own sign-in attempt, so a client can refuse a token that was not issued for its request; whether a token is accepted rests on its signature, issuer, audience and expiry (NFR-13, Threat Model TH-19) and on its not having been used before (FR-GO-21) | Medium |
+| FR-GO-21 | A Google ID token shall be accepted once. Once a token has been verified (NFR-13, FR-GO-20), and before anything is created, written or issued on its strength — at sign-in, before any scope or account is read; for an erasure request, once the Google User it must name has been read and its subject compared (AF-42a, AF-42c) — its use shall be recorded under the SHA-256 digest of its `jti` claim, or, when it carries none, of its signed part (the `header.payload` its signature covers, so that a respelling of the signature segment is the same token), by one write that also finds an earlier use; a token already recorded shall be refused exactly as an invalid one — `401 Unauthorized`, "Google authentication failed." at sign-in (AF-25a), "The credential presented was not accepted." as an erasure request's proof of presence (AF-42a) — and nothing shall be written. Of simultaneous presentations of one token exactly one is accepted. A token is spent once its use is recorded, even when the request then fails for another reason (AF-25b, AF-25c, AF-25d, AF-25f, or an error), so a client shall obtain a new one for every attempt, a retry included. The record is kept until the token's own expiry plus the single-use grace period, then purged (NFR-19) | High |
 
 ### 3.8a Self-Registration
 
@@ -434,6 +435,11 @@ erDiagram
         datetime WindowEndsAt "End of the current one-day window"
     }
 
+    GOOGLE_ID_TOKEN_USE {
+        string TokenHash PK "SHA-256 of an accepted Google ID token's jti, or of its signed part when it has none (FR-GO-21)"
+        datetime ExpiresAt "The token's own expiry, which the purge counts from"
+    }
+
     APPLICATION {
         bigint Id PK "Internal auto-increment identifier"
         guid PublicId "External identifier, used in API paths/responses"
@@ -507,11 +513,38 @@ erDiagram
 | CreatedAt | DateTime | Auto-set on creation |
 | UpdatedAt | DateTime | Auto-set on update |
 
-A person has no `ScopeId` column. Its relationship to scopes is derived from its role:
+Once a person row exists, its lifecycle columns — the address and `EmailVerified`, the role and the
+scope it implies, the login lockout, and the deletion, erasure-request, restriction and anonymisation
+columns — are written only by targeted, conditional writes of the columns each change concerns, like
+the password, the security stamp and the budgets above, never by a whole-row save. A save of a copy
+read before one of those changes therefore cannot put the earlier value back; what a whole-row save
+still writes is the plain profile, `Name` and the recorded basis among it, and `UpdatedAt` (#237).
+
+Two residuals are recorded rather than closed:
+
+- **`Name` is still written whole-row.** A save of a copy read before an anonymisation could put the
+  real name back over the placeholder. Anonymisation reaches only rows deleted for the whole retention
+  window, which no profile edit spans (UC-08 reads live persons only), so the one overlap is an
+  operator running `ReapplyErasures` after a restore, racing a name edit or another save that has the
+  person tracked, within one request's duration. Writing the name by a targeted write that requires
+  the person live and not anonymised would close it.
+- **Two removals of a scope's last two owners at the same moment can both succeed.** Removing an
+  owner (UC-22) deletes the `SCOPE_OWNER` row only while another live owner remains, checked in the
+  same statement, but under `READ COMMITTED` each of two simultaneous removals can still see the
+  other's row. The same check-then-act gap is in the other last-owner checks (UC-08's role change,
+  UC-09, UC-42's block decision). The scope is then left with no live owner until a System Admin adds
+  one (UC-21). Locking the scope row in one check that all four share would close it.
+
+A person's relationship to scopes is derived from its role:
 
 - `User`: exactly one row in `SCOPE_USER`.
 - `ScopeAdmin`: one or more rows in `SCOPE_OWNER`.
 - `SystemAdmin`: no rows in either `SCOPE_OWNER` or `SCOPE_USER`.
+
+The person row also carries a `ScopeId` column: a copy of a `User`'s `SCOPE_USER` scope, `null` for an
+admin, and not a second source of truth. It exists so that FR-PE-09's per-scope uniqueness of an
+address can be enforced by a unique index over `PERSON`, and it is written with the membership — set
+when a `User` is created, cleared by a promotion (UC-23) or a role change (UC-08).
 
 ### 4.3 Role Fields
 
@@ -1164,7 +1197,7 @@ Notes on cascading behavior:
 | Authentication | FR-AU-01 through FR-AU-13 |
 | Password Recovery | FR-PR-01 through FR-PR-08 |
 | Email Verification | FR-EV-01 through FR-EV-08 |
-| Google Sign-In | FR-GO-01 through FR-GO-20 |
+| Google Sign-In | FR-GO-01 through FR-GO-21 |
 | Self-Registration | FR-SR-01 through FR-SR-14 |
 | Scope Permission CRUD | FR-SP-01 through FR-SP-09 |
 | Two-Factor Authentication | FR-2F-01 through FR-2F-20 |

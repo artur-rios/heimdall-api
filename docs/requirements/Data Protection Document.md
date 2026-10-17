@@ -212,6 +212,23 @@ hashing the subject's address to look it up, which is processing the row exists 
 it instead is its retention: it lasts at most the one-day window plus the grace period, and is then
 purged whether or not anyone asked.
 
+### `GOOGLE_ID_TOKEN_USE`
+
+| Column | Purpose |
+| --- | --- |
+| `TokenHash` | Which Google ID token has been accepted, so the same token is refused if it is presented again (FR-GO-21, Threat Model TH-19). A SHA-256 digest of the token's `jti` claim, or of its signed part (header and payload) when it carries none — never the token, which would be a credential until it expired, and never anything the token says about its holder |
+| `ExpiresAt` | The token's own expiry, after which no verifier accepts it whether or not its use is recorded. Purged with the single-use tokens once it and the grace period have passed (Data Retention Schedule) |
+
+The row is written when a Google sign-in, sign-up or erasure request accepts a token. It records that
+some token was used and when that token expires: not who used it, from where, or for which account or
+scope. It is never read through the API.
+
+It is linked to no Google User, so erasure, anonymisation and a hard delete do not reach it, and the
+data export (UC-41) does not include it: a `jti` is a random identifier Google assigns, so the row is
+not data about anybody that a subject could ask for. What bounds it is its retention: it lasts at most
+the token's remaining lifetime, an hour at most, plus the grace period, and is then purged whether or
+not anyone asked.
+
 ### Two decisions this review settled
 
 **`ProfilePictureUrl` stays, and it is the weakest case here.** The issue that prompted this review

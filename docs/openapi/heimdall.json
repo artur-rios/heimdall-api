@@ -2853,7 +2853,7 @@
           "Person"
         ],
         "summary": "Promotes an existing `User` of a scope to `ScopeAdmin`, making them a co-owner of\nthat scope (UC-23, FR-SC-08/FR-SC-13/FR-RO-03). The attribute keeps a `User` out —\nthey can never be a System Admin nor an existing owner — while the rules that depend on\ndata it cannot see are the handler's: whether the acting Scope Admin owns this scope\n(AF-23c), whether the scope is active (AF-23a), whether the named person is a `User`\nof it (AF-23b), and whether they already hold the role (AF-23d).",
-        "description": "**Requires role:** System Admin or Scope Admin.",
+        "description": "The role is written only while the person is still the `User` the request read\n(#237): when another request changed, promoted or deleted them in the meantime, nothing is\nwritten and the answer is 409 \"Concurrency conflict: the record was modified or removed by\nanother process.\" (AF-23f), or 409 \"Conflict: a record with the same unique value already\nexists.\" when an administrator took the address meanwhile. Read the person again before\nretrying.\n\n**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_PromoteScopeUser",
         "parameters": [
           {
@@ -2896,6 +2896,26 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
+                }
+              }
+            }
+          },
           "401": {
             "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
           },
@@ -2916,7 +2936,7 @@
           "Person"
         ],
         "summary": "Updates a person's name and email, and — for a System Admin — their role (UC-08). Open to\nany authenticated actor because a User may update their own record; the per-actor rule and\nthe role-change restriction (AF-08c) are enforced by the handler. The response's\n`ownedScopeIds` follows FR-PE-19, as `GET /api/persons/{id}` does.",
-        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14) — six digits for an authenticator-app code,\nor a recovery code, matched as `2fa/verify` matches one (`XXXX-XXXX-XXXX-XXXX`,\nhyphens, spaces and case ignored, the shorter `XXXX-XXXX` codes still accepted,\nFR-2F-20) — so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18), as every\npassword-verifying endpoint does. An own email change mails the previous address, so it is\ncharged to the person's account-email budget once the credentials are accepted: 429 \"An\nemail of this kind was sent to you recently. Try again in a few minutes.\" inside the\ncooldown, 429 \"You have reached the limit for account emails. Try again later.\" once\nthe window's five are spent (AF-08j), both with `Retry-After`; nothing changes then, and\nno recovery or email code is spent (an accepted authenticator code's time step is recorded,\nas for any accepted code). While the caller's email sign-in method is enabled, an own\nemail change answers 409 \"Turn off the email sign-in method before changing your email\naddress.\" (AF-08k), once the credentials are accepted.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
+        "description": "A caller changing their own email presents `currentPassword`, and `twoFactorCode`\nwhen their second factor is active (FR-PE-14) — six digits for an authenticator-app code,\nor a recovery code, matched as `2fa/verify` matches one (`XXXX-XXXX-XXXX-XXXX`,\nhyphens, spaces and case ignored, the shorter `XXXX-XXXX` codes still accepted,\nFR-2F-20) — so this action verifies a password like the\ncredential endpoints do, and sits under their rate limit (NFR-18), as every\npassword-verifying endpoint does. An own email change mails the previous address, so it is\ncharged to the person's account-email budget once the credentials are accepted: 429 \"An\nemail of this kind was sent to you recently. Try again in a few minutes.\" inside the\ncooldown, 429 \"You have reached the limit for account emails. Try again later.\" once\nthe window's five are spent (AF-08j), both with `Retry-After`; nothing changes then, and\nno recovery or email code is spent (an accepted authenticator code's time step is recorded,\nas for any accepted code). While the caller's email sign-in method is enabled, an own\nemail change answers 409 \"Turn off the email sign-in method before changing your email\naddress.\" (AF-08k), once the credentials are accepted. An address or role change is\nwritten only while the person still holds the address and role the request read (#237):\nwhen another request changed or deleted them in the meantime, neither the change nor the\nname is written and the answer is 409 \"Concurrency conflict: the record was modified or removed by\nanother process.\" (AF-08l), or 409 \"Conflict: a record with the same unique value already\nexists.\" when the new address was taken meanwhile. As for a failed save, an email change's\nearlier steps stand: the person's tokens are already revoked and their reset and\nverification links retired, and for an own change the account-email budget is charged and\nany recovery or email code presented is spent. Read the person again before retrying.\n\n**Any authenticated caller** — the handler decides who may act, so no role is required at the door.",
         "operationId": "Person_Update",
         "parameters": [
           {
@@ -2951,6 +2971,26 @@
         "responses": {
           "200": {
             "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "text/plain": {
                 "schema": {

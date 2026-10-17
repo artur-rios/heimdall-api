@@ -4,6 +4,7 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -32,7 +33,8 @@ public class GoogleSignInCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
-    IAuthTokenIssuer tokenIssuer)
+    IAuthTokenIssuer tokenIssuer,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<GoogleSignInCommand, GoogleSignInCommandOutput>
 {
     public async Task<DataOutput<GoogleSignInCommandOutput?>> HandleAsync(GoogleSignInCommand command, CancellationToken cancellationToken = default)
@@ -56,6 +58,16 @@ public class GoogleSignInCommandHandler(
         // nothing; the server issued no nonce, so this binds the client's attempt, not the token.
         if (!string.IsNullOrEmpty(command.Nonce) &&
             !string.Equals(payload.Nonce, command.Nonce, StringComparison.Ordinal))
+        {
+            return output.WithError(AuthMessages.GoogleAuthenticationFailed);
+        }
+
+        // FR-GO-21 (AF-25a): a Google ID token is accepted once. Its use is recorded now — once it is
+        // known to be valid and before anything is read, created or issued on its strength — by one
+        // insert that also finds an earlier use, so a second presentation, however soon or however
+        // concurrent, is refused exactly as an invalid token is and leaves nothing behind.
+        if (!await atomicWrites.TryRecordGoogleIdTokenUseAsync(
+                GoogleIdTokenUse.KeyOf(payload.TokenId, command.IdToken), payload.ExpiresAt ?? DateTime.UtcNow))
         {
             return output.WithError(AuthMessages.GoogleAuthenticationFailed);
         }

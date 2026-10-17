@@ -44,13 +44,14 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
             RoleId = (long)role,
             EmailVerified = true
         };
+        // Set before the insert: a whole-row save ignores it once the row exists (#237).
+        person.ScopeId = memberOf?.Id;
         context.Persons.Add(person);
         await context.SaveChangesAsync();
 
         if (memberOf is not null)
         {
             context.ScopeUsers.Add(new ScopeUser { ScopeId = memberOf.Id, PersonId = person.Id });
-            person.ScopeId = memberOf.Id;
         }
 
         foreach (var scope in owns)

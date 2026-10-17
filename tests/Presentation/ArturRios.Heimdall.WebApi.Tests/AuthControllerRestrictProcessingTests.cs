@@ -166,10 +166,11 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
 
         await using (var context = db.CreateContext())
         {
-            var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
-            stored.IsDeleted = true;
-            stored.DeletedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(x => x.IsDeleted, true)
+                    .SetProperty(x => x.DeletedAt, DateTime.UtcNow));
         }
 
         var login = await LoginAsync(person.Email, Password);

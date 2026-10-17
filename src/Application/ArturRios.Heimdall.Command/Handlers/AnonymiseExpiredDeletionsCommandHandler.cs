@@ -55,7 +55,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
@@ -100,12 +99,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // transferred, a co-owner added (UC-21). Re-checked here rather than requiring an
         // administrator to resubmit anything: the subject asked once, and the deadline has been
         // running the whole time.
-        var unblockErrors = await RetryBlockedRequestsAsync(now);
-
-        if (unblockErrors.Count > 0)
-        {
-            return output.WithErrors(unblockErrors);
-        }
+        await RetryBlockedRequestsAsync(now);
 
         var persons = await personReader.Query()
             // A restricted record is preserved exactly as it stands rather than entering the window
@@ -164,22 +158,18 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             return output.WithErrors(errors);
         }
 
+        // One targeted write per person (#237): the identifying values, the password, the factor and
+        // account-email budgets together, and only while the record is still deleted, unanonymised
+        // and unrestricted. A record restricted since it was selected is preserved as it stands
+        // (NFR-24), and is not counted.
+        var anonymisedPersons = new List<Person>();
+
         foreach (var person in persons)
         {
-            IdentityAnonymiser.Anonymise(person, now);
-
-            // The factor budgets are behavioural data too, and a whole-row save never writes them
-            // (FR-AU-12, FR-AU-13): they are cleared by their own targeted writes.
-            await atomicWrites.ClearSecondFactorAttemptsAsync(person);
-            await atomicWrites.ClearReauthenticationAttemptsAsync(person);
-            await atomicWrites.ClearAccountEmailsAsync(person);
-
-            // The password hash and salt likewise: a whole-row save never writes them once the row
-            // exists, so the anonymiser's in-memory clear reaches the row only through this.
-            await atomicWrites.ClearPasswordAsync(person);
-
-            // Nothing blocks it any more; it is done.
-            person.ErasureBlockedReason = null;
+            if (await IdentityAnonymiser.AnonymiseAsync(atomicWrites, person, now))
+            {
+                anonymisedPersons.Add(person);
+            }
         }
 
         foreach (var googleUser in googleUsers)
@@ -187,14 +177,13 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             IdentityAnonymiser.Anonymise(googleUser, now);
         }
 
-        errors.AddRange(await SaveAsync(persons, personWriter));
         errors.AddRange(await SaveAsync(googleUsers, googleUserWriter));
 
         return errors.Count > 0
             ? output.WithErrors(errors)
             : Success(
-                output, persons.Count, googleUsers.Count, dependentsRemoved,
-                persons.Select(person => person.PublicId)
+                output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
+                anonymisedPersons.Select(person => person.PublicId)
                     .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
                     .ToList());
     }
@@ -211,7 +200,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     from the request means a long-blocked record is due immediately, which is correct: it is
     ///     already late.
     /// </remarks>
-    private async Task<List<string>> RetryBlockedRequestsAsync(DateTime now)
+    private async Task RetryBlockedRequestsAsync(DateTime now)
     {
         var blocked = await personReader.Query()
             .Include(person => person.ScopeOwnerships)
@@ -222,13 +211,6 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                              && person.ProcessingRestrictedAt == null)
             .ToListAsync();
 
-        if (blocked.Count == 0)
-        {
-            return [];
-        }
-
-        var cleared = new List<Person>();
-
         foreach (var person in blocked)
         {
             if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
@@ -236,16 +218,10 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 continue;
             }
 
-            person.IsDeleted = true;
-            person.DeletedAt = person.ErasureRequestedAt;
-            person.DeletionKind = (int)DeletionKinds.SubjectRequested;
-            person.ErasureBlockedReason = null;
-            person.UpdatedAt = now;
-
-            cleared.Add(person);
+            // A targeted write (#237), made only while the request is still blocked and the record
+            // live and unrestricted, so a restriction or deletion that landed since stands.
+            await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
         }
-
-        return cleared.Count == 0 ? [] : (await SaveAsync(cleared, personWriter)).ToList();
     }
 
     /// <summary>
