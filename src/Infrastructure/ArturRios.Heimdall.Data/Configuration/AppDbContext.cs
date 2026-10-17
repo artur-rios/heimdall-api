@@ -32,6 +32,7 @@ public class AppDbContext(
     public DbSet<AuditLog> AuditLogs { get; init; }
     public DbSet<ErasedSubject> ErasedSubjects { get; init; }
     public DbSet<AttemptNoticeBudget> AttemptNoticeBudgets { get; init; }
+    public DbSet<ScopeOwnerInvitation> ScopeOwnerInvitations { get; init; }
     public DbSet<GoogleIdTokenUse> GoogleIdTokenUses { get; init; }
 
     /// <summary>
@@ -80,6 +81,7 @@ public class AppDbContext(
         modelBuilder.Entity<AuditLog>().Configure();
         modelBuilder.Entity<ErasedSubject>().Configure();
         modelBuilder.Entity<AttemptNoticeBudget>().Configure();
+        modelBuilder.Entity<ScopeOwnerInvitation>().Configure();
         modelBuilder.Entity<GoogleIdTokenUse>().Configure();
     }
 }

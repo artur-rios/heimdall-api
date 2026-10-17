@@ -937,6 +937,76 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("scope_owner", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ScopeOwnerInvitation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id")
+                        .HasColumnOrder(1);
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<long?>("InvitedByPersonId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("invited_by_person_id");
+
+                    b.Property<long>("InviteePersonId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("invitee_person_id");
+
+                    b.Property<short?>("Outcome")
+                        .HasColumnType("smallint")
+                        .HasColumnName("outcome");
+
+                    b.Property<Guid>("PublicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id");
+
+                    b.Property<long>("ScopeId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("scope_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scope_owner_invitation");
+
+                    b.HasIndex("InvitedByPersonId")
+                        .HasDatabaseName("ix_scope_owner_invitation_invited_by_person_id");
+
+                    b.HasIndex("InviteePersonId")
+                        .HasDatabaseName("ix_scope_owner_invitation_invitee_person_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scope_owner_invitation_public_id");
+
+                    b.HasIndex("ScopeId", "InviteePersonId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scope_owner_invitation_scope_id_invitee_person_id")
+                        .HasFilter("ended_at IS NULL");
+
+                    b.ToTable("scope_owner_invitation", "heimdall", t =>
+                        {
+                            t.HasCheckConstraint("ck_scope_owner_invitation_outcome_ends_it", "outcome IS NULL OR ended_at IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_scope_owner_invitation_outcome_known", "outcome IS NULL OR outcome BETWEEN 1 AND 4");
+                        });
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ScopePermission", b =>
                 {
                     b.Property<long>("Id")
@@ -1331,6 +1401,35 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasConstraintName("fk_scope_owner_scope_scope_id");
 
                     b.Navigation("Person");
+
+                    b.Navigation("Scope");
+                });
+
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.ScopeOwnerInvitation", b =>
+                {
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Person", "InvitedBy")
+                        .WithMany()
+                        .HasForeignKey("InvitedByPersonId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_scope_owner_invitation_person_invited_by_person_id");
+
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Person", "Invitee")
+                        .WithMany()
+                        .HasForeignKey("InviteePersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scope_owner_invitation_person_invitee_person_id");
+
+                    b.HasOne("ArturRios.Heimdall.Domain.Entities.Scope", "Scope")
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scope_owner_invitation_scope_scope_id");
+
+                    b.Navigation("InvitedBy");
+
+                    b.Navigation("Invitee");
 
                     b.Navigation("Scope");
                 });

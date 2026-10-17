@@ -26,12 +26,13 @@ public class PersonalDataPurposeTests
     ///     key is a removed person's `PublicId`, the very id the audit trail is cleared of (#195);
     ///     the key itself is skipped like every `Id`, so its record names it as `PublicId`.
     ///     `AttemptNoticeBudget` is here because its digest of an address is pseudonymous, not
-    ///     anonymous: whoever suspects an address can hash it and find its row.
+    ///     anonymous: whoever suspects an address can hash it and find its row. `ScopeOwnerInvitation`
+    ///     is here because it records who invited whom to co-own which scope (UC-21).
     /// </summary>
     private static readonly Type[] PersonalDataEntities =
     [
         typeof(Person), typeof(GoogleUser), typeof(AuditLog), typeof(PendingRegistration), typeof(ErasedSubject),
-        typeof(AttemptNoticeBudget)
+        typeof(AttemptNoticeBudget), typeof(ScopeOwnerInvitation)
     ];
 
     /// <summary>
