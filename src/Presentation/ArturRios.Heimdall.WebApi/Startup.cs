@@ -1132,6 +1132,7 @@ public class Startup : WebApiStartup
             Builder.Services.AddScoped<IRegistrationAttemptSender, LoggingRegistrationAttemptSender>();
             Builder.Services.AddScoped<IRegistrationLinkSender, LoggingRegistrationLinkSender>();
             Builder.Services.AddScoped<IEmailChangeNoticeSender, LoggingEmailChangeNoticeSender>();
+            Builder.Services.AddScoped<IScopeInvitationNoticeSender, LoggingScopeInvitationNoticeSender>();
 
             return;
         }
@@ -1146,6 +1147,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IRegistrationAttemptSender, MailgunRegistrationAttemptSender>();
         Builder.Services.AddScoped<IRegistrationLinkSender, MailgunRegistrationLinkSender>();
         Builder.Services.AddScoped<IEmailChangeNoticeSender, MailgunEmailChangeNoticeSender>();
+        Builder.Services.AddScoped<IScopeInvitationNoticeSender, MailgunScopeInvitationNoticeSender>();
     }
 
     /// <summary>
