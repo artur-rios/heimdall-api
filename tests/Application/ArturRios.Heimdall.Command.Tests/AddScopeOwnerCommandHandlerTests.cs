@@ -19,8 +19,8 @@ namespace ArturRios.Heimdall.Command.Tests;
 // SCOPE_OWNER row; a Scope Admin actor's opening an invitation instead (FR-SC-14) — the notice, its
 // cooldown and its restriction rule, the idempotent re-invite, an expired invitation replaced, and the
 // audit entry; AF-21a (scope missing or logically deleted), AF-21b (person missing, deleted, or not a
-// ScopeAdmin), AF-21c delegation (the checker rejects the actor), and AF-21d (already an owner) for
-// both actors. The AF-21c ownership rule itself is covered by ScopeOwnershipCheckerTests; the
+// ScopeAdmin) — for a Scope Admin actor too, who must be refused before any invitation or notice —
+// AF-21c delegation (the checker rejects the actor), and AF-21d (already an owner) for both actors. The AF-21c ownership rule itself is covered by ScopeOwnershipCheckerTests; the
 // 401/403-by-attribute flows are covered by PersonControllerAddScopeOwnerTests.
 public class AddScopeOwnerCommandHandlerTests
 {
@@ -630,5 +630,99 @@ public class AddScopeOwnerCommandHandlerTests
         Assert.True(output.Data!.AlreadyOwner);
         Assert.False(output.Data.Invited);
         Assert.Empty(await AllAsync(invitations));
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdminActorAndAnUnknownPerson_WhenAdding_ThenPersonNotValidScopeAdminAndNoInvitation()
+    {
+        // Given AF-21b for a Scope Admin actor — refused before the invitation path
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var notices = new RecordingScopeInvitationNoticeSender();
+        var scope = await SeedScopeAsync(scopes);
+        var actor = await SeedPersonAsync(persons, ownedScopes: scope);
+        var handler = Handler(scopes, persons, invitations: invitations, notices: notices);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, Guid.NewGuid(), Roles.ScopeAdmin, actor.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([PersonMessages.PersonNotValidScopeAdmin], output.Errors);
+        Assert.Empty(await AllAsync(invitations));
+        Assert.Empty(notices.Invitations);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdminActorAndALogicallyDeletedPerson_WhenAdding_ThenPersonNotValidScopeAdminAndNoInvitation()
+    {
+        // Given AF-21b for a Scope Admin actor
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var notices = new RecordingScopeInvitationNoticeSender();
+        var scope = await SeedScopeAsync(scopes);
+        var actor = await SeedPersonAsync(persons, ownedScopes: scope);
+        var person = await SeedPersonAsync(persons, isDeleted: true);
+        var handler = Handler(scopes, persons, invitations: invitations, notices: notices);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId, Roles.ScopeAdmin, actor.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([PersonMessages.PersonNotValidScopeAdmin], output.Errors);
+        Assert.Empty(await AllAsync(invitations));
+        Assert.Empty(notices.Invitations);
+        Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdminActorAndAUser_WhenAdding_ThenPersonNotValidScopeAdminAndNoInvitation()
+    {
+        // Given AF-21b for a Scope Admin actor — only an administrator may be invited (FR-SC-08)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var notices = new RecordingScopeInvitationNoticeSender();
+        var scope = await SeedScopeAsync(scopes);
+        var actor = await SeedPersonAsync(persons, ownedScopes: scope);
+        var person = await SeedPersonAsync(persons, Roles.User);
+        var handler = Handler(scopes, persons, invitations: invitations, notices: notices);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId, Roles.ScopeAdmin, actor.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([PersonMessages.PersonNotValidScopeAdmin], output.Errors);
+        Assert.Empty(await AllAsync(invitations));
+        Assert.Empty(notices.Invitations);
+        Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdminActorAndALogicallyDeletedScope_WhenAdding_ThenScopeNotFoundAndNoInvitation()
+    {
+        // Given AF-21a for a Scope Admin actor who owned the scope before it was deleted
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var notices = new RecordingScopeInvitationNoticeSender();
+        var scope = await SeedScopeAsync(scopes, isDeleted: true);
+        var actor = await SeedPersonAsync(persons, ownedScopes: scope);
+        var person = await SeedPersonAsync(persons);
+        var handler = Handler(scopes, persons, invitations: invitations, notices: notices);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId, Roles.ScopeAdmin, actor.PublicId));
+
+        // Then
+        Assert.False(output.Success);
+        Assert.Equal([PersonMessages.ScopeNotFound], output.Errors);
+        Assert.Empty(await AllAsync(invitations));
+        Assert.Empty(notices.Invitations);
+        Assert.Empty((await StoredAsync(persons, person)).ScopeOwnerships);
     }
 }
