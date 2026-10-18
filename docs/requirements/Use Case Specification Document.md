@@ -2848,7 +2848,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-60a | No open invitation with that id was made to the caller — unknown, somebody else's (the inviter's own included), ended, expired, or withdrawn or answered between steps 2 and 4 | `404 Not Found` — "The invitation was not found or is no longer open." Inviter, invitee and outsider get the same answer; nothing changes |
-| AF-60b | The scope was deleted, or the caller is no longer an unrestricted administrator — whether before step 3 or in the instant before the write of step 4 | The invitation ends as voided, audited with the invitation as target; `404 Not Found` with AF-60a's message |
+| AF-60b | The scope was deleted, or the caller is no longer an eligible administrator (step 3) — whether before step 3 or in the instant before the write of step 4 | The invitation ends as voided, audited with the invitation as target; `404 Not Found` with AF-60a's message |
 | AF-60c | The caller is a `User` | `403 Forbidden`; an anonymous caller `401` |
 
 ---
@@ -2880,8 +2880,7 @@ sequenceDiagram
 > **How an invitation ends.** Exactly once: accepted (UC-60), declined (UC-61), withdrawn (UC-58), voided
 > (AF-60b, or when the invitee is anonymised), or by running out unanswered. One that ended is purged
 > 90 days after it ended, and one that ran out unanswered 90 days after it expired (Data Retention
-> Schedule). When the inviter is anonymised the invitation stays, with no inviter. Invitations are not
-> part of the data export (UC-41).
+> Schedule). When the inviter is anonymised the invitation stays, with no inviter.
 
 ---
 
@@ -2942,8 +2941,8 @@ sequenceDiagram
 | UC-57: Check an Application Token | FR-AP-15, FR-AP-16 |
 | UC-58: Withdraw a Scope Owner Invitation | FR-SC-15, NFR-09 |
 | UC-59: List My Scope Invitations | FR-SC-16 |
-| UC-60: Accept a Scope Owner Invitation | FR-SC-17, FR-SC-18, NFR-09 |
-| UC-61: Decline a Scope Owner Invitation | FR-SC-17, NFR-09 |
+| UC-60: Accept a Scope Owner Invitation | FR-SC-17, FR-SC-18, NFR-09, NFR-24 |
+| UC-61: Decline a Scope Owner Invitation | FR-SC-17, NFR-09, NFR-24 |
 
 ---
 

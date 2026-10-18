@@ -117,7 +117,7 @@ graph LR
 | FR-SC-14 | When an existing owner who is not a System Admin adds an existing Scope Admin or System Admin as an owner, the system shall open an **invitation** instead of the ownership, notify the person by email with no link and no token, and answer `202`; the ownership starts only when the person accepts it (FR-SC-17). A repeat while an invitation is open shall answer with that invitation and send nothing, and no notice shall go to a person who is processing-restricted or was invited within the administrator-mail cooldown. A System Admin's add shall stay immediate | High |
 | FR-SC-15 | The system shall allow System Admins and existing owners of a scope to **list** its open owner invitations and to **withdraw** one | High |
 | FR-SC-16 | The system shall allow a signed-in Scope Admin or System Admin to **list their own** open owner invitations | High |
-| FR-SC-17 | The system shall allow only the invited person, signed in as themselves, to **accept** or **decline** an open invitation. Accepting shall end the invitation and create the ownership in one transaction, only while the scope is live and the person a live, unrestricted administrator, and void the invitation otherwise, including when that stops being so just before the write; every refusal shall answer alike. The inviter shall be told the answer unless they are deleted, anonymised or processing-restricted. When a person is anonymised, their unended invitations shall be voided and they shall be cleared as the inviter of every other | High |
+| FR-SC-17 | The system shall allow only the invited person, signed in as themselves, to **accept** or **decline** an open invitation. Accepting shall end the invitation and create the ownership in one transaction, only while the scope is live and the person a live, unrestricted administrator, and void the invitation otherwise, including when that stops being so just before the write; every refusal shall answer alike. The inviter shall be told the answer unless they are deleted, anonymised or processing-restricted (NFR-24). When a person is anonymised, their unended invitations shall be voided and they shall be cleared as the inviter of every other | High |
 | FR-SC-18 | An invitation shall expire after `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` (default 604800, accepted 3600 to 2592000); at most one shall be open per scope and person; and one that ended shall be purged 90 days after it ended, and one that ran out unanswered 90 days after it expired | High |
 
 ### 3.2 Person Management
@@ -317,12 +317,12 @@ graph LR
 
 ### 4.0 Identifier Strategy
 
-Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`) has two identifiers:
+Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`, `Scope Owner Invitation`) has two identifiers:
 
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
-- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). It is immutable, enforced by trigger, on every table listed above and on `APPLICATION_CREDENTIAL` and `PENDING_REGISTRATION`, no new row of those tables may take a `PublicId` that another of them holds, and a new `PERSON` or `GOOGLE_USER` row may not take one that an audit entry names (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
+- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). It is immutable, enforced by trigger, on every table listed above and on `APPLICATION_CREDENTIAL`, `PENDING_REGISTRATION` and `SCOPE_OWNER_INVITATION`, no new row of those tables may take a `PublicId` that another of them holds, and a new `PERSON` or `GOOGLE_USER` row may not take one that an audit entry names (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
 
-`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `SCOPE_OWNER_INVITATION` is the exception among the ownership tables: it carries a `PublicId`, the reference by which a scope's owners withdraw an invitation and the invitee accepts or declines it (UC-58, UC-60, UC-61). `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -340,6 +340,8 @@ erDiagram
     SCOPE ||--o{ GOOGLE_USER : "contains"
     SCOPE ||--o{ SCOPE_PERMISSION : "defines"
     SCOPE ||--o{ PENDING_REGISTRATION : "awaits confirmation of"
+    SCOPE ||--o{ SCOPE_OWNER_INVITATION : "is offered through"
+    PERSON ||--o{ SCOPE_OWNER_INVITATION : "is invited by or invites"
     PERSON ||--o| TWO_FACTOR_AUTH : "configures"
     TWO_FACTOR_AUTH ||--o{ TWO_FACTOR_RECOVERY_CODE : "issues"
 
@@ -431,6 +433,18 @@ erDiagram
         datetime ExpiresAt "Expiration timestamp"
         datetime CreatedAt "When the registration was stored"
         int FailedAttempts "Wrong confirmation passwords so far; the row is discarded at 10"
+    }
+
+    SCOPE_OWNER_INVITATION {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        guid PublicId "External identifier; the reference withdrawn and answered by (UC-58, UC-60, UC-61)"
+        bigint ScopeId FK "Scope the invitee is asked to co-own (internal Id)"
+        bigint InviteePersonId FK "Person invited (internal Id)"
+        bigint InvitedByPersonId FK "Person who invited; optional, cleared on anonymisation"
+        datetime CreatedAt "When the invitation was made"
+        datetime ExpiresAt "When it stops being acceptable (FR-SC-18)"
+        datetime EndedAt "Null while open"
+        smallint Outcome "1 accepted, 2 declined, 3 withdrawn, 4 voided; null while open or when unanswered"
     }
 
     ATTEMPT_NOTICE_BUDGET {
