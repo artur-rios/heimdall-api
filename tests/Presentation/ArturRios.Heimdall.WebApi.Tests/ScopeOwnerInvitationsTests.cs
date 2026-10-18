@@ -1,9 +1,11 @@
+using System.Data.Common;
 using ArturRios.Heimdall.Data.Persistence;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
@@ -450,6 +452,130 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
         var stillOpen = await StoredAsync(fromErased);
         Assert.Null(stillOpen.EndedAt);
         Assert.Null(stillOpen.InvitedByPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenEndedInvitationsToAndFromAnErasedPerson_WhenForgotten_ThenNoneIsVoidedAndTheInviterIsCleared()
+    {
+        // Given — one the erased person declined, and one they made that was withdrawn
+        var scope = await SeedScopeAsync(db);
+        var erased = await SeedScopeAdminAsync(db, scope);
+        var other = await SeedScopeAdminAsync(db);
+        var otherScope = await SeedScopeAsync(db);
+        var declinedAt = OneMinuteAgo();
+        var toErased = New(otherScope, erased, other);
+        toErased.EndedAt = declinedAt;
+        toErased.Outcome = ScopeOwnerInvitationOutcomes.Declined;
+        await InsertAsync(toErased);
+        var fromErased = New(scope, other, erased);
+        fromErased.EndedAt = declinedAt;
+        fromErased.Outcome = ScopeOwnerInvitationOutcomes.Withdrawn;
+        await InsertAsync(fromErased);
+        await using var context = db.CreateContext();
+
+        // When
+        var voided = await new ScopeOwnerInvitations(context).ForgetPersonsAsync([erased.Id], DateTime.UtcNow);
+
+        // Then — the ended rows keep how and when they ended; only the inviter goes
+        Assert.Empty(voided);
+        var declined = await StoredAsync(toErased);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Declined, declined.Outcome);
+        Assert.Equal(declinedAt, declined.EndedAt);
+        Assert.Equal(other.Id, declined.InvitedByPersonId);
+        var withdrawn = await StoredAsync(fromErased);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Withdrawn, withdrawn.Outcome);
+        Assert.Equal(declinedAt, withdrawn.EndedAt);
+        Assert.Null(withdrawn.InvitedByPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenNoPersons_WhenForgotten_ThenNothingIsReturnedOrWritten()
+    {
+        // Given
+        var (scope, inviter, invitee) = await SeedAsync();
+        var invitation = await InsertAsync(New(scope, invitee, inviter));
+        var commands = new CommandCounter();
+        await using var context = db.CreateContext(commands);
+
+        // When
+        var voided = await new ScopeOwnerInvitations(context).ForgetPersonsAsync([], DateTime.UtcNow);
+
+        // Then
+        Assert.Empty(voided);
+        Assert.Equal(0, commands.Count);
+        var stored = await StoredAsync(invitation);
+        Assert.Null(stored.EndedAt);
+        Assert.Equal(inviter.Id, stored.InvitedByPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAWithdrawalCommittedJustBeforeTheVoid_WhenForgotten_ThenItsIdIsNotReturned()
+    {
+        // Given — two open invitations to the erased person; one is withdrawn just before the void is sent
+        var erased = await SeedScopeAdminAsync(db);
+        var inviter = await SeedScopeAdminAsync(db);
+        var voidable = await InsertAsync(New(await SeedScopeAsync(db), erased, inviter));
+        var withdrawn = await InsertAsync(New(await SeedScopeAsync(db), erased, inviter));
+        await using var context = db.CreateContext(new BeforeFirstUpdate(() => WithdrawAsync(withdrawn)));
+
+        // When
+        var voided = await new ScopeOwnerInvitations(context).ForgetPersonsAsync([erased.Id], DateTime.UtcNow);
+
+        // Then — only the void that took effect is reported, so only it is audited (G-F7)
+        Assert.Equal([voidable.PublicId], voided);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, (await StoredAsync(voidable)).Outcome);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Withdrawn, (await StoredAsync(withdrawn)).Outcome);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnOpenInvitationCommittedJustBeforeTheInsert_WhenOpening_ThenTheCompetingOneIsReturned()
+    {
+        // Given — a simultaneous request's invitation commits after this one found none open
+        var (scope, inviter, invitee) = await SeedAsync();
+        var competing = New(scope, invitee, inviter);
+        await using var context = db.CreateContext(new BeforeFirstCommand("INSERT", () => InsertAsync(competing)));
+
+        // When — the partial unique index refuses this insert (23505)
+        var opening = await new ScopeOwnerInvitations(context).OpenAsync(New(scope, invitee, inviter), DateTime.UtcNow);
+
+        // Then
+        Assert.False(opening.Created);
+        Assert.Equal(competing.PublicId, opening.Invitation.PublicId);
+        Assert.Equal(competing.PublicId, Assert.Single(await OfPairAsync(scope, invitee)).PublicId);
+    }
+
+    /// <summary>A time PostgreSQL stores exactly (whole seconds), distinct from any the port writes.</summary>
+    private static DateTime OneMinuteAgo()
+    {
+        var time = DateTime.UtcNow.AddMinutes(-1);
+        return new DateTime(time.Ticks - time.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+    }
+
+    /// <summary>Counts every command the context sends, for a test that must prove it sent none.</summary>
+    private sealed class CommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<object> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     /// <summary>A fresh, untracked copy of the stored row, as a second request would read it.</summary>

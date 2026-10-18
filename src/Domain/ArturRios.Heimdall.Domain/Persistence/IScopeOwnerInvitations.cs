@@ -36,9 +36,10 @@ public interface IScopeOwnerInvitations
     Task<bool> TryAcceptAsync(ScopeOwnerInvitation invitation, DateTime now);
 
     /// <summary>
-    ///     Anonymisation (NFR-20): voids every unended invitation whose invitee is among
-    ///     <paramref name="personIds" />, answering with their public ids, and clears those persons as inviter
-    ///     on every invitation.
+    ///     Anonymisation (NFR-20), in one transaction: voids every unended invitation whose invitee is among
+    ///     <paramref name="personIds" />, and clears those persons as inviter on every invitation. Answers
+    ///     with the public ids of exactly the invitations this call voided, never one a racing answer ended
+    ///     first, so each can be audited as voided.
     /// </summary>
     Task<IReadOnlyList<Guid>> ForgetPersonsAsync(IReadOnlyCollection<long> personIds, DateTime now);
 }

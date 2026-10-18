@@ -132,27 +132,43 @@ public sealed class ScopeOwnerInvitations(AppDbContext context) : IScopeOwnerInv
             return [];
         }
 
-        var unended = await context.ScopeOwnerInvitations.AsNoTracking()
-            .Where(x => personIds.Contains(x.InviteePersonId) && x.EndedAt == null)
-            .Select(x => new { x.Id, x.PublicId })
-            .ToListAsync();
+        // Table and column names come from the model, never from input, so building them into the SQL is
+        // safe; the values stay parameters.
+        var invitationType = context.Model.FindEntityType(typeof(ScopeOwnerInvitation))!;
+        var table = invitationType.GetSchemaQualifiedTableName();
+        var endedAt = Column(nameof(ScopeOwnerInvitation.EndedAt));
+        var outcome = Column(nameof(ScopeOwnerInvitation.Outcome));
+        var invitee = Column(nameof(ScopeOwnerInvitation.InviteePersonId));
+        var publicId = Column(nameof(ScopeOwnerInvitation.PublicId));
+        var ids = personIds.ToArray();
+        var strategy = context.Database.CreateExecutionStrategy();
 
-        var ids = unended.Select(x => x.Id).ToList();
-
-        if (ids.Count > 0)
+        return await strategy.ExecuteAsync(async () =>
         {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+
+            // RETURNING answers with exactly the rows this UPDATE changed. A row a racing answer ended first
+            // fails the guard, so it is neither voided nor reported: every id returned is a void that took
+            // effect, and the caller audits each one (G-F7).
+            var sql = $$"""
+                UPDATE {{table}} SET {{endedAt}} = {0}, {{outcome}} = {1}
+                WHERE {{invitee}} = ANY({2}) AND {{endedAt}} IS NULL
+                RETURNING {{publicId}} AS "Value"
+                """;
+            var voided = await context.Database
+                .SqlQueryRaw<Guid>(sql, now, (short)ScopeOwnerInvitationOutcomes.Voided, ids)
+                .ToListAsync();
+
             await context.ScopeOwnerInvitations
-                .Where(x => ids.Contains(x.Id) && x.EndedAt == null)
-                .ExecuteUpdateAsync(set => set
-                    .SetProperty(x => x.EndedAt, now)
-                    .SetProperty(x => x.Outcome, ScopeOwnerInvitationOutcomes.Voided));
-        }
+                .Where(x => x.InvitedByPersonId != null && ids.Contains(x.InvitedByPersonId.Value))
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.InvitedByPersonId, (long?)null));
 
-        await context.ScopeOwnerInvitations
-            .Where(x => x.InvitedByPersonId != null && personIds.Contains(x.InvitedByPersonId.Value))
-            .ExecuteUpdateAsync(set => set.SetProperty(x => x.InvitedByPersonId, (long?)null));
+            await transaction.CommitAsync();
 
-        return unended.Select(x => x.PublicId).ToList();
+            return (IReadOnlyList<Guid>)voided;
+        });
+
+        string Column(string property) => invitationType.FindProperty(property)!.GetColumnName();
     }
 
     private Task<ScopeOwnerInvitation?> FindOpenAsync(ScopeOwnerInvitation invitation, DateTime now) =>
