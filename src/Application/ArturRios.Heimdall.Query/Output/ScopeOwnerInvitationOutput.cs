@@ -18,7 +18,7 @@ public class ScopeOwnerInvitationOutput : QueryOutput
 
     public string InviteeEmail { get; set; } = string.Empty;
 
-    /// <summary>Who invited them; <c>null</c> once that person was anonymised or removed.</summary>
+    /// <summary>Who invited them; <c>null</c> once that person was anonymised, removed or restricted.</summary>
     public string? InvitedByName { get; set; }
 
     public DateTime CreatedAt { get; set; }

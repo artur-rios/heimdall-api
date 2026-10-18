@@ -18,7 +18,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 /// <remarks>
 ///     A missing or logically deleted scope is AF-58a; a caller who may not manage it is AF-58b. Only open
 ///     invitations are listed — not ended, not expired — and not those of a logically deleted invitee, who
-///     could never accept. The listing answers 200 with no message.
+///     could never accept, nor of a processing-restricted one (NFR-24). The inviter's name is shown only for
+///     a live, unrestricted inviter. The listing answers 200 with no message.
 /// </remarks>
 public class ListScopeOwnerInvitationsQueryHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
@@ -59,8 +60,10 @@ public class ListScopeOwnerInvitationsQueryHandler(
 
         // Newest first with the internal id as tiebreaker, ordered on the entity because the id never
         // reaches the output, then projected and paginated over that ordering.
+        // NFR-24: a restricted identity is withheld from tenant-facing listings — the invitee's row and the
+        // inviter's name alike, as ListScopeOwners does.
         var projected = invitationReader.Query()
-            .Where(x => x.ScopeId == scope.Id && !x.Invitee.IsDeleted)
+            .Where(x => x.ScopeId == scope.Id && !x.Invitee.IsDeleted && x.Invitee.ProcessingRestrictedAt == null)
             .Where(ScopeOwnerInvitation.OpenAt(now))
             .OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
@@ -70,7 +73,10 @@ public class ListScopeOwnerInvitationsQueryHandler(
                 InviteeId = x.Invitee.PublicId,
                 InviteeName = x.Invitee.Name,
                 InviteeEmail = x.Invitee.Email,
-                InvitedByName = x.InvitedBy == null ? null : x.InvitedBy.Name,
+                InvitedByName =
+                    x.InvitedBy != null && !x.InvitedBy.IsDeleted && x.InvitedBy.ProcessingRestrictedAt == null
+                        ? x.InvitedBy.Name
+                        : null,
                 CreatedAt = x.CreatedAt,
                 ExpiresAt = x.ExpiresAt
             });

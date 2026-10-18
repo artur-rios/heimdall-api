@@ -17,7 +17,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for GET and DELETE /api/scopes/{scopeId}/owner-invitations[/{invitationId}] (UC-58,
 // FR-SC-15): an owner lists the open invitations and withdraws one (204, audited with the invitation as
-// target); a second withdrawal, another scope's invitation through this scope's route, and a non-owner are
+// target); a processing-restricted invitee and a restricted inviter's name are withheld (NFR-24); a second
+// withdrawal, another scope's invitation through this scope's route, and a non-owner are
 // refused; a User 403 and an anonymous caller 401 by the attribute.
 [Collection(nameof(FunctionalCollection))]
 public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
@@ -40,6 +41,13 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
         context.ScopeOwnerInvitations.Add(invitation);
         await context.SaveChangesAsync();
         return invitation;
+    }
+
+    private async Task RestrictAsync(Person person)
+    {
+        await using var context = db.CreateContext();
+        await context.Persons.Where(x => x.Id == person.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
     }
 
     private async Task<ScopeOwnerInvitation> StoredAsync(ScopeOwnerInvitation invitation)
@@ -73,6 +81,31 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
         var item = Assert.Single(response.Body!.Data!);
         Assert.Equal(open.PublicId, item.Id);
         Assert.Equal(owner.Name, item.InvitedByName);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictedInviteeAndARestrictedInviter_WhenListing_ThenTheirIdentitiesAreWithheld()
+    {
+        // Given NFR-24 — one invitation to a restricted invitee, one from a restricted inviter
+        var scope = await SeedScopeAsync(db);
+        var owner = await SeedScopeAdminAsync(db, scope);
+        var restrictedInvitee = await SeedScopeAdminAsync(db);
+        await SeedInvitationAsync(scope, restrictedInvitee, owner);
+        await RestrictAsync(restrictedInvitee);
+        var restrictedInviter = await SeedScopeAdminAsync(db, scope);
+        var listed = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), restrictedInviter);
+        await RestrictAsync(restrictedInviter);
+        Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
+
+        // When
+        var response = await ListAsync(scope.PublicId);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, response.Body!.TotalItems);
+        var item = Assert.Single(response.Body.Data!);
+        Assert.Equal(listed.PublicId, item.Id);
+        Assert.Null(item.InvitedByName);
     }
 
     [FunctionalFact]

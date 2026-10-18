@@ -15,7 +15,8 @@ namespace ArturRios.Heimdall.Query.Handlers;
 /// </summary>
 /// <remarks>
 ///     Only open invitations, and not those of a logically deleted scope, which accepting would only void.
-///     The listing answers 200 with no message, and an empty page when there are none.
+///     The inviter's name is shown only for a live, unrestricted inviter (NFR-24). The listing answers 200
+///     with no message, and an empty page when there are none.
 /// </remarks>
 public class ListMyScopeInvitationsQueryHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -54,7 +55,11 @@ public class ListMyScopeInvitationsQueryHandler(
                 Id = x.PublicId,
                 ScopeId = x.Scope.PublicId,
                 ScopeName = x.Scope.Name,
-                InvitedByName = x.InvitedBy == null ? null : x.InvitedBy.Name,
+                // NFR-24: a removed or restricted inviter's name is withheld, as every person listing does.
+                InvitedByName =
+                    x.InvitedBy != null && !x.InvitedBy.IsDeleted && x.InvitedBy.ProcessingRestrictedAt == null
+                        ? x.InvitedBy.Name
+                        : null,
                 CreatedAt = x.CreatedAt,
                 ExpiresAt = x.ExpiresAt
             });

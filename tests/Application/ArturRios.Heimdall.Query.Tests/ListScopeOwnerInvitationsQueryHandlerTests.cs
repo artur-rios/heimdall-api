@@ -14,7 +14,8 @@ namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for ListScopeOwnerInvitationsQueryHandler (UC-58, FR-SC-15): a scope's open invitations only,
 // newest first, with the invitee's name and address and the inviter's name; another scope's, an ended, an
-// expired and a deleted invitee's are not listed; AF-58a, AF-58b and the page bound.
+// expired, a deleted and a processing-restricted invitee's are not listed; a removed or restricted inviter's
+// name is withheld (NFR-24); AF-58a, AF-58b and the page bound.
 public class ListScopeOwnerInvitationsQueryHandlerTests
 {
     private static readonly DateTime Now = DateTime.UtcNow;
@@ -24,10 +25,11 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
         Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}", IsDeleted = isDeleted
     };
 
-    private static Person Person(long id, string name, bool isDeleted = false) => new()
+    private static Person Person(long id, string name, bool isDeleted = false, bool isRestricted = false) => new()
     {
         Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
-        RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted
+        RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
+        ProcessingRestrictedAt = isRestricted ? Now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(
@@ -136,6 +138,59 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
 
         // Then
         Assert.Null(Assert.Single(output.Data!).InvitedByName);
+    }
+
+    [UnitFact]
+    public async Task GivenAProcessingRestrictedInvitee_WhenListing_ThenTheInvitationIsNotReturned()
+    {
+        // Given NFR-24 — a restricted identity is withheld from tenant-facing listings
+        var scope = Scope(1);
+        var ada = Person(1, "Ada");
+        var listed = Invitation(1, scope, Person(2, "Grace"), ada);
+        var handler = Handler(await RepositoryWith(scope), await RepositoryWith(
+            listed, Invitation(2, scope, Person(3, "Restricted", isRestricted: true), ada)));
+
+        // When
+        var output = await handler.HandleAsync(Query(scope));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(1, output.TotalItems);
+        Assert.Equal(listed.PublicId, Assert.Single(output.Data!).Id);
+    }
+
+    [UnitFact]
+    public async Task GivenAProcessingRestrictedInviter_WhenListing_ThenItIsListedWithoutTheInvitersName()
+    {
+        // Given NFR-24
+        var scope = Scope(1);
+        var invitation = Invitation(1, scope, Person(1, "Grace"), Person(2, "Ada", isRestricted: true));
+        var handler = Handler(await RepositoryWith(scope), await RepositoryWith(invitation));
+
+        // When
+        var output = await handler.HandleAsync(Query(scope));
+
+        // Then
+        var listed = Assert.Single(output.Data!);
+        Assert.Equal(invitation.PublicId, listed.Id);
+        Assert.Null(listed.InvitedByName);
+    }
+
+    [UnitFact]
+    public async Task GivenALogicallyDeletedInviter_WhenListing_ThenItIsListedWithoutTheInvitersName()
+    {
+        // Given
+        var scope = Scope(1);
+        var invitation = Invitation(1, scope, Person(1, "Grace"), Person(2, "Ada", isDeleted: true));
+        var handler = Handler(await RepositoryWith(scope), await RepositoryWith(invitation));
+
+        // When
+        var output = await handler.HandleAsync(Query(scope));
+
+        // Then
+        var listed = Assert.Single(output.Data!);
+        Assert.Equal(invitation.PublicId, listed.Id);
+        Assert.Null(listed.InvitedByName);
     }
 
     [UnitFact]

@@ -12,7 +12,8 @@ namespace ArturRios.Heimdall.Query.Tests;
 
 // Unit tests for ListMyScopeInvitationsQueryHandler (UC-59, FR-SC-16): the caller's own open invitations,
 // soonest to expire first, with the scope's id and name and the inviter's name; somebody else's, ended,
-// expired and a deleted scope's are not listed; the page bound.
+// expired and a deleted scope's are not listed; a removed or restricted inviter's name is withheld (NFR-24);
+// the page bound.
 public class ListMyScopeInvitationsQueryHandlerTests
 {
     private static readonly DateTime Now = DateTime.UtcNow;
@@ -22,10 +23,11 @@ public class ListMyScopeInvitationsQueryHandlerTests
         Id = id, PublicId = Guid.NewGuid(), Name = $"scope-{id}", IsDeleted = isDeleted
     };
 
-    private static Person Person(long id, string name) => new()
+    private static Person Person(long id, string name, bool isDeleted = false, bool isRestricted = false) => new()
     {
         Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
-        RoleId = (long)Roles.ScopeAdmin
+        RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
+        ProcessingRestrictedAt = isRestricted ? Now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(long id, Scope scope, Person invitee, Person? inviter,
@@ -97,6 +99,44 @@ public class ListMyScopeInvitationsQueryHandlerTests
         var acme = Scope(1);
         var grace = Person(1, "Grace");
         var invitation = Invitation(1, acme, grace, null);
+        var handler = new ListMyScopeInvitationsQueryHandler(
+            await RepositoryWith(grace), await RepositoryWith(invitation), new ListMyScopeInvitationsQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(Query(grace));
+
+        // Then
+        var listed = Assert.Single(output.Data!);
+        Assert.Equal(invitation.PublicId, listed.Id);
+        Assert.Null(listed.InvitedByName);
+    }
+
+    [UnitFact]
+    public async Task GivenAProcessingRestrictedInviter_WhenListing_ThenItIsListedWithNoInviterName()
+    {
+        // Given NFR-24 — a restricted identity is withheld from tenant-facing listings
+        var acme = Scope(1);
+        var grace = Person(1, "Grace");
+        var invitation = Invitation(1, acme, grace, Person(2, "Ada", isRestricted: true));
+        var handler = new ListMyScopeInvitationsQueryHandler(
+            await RepositoryWith(grace), await RepositoryWith(invitation), new ListMyScopeInvitationsQueryValidator());
+
+        // When
+        var output = await handler.HandleAsync(Query(grace));
+
+        // Then
+        var listed = Assert.Single(output.Data!);
+        Assert.Equal(invitation.PublicId, listed.Id);
+        Assert.Null(listed.InvitedByName);
+    }
+
+    [UnitFact]
+    public async Task GivenALogicallyDeletedInviter_WhenListing_ThenItIsListedWithNoInviterName()
+    {
+        // Given
+        var acme = Scope(1);
+        var grace = Person(1, "Grace");
+        var invitation = Invitation(1, acme, grace, Person(2, "Ada", isDeleted: true));
         var handler = new ListMyScopeInvitationsQueryHandler(
             await RepositoryWith(grace), await RepositoryWith(invitation), new ListMyScopeInvitationsQueryValidator());
 
