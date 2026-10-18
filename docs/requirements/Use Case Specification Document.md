@@ -52,6 +52,10 @@ graph LR
         UC21[UC-21: Add Scope Owner]
         UC22[UC-22: Remove Scope Owner]
         UC23[UC-23: Promote User to Scope Owner]
+        UC58[UC-58: Withdraw a Scope Owner Invitation]
+        UC59[UC-59: List My Scope Invitations]
+        UC60[UC-60: Accept a Scope Owner Invitation]
+        UC61[UC-61: Decline a Scope Owner Invitation]
     end
 
     subgraph "Person Management"
@@ -106,6 +110,10 @@ graph LR
     SA --> UC01 & UC02 & UC03 & UC04 & UC05
     SA --> UC21 & UC22 & UC23
     SCA --> UC02 & UC21 & UC22 & UC23
+    SA & SCA --> UC58 & UC59 & UC60 & UC61
+    UC21 --> ES
+    UC60 --> ES
+    UC61 --> ES
     SA --> UC06 & UC07 & UC08 & UC09 & UC10
     SCA --> UC06 & UC07 & UC08 & UC09
     U --> UC07 & UC08
@@ -1166,10 +1174,10 @@ sequenceDiagram
 | ------- | ------- |
 | **ID** | UC-21 |
 | **Name** | Add Scope Owner |
-| **Actors** | System Admin, Scope Admin (existing owner) |
-| **Description** | Add an existing `ScopeAdmin` or `SystemAdmin` person as an additional owner of a scope. To make a brand-new person a co-owner, see UC-06 (path c); to make an existing `User` of the scope a co-owner, see UC-23 (Promote User to Scope Owner) |
+| **Actors** | System Admin, Scope Admin (existing owner), Email Service |
+| **Description** | Add an existing `ScopeAdmin` or `SystemAdmin` person as an additional owner of a scope. A System Admin adds them at once; a Scope Admin invites them, and the ownership starts only when they accept it (UC-60). To make a brand-new person a co-owner, see UC-06 (path c); to make an existing `User` of the scope a co-owner, see UC-23 (Promote User to Scope Owner) |
 | **Preconditions** | Actor is authenticated with `SystemAdmin` role, or is an existing owner of the target scope; the target person exists, is not logically deleted, and has the `ScopeAdmin` or `SystemAdmin` role |
-| **Postconditions** | A new `SCOPE_OWNER` row links the scope to the person |
+| **Postconditions** | System Admin: a new `SCOPE_OWNER` row links the scope to the person. Scope Admin: one open `SCOPE_OWNER_INVITATION` for the scope and the person, and the person has been notified unless AF-21f applies |
 
 **Main Flow:**
 
@@ -1178,22 +1186,26 @@ sequenceDiagram
     actor Admin as System Admin / Existing Owner
     participant API as Heimdall API
     participant DB as Database
+    participant ES as Email Service
 
     Admin->>API: POST /api/scopes/{id}/owners/{personId}
     API->>DB: Verify scope exists and is not logically deleted
-    DB-->>API: Scope found
     API->>DB: Verify person exists, is not logically deleted, and has the ScopeAdmin or SystemAdmin role
-    DB-->>API: Person found
-    API->>DB: Insert SCOPE_OWNER row { ScopeId, PersonId }
-    DB-->>API: Owner added
-    API-->>Admin: 201 Created
+    alt System Admin
+        API->>DB: Insert SCOPE_OWNER row { ScopeId, PersonId }
+        API-->>Admin: 201 Created
+    else Scope Admin
+        API->>DB: Open a SCOPE_OWNER_INVITATION, or find the one already open
+        API->>ES: Notice to the person (a new invitation only; no link, no token)
+        API-->>Admin: 202 Accepted — "The invitation was sent."
+    end
 ```
 
 1. Actor sends a request to add a person as an owner of a scope.
 2. The system verifies the scope exists and is not logically deleted.
 3. The system verifies the person exists, is not logically deleted, and has the `ScopeAdmin` or `SystemAdmin` role.
-4. The system inserts a `SCOPE_OWNER` row linking the scope to the person (no-op if it already exists).
-5. The system returns success.
+4. For a System Admin actor, the system inserts a `SCOPE_OWNER` row and answers `201 Created` "Scope owner added successfully."
+5. For a Scope Admin actor, the system opens an invitation that expires after `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` (seven days by default), audits it with the invitation as target, mails the person "<inviter name> invited you to co-own the scope <scope name>. Sign in to Heimdall to accept or decline. The invitation expires on <date>." (unless AF-21f), and answers `202 Accepted` "The invitation was sent." with `invited`, `invitationId` and `invitationExpiresAt`. The person owns nothing until they accept (UC-60); an owner may withdraw it meanwhile (UC-58).
 
 **Alternative Flows:**
 
@@ -1202,10 +1214,15 @@ sequenceDiagram
 | AF-21a | Scope not found or logically deleted | Return `404 Not Found` |
 | AF-21b | Person not found, logically deleted, or neither a `ScopeAdmin` nor a `SystemAdmin` | Return `400 Bad Request` |
 | AF-21c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
-| AF-21d | Person is already an owner of the scope | Return `200 OK` (idempotent) |
+| AF-21d | Person is already an owner of the scope | Return `200 OK` "Person is already an owner of this scope." (idempotent), for either actor; no invitation is opened |
+| AF-21e | Scope Admin actor, and an invitation for this scope and person is already open | `202 Accepted` "The invitation was sent." with that invitation; nothing is mailed. An invitation that ran out unanswered does not count as open: it is closed and a new one is opened |
+| AF-21f | Scope Admin actor, and the person is processing-restricted (AF-51c), or was invited, to any scope, within `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | The invitation is opened and answered as in step 5; the notice is not sent. A restricted person cannot accept, and accepting voids the invitation |
+| AF-21g | More than thirty requests a minute by the actor, or from their address, to this endpoint (System Admin included) | `429 Too Many Requests` — "Too many requests." with `Retry-After` |
 
-> **On the person added.** The person is not asked to accept; the ownership takes effect at once
-> (Threat Model TH-41).
+> **On the person added.** A System Admin's add takes effect at once. A Scope Admin's never does: the
+> person becomes an owner only by accepting, signed in as themselves (UC-60, Threat Model TH-41). A
+> Scope Admin who owns no live scope cannot sign in (AF-11e) and so cannot accept; a System Admin adds
+> such a person directly.
 
 ---
 
@@ -2740,6 +2757,134 @@ sequenceDiagram
 
 ---
 
+### UC-58: Withdraw a Scope Owner Invitation
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-58 |
+| **Name** | Withdraw a Scope Owner Invitation |
+| **Actors** | System Admin, Scope Admin (existing owner) |
+| **Description** | List a scope's open owner invitations via `GET /api/scopes/{scopeId}/owner-invitations`, and withdraw one via `DELETE /api/scopes/{scopeId}/owner-invitations/{invitationId}` |
+| **Preconditions** | Actor is authenticated; the scope exists and is not logically deleted; the actor is a System Admin or an owner of it |
+| **Postconditions** | The invitation has ended as withdrawn and can no longer be accepted; the withdrawal is audited with the invitation as target |
+
+**Main Flow:**
+
+1. The actor lists the scope's open invitations: for each, its id, the invitee's id, name and address, the inviter's name (absent once the inviter is erased), and when it was made and expires, newest first and paginated. Ended and expired invitations, and those of a logically deleted invitee, are not listed.
+2. The actor asks to withdraw one by its id.
+3. The system confirms the scope and the actor's right to manage it, ends the invitation as withdrawn — only while it is still open — and answers `204 No Content`.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-58a | The scope is not found or is logically deleted | `404 Not Found` — "Scope not found." |
+| AF-58b | The actor is neither a System Admin nor an owner of the scope | `403 Forbidden` — "You are not an owner of the target scope."; a `User` `403`, an anonymous caller `401` |
+| AF-58c | No open invitation with that id belongs to the scope — unknown, another scope's, ended, expired, or answered a moment earlier | `404 Not Found` — "The invitation was not found or is no longer open." Nothing changes |
+
+---
+
+### UC-59: List My Scope Invitations
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-59 |
+| **Name** | List My Scope Invitations |
+| **Actors** | Scope Admin, System Admin (the invitee) |
+| **Description** | List the caller's own open scope owner invitations via `GET /api/persons/me/scope-invitations` |
+| **Preconditions** | Actor is authenticated as a `ScopeAdmin` or `SystemAdmin` |
+| **Postconditions** | None; the use case reads |
+
+**Main Flow:**
+
+1. The actor asks for their invitations.
+2. The system answers with their open invitations, soonest to expire first and paginated: each one's id, the scope's id and name, the inviter's name (absent once the inviter is erased), and when it was made and expires. Invitations to a logically deleted scope are not listed.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-59a | The caller has no open invitation | `200 OK` with an empty page |
+| AF-59b | The caller is a `User` | `403 Forbidden`; an anonymous caller `401` |
+
+---
+
+### UC-60: Accept a Scope Owner Invitation
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-60 |
+| **Name** | Accept a Scope Owner Invitation |
+| **Actors** | Scope Admin, System Admin (the invitee), Email Service |
+| **Description** | Accept an open invitation via `POST /api/scope-invitations/{invitationId}/accept`, becoming an owner of the scope |
+| **Preconditions** | Actor is authenticated as the invitee |
+| **Postconditions** | The invitation has ended as accepted and a `SCOPE_OWNER` row links the scope to the invitee — both or neither; the inviter has been notified, where they can be |
+
+**Main Flow:**
+
+```mermaid
+sequenceDiagram
+    actor I as Invitee
+    participant API as Heimdall API
+    participant DB as Database
+    participant ES as Email Service
+
+    I->>API: POST /api/scope-invitations/{invitationId}/accept
+    API->>DB: Find the caller's own open invitation
+    API->>DB: Scope live? Caller a live, unrestricted administrator?
+    API->>DB: BEGIN — end it as accepted only while open; insert SCOPE_OWNER only if that took — COMMIT
+    API->>ES: Notice to the inviter
+    API-->>I: 200 OK — "The invitation was accepted."
+```
+
+1. The invitee asks to accept an invitation by its id.
+2. The system finds the invitation among the caller's own open ones.
+3. The system confirms the scope is still live and the caller still a non-deleted, non-restricted, non-anonymised `ScopeAdmin` or `SystemAdmin`.
+4. In one transaction, the system ends the invitation as accepted — only while it is still open, with the conditions of step 3 checked again — and, only if that took, inserts the `SCOPE_OWNER` row. The acceptance is audited with the invitation as target.
+5. The system notifies the inviter, if there still is one who may be mailed (not deleted, anonymised or processing-restricted; AF-51c, NFR-24), and answers `200 OK` "The invitation was accepted." with the invitation's and the scope's ids. The scope appears in the caller's scope list at once.
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-60a | No open invitation with that id was made to the caller — unknown, somebody else's (the inviter's own included), ended, expired, or withdrawn or answered between steps 2 and 4 | `404 Not Found` — "The invitation was not found or is no longer open." Inviter, invitee and outsider get the same answer; nothing changes |
+| AF-60b | The scope was deleted, or the caller is no longer an unrestricted administrator — whether before step 3 or in the instant before the write of step 4 | The invitation ends as voided, audited with the invitation as target; `404 Not Found` with AF-60a's message |
+| AF-60c | The caller is a `User` | `403 Forbidden`; an anonymous caller `401` |
+
+---
+
+### UC-61: Decline a Scope Owner Invitation
+
+| Field | Value |
+| ------- | ------- |
+| **ID** | UC-61 |
+| **Name** | Decline a Scope Owner Invitation |
+| **Actors** | Scope Admin, System Admin (the invitee), Email Service |
+| **Description** | Decline an open invitation via `POST /api/scope-invitations/{invitationId}/decline` |
+| **Preconditions** | Actor is authenticated as the invitee |
+| **Postconditions** | The invitation has ended as declined, audited with the invitation as target; the inviter has been notified, where they can be; an owner may invite the person again |
+
+**Main Flow:**
+
+1. The invitee asks to decline an invitation by its id.
+2. The system finds the invitation among the caller's own open ones and ends it as declined, only while it is still open.
+3. The system notifies the inviter, if there still is one who may be mailed (not deleted, anonymised or processing-restricted; AF-51c, NFR-24), and answers `200 OK` "The invitation was declined."
+
+**Alternative Flows:**
+
+| ID | Condition | Outcome |
+| ---- | ----------- | --------- |
+| AF-61a | As AF-60a | `404 Not Found` — "The invitation was not found or is no longer open." |
+| AF-61b | The caller is a `User` | `403 Forbidden`; an anonymous caller `401` |
+
+> **How an invitation ends.** Exactly once: accepted (UC-60), declined (UC-61), withdrawn (UC-58), voided
+> (AF-60b, or when the invitee is anonymised), or by running out unanswered. One that ended is purged
+> 90 days after it ended, and one that ran out unanswered 90 days after it expired (Data Retention
+> Schedule). When the inviter is anonymised the invitation stays, with no inviter. Invitations are not
+> part of the data export (UC-41).
+
+---
+
 ## 3. Use Case — Requirements Traceability
 
 | Use Case | Requirements Covered |
@@ -2764,7 +2909,7 @@ sequenceDiagram
 | UC-18: Update Application | FR-AP-06 |
 | UC-19: Logical Delete Application | FR-AP-07, FR-AP-09 |
 | UC-20: Hard Delete Application | FR-AP-08 |
-| UC-21: Add Scope Owner | FR-SC-08, FR-SC-09 |
+| UC-21: Add Scope Owner | FR-SC-08, FR-SC-09, FR-SC-14, FR-SC-18 |
 | UC-22: Remove Scope Owner | FR-SC-08, FR-SC-10 |
 | UC-23: Promote User to Scope Owner | FR-SC-08, FR-SC-13, FR-RO-03 |
 | UC-24: Enable/Disable Google Sign-In | FR-GO-01, FR-GO-02 |
@@ -2795,6 +2940,10 @@ sequenceDiagram
 | UC-55: Revoke an Application Credential | FR-AP-12, FR-AP-16, NFR-09 |
 | UC-56: Obtain an Application Token | FR-AP-13, FR-AP-14, NFR-09 |
 | UC-57: Check an Application Token | FR-AP-15, FR-AP-16 |
+| UC-58: Withdraw a Scope Owner Invitation | FR-SC-15, NFR-09 |
+| UC-59: List My Scope Invitations | FR-SC-16 |
+| UC-60: Accept a Scope Owner Invitation | FR-SC-17, FR-SC-18, NFR-09 |
+| UC-61: Decline a Scope Owner Invitation | FR-SC-17, NFR-09 |
 
 ---
 

@@ -127,6 +127,10 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-21: Add Scope Owner | ✅ | [#22](https://github.com/artur-rios/heimdall-api/issues/22) |
 | UC-22: Remove Scope Owner | ✅ | [#23](https://github.com/artur-rios/heimdall-api/issues/23) |
 | UC-23: Promote User to Scope Owner | ✅ | [#24](https://github.com/artur-rios/heimdall-api/issues/24) |
+| UC-58: Withdraw a Scope Owner Invitation | ✅ | — |
+| UC-59: List My Scope Invitations | ✅ | — |
+| UC-60: Accept a Scope Owner Invitation | ✅ | — |
+| UC-61: Decline a Scope Owner Invitation | ✅ | — |
 
 ### Person Management
 
