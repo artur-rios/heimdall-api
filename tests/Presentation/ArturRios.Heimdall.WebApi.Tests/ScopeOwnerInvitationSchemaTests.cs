@@ -10,8 +10,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
 ///     <c>scope_owner_invitation</c>'s own rules, against real PostgreSQL (UC-21, FR-SC-14): one unended
-///     invitation per scope and invitee, an outcome only on an ended row, and what each hard delete does
-///     to an invitation that names the deleted row.
+///     invitation per scope and invitee, only a known outcome and only on an ended row, and what each hard
+///     delete does to an invitation that names the deleted row.
 /// </summary>
 [Collection(nameof(FunctionalCollection))]
 public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
@@ -101,7 +101,58 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
         var failure = await RunAsync($"UPDATE heimdall.scope_owner_invitation SET outcome = 1 WHERE id = {invitation.Id}");
 
         // Then
-        Assert.Equal(CheckViolation, Assert.IsType<PostgresException>(failure).SqlState);
+        var refusal = Assert.IsType<PostgresException>(failure);
+        Assert.Equal(CheckViolation, refusal.SqlState);
+        Assert.Equal("ck_scope_owner_invitation_outcome_ends_it", refusal.ConstraintName);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnUnknownOutcome_WhenAnEndedInvitationIsInsertedWithIt_ThenTheDatabaseRefusesIt()
+    {
+        // Given
+        var scope = await SeedScopeAsync(db);
+        var invitee = await SeedScopeAdminAsync(db);
+
+        // When
+        var failure = await Record.ExceptionAsync(() =>
+            SeedInvitationAsync(scope, invitee, null, DateTime.UtcNow, (ScopeOwnerInvitationOutcomes)5));
+
+        // Then
+        var refusal = Assert.IsType<PostgresException>(Assert.IsType<DbUpdateException>(failure).InnerException);
+        Assert.Equal(CheckViolation, refusal.SqlState);
+        Assert.Equal("ck_scope_owner_invitation_outcome_known", refusal.ConstraintName);
+    }
+
+    [FunctionalFact]
+    public async Task GivenNoOutcome_WhenAnInvitationEndedByExpiryIsInserted_ThenTheDatabaseAllowsIt()
+    {
+        // Given — the shape ScopeOwnerInvitations.OpenAsync leaves when it closes an expired row
+        var scope = await SeedScopeAsync(db);
+        var invitee = await SeedScopeAdminAsync(db);
+
+        // When
+        var failure = await Record.ExceptionAsync(() =>
+            SeedInvitationAsync(scope, invitee, null, DateTime.UtcNow, outcome: null));
+
+        // Then
+        Assert.Null(failure);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnOutcome_WhenAnInvitationWithNoEndIsInsertedWithIt_ThenTheDatabaseRefusesIt()
+    {
+        // Given
+        var scope = await SeedScopeAsync(db);
+        var invitee = await SeedScopeAdminAsync(db);
+
+        // When
+        var failure = await Record.ExceptionAsync(() =>
+            SeedInvitationAsync(scope, invitee, null, endedAt: null, ScopeOwnerInvitationOutcomes.Declined));
+
+        // Then
+        var refusal = Assert.IsType<PostgresException>(Assert.IsType<DbUpdateException>(failure).InnerException);
+        Assert.Equal(CheckViolation, refusal.SqlState);
+        Assert.Equal("ck_scope_owner_invitation_outcome_ends_it", refusal.ConstraintName);
     }
 
     [FunctionalFact]

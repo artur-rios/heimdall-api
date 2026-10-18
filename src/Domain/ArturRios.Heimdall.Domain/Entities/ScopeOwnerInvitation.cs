@@ -58,4 +58,14 @@ public class ScopeOwnerInvitation : Entity<long>
     /// </summary>
     public static Expression<Func<ScopeOwnerInvitation, bool>> OpenAt(DateTime now) =>
         invitation => invitation.EndedAt == null && invitation.ExpiresAt > now;
+
+    /// <summary>
+    ///     Whether a person may still accept an invitation (UC-60): not logically deleted, not
+    ///     processing-restricted, not anonymised, and a Scope Admin or System Admin. The one definition of
+    ///     the rule: the PostgreSQL acceptance writes it into its conditional <c>UPDATE</c>, and code that
+    ///     holds a person in memory compiles it. The scope must be live too, which this does not cover.
+    /// </summary>
+    public static Expression<Func<Person, bool>> EligibleInvitee { get; } = person =>
+        !person.IsDeleted && person.ProcessingRestrictedAt == null && person.AnonymisedAt == null &&
+        (person.RoleId == (long)Roles.ScopeAdmin || person.RoleId == (long)Roles.SystemAdmin);
 }

@@ -5,14 +5,19 @@ using ArturRios.Util.Test.Attributes;
 namespace ArturRios.Heimdall.Domain.Tests;
 
 // Unit tests for ScopeOwnerInvitation (UC-21, UC-58…UC-61): an invitation is open while it has not ended
-// and its expiry is still ahead — the instant of expiry already counts as expired — and the stored
-// outcome values are the ones the table's check and the documentation name.
+// and its expiry is still ahead — the instant of expiry already counts as expired — the stored outcome
+// values are the ones the table's check and the documentation name, and only a live, unrestricted,
+// unanonymised administrator is an eligible invitee.
 public class ScopeOwnerInvitationTests
 {
     private static readonly DateTime Now = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
 
     private static bool IsOpen(ScopeOwnerInvitation invitation) =>
         ScopeOwnerInvitation.OpenAt(Now).Compile()(invitation);
+
+    private static bool IsEligible(Person person) => ScopeOwnerInvitation.EligibleInvitee.Compile()(person);
+
+    private static Person Invitee(Roles role = Roles.ScopeAdmin) => new() { RoleId = (long)role };
 
     private static ScopeOwnerInvitation Invitation(DateTime expiresAt, DateTime? endedAt = null,
         ScopeOwnerInvitationOutcomes? outcome = null) => new()
@@ -90,5 +95,75 @@ public class ScopeOwnerInvitationTests
         // Then
         Assert.NotEqual(Guid.Empty, first.PublicId);
         Assert.NotEqual(first.PublicId, second.PublicId);
+    }
+
+    [UnitTheory]
+    [InlineData(Roles.ScopeAdmin)]
+    [InlineData(Roles.SystemAdmin)]
+    public void GivenALiveUnrestrictedAdministrator_WhenCheckedAsInvitee_ThenEligible(Roles role)
+    {
+        // Given
+        var person = Invitee(role);
+
+        // When
+        var eligible = IsEligible(person);
+
+        // Then
+        Assert.True(eligible);
+    }
+
+    [UnitFact]
+    public void GivenAUser_WhenCheckedAsInvitee_ThenNotEligible()
+    {
+        // Given
+        var person = Invitee(Roles.User);
+
+        // When
+        var eligible = IsEligible(person);
+
+        // Then
+        Assert.False(eligible);
+    }
+
+    [UnitFact]
+    public void GivenALogicallyDeletedAdministrator_WhenCheckedAsInvitee_ThenNotEligible()
+    {
+        // Given
+        var person = Invitee();
+        person.IsDeleted = true;
+
+        // When
+        var eligible = IsEligible(person);
+
+        // Then
+        Assert.False(eligible);
+    }
+
+    [UnitFact]
+    public void GivenAProcessingRestrictedAdministrator_WhenCheckedAsInvitee_ThenNotEligible()
+    {
+        // Given
+        var person = Invitee();
+        person.ProcessingRestrictedAt = Now;
+
+        // When
+        var eligible = IsEligible(person);
+
+        // Then
+        Assert.False(eligible);
+    }
+
+    [UnitFact]
+    public void GivenAnAnonymisedAdministrator_WhenCheckedAsInvitee_ThenNotEligible()
+    {
+        // Given
+        var person = Invitee();
+        person.AnonymisedAt = Now;
+
+        // When
+        var eligible = IsEligible(person);
+
+        // Then
+        Assert.False(eligible);
     }
 }

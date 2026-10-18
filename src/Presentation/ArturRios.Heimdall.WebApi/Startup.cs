@@ -272,6 +272,9 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IErasedSubjects, ErasedSubjects>();
         // FR-SR-14: the per-address budget of registration-attempt notices, charged as one upsert.
         Builder.Services.AddScoped<IAttemptNoticeBudgets, AttemptNoticeBudgets>();
+        // FR-SC-17: opening, answering, withdrawing and voiding scope owner invitations, each one
+        // conditional write, and acceptance one transaction with the ownership it grants.
+        Builder.Services.AddScoped<IScopeOwnerInvitations, ScopeOwnerInvitations>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
