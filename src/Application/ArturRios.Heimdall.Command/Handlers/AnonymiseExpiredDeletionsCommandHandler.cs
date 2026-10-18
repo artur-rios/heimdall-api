@@ -1,5 +1,6 @@
 using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
@@ -11,6 +12,7 @@ using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Handlers;
 
@@ -40,9 +42,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 ///     <para>
 ///         <b>Invitations.</b> A person anonymised has their unended scope owner invitations voided and
-///         is cleared as the inviter of the rest (FR-SC-17); each void is audited, on its invitation, as a
-///         side effect of the run. The voids follow the anonymisation rather than preceding it with the
-///         dependents, because only the targeted write knows whether the person is erased at all.
+///         is cleared as the inviter of the rest (FR-SC-17); each void is audited, on its invitation, as
+///         soon as it is made (<see cref="ErasedPersonInvitations" />). The voids follow the anonymisation
+///         rather than preceding it with the dependents, because only the targeted write knows whether the
+///         person is erased at all. A run that anonymised a person and then failed before forgetting them
+///         is caught up by the next one, which first forgets every anonymised person an invitation still
+///         names.
 ///     </para>
 ///     <para>
 ///         <b>What is deliberately left alone.</b> The scope membership and ownership rows, the
@@ -68,7 +73,10 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
     DataRetentionOptions retention,
     IAtomicWrites atomicWrites,
-    IScopeOwnerInvitations invitations)
+    IScopeOwnerInvitations invitations,
+    IAsyncReadOnlyRepository<ScopeOwnerInvitation, long> invitationReader,
+    IAuditLogWriter auditLog,
+    ILogger<AnonymiseExpiredDeletionsCommandHandler> logger)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
     /// <summary>
@@ -108,6 +116,10 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // running the whole time.
         await RetryBlockedRequestsAsync(now);
 
+        // Before selecting anyone new: a person anonymised by an earlier run that failed before their
+        // invitations were forgotten is never selected again, and would otherwise stay named for good.
+        var caughtUp = await ForgetAnonymisedStillNamedAsync(now);
+
         var persons = await personReader.Query()
             // A restricted record is preserved exactly as it stands rather than entering the window
             // (NFR-24): restriction and deletion are independent, so a record can be both — deleted
@@ -142,7 +154,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
         if (persons.Count == 0 && googleUsers.Count == 0)
         {
-            return Success(output, 0, 0, 0);
+            return Success(output, 0, 0, 0, invitationsVoided: caughtUp.Count);
         }
 
         var errors = new List<string>();
@@ -183,9 +195,8 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // (FR-SC-17): their unended invitations are voided, and they are cleared as the inviter of any
         // other. Only for the persons actually anonymised — one restricted since the selection is not
         // erased (NFR-24), so what names them stays as it stands.
-        IReadOnlyList<Guid> voided = anonymisedPersons.Count == 0
-            ? []
-            : await invitations.ForgetPersonsAsync(anonymisedPersons.Select(person => person.Id).ToList(), now);
+        var voided = await ErasedPersonInvitations.ForgetAsync(
+            invitations, auditLog, logger, anonymisedPersons.Select(person => person.Id).ToList(), now);
 
         foreach (var googleUser in googleUsers)
         {
@@ -201,7 +212,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 anonymisedPersons.Select(person => person.PublicId)
                     .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
                     .ToList(),
-                voided);
+                caughtUp.Count + voided.Count);
     }
 
     /// <summary>
@@ -241,6 +252,34 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     }
 
     /// <summary>
+    ///     Forgets, as <see cref="ErasedPersonInvitations" /> does, the persons already anonymised whom an
+    ///     unended invitation still names as invitee, or any invitation as inviter — at most a batch per run.
+    /// </summary>
+    /// <remarks>
+    ///     Normally none: the run that anonymised a person forgot them too. One that failed in between
+    ///     leaves them anonymised, and the selection takes only persons not yet anonymised, so nothing else
+    ///     would come back for them. Both invitation columns are indexed.
+    /// </remarks>
+    private async Task<IReadOnlyList<Guid>> ForgetAnonymisedStillNamedAsync(DateTime now)
+    {
+        var anonymised = personReader.Query()
+            .Where(person => person.AnonymisedAt != null)
+            .Select(person => person.Id);
+
+        var stillNamed = await invitationReader.Query()
+            .Where(invitation => invitation.EndedAt == null && anonymised.Contains(invitation.InviteePersonId))
+            .Select(invitation => invitation.InviteePersonId)
+            .Union(invitationReader.Query()
+                .Where(invitation => invitation.InvitedByPersonId != null &&
+                                     anonymised.Contains(invitation.InvitedByPersonId.Value))
+                .Select(invitation => invitation.InvitedByPersonId!.Value))
+            .Take(retention.PurgeBatchSize)
+            .ToListAsync();
+
+        return await ErasedPersonInvitations.ForgetAsync(invitations, auditLog, logger, stillNamed, now);
+    }
+
+    /// <summary>
     ///     Permanently removes the rows that hold data belonging to the persons being anonymised —
     ///     see <see cref="PersonDependentsRemoval" />, which the re-application of erasures shares.
     /// </summary>
@@ -271,7 +310,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         int googleUsers,
         int dependents,
         IEnumerable<Guid>? anonymisedIds = null,
-        IReadOnlyCollection<Guid>? voidedInvitationIds = null) =>
+        int invitationsVoided = 0) =>
         output
             .WithData(new AnonymiseExpiredDeletionsCommandOutput
             {
@@ -279,7 +318,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 GoogleUsersAnonymised = googleUsers,
                 DependentsRemoved = dependents,
                 AnonymisedIds = anonymisedIds ?? [],
-                VoidedScopeOwnerInvitationIds = voidedInvitationIds ?? []
+                ScopeOwnerInvitationsVoided = invitationsVoided
             })
             .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
 }

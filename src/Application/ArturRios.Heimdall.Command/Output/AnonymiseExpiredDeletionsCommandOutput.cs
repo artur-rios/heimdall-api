@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Mediator.Command;
 
 namespace ArturRios.Heimdall.Command.Output;
@@ -8,7 +6,7 @@ namespace ArturRios.Heimdall.Command.Output;
 ///     Result of <see cref="Input.AnonymiseExpiredDeletionsCommand" />: how many identities the run
 ///     anonymised. Zero is an ordinary successful run.
 /// </summary>
-public class AnonymiseExpiredDeletionsCommandOutput : CommandOutput, IAuditedSideEffects
+public class AnonymiseExpiredDeletionsCommandOutput : CommandOutput
 {
     /// <summary>Persons anonymised.</summary>
     public int PersonsAnonymised { get; set; }
@@ -33,20 +31,11 @@ public class AnonymiseExpiredDeletionsCommandOutput : CommandOutput, IAuditedSid
     public IEnumerable<Guid> AnonymisedIds { get; set; } = [];
 
     /// <summary>
-    ///     Unended scope owner invitations of the persons this run anonymised, voided (FR-SC-17).
-    ///     Each is recorded in the audit trail as <c>ScopeOwnerInvitationVoided</c>, on that invitation.
+    ///     Unended scope owner invitations this run voided (FR-SC-17): those of the persons it anonymised,
+    ///     and any still open to a person an earlier run anonymised. Each is recorded in the audit trail as
+    ///     <c>ScopeOwnerInvitationVoided</c>, on that invitation.
     /// </summary>
-    public int ScopeOwnerInvitationsVoided => VoidedScopeOwnerInvitationIds.Count;
-
-    /// <summary>
-    ///     Public identifiers of those invitations, which their audit entries target (NFR-09). In no
-    ///     particular order, and kept out of the serialized response: the count says what a caller needs.
-    /// </summary>
-    [JsonIgnore]
-    public IReadOnlyCollection<Guid> VoidedScopeOwnerInvitationIds { get; init; } = [];
-
-    public IEnumerable<AuditedSideEffect> AuditedSideEffects() =>
-        VoidedScopeOwnerInvitationIds.Select(id => new AuditedSideEffect(ScopeOwnerInvitationAuditActions.Voided, id));
+    public int ScopeOwnerInvitationsVoided { get; set; }
 
     /// <summary>Identities anonymised across both tables.</summary>
     public int TotalAnonymised => PersonsAnonymised + GoogleUsersAnonymised;

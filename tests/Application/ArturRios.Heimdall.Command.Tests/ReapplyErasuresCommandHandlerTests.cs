@@ -5,9 +5,12 @@ using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
+using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
@@ -25,15 +28,19 @@ public class ReapplyErasuresCommandHandlerTests
         AsyncFakeRepository<PasswordResetToken, long>? passwordResetTokens = null,
         AsyncFakeRepository<EmailVerificationToken, long>? emailVerificationTokens = null,
         AsyncFakeRepository<TwoFactorAuth, long>? twoFactorAuths = null,
-        AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null) =>
+        AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null,
+        IAtomicWrites? atomicWrites = null,
+        IAuditLogWriter? auditLog = null) =>
         new(persons, googleUsers, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),
-            InMemoryAtomicWrites.Instance,
+            atomicWrites ?? InMemoryAtomicWrites.Instance,
             new InMemoryScopeOwnerInvitations(
                 invitations ?? new AsyncFakeRepository<ScopeOwnerInvitation, long>(), persons,
-                new AsyncFakeRepository<Scope, long>()));
+                new AsyncFakeRepository<Scope, long>()),
+            auditLog ?? new RecordingAuditLogWriter(),
+            NullLogger<ReapplyErasuresCommandHandler>.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons, DateTime? anonymisedAt = null)
@@ -243,7 +250,9 @@ public class ReapplyErasuresCommandHandlerTests
         await invitations.CreateAsync(sent);
 
         // When
-        var output = await Handler(persons, googleUsers, invitations: invitations).HandleAsync(Command(person.PublicId));
+        var auditLog = new RecordingAuditLogWriter();
+        var output = await Handler(persons, googleUsers, invitations: invitations, auditLog: auditLog)
+            .HandleAsync(Command(person.PublicId));
 
         // Then
         Assert.True(output.Success);
@@ -251,9 +260,7 @@ public class ReapplyErasuresCommandHandlerTests
         Assert.Null(sent.InvitedByPersonId);
         Assert.Null(sent.EndedAt);
         Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
-        Assert.Equal(
-            [new AuditedSideEffect(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId)],
-            output.Data.AuditedSideEffects());
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], auditLog.Entries);
     }
 
     [UnitFact]
@@ -271,12 +278,48 @@ public class ReapplyErasuresCommandHandlerTests
         await invitations.CreateAsync(invitation);
 
         // When
-        var output = await Handler(persons, googleUsers, invitations: invitations).HandleAsync(Command(person.PublicId));
+        var auditLog = new RecordingAuditLogWriter();
+        var output = await Handler(persons, googleUsers, invitations: invitations, auditLog: auditLog)
+            .HandleAsync(Command(person.PublicId));
 
         // Then
         Assert.True(output.Success);
         Assert.Null(invitation.EndedAt);
         Assert.Equal(0, output.Data!.ScopeOwnerInvitationsVoided);
-        Assert.Empty(output.Data.AuditedSideEffects());
+        Assert.Empty(auditLog.Entries);
+    }
+
+    [UnitFact]
+    public async Task GivenTheIdentityWriteThrowsAfterAVoid_WhenTheAuditedReapplyRuns_ThenTheVoidIsStillAudited()
+    {
+        // Given — the void commits before the identity is written; the write then fails outright, and a
+        // retry would find the invitation already ended, with no id left to audit
+        var (persons, googleUsers) = Fakes();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var person = await SeedPersonAsync(persons);
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+        };
+        await invitations.CreateAsync(invitation);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = _ => throw new InvalidOperationException("database unavailable")
+        };
+        var auditLog = new RecordingAuditLogWriter();
+        var handler = new AuditingCommandHandler<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>(
+            Handler(persons, googleUsers, invitations: invitations, atomicWrites: atomicWrites, auditLog: auditLog),
+            auditLog, NullLogger<AuditingCommandHandler<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>>.Instance);
+
+        // When
+        var thrown = await Record.ExceptionAsync(() => handler.HandleAsync(Command(person.PublicId)));
+
+        // Then
+        Assert.IsType<InvalidOperationException>(thrown);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
+        Assert.Equal(
+            [(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)],
+            auditLog.Entries);
     }
 }

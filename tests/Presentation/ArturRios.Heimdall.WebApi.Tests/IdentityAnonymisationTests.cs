@@ -8,9 +8,12 @@ using ArturRios.Heimdall.Data.Persistence;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Retention;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -56,8 +59,35 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
             twoFactorAuths,
             Retention,
             new AtomicWrites(context),
-            new ScopeOwnerInvitations(context));
+            new ScopeOwnerInvitations(context),
+            new EfRepository<ScopeOwnerInvitation, long>(context),
+            AuditLog(context),
+            NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance);
     }
+
+    /// <summary>The real audit writer, actorless as the scheduled pass is.</summary>
+    private static AuditLogWriter AuditLog(AppDbContext context) =>
+        new(new EfRepository<AuditLog, long>(context), new HttpContextActorAccessor(new HttpContextAccessor()));
+
+    private static ReapplyErasuresCommandHandler ReapplyHandler(AppDbContext context)
+    {
+        var persons = new EfRepository<Person, long>(context);
+        var googleUsers = new EfRepository<GoogleUser, long>(context);
+
+        return new ReapplyErasuresCommandHandler(
+            persons, googleUsers, googleUsers,
+            new EfRepository<PasswordResetToken, long>(context),
+            new EfRepository<EmailVerificationToken, long>(context),
+            new EfRepository<TwoFactorAuth, long>(context),
+            new AtomicWrites(context),
+            new ScopeOwnerInvitations(context),
+            AuditLog(context),
+            NullLogger<ReapplyErasuresCommandHandler>.Instance);
+    }
+
+    private static async Task<bool> VoidAuditedAsync(AppDbContext context, Guid invitationId) =>
+        await context.AuditLogs.AsNoTracking().AnyAsync(entry =>
+            entry.Action == ScopeOwnerInvitationAuditActions.Voided && entry.TargetId == invitationId && entry.Succeeded);
 
     private static Person DeletedPerson(DateTime deletedAt, DeletionKinds kind) => new()
     {
@@ -244,15 +274,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         context.Persons.Add(restored);
         await context.SaveChangesAsync();
 
-        var persons = new EfRepository<Person, long>(context);
-        var googleUsers = new EfRepository<GoogleUser, long>(context);
-        var handler = new ReapplyErasuresCommandHandler(
-            persons, googleUsers, googleUsers,
-            new EfRepository<PasswordResetToken, long>(context),
-            new EfRepository<EmailVerificationToken, long>(context),
-            new EfRepository<TwoFactorAuth, long>(context),
-            new AtomicWrites(context),
-            new ScopeOwnerInvitations(context));
+        var handler = ReapplyHandler(context);
 
         // When
         var output = await handler.HandleAsync(new ReapplyErasuresCommand
@@ -304,13 +326,106 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         // Then
         Assert.True(output.Success);
-        Assert.Contains(
-            new AuditedSideEffect(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId),
-            output.Data!.AuditedSideEffects());
+        await using var check = fixture.CreateContext();
+        Assert.True(await VoidAuditedAsync(check, invitation.PublicId));
+        var stored = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == invitation.Id);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, stored.Outcome);
+        Assert.NotNull(stored.EndedAt);
+        var storedSent = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == sent.Id);
+        Assert.Null(storedSent.InvitedByPersonId);
+        Assert.Null(storedSent.EndedAt);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnAnonymisedPersonStillNamedByInvitations_WhenAnonymising_ThenTheyAreForgottenAndAudited()
+    {
+        // Given — a person an earlier run anonymised and then failed to forget: still invited, and still
+        // named as the inviter of another invitation
+        await using var context = fixture.CreateContext();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        var person = DeletedPerson(DateTime.UtcNow.AddDays(-60), DeletionKinds.SubjectRequested);
+        person.RoleId = (long)Roles.ScopeAdmin;
+        var other = new Person
+        {
+            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+        };
+        context.Persons.AddRange(person, other);
+        await context.SaveChangesAsync();
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+        };
+        var sent = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = other.Id, InvitedByPersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+        };
+        context.ScopeOwnerInvitations.AddRange(invitation, sent);
+        await context.SaveChangesAsync();
+        Assert.True(await IdentityAnonymiser.AnonymiseAsync(new AtomicWrites(context), person, DateTime.UtcNow));
+
+        // When
+        var output = await Handler(context).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        await using var check = fixture.CreateContext();
+        var stored = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == invitation.Id);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, stored.Outcome);
+        Assert.True(await VoidAuditedAsync(check, invitation.PublicId));
+        var storedSent = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == sent.Id);
+        Assert.Null(storedSent.InvitedByPersonId);
+        Assert.Null(storedSent.EndedAt);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestoredPersonWithInvitations_WhenErasureIsReapplied_ThenTheyAreForgottenAndAudited()
+    {
+        // Given — a restore brought back a person, an invitation open to them and one they sent
+        await using var context = fixture.CreateContext();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        var restored = DeletedPerson(DateTime.UtcNow, DeletionKinds.SubjectRequested);
+        restored.IsDeleted = false;
+        restored.DeletedAt = null;
+        restored.RoleId = (long)Roles.ScopeAdmin;
+        var other = new Person
+        {
+            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+        };
+        context.Persons.AddRange(restored, other);
+        await context.SaveChangesAsync();
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = restored.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+        };
+        var sent = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = other.Id,
+            InvitedByPersonId = restored.Id, CreatedAt = DateTime.UtcNow.AddDays(-2), ExpiresAt = DateTime.UtcNow.AddDays(5)
+        };
+        context.ScopeOwnerInvitations.AddRange(invitation, sent);
+        await context.SaveChangesAsync();
+
+        // When
+        var output = await ReapplyHandler(context).HandleAsync(new ReapplyErasuresCommand
+        {
+            SubjectIds = [restored.PublicId], ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
         await using var check = fixture.CreateContext();
         var stored = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == invitation.Id);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, stored.Outcome);
         Assert.NotNull(stored.EndedAt);
+        Assert.True(await VoidAuditedAsync(check, invitation.PublicId));
         var storedSent = await check.ScopeOwnerInvitations.AsNoTracking().SingleAsync(x => x.Id == sent.Id);
         Assert.Null(storedSent.InvitedByPersonId);
         Assert.Null(storedSent.EndedAt);

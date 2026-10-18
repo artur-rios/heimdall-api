@@ -34,13 +34,12 @@ public class AuditingCommandHandler<TCommand, TOutput>(
         await TryWriteAsync(
             action, targetId, result.Success, result.Success ? null : result.Errors.FirstOrDefault());
 
-        // A side effect only happened if the command did, so a refusal records none. One that acted
-        // on an entity of its own is recorded on that entity, where a reader of its history looks.
+        // A side effect only happened if the command did, so a refusal records none.
         if (result.Success && result.Data is IAuditedSideEffects sideEffects)
         {
             foreach (var sideEffect in sideEffects.AuditedSideEffects())
             {
-                await TryWriteAsync(sideEffect.Action, sideEffect.TargetId ?? targetId, true, null);
+                await TryWriteAsync(sideEffect, targetId, true, null);
             }
         }
 

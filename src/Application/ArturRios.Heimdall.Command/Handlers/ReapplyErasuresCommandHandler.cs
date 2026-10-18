@@ -1,4 +1,5 @@
 using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
@@ -9,6 +10,7 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Handlers;
 
@@ -43,7 +45,9 @@ public class ReapplyErasuresCommandHandler(
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
     IAtomicWrites atomicWrites,
-    IScopeOwnerInvitations invitations)
+    IScopeOwnerInvitations invitations,
+    IAuditLogWriter auditLog,
+    ILogger<ReapplyErasuresCommandHandler> logger)
     : ICommandHandlerAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>
 {
     public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command, CancellationToken cancellationToken = default)
@@ -82,6 +86,47 @@ public class ReapplyErasuresCommandHandler(
             toWrite.Add(person);
         }
 
+        // The restored copy brought back what the original erasure removed alongside the identity —
+        // the two-factor secret with its codes, and any reset or verification tokens. Removed before
+        // the identity is overwritten, as the scheduled pass does, so a failure here leaves the
+        // record selectable for another attempt rather than anonymised with its secret kept.
+        var (_, dependentErrors) = await PersonDependentsRemoval.RemoveAsync(
+            toWrite.Select(person => person.Id).ToList(),
+            passwordResetTokenWriter,
+            emailVerificationTokenWriter,
+            twoFactorAuthWriter);
+
+        if (dependentErrors.Count > 0)
+        {
+            return output.WithErrors(dependentErrors);
+        }
+
+        // As the scheduled pass does: the restored copy may have brought back invitations the erasure
+        // voided, and the person as the inviter of others (FR-SC-17). Before the identity is written,
+        // like the dependents, so a failure leaves the person selectable for another attempt; every
+        // person here ends anonymised, by this run or by one that got there first. Each void is audited
+        // as it is made, so a later failure cannot lose its entry.
+        var voided = await ErasedPersonInvitations.ForgetAsync(
+            invitations, auditLog, logger, toWrite.Select(person => person.Id).ToList(), now);
+
+        // Then each person, by one targeted write (#237): marked as a subject-requested deletion, so
+        // the record's own state says why it is gone and the audit trail reads correctly afterwards,
+        // and anonymised with its password and budgets in the same statement. One anonymised since it
+        // was read is counted as such.
+        foreach (var person in toWrite)
+        {
+            if (await IdentityAnonymiser.ReapplyAsync(atomicWrites, person, now))
+            {
+                anonymised++;
+            }
+            else
+            {
+                alreadyAnonymised++;
+            }
+        }
+
+        // The Google Users are changed only now, after the voids' audit entries are written: those
+        // writes save the unit of work, and must not carry an identity change that has not been made.
         var googleUsersToWrite = new List<GoogleUser>();
 
         foreach (var googleUser in googleUsers)
@@ -101,45 +146,6 @@ public class ReapplyErasuresCommandHandler(
 
             googleUsersToWrite.Add(googleUser);
             anonymised++;
-        }
-
-        // The restored copy brought back what the original erasure removed alongside the identity —
-        // the two-factor secret with its codes, and any reset or verification tokens. Removed before
-        // the identity is overwritten, as the scheduled pass does, so a failure here leaves the
-        // record selectable for another attempt rather than anonymised with its secret kept.
-        var (_, dependentErrors) = await PersonDependentsRemoval.RemoveAsync(
-            toWrite.Select(person => person.Id).ToList(),
-            passwordResetTokenWriter,
-            emailVerificationTokenWriter,
-            twoFactorAuthWriter);
-
-        if (dependentErrors.Count > 0)
-        {
-            return output.WithErrors(dependentErrors);
-        }
-
-        // As the scheduled pass does: the restored copy may have brought back invitations the erasure
-        // voided, and the person as the inviter of others (FR-SC-17). Before the identity is written,
-        // like the dependents, so a failure leaves the person selectable for another attempt; every
-        // person here ends anonymised, by this run or by one that got there first.
-        IReadOnlyList<Guid> voided = toWrite.Count == 0
-            ? []
-            : await invitations.ForgetPersonsAsync(toWrite.Select(person => person.Id).ToList(), now);
-
-        // Then each person, by one targeted write (#237): marked as a subject-requested deletion, so
-        // the record's own state says why it is gone and the audit trail reads correctly afterwards,
-        // and anonymised with its password and budgets in the same statement. One anonymised since it
-        // was read is counted as such.
-        foreach (var person in toWrite)
-        {
-            if (await IdentityAnonymiser.ReapplyAsync(atomicWrites, person, now))
-            {
-                anonymised++;
-            }
-            else
-            {
-                alreadyAnonymised++;
-            }
         }
 
         var errors = new List<string>();
@@ -169,7 +175,7 @@ public class ReapplyErasuresCommandHandler(
                 Anonymised = anonymised,
                 AlreadyAnonymised = alreadyAnonymised,
                 NotFound = requested.Where(id => !found.Contains(id)).ToList(),
-                VoidedScopeOwnerInvitationIds = voided
+                ScopeOwnerInvitationsVoided = voided.Count
             })
             .WithMessage(ErasureMessages.ErasuresReapplied);
     }
