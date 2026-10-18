@@ -1,5 +1,7 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
+using ArturRios.Heimdall.Command.Auditing;
+using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -14,8 +16,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for POST /api/scopes/{scopeId}/owners/{personId} (UC-21, FR-SC-08/FR-SC-09): the
-// main flow for a System Admin and for an existing owner, AF-21a (scope unknown or logically
-// deleted), AF-21b (person unknown, logically deleted, or not a ScopeAdmin), AF-21c (a Scope Admin
+// main flow for a System Admin, an existing owner's invitation instead (FR-SC-14: 202, idempotent while
+// open, audited with the invitation as target), AF-21a (scope unknown or logically deleted), AF-21b (person unknown, logically deleted, or not a ScopeAdmin), AF-21c (a Scope Admin
 // who owns a different scope), AF-21d (a repeated call is an idempotent 200 that does not duplicate
 // the row), and the framework flows the actor list produces (403 for a User, 401 unauthenticated).
 [Collection(nameof(FunctionalCollection))]
@@ -89,6 +91,14 @@ public class PersonControllerAddScopeOwnerTests(PostgresFixture db) : WebApiTest
         return await context.ScopeOwners.CountAsync(so => so.ScopeId == scope.Id && so.PersonId == person.Id);
     }
 
+    private async Task<List<ScopeOwnerInvitation>> InvitationsOfAsync(Scope scope, Person person)
+    {
+        await using var context = db.CreateContext();
+        return await context.ScopeOwnerInvitations.AsNoTracking()
+            .Where(x => x.ScopeId == scope.Id && x.InviteePersonId == person.Id)
+            .ToListAsync();
+    }
+
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPostScopeOwner_ThenCreatedAndRowExists()
     {
@@ -107,14 +117,16 @@ public class PersonControllerAddScopeOwnerTests(PostgresFixture db) : WebApiTest
         Assert.False(response.Body?.Data?.AlreadyOwner);
         Assert.Contains(PersonMessages.ScopeOwnerAddedSuccessfully, response.Body!.Messages);
 
-        // Then — database state
+        // Then — database state: the ownership, and no invitation
         Assert.Equal(1, await OwnershipCountAsync(scope, person));
+        Assert.False(response.Body.Data!.Invited);
+        Assert.Empty(await InvitationsOfAsync(scope, person));
     }
 
     [FunctionalFact]
-    public async Task GivenExistingOwner_WhenPostScopeOwner_ThenCreatedAndRowExists()
+    public async Task GivenExistingOwner_WhenPostScopeOwner_ThenAcceptedAndOnlyAnInvitationExists()
     {
-        // Given a Scope Admin who already owns the scope adding a co-owner (FR-SC-09)
+        // Given a Scope Admin who already owns the scope adding a co-owner (FR-SC-14)
         var scope = await SeedScopeAsync();
         var actor = await SeedScopeAdminAsync(ownedScope: scope);
         var person = await SeedScopeAdminAsync();
@@ -123,10 +135,57 @@ public class PersonControllerAddScopeOwnerTests(PostgresFixture db) : WebApiTest
         // When
         var response = await AddOwnerAsync(scope.PublicId, person.PublicId);
 
-        // Then — the scope now has both owners
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Equal(1, await OwnershipCountAsync(scope, person));
-        Assert.Equal(1, await OwnershipCountAsync(scope, actor));
+        // Then — invited, not added
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Contains(ScopeInvitationMessages.InvitationSent, response.Body!.Messages);
+        Assert.True(response.Body.Data!.Invited);
+        Assert.Equal(0, await OwnershipCountAsync(scope, person));
+        var invitation = Assert.Single(await InvitationsOfAsync(scope, person));
+        Assert.Equal(response.Body.Data.InvitationId, invitation.PublicId);
+        Assert.Equal(actor.Id, invitation.InvitedByPersonId);
+        Assert.Null(invitation.EndedAt);
+    }
+
+    [FunctionalFact]
+    public async Task GivenExistingOwnerInvitingTwice_WhenPostScopeOwner_ThenTheSameInvitationIsReturned()
+    {
+        // Given
+        var scope = await SeedScopeAsync();
+        var actor = await SeedScopeAdminAsync(ownedScope: scope);
+        var person = await SeedScopeAdminAsync();
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
+        var first = await AddOwnerAsync(scope.PublicId, person.PublicId);
+
+        // When
+        var second = await AddOwnerAsync(scope.PublicId, person.PublicId);
+
+        // Then
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
+        Assert.Equal(first.Body!.Data!.InvitationId, second.Body!.Data!.InvitationId);
+        Assert.Single(await InvitationsOfAsync(scope, person));
+    }
+
+    [FunctionalFact]
+    public async Task GivenExistingOwner_WhenAnInvitationIsOpened_ThenItIsAudited()
+    {
+        // Given
+        var scope = await SeedScopeAsync();
+        var actor = await SeedScopeAdminAsync(ownedScope: scope);
+        var person = await SeedScopeAdminAsync();
+        Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
+
+        // When
+        var response = await AddOwnerAsync(scope.PublicId, person.PublicId);
+
+        // Then — the command's own entry, and the invitation's, which names the invitation
+        await using var context = db.CreateContext();
+        var entries = await context.AuditLogs.AsNoTracking()
+            .Where(x => x.ActorPersonId == actor.PublicId && x.Succeeded)
+            .Select(x => new { x.Action, x.TargetId })
+            .ToListAsync();
+        Assert.Contains(entries, x => x.Action == nameof(AddScopeOwnerCommand));
+        var created = Assert.Single(entries, x => x.Action == ScopeOwnerInvitationAuditActions.Created);
+        Assert.Equal(response.Body!.Data!.InvitationId, created.TargetId);
     }
 
     [FunctionalFact]

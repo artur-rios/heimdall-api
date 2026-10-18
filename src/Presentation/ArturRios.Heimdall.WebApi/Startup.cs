@@ -984,7 +984,7 @@ public class Startup : WebApiStartup
     ///     Whether a request spends the account-creation address bound: only an administrator's
     ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
     ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
-    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
+    ///     to its audience) — and only the roles the four endpoints admit. Anything else is turned
     ///     away by the endpoint's own checks and must not use up a bound administrators share.
     /// </summary>
     private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
@@ -993,11 +993,12 @@ public class Startup : WebApiStartup
 
     /// <summary>
     ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
-    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) twice over:
+    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>), and the one that invites
+    ///     an existing administrator and mails them (<c>POST /api/scopes/{id}/owners/{personId}</c>), twice over:
     ///     <see cref="AccountCreationPermitLimit" /> a minute per acting person, and as many per address.
-    ///     Each derives an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
+    ///     The first three derive an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
     ///     administrator's token, so without a bound one caller could keep the gate full and starve every
-    ///     sign-in (Threat Model TH-03).
+    ///     sign-in (Threat Model TH-03); the fourth would otherwise let one caller fill an inbox.
     /// </summary>
     /// <remarks>
     ///     <para>

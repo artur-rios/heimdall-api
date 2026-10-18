@@ -89,14 +89,20 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     }
 
     /// <summary>
-    ///     Adds an existing <c>ScopeAdmin</c> or <c>SystemAdmin</c> person as an additional owner
-    ///     of a scope (UC-21, FR-SC-08/FR-SC-09). The attribute keeps a <c>User</c> out — they can
-    ///     never be a System Admin nor an existing owner — while the rules that depend on data it
-    ///     cannot see are the handler's: whether the acting Scope Admin owns this scope (AF-21c),
-    ///     whether the scope is active (AF-21a), whether the named person is a usable administrator
-    ///     (AF-21b), and whether they already own it (AF-21d).
+    ///     Adds an existing <c>ScopeAdmin</c> or <c>SystemAdmin</c> person as an additional owner of a scope
+    ///     (UC-21, FR-SC-08/FR-SC-09). A System Admin adds them at once (201, or 200 when they already own
+    ///     it). A Scope Admin owning the scope invites them instead (202 "The invitation was sent.", FR-SC-14):
+    ///     they own nothing until they accept (UC-60), and a repeat while it is open answers the same and
+    ///     mails nothing. The attribute keeps a <c>User</c> out; the handler checks the scope (AF-21a), the
+    ///     ownership (AF-21c), the person (AF-21b) and an existing ownership (AF-21d).
     /// </summary>
+    /// <remarks>
+    ///     It can mail a third party, so it shares the account-creation limit: thirty requests a minute per
+    ///     acting person and thirty per address; a rejection answers 429 "Too many requests." with a
+    ///     <c>Retry-After</c> header.
+    /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners/{personId:guid}")]
+    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<AddScopeOwnerCommandOutput?>>> AddScopeOwner(
         Guid scopeId, Guid personId)
