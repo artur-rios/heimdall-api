@@ -25,9 +25,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for the invitee's side (UC-59…UC-61, FR-SC-16, FR-SC-17): the whole flow from a Scope
 // Admin's invite to the invitee owning the scope and seeing it listed; the inviter and an outsider refused
-// like an unknown id; a decline; a withdrawal committed after the accept read the invitation; two accepts at
-// once; an invitee demoted between the accept's read and its write, which voids it; a deleted scope's
-// invitation hidden; an inviter hard-deleted meanwhile; a User refused.
+// like an unknown id; a decline, audited; an invitee who already owns the scope; a withdrawal committed after
+// the accept read the invitation; two accepts at once; an invitee demoted between the accept's read and its
+// write, which voids it; a deleted scope's invitation hidden; an inviter hard-deleted meanwhile; a User refused.
 [Collection(nameof(FunctionalCollection))]
 public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
@@ -155,6 +155,34 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
         Assert.Contains(ScopeInvitationMessages.InvitationDeclined, response.Body!.Messages);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Declined, (await StoredAsync(invitation)).Outcome);
         Assert.Equal(0, await OwnershipCountAsync(scope, invitee));
+
+        // Then — the decline is audited under its command's name with the invitation as target
+        await using var context = db.CreateContext();
+        var entry = await context.AuditLogs.AsNoTracking().SingleAsync(x =>
+            x.Action == nameof(DeclineScopeOwnerInvitationCommand) && x.TargetId == invitation.PublicId);
+        Assert.True(entry.Succeeded);
+        Assert.Equal(invitee.PublicId, entry.ActorPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAnInviteeWhoAlreadyOwnsTheScope_WhenAccepting_ThenAcceptedWithOneOwnership()
+    {
+        // Given — the ownership was granted meanwhile, outside the invitation (e.g. a System Admin's UC-21)
+        var scope = await SeedScopeAsync(db);
+        var invitee = await SeedScopeAdminAsync(db);
+        var invitation = await SeedInvitationAsync(scope, invitee, await SeedScopeAdminAsync(db, scope));
+        Assert.Null(await RunAsync(
+            $"INSERT INTO heimdall.scope_owner (scope_id, person_id) VALUES ({scope.Id}, {invitee.Id})"));
+        Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));
+
+        // When
+        var response = await AcceptAsync(invitation.PublicId);
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(ScopeInvitationMessages.InvitationAccepted, response.Body!.Messages);
+        Assert.Equal(1, await OwnershipCountAsync(scope, invitee));
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Accepted, (await StoredAsync(invitation)).Outcome);
     }
 
     [FunctionalFact]

@@ -151,30 +151,36 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
     public async Task GivenAnInviteeDemotedToUser_WhenAccepting_ThenVoided()
     {
         // Given AF-60b — UC-08 made them a User after they were invited
-        var (world, _, _, invitee, invitation) = await OpenInvitationAsync();
+        var (world, scope, _, invitee, invitation) = await OpenInvitationAsync();
         invitee.RoleId = (long)Roles.User;
+        var audit = new RecordingAuditLogWriter();
 
         // When
-        var output = await Handler(world).HandleAsync(Command(invitee, invitation));
+        var output = await Handler(world, audit).HandleAsync(Command(invitee, invitation));
 
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.DoesNotContain(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
     }
 
     [UnitFact]
     public async Task GivenARestrictedInvitee_WhenAccepting_ThenVoided()
     {
         // Given AF-60b — NFR-24
-        var (world, _, _, invitee, invitation) = await OpenInvitationAsync();
+        var (world, scope, _, invitee, invitation) = await OpenInvitationAsync();
         invitee.ProcessingRestrictedAt = DateTime.UtcNow.AddMinutes(-5);
+        var audit = new RecordingAuditLogWriter();
 
         // When
-        var output = await Handler(world).HandleAsync(Command(invitee, invitation));
+        var output = await Handler(world, audit).HandleAsync(Command(invitee, invitation));
 
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.DoesNotContain(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
     }
 
     [UnitFact]
@@ -289,6 +295,22 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Given — anonymisation clears the inviter; one not yet cleared is still not told
         var (world, scope, inviter, invitee, invitation) = await OpenInvitationAsync();
         inviter.AnonymisedAt = DateTime.UtcNow.AddMinutes(-1);
+
+        // When
+        var output = await Handler(world).HandleAsync(Command(invitee, invitation));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Contains(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
+        Assert.Empty(world.Notices.Answers);
+    }
+
+    [UnitFact]
+    public async Task GivenARestrictedInviter_WhenAccepting_ThenAcceptedAndNobodyIsTold()
+    {
+        // Given — NFR-24: a processing-restricted person is mailed nothing (AF-51c)
+        var (world, scope, inviter, invitee, invitation) = await OpenInvitationAsync();
+        inviter.ProcessingRestrictedAt = DateTime.UtcNow.AddMinutes(-1);
 
         // When
         var output = await Handler(world).HandleAsync(Command(invitee, invitation));

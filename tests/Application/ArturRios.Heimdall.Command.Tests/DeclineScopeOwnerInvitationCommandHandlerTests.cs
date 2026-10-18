@@ -138,4 +138,24 @@ public class DeclineScopeOwnerInvitationCommandHandlerTests
         Assert.Equal(ScopeOwnerInvitationOutcomes.Declined, invitation.Outcome);
         Assert.Empty(world.Notices.Answers);
     }
+
+    [UnitFact]
+    public async Task GivenARestrictedInviter_WhenDeclining_ThenDeclinedAndNobodyIsTold()
+    {
+        // Given — NFR-24: a processing-restricted person is mailed nothing (AF-51c)
+        var world = new InvitationWorld();
+        var scope = await world.ScopeAsync();
+        var inviter = await world.PersonAsync("Ada", owns: scope);
+        inviter.ProcessingRestrictedAt = DateTime.UtcNow.AddMinutes(-1);
+        var invitee = await world.PersonAsync("Grace");
+        var invitation = await world.InvitationAsync(scope, invitee, inviter);
+
+        // When
+        var output = await Handler(world).HandleAsync(Command(invitee, invitation));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Declined, invitation.Outcome);
+        Assert.Empty(world.Notices.Answers);
+    }
 }

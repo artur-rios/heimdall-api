@@ -40,8 +40,9 @@ public static class InviteeInvitationLookup
     }
 
     /// <summary>
-    ///     The inviter, when there is still somebody to tell: not cleared by anonymisation or a hard delete, and
-    ///     not logically deleted or anonymised. <c>null</c> means no answer notice is sent.
+    ///     The inviter, when there is still somebody to tell: not cleared by anonymisation or a hard delete, not
+    ///     logically deleted or anonymised, and not processing-restricted, since a restricted person is mailed
+    ///     nothing (NFR-24, AF-51c). <c>null</c> means no answer notice is sent.
     /// </summary>
     public static async Task<Person?> InviterToTellAsync(
         IAsyncReadOnlyRepository<Person, long> personReader,
@@ -54,6 +55,7 @@ public static class InviteeInvitationLookup
         }
 
         return await personReader.Query()
-            .FirstOrDefaultAsync(x => x.Id == inviterId && !x.IsDeleted && x.AnonymisedAt == null, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == inviterId && !x.IsDeleted && x.AnonymisedAt == null &&
+                                      x.ProcessingRestrictedAt == null, cancellationToken);
     }
 }
