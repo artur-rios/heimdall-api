@@ -111,9 +111,9 @@ even after the restriction is lifted, when the subject signs in again for a full
 
 | Method & path | Who | Use case |
 | --- | --- | --- |
-| `GET /scopes/{scopeId}/owner-invitations` | System Admin + Scope Admin | UC-58 — the scope's open invitations, newest first: invitee, inviter, created and expiry times |
+| `GET /scopes/{scopeId}/owner-invitations` | System Admin + Scope Admin | UC-58 — the scope's open invitations, newest first: invitee, inviter, created and expiry times. A processing-restricted invitee's are withheld, and the inviter's name is absent when the inviter was removed, restricted or anonymised |
 | `DELETE /scopes/{scopeId}/owner-invitations/{invitationId}` | System Admin + Scope Admin | UC-58 — withdraw an open invitation (`204`); an ended, unknown or other scope's one is `404` |
-| `GET /persons/me/scope-invitations` | System Admin; Scope Admin | UC-59 — the caller's own open invitations, soonest to expire first |
+| `GET /persons/me/scope-invitations` | System Admin; Scope Admin | UC-59 — the caller's own open invitations, soonest to expire first; the inviter's name is absent when the inviter was removed, restricted or anonymised |
 | `POST /scope-invitations/{invitationId}/accept` | The invitee | UC-60 — the invitation ends and the ownership starts, in one transaction |
 | `POST /scope-invitations/{invitationId}/decline` | The invitee | UC-61 — decline |
 

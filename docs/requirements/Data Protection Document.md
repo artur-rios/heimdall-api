@@ -242,7 +242,9 @@ not anyone asked.
 
 The scope's owners and System Admins can read an open invitation's id, the invitee's name and address,
 the inviter's name and the two times through the API (UC-58); the invitee reads their own, with the
-scope's name (UC-59). Ended invitations are never listed.
+scope's name (UC-59). Ended invitations are never listed. Under NFR-24 a processing-restricted invitee's
+invitations are withheld from the scope's listing, and the inviter's name is shown in either listing only
+while the inviter is neither logically deleted nor restricted.
 
 ### Two decisions this review settled
 

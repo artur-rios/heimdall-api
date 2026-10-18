@@ -2770,7 +2770,7 @@ sequenceDiagram
 
 **Main Flow:**
 
-1. The actor lists the scope's open invitations: for each, its id, the invitee's id, name and address, the inviter's name (absent once the inviter is erased), and when it was made and expires, newest first and paginated. Ended and expired invitations, and those of a logically deleted invitee, are not listed.
+1. The actor lists the scope's open invitations: for each, its id, the invitee's id, name and address, the inviter's name (absent when the inviter was removed, restricted or anonymised), and when it was made and expires, newest first and paginated. Ended and expired invitations, and those of a logically deleted or processing-restricted invitee (NFR-24), are not listed.
 2. The actor asks to withdraw one by its id.
 3. The system confirms the scope and the actor's right to manage it, ends the invitation as withdrawn — only while it is still open — and answers `204 No Content`.
 
@@ -2798,7 +2798,7 @@ sequenceDiagram
 **Main Flow:**
 
 1. The actor asks for their invitations.
-2. The system answers with their open invitations, soonest to expire first and paginated: each one's id, the scope's id and name, the inviter's name (absent once the inviter is erased), and when it was made and expires. Invitations to a logically deleted scope are not listed.
+2. The system answers with their open invitations, soonest to expire first and paginated: each one's id, the scope's id and name, the inviter's name (absent when the inviter was removed, restricted or anonymised), and when it was made and expires. Invitations to a logically deleted scope are not listed.
 
 **Alternative Flows:**
 
