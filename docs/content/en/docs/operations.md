@@ -463,11 +463,11 @@ unthrottled. The person update is limited whether or not it checks a password, a
 updates included. The verification-link resend (`POST /api/auth/resend-verification`) shares it too,
 because every call mails the account's address.
 
-**Per administrator — account creation.** The four endpoints that create a person with a password or invite an existing administrator —
-`POST /api/persons`, `POST /api/scopes/{id}/persons`, `POST /api/scopes/{id}/owners` and
-`POST /api/scopes/{id}/owners/{personId}` — the first three derive an Argon2id hash, and all need
-nothing but an administrator's token. They are limited to **30 requests a
-minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
+**Per administrator — account creation.** The four endpoints that create a person with a password
+or invite an existing administrator — `POST /api/persons`, `POST /api/scopes/{id}/persons`,
+`POST /api/scopes/{id}/owners` and `POST /api/scopes/{id}/owners/{personId}` — the first three derive
+an Argon2id hash, and all need nothing but an administrator's token. They are limited to **30
+requests a minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
 with `Retry-After`. Only administrators' access tokens count against the address, so other requests
 — without a token, or with a User's, a two-factor challenge or a subject-rights token — cannot use
 up an address administrators share. Thirty a minute is more than anyone creates by
@@ -712,7 +712,8 @@ of a setting here.
 default, removing password reset tokens, email verification tokens, and two-factor email codes that
 are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
 application credentials, self-registration attempt-notice budgets whose day has ended, and the
-records of used Google ID tokens past their expiry by the grace period. Each run removes at most a bounded batch per table,
+records of used Google ID tokens past their expiry by the grace period. It also removes scope owner
+invitations 90 days after they end, or 90 days after they expire if never answered. Each run removes at most a bounded batch per table,
 oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).

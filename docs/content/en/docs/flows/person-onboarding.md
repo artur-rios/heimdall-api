@@ -167,7 +167,7 @@ deleted, anonymised or processing-restricted. Owners list and withdraw open invi
 `/api/scopes/{scopeId}/owner-invitations`; the person may decline instead (`…/decline`). Accepting
 answers `404` "The invitation was not found or is no longer open." when the invitation was withdrawn,
 answered or expired — and voids it when the scope was deleted or the person is no longer an
-unrestricted administrator. Erasing a person voids the invitations made to them and clears them as
+eligible administrator. Erasing a person voids the invitations made to them and clears them as
 inviter; an ended invitation is purged 90 days after it ended, an unanswered one 90 days after it
 expired.
 
