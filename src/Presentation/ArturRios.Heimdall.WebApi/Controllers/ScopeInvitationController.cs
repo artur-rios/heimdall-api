@@ -62,4 +62,59 @@ public class ScopeInvitationController(CommandMediator commandMediator, QueryMed
             ? NoContent()
             : result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes).Result!;
     }
+
+    /// <summary>
+    ///     Lists the caller's own open scope owner invitations (UC-59, FR-SC-16), soonest to expire first: each
+    ///     one's id, the scope's id and name, the inviter's name, and when it was made and expires. Any signed-in
+    ///     Scope Admin or System Admin may call it; a <c>User</c> cannot be invited, so the attribute keeps them
+    ///     out.
+    /// </summary>
+    [HttpGet("persons/me/scope-invitations")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<PaginatedOutput<MyScopeInvitationOutput>>> ListMine(
+        [FromQuery] ListMyScopeInvitationsQuery query)
+    {
+        HttpContext.ApplyActor(query);
+
+        var result = await queryMediator
+            .ExecutePaginatedQueryAsync<ListMyScopeInvitationsQuery, MyScopeInvitationOutput>(query);
+
+        return result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Accepts a scope owner invitation (UC-60, FR-SC-17): the invitation ends as accepted and the caller
+    ///     becomes an owner of the scope, together. Only the invitee may; everybody else, and an ended or expired
+    ///     invitation, gets 404 "The invitation was not found or is no longer open." (AF-60a). An invitation whose
+    ///     scope was deleted, or whose invitee is no longer an unrestricted administrator, is voided and answered
+    ///     the same (AF-60b).
+    /// </summary>
+    [HttpPost("scope-invitations/{invitationId:guid}/accept")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<AcceptScopeOwnerInvitationCommandOutput?>>> Accept(Guid invitationId)
+    {
+        var command = new AcceptScopeOwnerInvitationCommand { InvitationId = invitationId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<AcceptScopeOwnerInvitationCommand, AcceptScopeOwnerInvitationCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes);
+    }
+
+    /// <summary>
+    ///     Declines a scope owner invitation (UC-61, FR-SC-17). Same caller and refusals as UC-60 (AF-61a).
+    /// </summary>
+    [HttpPost("scope-invitations/{invitationId:guid}/decline")]
+    [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    public async Task<ActionResult<DataOutput<DeclineScopeOwnerInvitationCommandOutput?>>> Decline(Guid invitationId)
+    {
+        var command = new DeclineScopeOwnerInvitationCommand { InvitationId = invitationId };
+        HttpContext.ApplyActor(command);
+
+        var result = await commandMediator
+            .ExecuteCommandAsync<DeclineScopeOwnerInvitationCommand, DeclineScopeOwnerInvitationCommandOutput>(command);
+
+        return result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes);
+    }
 }

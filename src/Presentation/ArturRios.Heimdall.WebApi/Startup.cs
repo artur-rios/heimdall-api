@@ -309,6 +309,9 @@ public class Startup : WebApiStartup
         Builder.Services.AddAuditedCommandHandler<AddScopeOwnerCommand, AddScopeOwnerCommandOutput, AddScopeOwnerCommandHandler>();
         // UC-58: an owner or a System Admin withdraws an open scope owner invitation.
         Builder.Services.AddAuditedCommandHandler<WithdrawScopeOwnerInvitationCommand, WithdrawScopeOwnerInvitationCommandOutput, WithdrawScopeOwnerInvitationCommandHandler>();
+        // UC-60/UC-61: the invitee accepts or declines; no validator — the route's id is the whole input.
+        Builder.Services.AddAuditedCommandHandler<AcceptScopeOwnerInvitationCommand, AcceptScopeOwnerInvitationCommandOutput, AcceptScopeOwnerInvitationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeclineScopeOwnerInvitationCommand, DeclineScopeOwnerInvitationCommandOutput, DeclineScopeOwnerInvitationCommandHandler>();
         // Likewise no validator for UC-22: both identifiers are route values.
         Builder.Services.AddAuditedCommandHandler<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput, RemoveScopeOwnerCommandHandler>();
         // Likewise no validator for UC-23: both identifiers are route values.
@@ -392,6 +395,9 @@ public class Startup : WebApiStartup
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnerInvitationsQuery, ScopeOwnerInvitationOutput>,
                 ListScopeOwnerInvitationsQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListMyScopeInvitationsQuery, MyScopeInvitationOutput>,
+                ListMyScopeInvitationsQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
@@ -447,6 +453,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnerInvitationsQuery>, ListScopeOwnerInvitationsQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListMyScopeInvitationsQuery>, ListMyScopeInvitationsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListPendingRegistrationsQuery>, ListPendingRegistrationsQueryValidator>();
