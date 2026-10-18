@@ -104,6 +104,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     [HttpPost("scopes/{scopeId:guid}/owners/{personId:guid}")]
     [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status201Created)]
+    [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status202Accepted)]
     public async Task<ActionResult<DataOutput<AddScopeOwnerCommandOutput?>>> AddScopeOwner(
         Guid scopeId, Guid personId)
     {
