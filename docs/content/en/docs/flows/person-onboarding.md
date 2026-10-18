@@ -2,7 +2,7 @@
 title = 'Person onboarding'
 linkTitle = 'Person onboarding'
 weight = 40
-description = 'UC-06, UC-14 and UC-15 — creating a person, the verification email, and replacing a lost link.'
+description = 'UC-06, UC-14, UC-15 and UC-21 — creating a person, the verification email, replacing a lost link, and inviting a co-owner.'
 +++
 
 Creating a person is one use case (UC-06) with **three paths**, decided by which endpoint is called
@@ -131,6 +131,45 @@ to the person's own address — refused for a deleted or restricted person (409)
 minutes by default), counting any verification email sent to the person in the window, including
 the one sent when the account was created; a request inside the window answers 429 and sends
 nothing. The check is best-effort: simultaneous requests for the same person can both pass it.
+
+## Making an existing administrator a co-owner — UC-21
+
+`POST /api/scopes/{scopeId}/owners/{personId}` takes an existing `ScopeAdmin` or `SystemAdmin`, and what
+it does depends on who asks:
+
+| Caller | Answer | Effect |
+| --- | --- | --- |
+| System Admin | `201` (`200` if they already own it) | A `SCOPE_OWNER` row at once — how onboarding makes a new Scope Admin an owner |
+| Owning Scope Admin | `202` "The invitation was sent." | An invitation, valid for `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` (seven days by default); the person owns nothing yet |
+
+```mermaid
+sequenceDiagram
+    actor O as Owning Scope Admin
+    actor P as Invited administrator
+    participant API as Heimdall API
+    participant ES as Email Service
+
+    O->>API: POST /api/scopes/{scopeId}/owners/{personId}
+    API->>ES: "… invited you to co-own the scope … Sign in to Heimdall to accept or decline."
+    API-->>O: 202 — invitationId, invitationExpiresAt
+    P->>API: GET /api/persons/me/scope-invitations
+    P->>API: POST /api/scope-invitations/{invitationId}/accept
+    API-->>P: 200 — "The invitation was accepted."
+    API->>ES: Notice to the owner who invited
+```
+
+The notice carries no link and no token: accepting is something the person does signed in as
+themselves, so the mail holds nothing worth intercepting or forwarding. A repeat while the invitation
+is open answers the same `202` and sends nothing, and a new invitation to someone invited within
+`HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS`, or to someone whose processing is restricted, is opened
+without a notice. The inviter's notice of an answer goes only to an inviter who can still be mailed: not
+deleted, anonymised or processing-restricted. Owners list and withdraw open invitations at
+`/api/scopes/{scopeId}/owner-invitations`; the person may decline instead (`…/decline`). Accepting
+answers `404` "The invitation was not found or is no longer open." when the invitation was withdrawn,
+answered or expired — and voids it when the scope was deleted or the person is no longer an
+unrestricted administrator. Erasing a person voids the invitations made to them and clears them as
+inviter; an ended invitation is purged 90 days after it ended, an unanswered one 90 days after it
+expired.
 
 ## Without mail credentials
 

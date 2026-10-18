@@ -48,6 +48,15 @@ classDiagram
         +long ScopeId
         +long PersonId
     }
+    class ScopeOwnerInvitation {
+        +Guid PublicId
+        +long ScopeId
+        +long InviteePersonId
+        +long? InvitedByPersonId
+        +DateTime ExpiresAt
+        +DateTime? EndedAt
+        +short? Outcome
+    }
     class Application {
         +Guid PublicId
         +string Name
@@ -79,6 +88,8 @@ classDiagram
     Person "1" o-- "0..*" ScopeOwner : owns via
     Scope "1" o-- "0..*" ScopeUser : has
     Person "1" o-- "0..1" ScopeUser : belongs via
+    Scope "1" o-- "0..*" ScopeOwnerInvitation : invites to
+    Person "1" o-- "0..*" ScopeOwnerInvitation : invited via
     Scope "1" o-- "0..*" Application : contains
     Person "1" o-- "0..*" Application : owns
     Scope "1" o-- "0..*" GoogleUser : contains
@@ -196,7 +207,7 @@ rows carry only the internal `Id` — see the table below for why.
 
 | Has `PublicId` | Internal `Id` only |
 | --- | --- |
-| `Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog`, `PendingRegistration` | `ScopeOwner`, `ScopeUser`, `TwoFactorAuth`, `TwoFactorEmailCode`, `TwoFactorRecoveryCode`, `EmailVerificationToken`, `PasswordResetToken` |
+| `Scope`, `Role`, `Person`, `Application`, `GoogleUser`, `ScopePermission`, `AuditLog`, `PendingRegistration`, `ScopeOwnerInvitation` | `ScopeOwner`, `ScopeUser`, `TwoFactorAuth`, `TwoFactorEmailCode`, `TwoFactorRecoveryCode`, `EmailVerificationToken`, `PasswordResetToken` |
 
 The right-hand column is never addressed by ID from outside:
 
@@ -209,6 +220,10 @@ The right-hand column is never addressed by ID from outside:
 
 `PendingRegistration` carries a `PublicId` for administrators only: a scope's owners list and discard
 registrations by it (UC-49, UC-50). The registrant never sees it — their reference is the mailed token.
+
+`ScopeOwnerInvitation` carries a `PublicId` because it is addressed from outside: a scope's owners
+withdraw an invitation, and the invited administrator accepts or declines it, by that id (UC-58, UC-60,
+UC-61).
 
 ## Secrets at rest
 
