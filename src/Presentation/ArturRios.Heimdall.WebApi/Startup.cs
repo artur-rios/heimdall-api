@@ -307,6 +307,8 @@ public class Startup : WebApiStartup
         // No validator: UC-21's request carries no body — both identifiers are route values already
         // constrained to GUIDs — so there is nothing left for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<AddScopeOwnerCommand, AddScopeOwnerCommandOutput, AddScopeOwnerCommandHandler>();
+        // UC-58: an owner or a System Admin withdraws an open scope owner invitation.
+        Builder.Services.AddAuditedCommandHandler<WithdrawScopeOwnerInvitationCommand, WithdrawScopeOwnerInvitationCommandOutput, WithdrawScopeOwnerInvitationCommandHandler>();
         // Likewise no validator for UC-22: both identifiers are route values.
         Builder.Services.AddAuditedCommandHandler<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput, RemoveScopeOwnerCommandHandler>();
         // Likewise no validator for UC-23: both identifiers are route values.
@@ -387,6 +389,9 @@ public class Startup : WebApiStartup
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnersQuery, PersonOutput>, ListScopeOwnersQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnerInvitationsQuery, ScopeOwnerInvitationOutput>,
+                ListScopeOwnerInvitationsQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
@@ -441,6 +446,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopesQuery>, ListScopesQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListScopeOwnerInvitationsQuery>, ListScopeOwnerInvitationsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListPendingRegistrationsQuery>, ListPendingRegistrationsQueryValidator>();
