@@ -20,9 +20,9 @@ public class StubOutputWithSideEffects : CommandOutput, IAuditedSideEffects
 {
     public Guid Id { get; set; }
 
-    public List<string> SideEffects { get; set; } = [];
+    public List<AuditedSideEffect> SideEffects { get; set; } = [];
 
-    public IEnumerable<string> AuditedSideEffects() => SideEffects;
+    public IEnumerable<AuditedSideEffect> AuditedSideEffects() => SideEffects;
 }
 
 public class AuditingCommandHandlerTests
@@ -144,7 +144,7 @@ public class AuditingCommandHandlerTests
         var writer = new Mock<IAuditLogWriter>();
         var handler = SideEffectsHandler(
             DataOutput<StubOutputWithSideEffects?>.New.WithData(
-                new StubOutputWithSideEffects { Id = targetId, SideEffects = ["LiftSomethingCommand"] }),
+                new StubOutputWithSideEffects { Id = targetId, SideEffects = [new("LiftSomethingCommand")] }),
             writer.Object);
 
         // When
@@ -153,6 +153,32 @@ public class AuditingCommandHandlerTests
         // Then — the command's own entry, and one for the side effect, both on the same target
         writer.Verify(w => w.WriteAsync(nameof(StubCommand), targetId, true, null), Times.Once);
         writer.Verify(w => w.WriteAsync("LiftSomethingCommand", targetId, true, null), Times.Once);
+        writer.VerifyNoOtherCalls();
+    }
+
+    [UnitFact]
+    public async Task GivenSideEffectsOnTargetsOfTheirOwn_WhenHandling_ThenEachIsRecordedOnItsOwnTarget()
+    {
+        // Given a command whose side effects acted on other entities — as the anonymisation pass voids
+        // invitations — each must be found under the entity it acted on, not the command's target
+        var targetId = Guid.NewGuid();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = SideEffectsHandler(
+            DataOutput<StubOutputWithSideEffects?>.New.WithData(new StubOutputWithSideEffects
+            {
+                Id = targetId, SideEffects = [new("VoidSomethingCommand", first), new("VoidSomethingCommand", second)]
+            }),
+            writer.Object);
+
+        // When
+        await handler.HandleAsync(new StubCommand());
+
+        // Then — the command's own entry on its target, and one entry on each side effect's target
+        writer.Verify(w => w.WriteAsync(nameof(StubCommand), targetId, true, null), Times.Once);
+        writer.Verify(w => w.WriteAsync("VoidSomethingCommand", first, true, null), Times.Once);
+        writer.Verify(w => w.WriteAsync("VoidSomethingCommand", second, true, null), Times.Once);
         writer.VerifyNoOtherCalls();
     }
 
@@ -178,7 +204,7 @@ public class AuditingCommandHandlerTests
         var writer = new Mock<IAuditLogWriter>();
         var handler = SideEffectsHandler(
             DataOutput<StubOutputWithSideEffects?>.New
-                .WithData(new StubOutputWithSideEffects { Id = Guid.NewGuid(), SideEffects = ["LiftSomethingCommand"] })
+                .WithData(new StubOutputWithSideEffects { Id = Guid.NewGuid(), SideEffects = [new("LiftSomethingCommand")] })
                 .WithError("refused"),
             writer.Object);
 
@@ -201,7 +227,7 @@ public class AuditingCommandHandlerTests
             .ThrowsAsync(new InvalidOperationException("db unavailable"));
         var handler = SideEffectsHandler(
             DataOutput<StubOutputWithSideEffects?>.New.WithData(
-                new StubOutputWithSideEffects { Id = targetId, SideEffects = ["LiftSomethingCommand"] }),
+                new StubOutputWithSideEffects { Id = targetId, SideEffects = [new("LiftSomethingCommand")] }),
             writer.Object);
 
         var result = await handler.HandleAsync(new StubCommand());

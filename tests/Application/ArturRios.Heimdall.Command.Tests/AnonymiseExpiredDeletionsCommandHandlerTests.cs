@@ -1,13 +1,17 @@
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
@@ -35,18 +39,39 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         AsyncFakeRepository<GoogleUser, long> GoogleUsers,
         AsyncFakeRepository<PasswordResetToken, long> PasswordResetTokens,
         AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
-        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths)
+        AsyncFakeRepository<TwoFactorAuth, long> TwoFactorAuths,
+        AsyncFakeRepository<ScopeOwnerInvitation, long> Invitations)
     {
-        public static Fakes New() => new(new(), new(), new(), new(), new());
+        public static Fakes New() => new(new(), new(), new(), new(), new(), new());
 
-        public AnonymiseExpiredDeletionsCommandHandler Handler(DataRetentionOptions? retention = null) =>
+        public AnonymiseExpiredDeletionsCommandHandler Handler(
+            DataRetentionOptions? retention = null, IAtomicWrites? atomicWrites = null) =>
             new(Persons, GoogleUsers, GoogleUsers,
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,
                 retention ?? Retention(),
-                InMemoryAtomicWrites.Instance);
+                atomicWrites ?? InMemoryAtomicWrites.Instance,
+                new InMemoryScopeOwnerInvitations(Invitations, Persons, new AsyncFakeRepository<Scope, long>()));
     }
+
+    private static async Task<ScopeOwnerInvitation> SeedInvitationAsync(
+        Fakes fakes, long inviteeId, long? inviterId, DateTime? endedAt = null)
+    {
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = inviteeId, InvitedByPersonId = inviterId,
+            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6), EndedAt = endedAt,
+            Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
+        };
+        await fakes.Invitations.CreateAsync(invitation);
+        return invitation;
+    }
+
+    private static Task<Person> SeedDueScopeAdminAsync(Fakes fakes) =>
+        SeedPersonAsync(
+            fakes, DateTime.UtcNow - ErasureDeadline - TimeSpan.FromDays(1), (int)DeletionKinds.SubjectRequested,
+            role: Roles.ScopeAdmin);
 
     private static async Task<Person> SeedPersonAsync(
         Fakes fakes,
@@ -498,5 +523,124 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(0, person.AccountEmailsSent);
         Assert.Null(person.AccountEmailWindowEndsAt);
         Assert.Null(person.AccountEmailLastSentAt);
+    }
+
+    [UnitFact]
+    public async Task GivenAnErasedInviteeWithAnOpenInvitation_WhenAnonymising_ThenItIsVoidedAndAudited()
+    {
+        // Given — erasure voids the invitation (FR-SC-17)
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var invitation = await SeedInvitationAsync(fakes, person.Id, null);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
+        Assert.NotNull(invitation.EndedAt);
+        Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Equal(
+            [new AuditedSideEffect(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId)],
+            output.Data.AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenAnErasedInviteeWithSeveralInvitations_WhenAnonymising_ThenEachUnendedOneIsVoidedOnItsOwnId()
+    {
+        // Given — two unended invitations and one the invitee already declined
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var first = await SeedInvitationAsync(fakes, person.Id, null);
+        var second = await SeedInvitationAsync(fakes, person.Id, null);
+        var declined = await SeedInvitationAsync(fakes, person.Id, null, endedAt: DateTime.UtcNow.AddHours(-1));
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — one void entry per voided invitation, each on that invitation, in no promised order
+        Assert.True(output.Success);
+        Assert.Equal(2, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Declined, declined.Outcome);
+        Assert.Equal(
+            new[] { first.PublicId, second.PublicId }.Order(),
+            output.Data.AuditedSideEffects()
+                .Where(sideEffect => sideEffect.Action == ScopeOwnerInvitationAuditActions.Voided)
+                .Select(sideEffect => sideEffect.TargetId!.Value)
+                .Order());
+        Assert.Equal(2, output.Data.AuditedSideEffects().Count());
+    }
+
+    [UnitFact]
+    public async Task GivenAnErasedInviter_WhenAnonymising_ThenTheirInvitationStaysOpenWithoutAnInviter()
+    {
+        // Given
+        var fakes = Fakes.New();
+        var inviter = await SeedDueScopeAdminAsync(fakes);
+        var invitation = await SeedInvitationAsync(fakes, inviteeId: 999, inviter.Id);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Null(invitation.InvitedByPersonId);
+        Assert.Null(invitation.EndedAt);
+        Assert.Equal(0, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Empty(output.Data.AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenAPersonRestrictedSinceSelection_WhenAnonymising_ThenTheirInvitationsAreLeftAsTheyStand()
+    {
+        // Given — NFR-24: a record restricted between the selection and its write is not erased, so
+        // nothing that names it is touched either
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var received = await SeedInvitationAsync(fakes, person.Id, null);
+        var sent = await SeedInvitationAsync(fakes, inviteeId: 999, person.Id);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = restricted => restricted.ProcessingRestrictedAt = DateTime.UtcNow
+        };
+
+        // When
+        var output = await fakes.Handler(atomicWrites: atomicWrites).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Null(person.AnonymisedAt);
+        Assert.Null(received.EndedAt);
+        Assert.Null(received.Outcome);
+        Assert.Equal(person.Id, sent.InvitedByPersonId);
+        Assert.Equal(0, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Empty(output.Data.AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenVoidedInvitations_WhenTheAuditedPassRuns_ThenOneVoidEntryTargetsEachInvitation()
+    {
+        // Given — the pass as the application registers it, behind the auditing decorator (G-F7)
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var first = await SeedInvitationAsync(fakes, person.Id, null);
+        var second = await SeedInvitationAsync(fakes, person.Id, null);
+        var writer = new RecordingAuditLogWriter();
+        var handler = new AuditingCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>(
+            fakes.Handler(), writer,
+            NullLogger<AuditingCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>>
+                .Instance);
+
+        // When
+        var output = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the pass's own entry, untargeted, and one targeted void per invitation
+        Assert.True(output.Success);
+        Assert.Contains((nameof(AnonymiseExpiredDeletionsCommand), (Guid?)null, true), writer.Entries);
+        var voids = writer.Entries.Where(entry => entry.Action == ScopeOwnerInvitationAuditActions.Voided).ToList();
+        Assert.Equal(new[] { first.PublicId, second.PublicId }.Order(), voids.Select(entry => entry.TargetId!.Value).Order());
+        Assert.All(voids, entry => Assert.True(entry.Succeeded));
+        Assert.Equal(3, writer.Entries.Count);
     }
 }

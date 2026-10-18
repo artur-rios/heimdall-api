@@ -39,6 +39,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         obligation accepts, and it would never reach the two-factor rows at all.
 ///     </para>
 ///     <para>
+///         <b>Invitations.</b> A person anonymised has their unended scope owner invitations voided and
+///         is cleared as the inviter of the rest (FR-SC-17); each void is audited, on its invitation, as a
+///         side effect of the run. The voids follow the anonymisation rather than preceding it with the
+///         dependents, because only the targeted write knows whether the person is erased at all.
+///     </para>
+///     <para>
 ///         <b>What is deliberately left alone.</b> The scope membership and ownership rows, the
 ///         applications an owner held, and the audit entries naming them. All are foreign keys or
 ///         accountability records that NFR-07 requires to keep resolving, and none carries an
@@ -61,7 +67,8 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
     DataRetentionOptions retention,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IScopeOwnerInvitations invitations)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
     /// <summary>
@@ -172,6 +179,14 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             }
         }
 
+        // An erased person cannot answer an invitation, and keeping one open would keep naming them
+        // (FR-SC-17): their unended invitations are voided, and they are cleared as the inviter of any
+        // other. Only for the persons actually anonymised — one restricted since the selection is not
+        // erased (NFR-24), so what names them stays as it stands.
+        IReadOnlyList<Guid> voided = anonymisedPersons.Count == 0
+            ? []
+            : await invitations.ForgetPersonsAsync(anonymisedPersons.Select(person => person.Id).ToList(), now);
+
         foreach (var googleUser in googleUsers)
         {
             IdentityAnonymiser.Anonymise(googleUser, now);
@@ -185,7 +200,8 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
                 anonymisedPersons.Select(person => person.PublicId)
                     .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
-                    .ToList());
+                    .ToList(),
+                voided);
     }
 
     /// <summary>
@@ -254,14 +270,16 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         int persons,
         int googleUsers,
         int dependents,
-        IEnumerable<Guid>? anonymisedIds = null) =>
+        IEnumerable<Guid>? anonymisedIds = null,
+        IReadOnlyCollection<Guid>? voidedInvitationIds = null) =>
         output
             .WithData(new AnonymiseExpiredDeletionsCommandOutput
             {
                 PersonsAnonymised = persons,
                 GoogleUsersAnonymised = googleUsers,
                 DependentsRemoved = dependents,
-                AnonymisedIds = anonymisedIds ?? []
+                AnonymisedIds = anonymisedIds ?? [],
+                VoidedScopeOwnerInvitationIds = voidedInvitationIds ?? []
             })
             .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
 }

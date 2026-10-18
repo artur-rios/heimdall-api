@@ -45,6 +45,6 @@ public class RequestErasureCommandOutput : CommandOutput, IAuditedSideEffects
     ///     looking for when the restriction ended finds it under the same name whichever way it was
     ///     lifted.
     /// </summary>
-    public IEnumerable<string> AuditedSideEffects() =>
-        RestrictionLifted ? [nameof(LiftProcessingRestrictionCommand)] : [];
+    public IEnumerable<AuditedSideEffect> AuditedSideEffects() =>
+        RestrictionLifted ? [new AuditedSideEffect(nameof(LiftProcessingRestrictionCommand))] : [];
 }

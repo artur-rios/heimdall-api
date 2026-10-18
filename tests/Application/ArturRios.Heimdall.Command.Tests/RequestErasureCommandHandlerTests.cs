@@ -314,7 +314,7 @@ public class RequestErasureCommandHandlerTests
 
         // The lift is recorded in the audit trail under the name a reader looking for lifts searches
         Assert.Equal(
-            [nameof(LiftProcessingRestrictionCommand)],
+            [new AuditedSideEffect(nameof(LiftProcessingRestrictionCommand))],
             ((IAuditedSideEffects)output.Data).AuditedSideEffects());
     }
 
@@ -455,7 +455,7 @@ public class RequestErasureCommandHandlerTests
         Assert.Null(googleUser.RestrictionLiftNotifiedAt);
         Assert.True(googleUser.IsDeleted);
         Assert.Equal(
-            [nameof(LiftProcessingRestrictionCommand)],
+            [new AuditedSideEffect(nameof(LiftProcessingRestrictionCommand))],
             ((IAuditedSideEffects)output.Data).AuditedSideEffects());
     }
 

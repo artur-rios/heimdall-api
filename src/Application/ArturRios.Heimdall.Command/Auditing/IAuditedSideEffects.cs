@@ -4,7 +4,8 @@ namespace ArturRios.Heimdall.Command.Auditing;
 ///     An output whose command, besides its own write, carried out an action that has a use case of
 ///     its own — and that a reader of the audit trail would look for under that action's name.
 ///     <see cref="AuditingCommandHandler{TCommand,TOutput}" /> records one further entry for each,
-///     on the same target, after the command's own entry (NFR-09).
+///     after the command's own entry (NFR-09): on the entity the side effect names, or on the
+///     command's own target when it names none.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -22,9 +23,19 @@ namespace ArturRios.Heimdall.Command.Auditing;
 public interface IAuditedSideEffects
 {
     /// <summary>
-    ///     The action name to record for each side effect that took place — the name of the command
-    ///     that performs the same action on its own, e.g. <c>"LiftProcessingRestrictionCommand"</c>.
-    ///     Empty when there were none.
+    ///     One entry for each side effect that took place, naming the action to record — the name of
+    ///     the command that performs the same action on its own, e.g.
+    ///     <c>"LiftProcessingRestrictionCommand"</c>, or an event no command names, e.g.
+    ///     <c>"ScopeOwnerInvitationVoided"</c>. Empty when there were none.
     /// </summary>
-    IEnumerable<string> AuditedSideEffects();
+    IEnumerable<AuditedSideEffect> AuditedSideEffects();
 }
+
+/// <summary>One side effect of a command, as <see cref="IAuditedSideEffects" /> reports it.</summary>
+/// <param name="Action">The action name the audit entry records.</param>
+/// <param name="TargetId">
+///     The public identifier of the entity the side effect acted on, when that is not the command's own
+///     target — an anonymisation pass has none of its own, yet each invitation it voids is looked up by
+///     its id. <c>null</c> records the entry on the command's target.
+/// </param>
+public sealed record AuditedSideEffect(string Action, Guid? TargetId = null);

@@ -35,9 +35,12 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Records of used Google ID tokens removed (FR-GO-21).</summary>
     public int GoogleIdTokenUsesPurged { get; set; }
 
-    /// <summary>Rows removed across all seven tables.</summary>
+    /// <summary>Scope owner invitations that ended or expired more than 90 days ago, removed (FR-SC-18).</summary>
+    public int ScopeOwnerInvitationsPurged { get; set; }
+
+    /// <summary>Rows removed across all eight tables.</summary>
     public int TotalPurged =>
         PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +
         PendingRegistrationsPurged + ApplicationCredentialsPurged + AttemptNoticeBudgetsPurged +
-        GoogleIdTokenUsesPurged;
+        GoogleIdTokenUsesPurged + ScopeOwnerInvitationsPurged;
 }

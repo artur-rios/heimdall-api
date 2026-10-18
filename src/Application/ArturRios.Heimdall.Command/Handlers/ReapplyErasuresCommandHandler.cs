@@ -42,7 +42,8 @@ public class ReapplyErasuresCommandHandler(
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IScopeOwnerInvitations invitations)
     : ICommandHandlerAsync<ReapplyErasuresCommand, ReapplyErasuresCommandOutput>
 {
     public async Task<DataOutput<ReapplyErasuresCommandOutput?>> HandleAsync(ReapplyErasuresCommand command, CancellationToken cancellationToken = default)
@@ -117,6 +118,14 @@ public class ReapplyErasuresCommandHandler(
             return output.WithErrors(dependentErrors);
         }
 
+        // As the scheduled pass does: the restored copy may have brought back invitations the erasure
+        // voided, and the person as the inviter of others (FR-SC-17). Before the identity is written,
+        // like the dependents, so a failure leaves the person selectable for another attempt; every
+        // person here ends anonymised, by this run or by one that got there first.
+        IReadOnlyList<Guid> voided = toWrite.Count == 0
+            ? []
+            : await invitations.ForgetPersonsAsync(toWrite.Select(person => person.Id).ToList(), now);
+
         // Then each person, by one targeted write (#237): marked as a subject-requested deletion, so
         // the record's own state says why it is gone and the audit trail reads correctly afterwards,
         // and anonymised with its password and budgets in the same statement. One anonymised since it
@@ -159,7 +168,8 @@ public class ReapplyErasuresCommandHandler(
             {
                 Anonymised = anonymised,
                 AlreadyAnonymised = alreadyAnonymised,
-                NotFound = requested.Where(id => !found.Contains(id)).ToList()
+                NotFound = requested.Where(id => !found.Contains(id)).ToList(),
+                VoidedScopeOwnerInvitationIds = voided
             })
             .WithMessage(ErasureMessages.ErasuresReapplied);
     }

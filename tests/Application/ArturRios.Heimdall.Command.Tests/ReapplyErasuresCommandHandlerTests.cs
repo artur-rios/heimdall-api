@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -23,12 +24,16 @@ public class ReapplyErasuresCommandHandlerTests
         AsyncFakeRepository<GoogleUser, long> googleUsers,
         AsyncFakeRepository<PasswordResetToken, long>? passwordResetTokens = null,
         AsyncFakeRepository<EmailVerificationToken, long>? emailVerificationTokens = null,
-        AsyncFakeRepository<TwoFactorAuth, long>? twoFactorAuths = null) =>
+        AsyncFakeRepository<TwoFactorAuth, long>? twoFactorAuths = null,
+        AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null) =>
         new(persons, googleUsers, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),
-            InMemoryAtomicWrites.Instance);
+            InMemoryAtomicWrites.Instance,
+            new InMemoryScopeOwnerInvitations(
+                invitations ?? new AsyncFakeRepository<ScopeOwnerInvitation, long>(), persons,
+                new AsyncFakeRepository<Scope, long>()));
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons, DateTime? anonymisedAt = null)
@@ -214,5 +219,64 @@ public class ReapplyErasuresCommandHandlerTests
         Assert.Equal(0, person.AccountEmailsSent);
         Assert.Null(person.AccountEmailWindowEndsAt);
         Assert.Null(person.AccountEmailLastSentAt);
+    }
+
+    [UnitFact]
+    public async Task GivenARestoredInviteeWithAnOpenInvitation_WhenReapplying_ThenItIsVoidedAndAudited()
+    {
+        // Given — a restore brought back an invitation the original erasure had voided, and one the
+        // restored person sent
+        var (persons, googleUsers) = Fakes();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var person = await SeedPersonAsync(persons);
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+        };
+        var sent = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 999, InvitedByPersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+        };
+        await invitations.CreateAsync(invitation);
+        await invitations.CreateAsync(sent);
+
+        // When
+        var output = await Handler(persons, googleUsers, invitations: invitations).HandleAsync(Command(person.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
+        Assert.Null(sent.InvitedByPersonId);
+        Assert.Null(sent.EndedAt);
+        Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Equal(
+            [new AuditedSideEffect(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId)],
+            output.Data.AuditedSideEffects());
+    }
+
+    [UnitFact]
+    public async Task GivenOnlyAnAlreadyAnonymisedIdentity_WhenReapplying_ThenNoInvitationIsVoided()
+    {
+        // Given — the erasure held, so whatever its invitations show was settled when it ran
+        var (persons, googleUsers) = Fakes();
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        var person = await SeedPersonAsync(persons, anonymisedAt: DateTime.UtcNow.AddDays(-3));
+        var invitation = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+        };
+        await invitations.CreateAsync(invitation);
+
+        // When
+        var output = await Handler(persons, googleUsers, invitations: invitations).HandleAsync(Command(person.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Null(invitation.EndedAt);
+        Assert.Equal(0, output.Data!.ScopeOwnerInvitationsVoided);
+        Assert.Empty(output.Data.AuditedSideEffects());
     }
 }
