@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Upgrading from 1.x to 2.0
+
+- **Clients:** a Scope Admin's `POST /api/scopes/{scopeId}/owners/{personId}` answers `202` with `invited: true`
+  and an invitation instead of `201` and an added owner; the person becomes an owner only when they accept. Treat
+  `202` (or `invited: true`) as "invited", not "added". A System Admin's request is unchanged.
+- **Deploy order:** deploy the heimdall-ui release that carries scope invitations before this one.
+- **Operators:** nothing is required. `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` is optional (default 7 days),
+  and the one migration only adds the `scope_owner_invitation` table, covered by the runtime role's schema-wide
+  grants.
+
 ### Added
 
 - Scope owner invitations. New endpoints: `GET /api/scopes/{scopeId}/owner-invitations` and `DELETE
@@ -47,6 +57,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- An audit log entry that fails to save is now logged as a warning, naming its action and the database error. The
+  repository reports a failed insert in its result rather than throwing, and the writer discarded that result, so
+  the entry was lost without a trace. The request's answer is unchanged.
+
+### Security
+
+- A Scope Admin can no longer make another existing administrator a co-owner of a scope on their own: the ownership
+  starts only when that person accepts, signed in as themselves. This closes the acceptance residual of Threat Model
+  TH-41 (residual closed); the threat itself stays on the register.
+
+## [1.7.0] - 2026-10-19
+
+### Fixed
+
 - A person's lifecycle columns are no longer written by whole-row saves (#237). The address and its verified flag,
   the role and scope, the login lockout, and the deletion, erasure-request, restriction and anonymisation columns are
   each written by a conditional write of their own, so a request that read the person before another changed them
@@ -74,9 +98,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   "Google authentication failed." or "The credential presented was not accepted." respectively. The optional `nonce`
   is unchanged. **Operators:** the migration adds one table; the runtime role's schema-wide grants and default
   privileges cover it, so no grant changes.
-- A Scope Admin can no longer make another existing administrator a co-owner of a scope on their own: the ownership
-  starts only when that person accepts, signed in as themselves. This closes the acceptance residual of Threat Model
-  TH-41 (residual closed); the threat itself stays on the register.
 
 ## [1.6.0] - 2026-10-16
 
@@ -604,7 +625,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
