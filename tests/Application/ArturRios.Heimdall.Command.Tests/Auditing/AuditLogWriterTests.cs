@@ -1,6 +1,8 @@
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Shared.Security;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
@@ -85,5 +87,24 @@ public class AuditLogWriterTests
         // Then
         var stored = (await repository.GetAllAsync()).Data!.Single();
         Assert.Equal(500, stored.FailureReason!.Length);
+    }
+
+    [UnitFact]
+    public async Task GivenRepositoryReturnsFailure_WhenWritingEntry_ThenItThrowsWithTheErrorAndAction()
+    {
+        // Given a repository that reports a failed insert through its output instead of throwing,
+        // as EfRepository does for a failed SaveChanges
+        var repository = new Mock<IAsyncRepository<AuditLog, long>>();
+        repository.Setup(r => r.CreateAsync(It.IsAny<AuditLog>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataOutput<long>.New.WithError("insert failed"));
+        var writer = new AuditLogWriter(repository.Object, Actor(Guid.NewGuid(), 1));
+
+        // When
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.WriteAsync("DeletePersonCommand", Guid.NewGuid(), succeeded: true, failureReason: null));
+
+        // Then
+        Assert.Contains("insert failed", exception.Message);
+        Assert.Contains("DeletePersonCommand", exception.Message);
     }
 }

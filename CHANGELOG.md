@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- An audit log entry that fails to save is now logged as a warning, naming its action and the database error. The
+  repository reports a failed insert in its result rather than throwing, and the writer discarded that result, so
+  the entry was lost without a trace. The request's answer is unchanged.
+
 ## [1.7.0] - 2026-10-19
 
 ### Fixed
