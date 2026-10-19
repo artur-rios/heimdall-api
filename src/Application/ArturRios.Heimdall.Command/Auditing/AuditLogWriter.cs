@@ -29,6 +29,15 @@ public class AuditLogWriter(IAsyncRepository<AuditLog, long> repository, IActorA
             CreatedAt = DateTime.UtcNow
         };
 
-        await repository.CreateAsync(entry);
+        // The repository reports a failed insert in its output instead of throwing. Surface it, so
+        // the caller's catch-and-warn sees it; the message carries the action and the repository's
+        // own error text only, never the entry's actor or other personal data.
+        var output = await repository.CreateAsync(entry);
+
+        if (!output.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to save audit log entry for {action}: {string.Join("; ", output.Errors)}");
+        }
     }
 }
