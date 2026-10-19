@@ -524,7 +524,7 @@ Then, from the repository root:
 docker compose --env-file docker/local.env up -d --build
 ```
 
-The real env files are gitignored: they hold the database password, the token signing secret and the
+The real env files are gitignored: they hold the database password, the token signing key and the
 master user's credentials.
 
 **Development, homologation and production** share one Ubuntu VPS and are deployed by
@@ -532,7 +532,7 @@ master user's credentials.
 `stacks/heimdall-api.proxy.yml` on top of this Compose file — no host port, Traefik in front with a
 wildcard certificate, the project named `heimdall-api-<environment>` — and reads the env file from
 `/etc/yggdrasil/<environment>/heimdall-api.env` on the VPS, filled in from the matching template.
-Each environment has its own database, login, signing secret and master user. Development and
+Each environment has its own database, login, signing key and master user. Development and
 homologation run only while they are used: a deploy leaves a stopped environment stopped, and
 `scripts/ygg.sh env start <environment>` on the VPS turns one on (`env stop` turns it off again).
 

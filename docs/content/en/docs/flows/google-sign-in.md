@@ -160,5 +160,5 @@ path; a second call is a 404. Neither cascades, because a Google User owns nothi
 
 A third verifier exists for the functional suite, which cannot override a DI registration and must
 still reach the flows behind verification. It is guarded twice — never in Production, and never
-without an explicitly set signing secret — and is checked *before* the real verifier so a test
+without an explicitly set signing key — and is checked *before* the real verifier so a test
 environment cannot accidentally run both.

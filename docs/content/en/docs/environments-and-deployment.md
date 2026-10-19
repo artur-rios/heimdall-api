@@ -144,10 +144,17 @@ master user's credentials. Open it and fill in at least:
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
 
-`DB_HOST=host.docker.internal` is already correct for Docker Desktop. To generate the secret:
+`DB_HOST=host.docker.internal` is already correct for Docker Desktop. To generate the signing key, on one line:
+
+```bash
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | base64 -w0
+```
+
+On Windows, write the PEM with OpenSSL and encode it:
 
 ```powershell
-[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("signing.pem"))
 ```
 
 Every other variable has a default that suits a local deployment: Swagger and the developer exception
@@ -365,7 +372,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | That environment's runtime login (`…_svc`) from step 2 |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | Optional: the owner role's whole connection string, when the environment has one ([Database roles](../operations/#database-roles--th-18)) |
-| `HEIMDALL_AUTH_SIGNING_KEY` | Required, and a key of its own, never another environment's: the one-line base64 of a P-256 PKCS#8 PEM (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`), or the API will not start. Only Heimdall holds it: consumers verify with the public keys at `/.well-known/jwks.json`. `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` are optional and legacy: keep them during the 24-hour overlap after 3.0.0, then remove them ([Operations](../operations/#ending-the-overlap)) |
+| `HEIMDALL_AUTH_SIGNING_KEY` | Required, and a key of its own, never another environment's: the one-line base64 of a P-256 PKCS#8 PEM (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`), or the API will not start. Only Heimdall holds it: consumers verify with the public keys at `/.well-known/jwks.json`. `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` are optional and legacy: keep them until no legacy token is verified and at least 24 hours have passed since the 3.0.0 production deploy, then remove them ([Operations](../operations/#ending-the-overlap)) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |

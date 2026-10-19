@@ -12,10 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Operators:** set `HEIMDALL_AUTH_SIGNING_KEY` before deploying, one key per environment: generate it with
   `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem` and set the variable to
   `base64 -w0 signing.pem`. It is required: start-up refuses to run without a P-256 private key there, naming the
-  variable and never its value. Keep `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` as they are for the 24-hour
-  overlap, counted from the production deploy: while set, the HS256 tokens issued before the upgrade stay valid.
-  Remove them only once every consumer verifies through the key set and the longest token lifetime has passed;
-  4.0.0 stops reading them.
+  variable and never its value. Keep `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` as they are through the
+  overlap: while set, the HS256 tokens issued before the upgrade stay valid. Remove them no earlier than 24 hours
+  after the production deploy, and only once every consumer verifies through the key set and no legacy token has
+  been verified for the longest token lifetime; 4.0.0 stops reading them.
 - **Consumers:** every token (person, subject-rights-only, two-factor challenge and application) is now signed
   ES256 and carries a `kid`, the RFC 7638 thumbprint of its key. Claims, issuer, audiences and lifetimes are
   unchanged. Verify tokens with the keys at `GET /.well-known/jwks.json` (inside yggdrasil
@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Tokens are now signed ES256 and carry a `kid`; claims, issuer, audiences and lifetimes are unchanged.
 - `HEIMDALL_AUTH_TOKEN_SECRET` is optional. While it is set (with `_PREVIOUS`), HS256 tokens signed with it are
   still accepted, but none is issued, and each accepted one is logged without the token or the identity.
   `_PREVIOUS` without the secret stops start-up.

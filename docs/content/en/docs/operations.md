@@ -1112,26 +1112,31 @@ When the old key leaked, do not keep it: set `HEIMDALL_AUTH_SIGNING_KEY` to a ne
 at once, which signs everybody out. That is the correct response to a compromised key and the wrong
 one to a routine replacement. Then follow the [Incident Response Document](../requirements/incident-response-document/).
 
-Consumers learn of the new key without being told. After an emergency rotation, the first token
-with the new `kid` that fortuna-api sees replaces its cached key set, throttled to at most one
-fetch a minute. Fortuna ignores `Cache-Control`, so the `max-age=300` on the key set does not delay
-it. Until that fetch, tokens with the new `kid` are refused; once it lands, tokens signed with the
-leaked key (unknown `kid`) are refused.
+Consumers learn of the new key without being told, but not at once. Fortuna keeps trusting the
+leaked key until a token with the new `kid` reaches it: that first token replaces Fortuna's cached
+key set, throttled to at most one fetch a minute, and Fortuna ignores `Cache-Control`, so the
+`max-age=300` on the key set does not matter. Any fresh sign-in issues a new-`kid` token, so sign in
+once through Fortuna right after the redeploy to make that happen promptly. Until then tokens with the
+new `kid` are refused; once it lands, tokens signed with the leaked key (unknown `kid`) are refused.
+When the leaked material is the HS256 secret instead, also remove `HEIMDALL_AUTH_TOKEN_SECRET` and
+`_PREVIOUS`.
 
 ### Ending the overlap
 
-For 24 hours after 3.0.0 reaches an environment (counted from the production deploy), Heimdall
-also accepts HS256 tokens issued before the upgrade, as long as `HEIMDALL_AUTH_TOKEN_SECRET` is set.
-It issues none. A legacy token is accepted only when it carries no `kid`, is HS256, was issued
-before the process started, and expires within one lifetime of that start.
+While `HEIMDALL_AUTH_TOKEN_SECRET` is set, Heimdall also accepts HS256 tokens issued before the
+upgrade, and issues none. It is not a 24-hour window: acceptance lasts as long as the secret is set,
+bounded per process. A legacy token is accepted only when it carries no `kid`, is HS256, was issued
+before the process started, and expires within one lifetime of that start, so every restart moves the
+bound forward. The 24 hours is the operator's rule for when the secret may go.
 
 Each accepted legacy token logs
 `Verified a legacy HS256 {Reader} token; HS256 tokens are accepted until HEIMDALL_AUTH_TOKEN_SECRET is removed`,
-without the token or the identity. The overlap is over, and the secret can go, when
-no such line has been logged for the longest token lifetime and every consumer verifies through the
-key set. Then clear `HEIMDALL_AUTH_TOKEN_SECRET` and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and
-redeploy. A previous secret without the current one stops start-up. Heimdall 4.0.0 stops reading
-both variables.
+without the token or the identity. Search the logs for the prefix `Verified a legacy HS256`. Remove the
+secret only when both hold: it is not before T0 + 24 h, where T0 is the 3.0.0 production deploy, and
+there has been no `Verified a legacy HS256` line in the last token lifetime, with every consumer
+verifying through the key set. Then clear `HEIMDALL_AUTH_TOKEN_SECRET` and
+`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and redeploy. A previous secret without the current one stops
+start-up. Heimdall 4.0.0 stops reading both variables.
 
 ### Consumers
 
