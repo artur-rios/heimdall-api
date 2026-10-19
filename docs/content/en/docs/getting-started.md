@@ -91,6 +91,7 @@ configuration — which is why the launch profiles name `Local` outright rather 
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five per day-long window); `0` turns the cooldown off |
+| `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | `604800` (7 days) — how long a Scope Admin's invitation to co-own a scope can be accepted; 3600 to 2592000, anything else falls back to the default |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](../operations/#metrics--prometheus)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty → every cross-origin request is refused. Set it to your front end's origin (`https://app.example.com`, comma separated for several) or a browser client cannot call the API |

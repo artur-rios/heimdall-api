@@ -31,6 +31,7 @@ public class SchemaTests(PostgresFixture fixture)
             "role",
             "scope",
             "scope_owner",
+            "scope_owner_invitation",
             "scope_permission",
             "scope_user",
             "two_factor_auth",

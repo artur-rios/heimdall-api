@@ -127,6 +127,10 @@ writing code. Marking it complete while they stand would misrepresent the system
 | UC-21: Add Scope Owner | ✅ | [#22](https://github.com/artur-rios/heimdall-api/issues/22) |
 | UC-22: Remove Scope Owner | ✅ | [#23](https://github.com/artur-rios/heimdall-api/issues/23) |
 | UC-23: Promote User to Scope Owner | ✅ | [#24](https://github.com/artur-rios/heimdall-api/issues/24) |
+| UC-58: Withdraw a Scope Owner Invitation | ✅ | — |
+| UC-59: List My Scope Invitations | ✅ | — |
+| UC-60: Accept a Scope Owner Invitation | ✅ | — |
+| UC-61: Decline a Scope Owner Invitation | ✅ | — |
 
 ### Person Management
 
@@ -347,6 +351,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five per day-long window); `0` turns the cooldown off |
+| `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | `604800` (7 days) — how long a Scope Admin's invitation to co-own a scope can be accepted; 3600 to 2592000, anything else falls back to the default |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |

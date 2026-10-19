@@ -8,8 +8,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 /// <summary>
 ///     <c>public_id</c> on every table the identity check trusts — <c>scope</c>, <c>application</c>,
-///     <c>application_credential</c>, <c>scope_permission</c>, <c>role</c> and
-///     <c>pending_registration</c> — is immutable, and no guarded table, the identity tables included,
+///     <c>application_credential</c>, <c>scope_permission</c>, <c>role</c>,
+///     <c>pending_registration</c> and <c>scope_owner_invitation</c> — is immutable, and no guarded table, the identity tables included,
 ///     takes an id another one holds (#199, R2 and R3), against real PostgreSQL.
 /// </summary>
 /// <remarks>
@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         person with the freed id, anonymise them, clear every audit target naming the scope, then
 ///         rename the scope back. And while only identity inserts were checked, a person inserted
 ///         first could share its id with a scope inserted after it. Both are pinned here: the rename
-///         is refused and the chain leaves the entry as it was, and every one of the eight tables
+///         is refused and the chain leaves the entry as it was, and every one of the nine tables
 ///         refuses an id another holds.
 ///     </para>
 ///     <para>
@@ -305,6 +305,30 @@ public class EntityPublicIdTests(PostgresFixture fixture)
             "pending_registration", pending.PublicId, "failed_attempts = failed_attempts + 1");
     }
 
+    [FunctionalFact]
+    public async Task GivenAScopeOwnerInvitation_WhenItsPublicIdIsRewritten_ThenTheDatabaseRefuses()
+    {
+        // Given
+        var with = await SeedDependenciesAsync();
+        var publicId = Guid.NewGuid();
+        Assert.Null(await RunAsync(InsertStatement("scope_owner_invitation", publicId, with)));
+
+        // When / Then
+        await AssertRewriteRefusedAsync("scope_owner_invitation", publicId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAScopeOwnerInvitation_WhenAnotherColumnIsUpdated_ThenTheDatabasePermitsIt()
+    {
+        // Given
+        var with = await SeedDependenciesAsync();
+        var publicId = Guid.NewGuid();
+        Assert.Null(await RunAsync(InsertStatement("scope_owner_invitation", publicId, with)));
+
+        // When / Then — a withdrawal, as UC-58 ends one
+        await AssertOrdinaryUpdatePassesAsync("scope_owner_invitation", publicId, "ended_at = now(), outcome = 3");
+    }
+
     /// <summary>The rows a test row of any guarded table depends on.</summary>
     private sealed record Dependencies(long ScopeId, long ApplicationId, long OwnerId);
 
@@ -315,7 +339,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
         return new Dependencies(application.ScopeId, application.Id, application.OwnerId);
     }
 
-    /// <summary>An INSERT of one row with the given <c>public_id</c> into any of the eight guarded tables.</summary>
+    /// <summary>An INSERT of one row with the given <c>public_id</c> into any of the nine guarded tables.</summary>
     private static string InsertStatement(string table, Guid publicId, Dependencies with) => table switch
     {
         "person" => $"""
@@ -353,6 +377,11 @@ public class EntityPublicIdTests(PostgresFixture fixture)
                                            '{Unique("entity-public-id")}@functional.test', '\x01', '\x02',
                                            '{Guid.NewGuid():N}{Guid.NewGuid():N}', now() + interval '1 day')
                                    """,
+        "scope_owner_invitation" => $"""
+                                     INSERT INTO heimdall.scope_owner_invitation
+                                         (public_id, scope_id, invitee_person_id, created_at, expires_at)
+                                     VALUES ('{publicId}', {with.ScopeId}, {with.OwnerId}, now(), now() + interval '7 days')
+                                     """,
         _ => throw new ArgumentOutOfRangeException(nameof(table), table, null)
     };
 
@@ -409,7 +438,8 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     [InlineData("application_credential", "scope_permission")]
     [InlineData("scope_permission", "application_credential")]
     [InlineData("role", "application")]
-    [InlineData("pending_registration", "scope")]
+    [InlineData("pending_registration", "scope_owner_invitation")]
+    [InlineData("scope_owner_invitation", "scope")]
     public async Task GivenAnIdAnotherTableHolds_WhenARowIsInsertedWithIt_ThenTheDatabaseRefuses(string table, string holder)
     {
         // Given — every table is inserted into once and holds an id once, so every branch of the check is
@@ -436,6 +466,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     [InlineData("scope_permission")]
     [InlineData("role")]
     [InlineData("pending_registration")]
+    [InlineData("scope_owner_invitation")]
     public async Task GivenAFreshId_WhenARowIsInsertedWithIt_ThenTheDatabasePermitsIt(string table)
     {
         // Given

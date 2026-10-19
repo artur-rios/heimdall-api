@@ -42,6 +42,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var applicationCredentials = new EfRepository<ApplicationCredential, long>(context);
         var attemptNoticeBudgets = new EfRepository<AttemptNoticeBudget, long>(context);
         var googleIdTokenUses = new EfRepository<GoogleIdTokenUse, string>(context);
+        var scopeOwnerInvitations = new EfRepository<ScopeOwnerInvitation, long>(context);
 
         return new PurgeExpiredTokensCommandHandler(
             passwordResetTokens, passwordResetTokens,
@@ -51,6 +52,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
             applicationCredentials, applicationCredentials,
             attemptNoticeBudgets, attemptNoticeBudgets,
             googleIdTokenUses, googleIdTokenUses,
+            scopeOwnerInvitations, scopeOwnerInvitations,
             Retention);
     }
 
@@ -283,5 +285,52 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         var remaining = await ApplicationSeeds.CredentialsOfAsync(fixture, application);
         Assert.Equal([live.PublicId], remaining.Select(x => x.PublicId));
         Assert.DoesNotContain(remaining, x => x.PublicId == revoked.PublicId || x.PublicId == expired.PublicId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenScopeOwnerInvitationsPastNinetyDays_WhenPurging_ThenTheyAreRemovedAndRecentOnesKept()
+    {
+        // Given — a scope and invitee of this test's own
+        await using var context = fixture.CreateContext();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        var invitee = new Person
+        {
+            PublicId = Guid.NewGuid(), Name = "Invitee", Email = $"invitee-{Guid.NewGuid():N}@functional.test",
+            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.ScopeAdmin
+        };
+        context.Persons.Add(invitee);
+        await context.SaveChangesAsync();
+        var now = DateTime.UtcNow;
+        var old = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-100), ExpiresAt = now.AddDays(-93), EndedAt = now.AddDays(-91),
+            Outcome = ScopeOwnerInvitationOutcomes.Declined
+        };
+        var lapsed = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-98), ExpiresAt = now.AddDays(-91)
+        };
+        var recent = new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
+            CreatedAt = now.AddDays(-12), ExpiresAt = now.AddDays(-5), EndedAt = now.AddDays(-10),
+            Outcome = ScopeOwnerInvitationOutcomes.Withdrawn
+        };
+        context.ScopeOwnerInvitations.AddRange(old, lapsed, recent);
+        await context.SaveChangesAsync();
+
+        // When
+        var output = await Handler(context).HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(output.Data!.ScopeOwnerInvitationsPurged >= 2);
+        await using var check = fixture.CreateContext();
+        var left = await check.ScopeOwnerInvitations.AsNoTracking()
+            .Where(x => x.ScopeId == scope.Id).Select(x => x.PublicId).ToListAsync();
+        Assert.Equal([recent.PublicId], left);
     }
 }

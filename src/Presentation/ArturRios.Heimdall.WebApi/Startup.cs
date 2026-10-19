@@ -272,6 +272,9 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IErasedSubjects, ErasedSubjects>();
         // FR-SR-14: the per-address budget of registration-attempt notices, charged as one upsert.
         Builder.Services.AddScoped<IAttemptNoticeBudgets, AttemptNoticeBudgets>();
+        // FR-SC-17: opening, answering, withdrawing and voiding scope owner invitations, each one
+        // conditional write, and acceptance one transaction with the ownership it grants.
+        Builder.Services.AddScoped<IScopeOwnerInvitations, ScopeOwnerInvitations>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
@@ -304,6 +307,11 @@ public class Startup : WebApiStartup
         // No validator: UC-21's request carries no body — both identifiers are route values already
         // constrained to GUIDs — so there is nothing left for NFR-10 to validate.
         Builder.Services.AddAuditedCommandHandler<AddScopeOwnerCommand, AddScopeOwnerCommandOutput, AddScopeOwnerCommandHandler>();
+        // UC-58: an owner or a System Admin withdraws an open scope owner invitation.
+        Builder.Services.AddAuditedCommandHandler<WithdrawScopeOwnerInvitationCommand, WithdrawScopeOwnerInvitationCommandOutput, WithdrawScopeOwnerInvitationCommandHandler>();
+        // UC-60/UC-61: the invitee accepts or declines; no validator — the route's id is the whole input.
+        Builder.Services.AddAuditedCommandHandler<AcceptScopeOwnerInvitationCommand, AcceptScopeOwnerInvitationCommandOutput, AcceptScopeOwnerInvitationCommandHandler>();
+        Builder.Services.AddAuditedCommandHandler<DeclineScopeOwnerInvitationCommand, DeclineScopeOwnerInvitationCommandOutput, DeclineScopeOwnerInvitationCommandHandler>();
         // Likewise no validator for UC-22: both identifiers are route values.
         Builder.Services.AddAuditedCommandHandler<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput, RemoveScopeOwnerCommandHandler>();
         // Likewise no validator for UC-23: both identifiers are route values.
@@ -384,6 +392,12 @@ public class Startup : WebApiStartup
         Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnersQuery, PersonOutput>, ListScopeOwnersQueryHandler>();
         Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListScopeOwnerInvitationsQuery, ScopeOwnerInvitationOutput>,
+                ListScopeOwnerInvitationsQueryHandler>();
+        Builder.Services
+            .AddScoped<IPaginatedQueryHandlerAsync<ListMyScopeInvitationsQuery, MyScopeInvitationOutput>,
+                ListMyScopeInvitationsQueryHandler>();
+        Builder.Services
             .AddScoped<IPaginatedQueryHandlerAsync<ListScopeAdminsQuery, PersonSummaryOutput>,
                 ListScopeAdminsQueryHandler>();
         Builder.Services
@@ -438,6 +452,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IValidator<ListScopesQuery>, ListScopesQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopePersonsQuery>, ListScopePersonsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeOwnersQuery>, ListScopeOwnersQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListScopeOwnerInvitationsQuery>, ListScopeOwnerInvitationsQueryValidator>();
+        Builder.Services.AddScoped<IValidator<ListMyScopeInvitationsQuery>, ListMyScopeInvitationsQueryValidator>();
         Builder.Services.AddScoped<IValidator<ListScopeAdminsQuery>, ListScopeAdminsQueryValidator>();
         Builder.Services
             .AddScoped<IValidator<ListPendingRegistrationsQuery>, ListPendingRegistrationsQueryValidator>();
@@ -465,6 +481,12 @@ public class Startup : WebApiStartup
         WarnOnFallback(AdminEmailOptions.CooldownVariable, adminEmail.RejectedCooldown,
             AdminEmailOptions.DefaultCooldownSeconds);
         Builder.Services.AddSingleton(adminEmail);
+
+        // UC-21 (FR-SC-18): how long a scope owner invitation stays acceptable, read once at start-up.
+        var scopeInvitation = ScopeInvitationOptions.FromEnvironment();
+        WarnOnFallback(ScopeInvitationOptions.LifetimeVariable, scopeInvitation.RejectedLifetime,
+            ScopeInvitationOptions.DefaultLifetimeSeconds);
+        Builder.Services.AddSingleton(scopeInvitation);
         // UC-51: no validator — the only input is the route's person id, already constrained to a GUID.
         Builder.Services.AddAuditedCommandHandler<SendPersonVerificationEmailCommand, SendPersonVerificationEmailCommandOutput, SendPersonVerificationEmailCommandHandler>();
         // UC-52: no validator either — the route's person id is the whole of the input.
@@ -975,7 +997,7 @@ public class Startup : WebApiStartup
     ///     Whether a request spends the account-creation address bound: only an administrator's
     ///     person access token — the full sign-in audience, neither a two-factor challenge nor a
     ///     subject-rights token (<see cref="IdentityUserMapper" /> has already held each token's marks
-    ///     to its audience) — and only the roles the three endpoints admit. Anything else is turned
+    ///     to its audience) — and only the roles the four endpoints admit. Anything else is turned
     ///     away by the endpoint's own checks and must not use up a bound administrators share.
     /// </summary>
     private static bool CountsAgainstCreationAddress(IdentityUser? actor) =>
@@ -984,11 +1006,12 @@ public class Startup : WebApiStartup
 
     /// <summary>
     ///     Throttles the three endpoints that create a person with a password (<c>POST /api/persons</c>,
-    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>) twice over:
+    ///     <c>POST /api/scopes/{id}/persons</c>, <c>POST /api/scopes/{id}/owners</c>), and the one that invites
+    ///     an existing administrator and mails them (<c>POST /api/scopes/{id}/owners/{personId}</c>), twice over:
     ///     <see cref="AccountCreationPermitLimit" /> a minute per acting person, and as many per address.
-    ///     Each derives an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
+    ///     The first three derive an Argon2id hash through <c>PasswordHashGate</c>, and each needs only an
     ///     administrator's token, so without a bound one caller could keep the gate full and starve every
-    ///     sign-in (Threat Model TH-03).
+    ///     sign-in (Threat Model TH-03); the fourth would otherwise let one caller fill an inbox.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -1126,6 +1149,7 @@ public class Startup : WebApiStartup
             Builder.Services.AddScoped<IRegistrationAttemptSender, LoggingRegistrationAttemptSender>();
             Builder.Services.AddScoped<IRegistrationLinkSender, LoggingRegistrationLinkSender>();
             Builder.Services.AddScoped<IEmailChangeNoticeSender, LoggingEmailChangeNoticeSender>();
+            Builder.Services.AddScoped<IScopeInvitationNoticeSender, LoggingScopeInvitationNoticeSender>();
 
             return;
         }
@@ -1140,6 +1164,7 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IRegistrationAttemptSender, MailgunRegistrationAttemptSender>();
         Builder.Services.AddScoped<IRegistrationLinkSender, MailgunRegistrationLinkSender>();
         Builder.Services.AddScoped<IEmailChangeNoticeSender, MailgunEmailChangeNoticeSender>();
+        Builder.Services.AddScoped<IScopeInvitationNoticeSender, MailgunScopeInvitationNoticeSender>();
     }
 
     /// <summary>

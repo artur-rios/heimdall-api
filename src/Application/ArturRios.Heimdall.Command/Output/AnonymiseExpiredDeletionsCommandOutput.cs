@@ -30,6 +30,13 @@ public class AnonymiseExpiredDeletionsCommandOutput : CommandOutput
     /// </remarks>
     public IEnumerable<Guid> AnonymisedIds { get; set; } = [];
 
+    /// <summary>
+    ///     Unended scope owner invitations this run voided (FR-SC-17): those of the persons it anonymised,
+    ///     and any still open to a person an earlier run anonymised. Each is recorded in the audit trail as
+    ///     <c>ScopeOwnerInvitationVoided</c>, on that invitation.
+    /// </summary>
+    public int ScopeOwnerInvitationsVoided { get; set; }
+
     /// <summary>Identities anonymised across both tables.</summary>
     public int TotalAnonymised => PersonsAnonymised + GoogleUsersAnonymised;
 }

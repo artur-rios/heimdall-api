@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Util.Test.Attributes;
@@ -85,12 +86,14 @@ public class PurgeExpiredTokensCommandHandlerTests
         AsyncFakeRepository<PendingRegistration, long>? pendingRegistrations = null,
         AsyncFakeRepository<ApplicationCredential, long>? credentials = null,
         AsyncFakeRepository<AttemptNoticeBudget, long>? noticeBudgets = null,
-        AsyncFakeRepository<GoogleIdTokenUse, string>? googleIdTokenUses = null)
+        AsyncFakeRepository<GoogleIdTokenUse, string>? googleIdTokenUses = null,
+        AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null)
     {
         pendingRegistrations ??= new AsyncFakeRepository<PendingRegistration, long>();
         credentials ??= new AsyncFakeRepository<ApplicationCredential, long>();
         noticeBudgets ??= new AsyncFakeRepository<AttemptNoticeBudget, long>();
         googleIdTokenUses ??= new AsyncFakeRepository<GoogleIdTokenUse, string>();
+        invitations ??= new AsyncFakeRepository<ScopeOwnerInvitation, long>();
 
         return new(passwordResetTokens, passwordResetTokens,
             emailVerificationTokens, emailVerificationTokens,
@@ -99,6 +102,7 @@ public class PurgeExpiredTokensCommandHandlerTests
             credentials, credentials,
             noticeBudgets, noticeBudgets,
             googleIdTokenUses, googleIdTokenUses,
+            invitations, invitations,
             retention ?? Retention());
     }
 
@@ -387,5 +391,67 @@ public class PurgeExpiredTokensCommandHandlerTests
         // Then
         Assert.Equal(2, output.Data!.ApplicationCredentialsPurged);
         Assert.Equal([3L, 4L], credentials.Query().Select(c => c.Id).OrderBy(id => id));
+    }
+
+    [UnitFact]
+    public async Task GivenScopeOwnerInvitations_WhenPurging_ThenOnlyThoseEndedOrExpiredOverNinetyDaysAgoGo()
+    {
+        // Given — FR-SC-18: ended 91 days ago, expired unanswered 91 days ago, ended 10 days ago, still open
+        var now = DateTime.UtcNow;
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+
+        async Task<ScopeOwnerInvitation> SeedAsync(DateTime expiresAt, DateTime? endedAt)
+        {
+            var invitation = new ScopeOwnerInvitation
+            {
+                PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 1, CreatedAt = expiresAt.AddDays(-7),
+                ExpiresAt = expiresAt, EndedAt = endedAt,
+                Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
+            };
+            await invitations.CreateAsync(invitation);
+            return invitation;
+        }
+
+        var endedLongAgo = await SeedAsync(now.AddDays(-95), now.AddDays(-91));
+        var expiredLongAgo = await SeedAsync(now.AddDays(-91), null);
+        var endedRecently = await SeedAsync(now.AddDays(-5), now.AddDays(-10));
+        var open = await SeedAsync(now.AddDays(5), null);
+        var handler = Handler(new(), new(), new(), invitations: invitations);
+
+        // When
+        var output = await handler.HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(2, output.Data!.ScopeOwnerInvitationsPurged);
+        Assert.Equal(2, output.Data.TotalPurged);
+        var left = (await invitations.GetAllAsync()).Data!.Select(x => x.PublicId).ToList();
+        Assert.DoesNotContain(endedLongAgo.PublicId, left);
+        Assert.DoesNotContain(expiredLongAgo.PublicId, left);
+        Assert.Contains(endedRecently.PublicId, left);
+        Assert.Contains(open.PublicId, left);
+    }
+
+    [UnitFact]
+    public async Task GivenAnInvitationVoidedRecentlyThatExpiredLongAgo_WhenPurging_ThenItIsKept()
+    {
+        // Given — an invitation that lapsed unanswered long ago and was voided only recently, when its
+        // invitee was anonymised: once it has ended, the 90 days run from its end
+        var now = DateTime.UtcNow;
+        var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
+        await invitations.CreateAsync(new ScopeOwnerInvitation
+        {
+            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 1, CreatedAt = now.AddDays(-120),
+            ExpiresAt = now.AddDays(-113), EndedAt = now.AddDays(-10), Outcome = ScopeOwnerInvitationOutcomes.Voided
+        });
+        var handler = Handler(new(), new(), new(), invitations: invitations);
+
+        // When
+        var output = await handler.HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(0, output.Data!.ScopeOwnerInvitationsPurged);
+        Assert.Single((await invitations.GetAllAsync()).Data!);
     }
 }

@@ -93,7 +93,7 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `POST /persons` | System Admin | UC-06 path b — create a `ScopeAdmin` or `SystemAdmin` with no scope |
 | `POST /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-06 path a — create a `User` in a scope |
 | `POST /scopes/{scopeId}/owners` | System Admin + Scope Admin | UC-06 path c — create a new `ScopeAdmin` directly as a co-owner |
-| `POST /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-21 — add an existing `ScopeAdmin` or `SystemAdmin` as an owner |
+| `POST /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-21 — a System Admin adds an existing `ScopeAdmin` or `SystemAdmin` as an owner (`201`, or `200` for an existing owner); a Scope Admin's request invites them instead (`202`, "The invitation was sent."; they own nothing until they accept). Under the account-creation rate limit, for either caller |
 | `POST /scopes/{scopeId}/users/{personId}/promote` | System Admin + Scope Admin | UC-23 — promote a scope's `User` to owner; `409` "Concurrency conflict: the record was modified or removed by another process." when the person was changed, promoted or deleted after the request read them (AF-23f) — read them again before retrying |
 | `GET /persons/{id}` | Any authenticated | UC-07 — read one person (a person may read themselves) |
 | `GET /scopes/{scopeId}/persons` | System Admin + Scope Admin | UC-07 — list a scope's Users |
@@ -106,6 +106,16 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `POST /persons/{id}/verification-email` | System Admin + Scope Admin | UC-51 — mail a fresh verification link to the person's own address; a Scope Admin only for Users of scopes they own; 429 within the cooldown |
 | `POST /persons/{id}/password-reset` | System Admin + Scope Admin | UC-52 — mail a password-reset link to the person's own address, with UC-12's eligibility; 429 within the cooldown |
 | `DELETE /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-22 — remove an owner (rejected if it would be the last one) |
+
+## Scope owner invitations — `/api`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `GET /scopes/{scopeId}/owner-invitations` | System Admin + Scope Admin | UC-58 — the scope's open invitations, newest first: invitee, inviter, created and expiry times. A processing-restricted invitee's are withheld, and the inviter's name is absent when the inviter was removed, restricted or anonymised |
+| `DELETE /scopes/{scopeId}/owner-invitations/{invitationId}` | System Admin + Scope Admin | UC-58 — withdraw an open invitation (`204`); an ended, unknown or other scope's one is `404` |
+| `GET /persons/me/scope-invitations` | System Admin; Scope Admin | UC-59 — the caller's own open invitations, soonest to expire first; the inviter's name is absent when the inviter was removed, restricted or anonymised |
+| `POST /scope-invitations/{invitationId}/accept` | The invitee | UC-60 — the invitation ends and the ownership starts, in one transaction |
+| `POST /scope-invitations/{invitationId}/decline` | The invitee | UC-61 — decline |
 
 ## Applications — `/api/scopes/{scopeId}/applications`
 
@@ -262,6 +272,10 @@ Some responses tell the caller less than the API knows, on purpose:
 - **`POST /api/auth/password-reset`** and **`POST /api/auth/verify-email`** answer "Invalid token."
   both for a token nobody issued and for one whose person has since been restricted, deleted or
   anonymised, or can no longer sign in (AF-13e, AF-14d).
+- **`POST /api/scope-invitations/{id}/accept`** and **`…/decline`** answer "The invitation was not found
+  or is no longer open." alike for an unknown id, somebody else's invitation — the inviter's own
+  included — an ended or expired one, and one voided because it could no longer be honoured (AF-60a,
+  AF-60b).
 
 ## The specification
 

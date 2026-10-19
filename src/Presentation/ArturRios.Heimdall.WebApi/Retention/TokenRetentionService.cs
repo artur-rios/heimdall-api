@@ -17,7 +17,8 @@ public class TokenRetentionService(
 {
     protected override string StartupDescription =>
         $"Token retention purge scheduled every {retention.PurgeInterval}, removing tokens more than " +
-        $"{retention.SingleUseTokenGrace} past expiry";
+        $"{retention.SingleUseTokenGrace} past expiry and scope owner invitations " +
+        $"{retention.ScopeInvitationRetention} after they ended or expired";
 
     protected override async Task<string?> RunAsync(IServiceProvider scope)
     {
@@ -43,6 +44,7 @@ public class TokenRetentionService(
               $"{purged.PendingRegistrationsPurged} pending registration, " +
               $"{purged.ApplicationCredentialsPurged} application credential, " +
               $"{purged.AttemptNoticeBudgetsPurged} attempt-notice budget, " +
-              $"{purged.GoogleIdTokenUsesPurged} used Google ID token";
+              $"{purged.GoogleIdTokenUsesPurged} used Google ID token, " +
+              $"{purged.ScopeOwnerInvitationsPurged} scope owner invitation";
     }
 }
