@@ -25,8 +25,8 @@ public class IssuedTokenTests
         string kind)
     {
         // Given — the configuration start-up builds, keys.ApplyTo over the token settings, for a
-        // fresh key
-        var keys = TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, null);
+        // fresh key and a previous one, which is published but must never sign
+        var keys = TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, UnitSigningKeys.Create().EnvValue);
         var readers = new UnitTokenReaders([], keys, Issuer, "heimdall-tests");
 
         var (issue, audience) = kind switch
@@ -54,6 +54,7 @@ public class IssuedTokenTests
         var read = new JsonWebToken(token);
         Assert.Equal("ES256", read.Alg);
         Assert.Equal(keys.Current.Id, read.Kid);
+        Assert.NotEqual(keys.Previous!.Id, read.Kid);
         Assert.Equal("JWT", read.Typ);
         Assert.Equal(Issuer, read.Issuer);
         Assert.Equal(audience, Assert.Single(read.Audiences));
