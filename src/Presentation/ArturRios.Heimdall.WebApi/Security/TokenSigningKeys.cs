@@ -145,10 +145,11 @@ public sealed class TokenSigningKeys
             {
                 return JwtKey.FromEcPrivateKeyPem(pem);
             }
-            catch (ArgumentException)
+            catch (Exception exception) when (exception is ArgumentException or CryptographicException)
             {
                 // The library's message names no part of the key either, but this one names the
-                // variable, which is what an operator needs.
+                // variable, which is what an operator needs. A platform CryptographicException the
+                // library lets through is refused the same way rather than escaping unnamed.
                 throw new InvalidOperationException(
                     $"Environment variable '{variable}' is not a P-256 private key. Generate one with " +
                     $"{GenerateCommand}. Refusing to start.");

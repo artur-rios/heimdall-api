@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
@@ -15,6 +16,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // is in progress; any other previous key is held to the same rules and only ever verifies.
 public class TokenSigningKeysTests
 {
+    private const string LegacyKeyId = "legacy";
+    private const string LegacySecret = "unit-tests-legacy-hs256-signing-secret-0123456789";
+
     // The unusable values, by name, so that no test name carries key material. Each is built when
     // its case runs.
     private static readonly Dictionary<string, Func<string?>> UnusableValues = new()
@@ -111,19 +115,20 @@ public class TokenSigningKeysTests
     }
 
     [UnitTheory]
-    [InlineData("null")]
-    [InlineData("empty")]
-    [InlineData("blank")]
-    [InlineData("empty quoted")]
-    [InlineData("not base64")]
-    [InlineData("base64 of text")]
-    [InlineData("raw PEM")]
-    [InlineData("P-384 PKCS#8 PEM")]
-    [InlineData("RSA-2048 PKCS#8 PEM")]
-    [InlineData("P-256 public key PEM")]
-    [InlineData("encrypted PKCS#8 PEM")]
-    [InlineData("base64 of DER")]
-    public void GivenAnUnusableSigningKey_WhenParsing_ThenStartUpIsRefusedNamingOnlyTheVariable(string unusable)
+    [InlineData("null", "is unset")]
+    [InlineData("empty", "is unset")]
+    [InlineData("blank", "is unset")]
+    [InlineData("empty quoted", "is unset")]
+    [InlineData("not base64", "is not the base64 of a PEM")]
+    [InlineData("base64 of text", "is not the base64 of a PEM")]
+    [InlineData("raw PEM", "holds a PEM itself")]
+    [InlineData("P-384 PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("RSA-2048 PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("P-256 public key PEM", "is not a P-256 private key")]
+    [InlineData("encrypted PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("base64 of DER", "is not the base64 of a PEM")]
+    public void GivenAnUnusableSigningKey_WhenParsing_ThenStartUpIsRefusedNamingOnlyTheVariable(
+        string unusable, string refusalPhrase)
     {
         // Given
         var value = UnusableValues[unusable]();
@@ -133,22 +138,23 @@ public class TokenSigningKeysTests
 
         // Then
         Assert.Contains("'HEIMDALL_AUTH_SIGNING_KEY'", refusal.Message);
+        Assert.Contains($"'HEIMDALL_AUTH_SIGNING_KEY' {refusalPhrase}", refusal.Message);
         Assert.Contains("Refusing to start", refusal.Message);
         Assert.DoesNotContain("-----BEGIN", refusal.Message);
         if (!string.IsNullOrWhiteSpace(value) && value.Trim() != "\"\"") Assert.DoesNotContain(value.Trim(), refusal.Message);
     }
 
     [UnitTheory]
-    [InlineData("not base64")]
-    [InlineData("base64 of text")]
-    [InlineData("raw PEM")]
-    [InlineData("P-384 PKCS#8 PEM")]
-    [InlineData("RSA-2048 PKCS#8 PEM")]
-    [InlineData("P-256 public key PEM")]
-    [InlineData("encrypted PKCS#8 PEM")]
-    [InlineData("base64 of DER")]
+    [InlineData("not base64", "is not the base64 of a PEM")]
+    [InlineData("base64 of text", "is not the base64 of a PEM")]
+    [InlineData("raw PEM", "holds a PEM itself")]
+    [InlineData("P-384 PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("RSA-2048 PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("P-256 public key PEM", "is not a P-256 private key")]
+    [InlineData("encrypted PKCS#8 PEM", "is not a P-256 private key")]
+    [InlineData("base64 of DER", "is not the base64 of a PEM")]
     public void GivenAnUnusablePreviousSigningKey_WhenParsing_ThenStartUpIsRefusedNamingThePreviousVariable(
-        string unusable)
+        string unusable, string refusalPhrase)
     {
         // Given
         var (_, current) = UnitSigningKeys.Create();
@@ -159,6 +165,7 @@ public class TokenSigningKeysTests
 
         // Then
         Assert.Contains("'HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS'", refusal.Message);
+        Assert.Contains($"'HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS' {refusalPhrase}", refusal.Message);
         Assert.Contains("Refusing to start", refusal.Message);
         Assert.DoesNotContain("-----BEGIN", refusal.Message);
         Assert.DoesNotContain(value.Trim(), refusal.Message);
@@ -180,6 +187,8 @@ public class TokenSigningKeysTests
 
         // Then
         Assert.Null(keys.Previous);
+        Assert.Single(keys.ConfigurationKeys);
+        Assert.Single(Regex.Matches(keys.JwksJson, "\"kid\""));
         var published = Assert.Single(JwksDocument.Parse(keys.JwksJson));
         Assert.Equal(keys.Current.Id, published.Id);
     }
@@ -212,6 +221,8 @@ public class TokenSigningKeysTests
 
         // Then
         Assert.Null(keys.Previous);
+        Assert.Single(keys.ConfigurationKeys);
+        Assert.Single(Regex.Matches(keys.JwksJson, "\"kid\""));
         Assert.Single(JwksDocument.Parse(keys.JwksJson));
     }
 
@@ -232,22 +243,29 @@ public class TokenSigningKeysTests
     [UnitFact]
     public void GivenABaseConfiguration_WhenTheKeysApply_ThenItSignsEs256WithTheCurrentKey()
     {
-        // Given
+        // Given — a base that still carries an HS256 secret and key, which must not survive
         var (_, value) = UnitSigningKeys.Create();
         var keys = TokenSigningKeys.Parse(value, null);
+        var baseConfiguration = new JwtConfiguration(3600, "i", "a", LegacySecret, [])
+        {
+            Keys = [new JwtKey(LegacyKeyId, LegacySecret)],
+            SigningKeyId = LegacyKeyId
+        };
 
         // When
-        var c = keys.ApplyTo(new JwtConfiguration(3600, "i", "a", "", []));
+        var c = keys.ApplyTo(baseConfiguration);
 
         // Then
         Assert.Equal("ES256", c.Algorithm);
         Assert.Equal(keys.Current.Id, c.SigningKeyId);
         Assert.Equal(keys.ConfigurationKeys, c.Keys);
+        Assert.DoesNotContain(c.Keys, key => key.Id == LegacyKeyId);
         Assert.Equal("", c.Secret);
         Assert.Equal("i", c.Issuer);
         Assert.Equal("a", c.Audience);
         Assert.Equal(3600, c.ExpirationInSeconds);
-        Assert.Equal(keys.Current.Id,
-            new JsonWebToken(new JwtHandler().CreateToken(c with { Claims = new() { ["id"] = "x" } })).Kid);
+        var token = new JsonWebToken(new JwtHandler().CreateToken(c with { Claims = new() { ["id"] = "x" } }));
+        Assert.Equal(JwtAlgorithms.ES256, token.Alg);
+        Assert.Equal(keys.Current.Id, token.Kid);
     }
 }
