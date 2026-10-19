@@ -15,7 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   variable and never its value. Keep `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` as they are through the
   overlap: while set, the HS256 tokens issued before the upgrade stay valid. Remove them no earlier than 24 hours
   after the production deploy, and only once every consumer verifies through the key set and no legacy token has
-  been verified for the longest token lifetime; 4.0.0 stops reading them.
+  been verified for the longest token lifetime; 4.0.0 stops reading them. In yggdrasil, fortuna-api's
+  `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's value, so Fortuna's references are removed first, and
+  its 4.0.0 release must stop reading the secret, before Heimdall's value is unset (the 4.0.0 procedure, Part E).
 - **Consumers:** every token (person, subject-rights-only, two-factor challenge and application) is now signed
   ES256 and carries a `kid`, the RFC 7638 thumbprint of its key. Claims, issuer, audiences and lifetimes are
   unchanged. Verify tokens with the keys at `GET /.well-known/jwks.json` (inside yggdrasil
@@ -26,6 +28,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **alexandria-api and cerberus-api** verify HS256 only (alexandria-api#136, cerberus-api#120), so they cannot
   verify 3.0.0 tokens. Both are out of scope for this release and neither is deployed against Heimdall.
 - **Deploy order:** fortuna-api 3.0.0 or later first.
+- **Rolling back:** rolling Heimdall back to 2.x signs out everything 3.0.0 issued: person and subject-rights
+  sessions, challenges in flight, and application tokens. At Fortuna 3.0.0, ES256 tokens keep verifying from its
+  cached key set until they expire. After a Fortuna restart the key-set fetch fails and they are refused. HS256
+  tokens issued after the rollback verify through Fortuna's legacy secret. Fortuna must stay at 3.0.0 or later
+  while Heimdall runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` is still set,
+  because 2.0.0's compose requires it.
 
 ### Added
 

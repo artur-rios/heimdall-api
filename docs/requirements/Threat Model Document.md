@@ -449,9 +449,9 @@ means Heimdall's own deployment, not any verifier.
 `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is the other half. Both public keys are published and a token
 signed with either is accepted while new tokens are signed with the current one. Rotating is three
 steps and no outage: set the previous variable to the key in use, set the current variable to a new
-one, redeploy; then one token lifetime later clear the previous variable and redeploy again.
-Withdrawing a key still invalidates its tokens immediately, which is what makes the emergency
-version of that procedure (no previous key) the right response to a leak.
+one, redeploy; then, once the longest token lifetime has passed, clear the previous variable and
+redeploy again. Withdrawing a key still invalidates its tokens immediately, which is what makes the
+emergency version of that procedure (no previous key) the right response to a leak.
 
 Every token carries a `kid`, the RFC 7638 thumbprint of its key. It is derived from the key and
 never configured, so it stays stable across a rotation: "current" becoming "previous" does not
