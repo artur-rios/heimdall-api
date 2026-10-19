@@ -1,37 +1,37 @@
 using System.Text;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
 using ArturRios.Util.Test.Attributes;
-using ArturRios.Util.WebApi.Security.Authentication;
-using ArturRios.Util.WebApi.Security.Configuration;
-using ArturRios.Util.WebApi.Security.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for TokenOrigin and PersonTokenValidator (Threat Model TB-5). The signing key is not
-// Heimdall's alone, so a correct signature proves only that the key signed a token: each reader also
-// requires Heimdall's issuer and exactly one of the audiences it takes. The bearer validator applies
-// that after the library's signature and lifetime check, and answers a refusal as it answers a bad
-// signature.
+// Unit tests for TokenOrigin and PersonTokenValidator (Threat Model TB-5). Heimdall signs several
+// kinds of token with one key, and during the overlap its readers accept HS256 tokens signed with a
+// secret that is not Heimdall's alone, so a correct signature proves only that a key signed a token:
+// each reader also requires Heimdall's issuer and exactly one of the audiences it takes. The bearer
+// validator applies that after the signature and lifetime check, and answers a refusal as it answers
+// a bad signature.
 public class TokenOriginTests
 {
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
-    private const string Secret = "unit-tests-token-origin-signing-secret-0123456789";
 
     private static readonly PersonTokenAudiences Audiences = new(PersonAudience);
 
     private static readonly IdentityUserMapper Mapper = new(Audiences);
 
-    private static JwtConfiguration Configuration(string issuer = Issuer) =>
-        new(3600, issuer, PersonAudience, Secret, []) { Keys = [new JwtKey("current", Secret)] };
+    // The ES256 key Heimdall signs with here; every token below that is meant to be signed correctly is
+    // signed with it.
+    private static readonly TokenSigningKeys Keys = UnitTokenReaders.NewKeys();
 
     private static string Mint(IdentityUser user, string issuer, string audience) =>
-        new JwtHandler().CreateToken(new JwtConfiguration(3600, issuer, audience, Secret, Mapper.ToClaims(user)));
+        new JwtHandler().CreateToken(
+            Keys.ApplyTo(new JwtConfiguration(3600, issuer, audience, string.Empty, Mapper.ToClaims(user))));
 
     private static string MintWithAudiences(string issuer, params string[] audiences) =>
         new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
@@ -39,20 +39,13 @@ public class TokenOriginTests
             Issuer = issuer,
             Claims = new Dictionary<string, object> { [JwtRegisteredClaimNames.Aud] = audiences },
             Expires = DateTime.UtcNow.AddMinutes(10),
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(Secret)), SecurityAlgorithms.HmacSha256)
+            SigningCredentials = UnitSigningKeys.Es256(Keys.Current)
         });
 
     private static IdentityUser FullIdentity() => new(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
-    private static PersonTokenValidator Validator(JwtConfiguration configuration)
-    {
-        var options = new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly };
-        var handler = new JwtHandler();
-
-        return new PersonTokenValidator(
-            new JwtTokenValidator(configuration, handler, Mapper, options), configuration, Audiences);
-    }
+    // The bearer reader over that key, as start-up wires it; no legacy secret.
+    private static PersonTokenValidator Validator() => new UnitTokenReaders([], Keys, Issuer, PersonAudience).Bearer;
 
     // TokenOrigin
 
@@ -133,7 +126,7 @@ public class TokenOriginTests
         var token = Mint(user, Issuer, audience);
 
         // When
-        var result = await Validator(Configuration()).ValidateAsync(token, new DefaultHttpContext());
+        var result = await Validator().ValidateAsync(token, new DefaultHttpContext());
 
         // Then
         Assert.Equal(user.Id, result.User?.Id);
@@ -151,7 +144,7 @@ public class TokenOriginTests
         var token = Mint(FullIdentity(), issuer, audience);
 
         // When
-        var result = await Validator(Configuration()).ValidateAsync(token, new DefaultHttpContext());
+        var result = await Validator().ValidateAsync(token, new DefaultHttpContext());
 
         // Then — the answer a bad signature gets
         Assert.Null(result.User);
@@ -162,12 +155,11 @@ public class TokenOriginTests
     public async Task GivenABadSignature_WhenValidated_ThenTheLibrarysRefusalPassesThrough()
     {
         // Given
-        var token = new JwtHandler().CreateToken(new JwtConfiguration(
-            3600, Issuer, PersonAudience, "some-other-signing-secret-0123456789abcdef",
-            Mapper.ToClaims(FullIdentity())));
+        var token = new JwtHandler().CreateToken(UnitTokenReaders.NewKeys().ApplyTo(
+            new JwtConfiguration(3600, Issuer, PersonAudience, string.Empty, Mapper.ToClaims(FullIdentity()))));
 
         // When
-        var result = await Validator(Configuration()).ValidateAsync(token, new DefaultHttpContext());
+        var result = await Validator().ValidateAsync(token, new DefaultHttpContext());
 
         // Then
         Assert.Null(result.User);
@@ -181,32 +173,24 @@ public class TokenOriginTests
     public async Task GivenTheRightKeyUnderAnHmacAlgorithm_WhenValidated_ThenOnlyHs256IsAccepted(
         string algorithm, bool accepted)
     {
-        // Given — ArturRios.Jwt 1.3.0 accepts HS256 alone, the one algorithm Heimdall signs with. One
-        // descriptor for every case, with a key long enough for HS512, so only the algorithm differs.
+        // Given — during the overlap, a legacy token as a 2.x process issued it: the right legacy
+        // secret, issued before this process started. HS256 was the one algorithm Heimdall signed
+        // with, so it is the one the legacy path accepts. One descriptor for every case, with a key
+        // long enough for HS512, so only the algorithm differs.
         const string longSecret = "unit-tests-token-origin-signing-secret-long-enough-for-hs512-0123456789";
-        var configuration = new JwtConfiguration(3600, Issuer, PersonAudience, longSecret, [])
-        {
-            Keys = [new JwtKey("current", longSecret)]
-        };
-        var user = FullIdentity();
-        var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
-        {
-            Issuer = Issuer,
-            Audience = PersonAudience,
-            Claims = Mapper.ToClaims(user).ToDictionary(claim => claim.Key, object (claim) => claim.Value),
-            Expires = DateTime.UtcNow.AddMinutes(10),
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm)
-        });
+        var readers = new UnitTokenReaders(TokenSigningSecrets.Parse(longSecret, null), Keys, Issuer, PersonAudience);
+        var token = readers.TokenFor(
+            LegacyTokenValidator.BearerReader,
+            new SigningCredentials(new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm));
         Assert.Equal(algorithm, new JsonWebToken(token).Alg);
 
         // When
-        var result = await Validator(configuration).ValidateAsync(token, new DefaultHttpContext());
+        var result = await readers.Bearer.ValidateAsync(token, new DefaultHttpContext());
 
         // Then
         if (accepted)
         {
-            Assert.Equal(user.Id, result.User?.Id);
+            Assert.Equal(readers.Person.Id, result.User?.Id);
             Assert.Null(result.Error);
         }
         else
@@ -223,12 +207,8 @@ public class TokenOriginTests
     {
         // Given — HEIMDALL_AUTH_TOKEN_AUDIENCE left empty, its documented default: a full token then
         // carries no aud claim, and a challenge carries the bare suffix
-        var audiences = new PersonTokenAudiences(string.Empty);
-        var mapper = new IdentityUserMapper(audiences);
-        var configuration = new JwtConfiguration(3600, Issuer, string.Empty, Secret, [])
-        {
-            Keys = [new JwtKey("current", Secret)]
-        };
+        var readers = new UnitTokenReaders([], Keys, Issuer, string.Empty);
+        var audiences = readers.Audiences;
         var challenge = audience == audiences.TwoFactorChallenge;
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
         {
@@ -236,12 +216,10 @@ public class TokenOriginTests
             ChallengeId = challenge ? Guid.NewGuid() : null
         };
         var token = new JwtHandler().CreateToken(
-            new JwtConfiguration(3600, Issuer, audience, Secret, mapper.ToClaims(user)));
+            readers.Configuration with { Audience = audience, Claims = readers.Mapper.ToClaims(user) });
         Assert.Equal(challenge, new JsonWebToken(token).TryGetClaim(JwtRegisteredClaimNames.Aud, out _));
 
-        var options = new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly };
-        var validator = new PersonTokenValidator(
-            new JwtTokenValidator(configuration, new JwtHandler(), mapper, options), configuration, audiences);
+        var validator = readers.Bearer;
 
         // When
         var result = await validator.ValidateAsync(token, new DefaultHttpContext());

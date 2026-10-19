@@ -42,6 +42,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
 using ArturRios.Util.WebApi.Security.Authentication;
+using ArturRios.Util.WebApi.Security.Configuration;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
@@ -134,6 +135,15 @@ public class Startup : WebApiStartup
     ///     it is decided.
     /// </summary>
     private SensitiveDiagnostics _diagnostics = SensitiveDiagnostics.None;
+
+    /// <summary>
+    ///     When this process started, read once, as the instance is constructed and before anything is
+    ///     built or served: from this moment Heimdall issues ES256 alone, so a genuine HS256 token was
+    ///     issued no later (<see cref="LegacyTokenValidator" />, spec decision 5). Captured here rather
+    ///     than inside the validator's registration, which the container runs on first use and which
+    ///     would move the cutoff to the first request.
+    /// </summary>
+    private readonly DateTimeOffset _processStart = DateTimeOffset.UtcNow;
 
     public Startup(string[] args) : base(args, ConfigureStandardSequence)
     {
@@ -782,10 +792,12 @@ public class Startup : WebApiStartup
     /// </summary>
     /// <remarks>
     ///     TB-5: the library's validator checks the signature and lifetime but not the issuer or the
-    ///     audience, and the signing key is not Heimdall's alone. PersonTokenValidator wraps it and
-    ///     takes its place, so a token reaches the middleware's user only if Heimdall issued it, for
-    ///     one of the person audiences. When the library registers its validator in some other way,
-    ///     start-up stops and says why, rather than running with the library's validator alone.
+    ///     audience, and Heimdall's key signs every kind of token, while the legacy secret accepted
+    ///     during the overlap is not Heimdall's alone. PersonTokenValidator wraps it, with
+    ///     <see cref="LegacyTokenValidator" /> beside it, and takes its place, so a token reaches the
+    ///     middleware's user only if Heimdall issued it, for one of the person audiences. When the
+    ///     library registers its validator in some other way, start-up stops and says why, rather
+    ///     than running with the library's validator alone.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     ///     The services hold no <see cref="ITokenValidator" /> registered as <see cref="JwtTokenValidator" />.
@@ -821,9 +833,30 @@ public class Startup : WebApiStartup
         // and the scope claims of FR-AU-04. Defaults are kept otherwise: app JWT only, read from the
         // Authorization header, user rebuilt from claims — so no IAuthenticationProvider is required
         // and no database read happens per request.
-        var jwtConfiguration = BuildJwtConfiguration();
+        //
+        // Every token is signed ES256 with the current key; a missing or unusable key stops start-up
+        // here, naming the variable. The legacy secrets are optional: set, they keep the HS256
+        // tokens issued before this process started valid during the overlap; unset, the overlap is
+        // over and HS256 is refused (spec decision 5).
+        var signingKeys = TokenSigningKeys.FromEnvironment();
+        var legacySecrets = TokenSigningSecrets.Parse(
+            Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable),
+            Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable));
+
+        var jwtConfiguration = BuildJwtConfiguration(signingKeys);
+        Builder.Services.AddSingleton(signingKeys);
         Builder.Services.AddSingleton(jwtConfiguration);
         Builder.Services.AddSingleton<JwtHandler>();
+
+        // Thumbprints only, which are public: they are what the published key set and every token's
+        // kid carry, so a consumer can be checked against them. No key material is logged.
+        Log.Information(
+            "Tokens: signed ES256 with key {KeyId}; published keys {KeyIds}; HS256 tokens {LegacyState}",
+            signingKeys.Current.Id,
+            signingKeys.ConfigurationKeys.Select(key => key.Id).ToArray(),
+            legacySecrets.Count > 0
+                ? $"accepted until {TokenSecretEnvironmentVariable} is removed"
+                : "refused");
 
         // TH-06/TH-35: the challenge and subject-rights-only tokens carry audiences derived from the
         // person audience, so a consumer pinning it refuses them. Logged, like the application
@@ -861,6 +894,18 @@ public class Startup : WebApiStartup
             options.EnableGoogle = false;
             options.JwtMode = JwtValidationMode.ClaimsOnly;
         });
+
+        // The one place HS256 is accepted, shared by the three readers. The start is the instant
+        // captured when this instance was constructed, not one read when the factory first runs.
+        var processStart = _processStart;
+        Builder.Services.AddSingleton(provider => new LegacyTokenValidator(
+            legacySecrets,
+            provider.GetRequiredService<JwtConfiguration>(),
+            provider.GetRequiredService<JwtHandler>(),
+            provider.GetRequiredService<IAuthenticatedUserMapper>(),
+            provider.GetRequiredService<AuthenticationOptions>(),
+            provider.GetRequiredService<ILogger<LegacyTokenValidator>>(),
+            processStart));
 
         ReplaceLibraryTokenValidator(Builder.Services);
 
@@ -1213,57 +1258,47 @@ public class Startup : WebApiStartup
     }
 
     /// <summary>
-    ///     Reads the token settings from the environment. The signing secret is required, and it and
-    ///     any previous secret must be at least 32 bytes of ASCII (<see cref="TokenSigningSecrets" />):
-    ///     an unusable one fails start-up rather than signing with a weak key, or failing every
-    ///     request inside the token validator.
+    ///     Reads the token settings from the environment — lifetime, issuer and audience — and hands
+    ///     them to <paramref name="keys" />, which makes the configuration sign ES256 with the current
+    ///     key and accept the current and any previous one (<see cref="TokenSigningKeys.ApplyTo" />).
+    ///     It holds EC keys alone and no secret: the legacy HS256 secrets live in
+    ///     <see cref="LegacyTokenValidator" />'s own configuration, so neither algorithm's keys ever
+    ///     verify the other's tokens.
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         <see cref="PreviousTokenSecretEnvironmentVariable" /> is how a signing secret is
-    ///         replaced without signing everybody out (Threat Model TH-22). Both secrets are handed
-    ///         to <c>JwtConfiguration.Keys</c>, so a token signed with either is accepted, while new
-    ///         tokens are signed with the current one. Rotating is then: set the previous variable to
-    ///         the secret in use, set the current variable to a new one, restart; and an hour later —
-    ///         one token lifetime — clear the previous variable and restart again. An empty previous
-    ///         variable is never passed to the library as a key.
+    ///         <c>HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS</c> is how the signing key is replaced without
+    ///         signing everybody out (Threat Model TH-22). Its public half is published beside the
+    ///         current key's and verifies the tokens it signed, while new tokens are signed with the
+    ///         current key alone. Rotating is then: set the previous variable to the key in use, set the
+    ///         current variable to a new one, restart; and once the longest token lifetime has passed —
+    ///         a person token's or an application token's, whichever is longer — clear the previous
+    ///         variable and restart again.
     ///     </para>
     ///     <para>
-    ///         The keys carry ids because <c>JwtKey</c> requires them, but no <c>kid</c> is written to
-    ///         the tokens: <c>SigningKeyId</c> is deliberately left unset, so a token names no key and
-    ///         validation tries both. That is the point of not using the <c>kid</c> feature here. An
-    ///         identifier stamped on the token has to stay attached to the same key forever, and these
-    ///         ids are positional — today's "current" is tomorrow's "previous" — so stamping them
-    ///         would make every token issued before a rotation name the wrong key afterwards, and be
-    ///         refused. Deriving stable ids from the secrets instead would mean publishing something
-    ///         computed from a signing key on every token, which is a poor trade for saving one HMAC
-    ///         against two keys.
+    ///         Every token carries a <c>kid</c>: the RFC 7638 thumbprint of the key that signed it
+    ///         (<see cref="JwtKey.Id" />). A thumbprint is derived from the public half, which the key
+    ///         set publishes anyway, so it discloses nothing, and it stays attached to its key wherever
+    ///         the key goes: a token signed before a rotation names the key that becomes the previous
+    ///         one, and is checked against that key alone. HS256 keys were never named this way —
+    ///         their ids were positional and the secret itself was the key — which is why no HS256
+    ///         token Heimdall issued carries a <c>kid</c>, and why the legacy path refuses one that does.
     ///     </para>
     /// </remarks>
-    private static JwtConfiguration BuildJwtConfiguration()
+    private static JwtConfiguration BuildJwtConfiguration(TokenSigningKeys keys)
     {
-        var secret = Environment.GetEnvironmentVariable(TokenSecretEnvironmentVariable);
-
-        // The current secret is always accepted; the previous one only while it is configured, and
-        // only when it is genuinely a different key.
-        var keys = TokenSigningSecrets.Parse(
-            secret, Environment.GetEnvironmentVariable(PreviousTokenSecretEnvironmentVariable));
-
         var lifetime = TokenLifetimeSetting.Parse(
             Environment.GetEnvironmentVariable(TokenExpirationEnvironmentVariable),
             DefaultTokenExpirationInSeconds);
 
         WarnOnFallback(TokenExpirationEnvironmentVariable, lifetime.RejectedValue, DefaultTokenExpirationInSeconds);
 
-        return new JwtConfiguration(
+        return keys.ApplyTo(new JwtConfiguration(
             lifetime.Seconds,
             Environment.GetEnvironmentVariable(TokenIssuerEnvironmentVariable) ?? string.Empty,
             Environment.GetEnvironmentVariable(TokenAudienceEnvironmentVariable) ?? string.Empty,
-            secret!,
-            [])
-        {
-            Keys = keys
-        };
+            string.Empty,
+            []));
     }
 
     /// <summary>

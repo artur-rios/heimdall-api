@@ -4,83 +4,97 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
-using ArturRios.Jwt;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Functional;
+using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for signing-key rotation (Threat Model TH-22).
 //
-// Replacing the signing secret used to be a cutover: the moment a new one took effect, every token in
+// Replacing the signing key used to be a cutover: the moment a new one took effect, every token in
 // flight was refused. That made a leaked key and a routine replacement cost the same outage, and it
-// is why the secret was in practice never rotated at all.
+// is why the key was in practice never rotated at all.
 //
-// HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS is the other half of a rotation. Both secrets are handed to
-// JwtConfiguration.Keys, so a token signed with either is accepted while new ones are signed with the
-// current secret. PostgresFixture publishes both before the host starts, because the API reads its
-// key material once at start-up.
+// HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS is the other half of a rotation. Its public half is published
+// beside the current key's and verifies the tokens it signed, while new ones are signed with the
+// current key alone; each token names its key by thumbprint in its kid. PostgresFixture publishes both
+// before the host starts, because the API reads its key material once at start-up.
 [Collection(nameof(FunctionalCollection))]
 public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Local)
 {
-    /// <summary>
-    ///     Mints a token the way <see cref="TestTokens" /> does, but signed with a chosen secret, so a
-    ///     test can produce the token a caller was holding before a rotation.
-    /// </summary>
-    private static string TokenSignedWith(string secret, Guid personId, int role)
-    {
-        var configuration = new JwtConfiguration(
-            3600,
-            Environment.GetEnvironmentVariable("HEIMDALL_AUTH_TOKEN_ISSUER") ?? string.Empty,
-            Environment.GetEnvironmentVariable("HEIMDALL_AUTH_TOKEN_AUDIENCE") ?? string.Empty,
-            secret,
-            new IdentityUserMapper(TestTokens.Audiences).ToClaims(
-                new IdentityUser(personId, role) { SecurityStamp = TestTokens.StampOf(personId) }));
+    private static readonly Guid SystemAdmin = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
 
-        return new JwtHandler().CreateToken(configuration);
-    }
+    private static IdentityUser SystemAdminIdentity() =>
+        new(SystemAdmin, (int)Roles.SystemAdmin) { SecurityStamp = TestTokens.StampOf(SystemAdmin) };
 
-    private Task<HttpOutput<DataOutput<PersonOutput?>?>> ReadSelfAsync(Guid personId) =>
-        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{personId}");
+    private Task<HttpOutput<DataOutput<PersonOutput?>?>> ReadSelfAsync() =>
+        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{SystemAdmin}");
 
     [FunctionalFact]
-    public async Task GivenATokenSignedWithTheRetiredSecret_WhenCallingAnEndpoint_ThenItIsStillAccepted()
+    public async Task GivenATokenSignedWithThePreviousSigningKey_WhenCallingAnEndpoint_ThenItIsStillAccepted()
     {
-        // The point of the whole feature: this is the token a caller was holding when the rotation
-        // happened, and they must not be signed out by it.
-        var personId = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+        // Given — the point of the whole feature: this is the token a caller was holding when the
+        // rotation happened, and they must not be signed out by it
+        Authorize(TestTokens.SignedWith(PostgresFixture.PreviousSigningKey, SystemAdminIdentity()));
 
-        Authorize(TokenSignedWith(PostgresFixture.PreviousTokenSecret, personId, (int)Roles.SystemAdmin));
+        // When
+        var response = await ReadSelfAsync();
 
-        var response = await ReadSelfAsync(personId);
-
+        // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [FunctionalFact]
-    public async Task GivenATokenSignedWithTheCurrentSecret_WhenCallingAnEndpoint_ThenItIsAccepted()
+    public async Task GivenATokenSignedWithTheCurrentSigningKey_WhenCallingAnEndpoint_ThenItIsAccepted()
     {
-        // The control. Accepting the retired key must not have come at the cost of the current one —
-        // and the rest of the suite, which signs every token with the current secret, is the wider
-        // version of this assertion.
-        var personId = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+        // Given — the control. Accepting the previous key must not have come at the cost of the
+        // current one, and the rest of the suite, which signs every token with the current key, is the
+        // wider version of this assertion
+        Authorize(TestTokens.SignedWith(PostgresFixture.SigningKey, SystemAdminIdentity()));
 
-        Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
+        // When
+        var response = await ReadSelfAsync();
 
-        Assert.Equal(HttpStatusCode.OK, (await ReadSelfAsync(personId)).StatusCode);
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [FunctionalFact]
-    public async Task GivenATokenSignedWithASecretThatWasNeverConfigured_WhenCallingAnEndpoint_ThenItIsRefused()
+    public async Task GivenATokenSignedWithAKeyThatWasNeverConfigured_WhenCallingAnEndpoint_ThenItIsRefused()
     {
-        // Accepting two keys is not accepting any key. A withdrawn secret — or one that was never
-        // ours — buys nothing, which is what makes withdrawing a leaked key an effective revocation.
-        var personId = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+        // Given — accepting two keys is not accepting any key. A withdrawn key, or one that was never
+        // ours, buys nothing, which is what makes withdrawing a leaked key an effective revocation
+        Authorize(TestTokens.SignedWith(UnitSigningKeys.Create().Key, SystemAdminIdentity()));
 
-        Authorize(TokenSignedWith("a-secret-this-deployment-never-accepted", personId, (int)Roles.SystemAdmin));
+        // When
+        var response = await ReadSelfAsync();
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await ReadSelfAsync(personId)).StatusCode);
+        // Then
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+}
+
+// The rotation at the challenge reader, which reads its token outside the bearer path: a UC-38
+// challenge issued just before the rotation is still a challenge after it.
+public class SigningKeyRotationReaderTests
+{
+    [UnitFact]
+    public async Task GivenAChallengeTokenFromThePreviousSigningKey_WhenRead_ThenItIsAChallenge()
+    {
+        // Given — a rotation in progress: a new current key, and the previous one's public half
+        var previous = UnitSigningKeys.Create();
+        var keys = TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, previous.EnvValue);
+        var readers = new UnitTokenReaders([], keys);
+        var challenge = readers.TokenFor(LegacyTokenValidator.ChallengeReader, UnitSigningKeys.Es256(previous.Key));
+        Assert.Equal(keys.Previous!.Id, new JsonWebToken(challenge).Kid);
+
+        // When
+        var accepted = await readers.AcceptsAsync(LegacyTokenValidator.ChallengeReader, challenge);
+
+        // Then
+        Assert.True(accepted);
     }
 }

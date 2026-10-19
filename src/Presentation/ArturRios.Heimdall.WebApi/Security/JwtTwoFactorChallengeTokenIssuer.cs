@@ -7,12 +7,19 @@ using ArturRios.Util.WebApi.Security.Interfaces;
 namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
-///     Issues and validates UC-38's short-lived challenge token as the application's own HMAC-signed
-///     JWT (FR-2F-07…FR-2F-10, NFR-17), signed with the same secret as
+///     Issues and validates UC-38's short-lived challenge token as the application's own ES256-signed
+///     JWT (FR-2F-07…FR-2F-10, NFR-17), signed with the same key as
 ///     <see cref="JwtAuthTokenIssuer" />'s full tokens but built and read independently of it, since
 ///     the two carry deliberately different claims.
 /// </summary>
 /// <remarks>
+///     <para>
+///         <b>Signature.</b> ES256 under any configured key, the current or the previous one, so a
+///         rotation does not void the challenges in flight. During the overlap, a challenge Heimdall
+///         issued as HS256 before this process started is still read, through
+///         <see cref="LegacyTokenValidator" />, bounded by the challenge lifetime; its acceptance is
+///         logged once the token has proved to be a challenge.
+///     </para>
 ///     <para>
 ///         <b>Expiry.</b> Taken from <see cref="TwoFactorLifetimes.ChallengeToken" /> (10 minutes,
 ///         NFR-17) rather than added to <see cref="JwtConfiguration" /> as a second environment
@@ -56,7 +63,8 @@ public class JwtTwoFactorChallengeTokenIssuer(
     JwtConfiguration configuration,
     PersonTokenAudiences audiences,
     JwtHandler jwtHandler,
-    IAuthenticatedUserMapper mapper) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
+    IAuthenticatedUserMapper mapper,
+    LegacyTokenValidator legacy) : ITwoFactorChallengeTokenIssuer, ITwoFactorChallengeTokenValidator
 {
     public Task<AuthToken> IssueAsync(Guid personId, int roleId, Guid challengeId, Guid securityStamp)
     {
@@ -78,27 +86,31 @@ public class JwtTwoFactorChallengeTokenIssuer(
         return Task.FromResult(new AuthToken(token, DateTime.UtcNow.Add(TwoFactorLifetimes.ChallengeToken)));
     }
 
-    /// <summary>
-    ///     Signature (HS256 only) and lifetime, against every configured key when there are any — the
-    ///     same rule the bearer-token validator applies — so rotating the signing secret does not void
-    ///     the challenges already in flight while it keeps every full token issued beside them valid.
-    /// </summary>
-    private Task<bool> IsSignedAndLiveAsync(string token) =>
-        configuration.Keys.Count > 0
-            ? jwtHandler.IsTokenValidAsync(token, configuration.Keys)
-            : jwtHandler.IsTokenValidAsync(token, configuration.Secret);
-
     public async Task<TwoFactorChallengePrincipal?> ValidateAsync(string? token)
     {
         // Signature and lifetime (JwtHandler.IsTokenValidAsync validates both) — AF-38a's "expired
-        // or invalid".
-        if (string.IsNullOrWhiteSpace(token) || !await IsSignedAndLiveAsync(token))
+        // or invalid". ES256 under the configured keys, which are EC keys alone, or else, during the
+        // overlap, a legacy HS256 challenge issued before this process started.
+        if (string.IsNullOrWhiteSpace(token))
         {
             return null;
         }
 
+        var byLegacy = false;
+
+        if (!await jwtHandler.IsTokenValidAsync(token, configuration.Keys))
+        {
+            if (!await legacy.IsSignedAndLiveAsync(token, TwoFactorLifetimes.ChallengeToken))
+            {
+                return null;
+            }
+
+            byLegacy = true;
+        }
+
         // TB-5: issued by Heimdall, for the challenge audience alone. The signature proves only that
-        // the key signed it, and the key is not Heimdall's alone.
+        // a key signed it: Heimdall's key signs every kind of token, and the legacy secret is not
+        // Heimdall's alone.
         if (!TokenOrigin.IsIssuedFor(token, configuration.Issuer, audiences.TwoFactorChallenge))
         {
             return null;
@@ -118,8 +130,16 @@ public class JwtTwoFactorChallengeTokenIssuer(
         // FR-2F-10 again: a challenge token names which challenge it is, so UC-38 can refuse one that
         // was already redeemed or has been superseded by a newer login. One without that claim
         // cannot be checked, and so is not accepted either.
-        return mapper.FromClaims(claims) is IdentityUser { MfaPending: true, ChallengeId: { } challengeId } identity
-            ? new TwoFactorChallengePrincipal(identity.Id, challengeId, identity.SecurityStamp)
-            : null;
+        if (mapper.FromClaims(claims) is not IdentityUser { MfaPending: true, ChallengeId: { } challengeId } identity)
+        {
+            return null;
+        }
+
+        if (byLegacy)
+        {
+            legacy.Accepted(LegacyTokenValidator.ChallengeReader);
+        }
+
+        return new TwoFactorChallengePrincipal(identity.Id, challengeId, identity.SecurityStamp);
     }
 }
