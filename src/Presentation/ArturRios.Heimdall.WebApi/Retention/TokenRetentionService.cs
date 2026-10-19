@@ -42,6 +42,7 @@ public class TokenRetentionService(
               $"{purged.TwoFactorEmailCodesPurged} two-factor email, " +
               $"{purged.PendingRegistrationsPurged} pending registration, " +
               $"{purged.ApplicationCredentialsPurged} application credential, " +
-              $"{purged.AttemptNoticeBudgetsPurged} attempt-notice budget";
+              $"{purged.AttemptNoticeBudgetsPurged} attempt-notice budget, " +
+              $"{purged.GoogleIdTokenUsesPurged} used Google ID token";
     }
 }

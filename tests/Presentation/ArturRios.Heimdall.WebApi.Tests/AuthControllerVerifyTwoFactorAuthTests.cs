@@ -288,9 +288,9 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
 
         await using (var context = db.CreateContext())
         {
-            var stored = await context.Persons.FirstAsync(x => x.Id == person.Id);
-            stored.ProcessingRestrictedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
         }
 
         // When
@@ -318,9 +318,9 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
 
         await using (var context = db.CreateContext())
         {
-            var stored = await context.Persons.FirstAsync(x => x.Id == person.Id);
-            stored.ProcessingRestrictedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            // A targeted write, as the application makes it: a whole-row save ignores the column (#237).
+            await context.Persons.Where(x => x.Id == person.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
         }
 
         // When

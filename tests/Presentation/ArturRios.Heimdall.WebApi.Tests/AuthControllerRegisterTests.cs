@@ -48,11 +48,12 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
             PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt), Salt = salt,
             RoleId = (long)Roles.User, EmailVerified = true
         };
+        // Set before the insert: a whole-row save ignores it once the row exists (#237).
+        person.ScopeId = scope.Id;
         context.Persons.Add(person);
         await context.SaveChangesAsync();
 
         context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        person.ScopeId = scope.Id;
         await context.SaveChangesAsync();
 
         return person;

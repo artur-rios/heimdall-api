@@ -1,7 +1,9 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Util.Test.Attributes;
@@ -70,8 +72,8 @@ public class DeletePersonCommandHandlerTests
     }
 
     private static DeletePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true) =>
-        new(persons, persons, Ownership(ownershipAllowed));
+        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true, IAtomicWrites? atomicWrites = null) =>
+        new(persons, Ownership(ownershipAllowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static DeletePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -177,6 +179,35 @@ public class DeletePersonCommandHandlerTests
         Assert.Contains(PersonMessages.PersonDeletedSuccessfully, output.Messages);
         Assert.True(target.IsDeleted);
         Assert.Equal(Stamp, target.UpdatedAt);
+    }
+
+    [UnitFact]
+    public async Task GivenPersonDeletedSinceTheRead_WhenHandlingDeletePerson_ThenTheFirstDeletionStands()
+    {
+        // Given a deletion another request makes between this one's read and its write
+        var scope = Scope(1);
+        var target = User(10, scope);
+        var persons = await PersonsWith(target);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        var firstDeletion = new DateTime(2021, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = row =>
+            {
+                row.IsDeleted = true;
+                row.DeletedAt = firstDeletion;
+                row.DeletionKind = (int)DeletionKinds.SubjectRequested;
+            }
+        };
+
+        // When
+        var output = await HandlerFor(persons, atomicWrites: atomicWrites).HandleAsync(command);
+
+        // Then it answers as AF-09b does, and the first deletion's time and kind stand
+        Assert.True(output.Success);
+        Assert.True(output.Data!.AlreadyDeleted);
+        Assert.Equal(firstDeletion, target.DeletedAt);
+        Assert.Equal((int)DeletionKinds.SubjectRequested, target.DeletionKind);
     }
 
     [UnitFact]

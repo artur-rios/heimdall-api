@@ -58,13 +58,14 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
             ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null,
             RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null
         };
+        // Set before the insert: a whole-row save ignores it once the row exists (#237).
+        person.ScopeId = memberOf?.Id;
         context.Persons.Add(person);
         await context.SaveChangesAsync();
 
         if (memberOf is not null)
         {
             context.ScopeUsers.Add(new ScopeUser { ScopeId = memberOf.Id, PersonId = person.Id });
-            person.ScopeId = memberOf.Id;
             await context.SaveChangesAsync();
         }
 

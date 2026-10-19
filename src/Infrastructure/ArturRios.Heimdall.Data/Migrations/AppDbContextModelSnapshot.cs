@@ -314,6 +314,27 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.ToTable("erased_subject", "heimdall");
                 });
 
+            modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.GoogleIdTokenUse", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash")
+                        .HasColumnOrder(1);
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_google_id_token_use");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_google_id_token_use_expires_at");
+
+                    b.ToTable("google_id_token_use", "heimdall");
+                });
+
             modelBuilder.Entity("ArturRios.Heimdall.Domain.Entities.GoogleUser", b =>
                 {
                     b.Property<long>("Id")

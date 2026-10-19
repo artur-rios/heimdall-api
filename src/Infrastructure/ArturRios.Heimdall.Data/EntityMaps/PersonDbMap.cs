@@ -105,6 +105,30 @@ internal static class PersonDbMap
         IgnoredAfterInsert(person.Property(x => x.AccountEmailWindowEndsAt));
         IgnoredAfterInsert(person.Property(x => x.AccountEmailLastSentAt));
 
+        // The lifecycle columns, for the same reason again (#237): who the person is to the system —
+        // their role and scope, whether their address is verified, locked out, restricted, deleted,
+        // asked to be erased or anonymised — and the address itself. Each changes only through a
+        // targeted, conditional write in AtomicWrites, so a whole-row save of a copy read before
+        // the change — a name edit racing a deletion, say, or an ownership grant racing a
+        // restriction — cannot put the old state back. What a whole-row save still writes is the
+        // plain profile: the name, the recorded basis and notice version, and UpdatedAt.
+        IgnoredAfterInsert(person.Property(x => x.Email));
+        IgnoredAfterInsert(person.Property(x => x.EmailVerified));
+        IgnoredAfterInsert(person.Property(x => x.RoleId));
+        IgnoredAfterInsert(person.Property(x => x.ScopeId));
+        IgnoredAfterInsert(person.Property(x => x.FailedLoginAttempts));
+        IgnoredAfterInsert(person.Property(x => x.LockedOutUntil));
+        IgnoredAfterInsert(person.Property(x => x.IsDeleted));
+        IgnoredAfterInsert(person.Property(x => x.DeletedAt));
+        IgnoredAfterInsert(person.Property(x => x.DeletionKind));
+        IgnoredAfterInsert(person.Property(x => x.ErasureRequestedAt));
+        IgnoredAfterInsert(person.Property(x => x.ErasureDueAt));
+        IgnoredAfterInsert(person.Property(x => x.ErasureBlockedReason));
+        IgnoredAfterInsert(person.Property(x => x.ProcessingRestrictedAt));
+        IgnoredAfterInsert(person.Property(x => x.RestrictionGround));
+        IgnoredAfterInsert(person.Property(x => x.RestrictionLiftNotifiedAt));
+        IgnoredAfterInsert(person.Property(x => x.AnonymisedAt));
+
         // Deliberately not a foreign key and not a navigation. It carries no relationship of its own
         // — SCOPE_USER is the relationship, and mapping this as a second one would give EF two ways
         // to describe the same association and two chances to disagree. It is a value the per-scope

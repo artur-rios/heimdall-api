@@ -66,7 +66,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
@@ -145,32 +144,33 @@ public class RequestErasureCommandHandler(
         var requestedAt = DateTime.UtcNow;
         var dueAt = requestedAt + retention.SubjectErasureDeadline;
 
-        person.ErasureRequestedAt = requestedAt;
-        person.ErasureDueAt = dueAt;
-        person.UpdatedAt = requestedAt;
-
-        var restrictionLifted = LiftRestriction(person);
+        var restrictionLifted = person.ProcessingRestrictedAt is not null;
 
         // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
         // ownerless, so the suspension waits — but the request and its deadline do not.
         var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader);
+        var blockedReason = blocked ? ErasureMessages.BlockedByLastScopeOwnership : null;
 
-        if (blocked)
+        // The request, the lifted restriction (see LiftRestriction), and the suspension or the
+        // reason it waits, as one targeted write of those columns alone (#237) — made only while no
+        // request is recorded and the person is live. A request recorded since the read refuses this
+        // one as AF-42c, and a deletion as AF-42b, as either would have a moment earlier; the row is
+        // read again, past the tracked copy, to tell which.
+        if (!await atomicWrites.TryRecordErasureRequestAsync(person, requestedAt, dueAt, blockedReason))
         {
-            person.ErasureBlockedReason = ErasureMessages.BlockedByLastScopeOwnership;
-        }
-        else
-        {
-            Suspend(person, requestedAt);
+            var requestedSince = await personReader.Query()
+                .Where(x => x.Id == person.Id)
+                .Select(x => x.ErasureRequestedAt)
+                .FirstOrDefaultAsync();
+
+            return output.WithError(requestedSince is not null
+                ? ErasureMessages.ErasureAlreadyRequested
+                : ErasureMessages.NotEligible);
         }
 
-        var update = await personWriter.UpdateAsync(person);
-
-        return !update.Success
-            ? output.WithErrors(update.Errors)
-            : Recorded(
-                output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason,
-                restrictionLifted);
+        return Recorded(
+            output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason,
+            restrictionLifted);
     }
 
     private async Task<DataOutput<RequestErasureCommandOutput?>> RequestForGoogleUserAsync(
@@ -194,6 +194,14 @@ public class RequestErasureCommandHandler(
         var payload = await tokenVerifier.VerifyAsync(command.IdToken);
 
         if (payload is null || payload.Subject != googleUser.GoogleId)
+        {
+            return output.WithError(ErasureMessages.CredentialNotAccepted);
+        }
+
+        // FR-GO-21: the token is a proof of presence only once. A token already used — to sign in, or
+        // to ask for this before — is refused as an invalid one is, before anything is written.
+        if (!await atomicWrites.TryRecordGoogleIdTokenUseAsync(
+                GoogleIdTokenUse.KeyOf(payload.TokenId, command.IdToken), payload.ExpiresAt ?? DateTime.UtcNow))
         {
             return output.WithError(ErasureMessages.CredentialNotAccepted);
         }
@@ -231,21 +239,6 @@ public class RequestErasureCommandHandler(
     ///     neither restricted nor suspended, which is what lets them take part in the ownership
     ///     transfer (UC-21) that unblocks their own request.
     /// </remarks>
-    private static bool LiftRestriction(Person person)
-    {
-        if (person.ProcessingRestrictedAt is null)
-        {
-            return false;
-        }
-
-        person.ProcessingRestrictedAt = null;
-        person.RestrictionGround = null;
-        person.RestrictionLiftNotifiedAt = null;
-
-        return true;
-    }
-
-    /// <inheritdoc cref="LiftRestriction(Person)" />
     private static bool LiftRestriction(GoogleUser googleUser)
     {
         if (googleUser.ProcessingRestrictedAt is null)
@@ -270,14 +263,6 @@ public class RequestErasureCommandHandler(
     ///     while the deadline runs would be processing they have objected to. `IsDeleted` already
     ///     stops every path: login refuses it, and `ActorLivenessFilter` refuses an unexpired token.
     /// </remarks>
-    private static void Suspend(Person person, DateTime at)
-    {
-        person.IsDeleted = true;
-        person.DeletedAt = at;
-        person.DeletionKind = (int)DeletionKinds.SubjectRequested;
-    }
-
-    /// <inheritdoc cref="Suspend(Person, DateTime)" />
     private static void Suspend(GoogleUser googleUser, DateTime at)
     {
         googleUser.IsDeleted = true;

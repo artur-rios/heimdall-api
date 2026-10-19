@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -21,8 +22,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class RemoveScopeOwnerCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>
 {
     public async Task<DataOutput<RemoveScopeOwnerCommandOutput?>> HandleAsync(RemoveScopeOwnerCommand command, CancellationToken cancellationToken = default)
@@ -76,17 +77,22 @@ public class RemoveScopeOwnerCommandHandler(
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
 
-        // UC-22 step 4: delete the SCOPE_OWNER row. ScopeOwner is a join entity with no repository of
-        // its own, so the row is removed through the person aggregate — the exact inverse of UC-21's
-        // Add, and the single-row form of the Clear() UC-08 uses. FR-PE-11 is deliberately not guarded
-        // here: SRD §8 names UC-22 as an operation that may leave a ScopeAdmin owning no scope.
-        person.ScopeOwnerships.Remove(ownership);
-
-        var update = await personWriter.UpdateAsync(person);
-
-        if (!update.Success)
+        // UC-22 step 4: delete the SCOPE_OWNER row, by a targeted write of that row alone (#237) rather
+        // than a save of the person aggregate, which would write the person's profile back as read —
+        // and this endpoint reads deleted persons too, whose name anonymisation may have replaced
+        // meanwhile. The write re-checks AF-22b itself, so a co-owner deleted since the check above is
+        // seen. FR-PE-11 is deliberately not guarded here: SRD §8 names UC-22 as an operation that may
+        // leave a ScopeAdmin owning no scope.
+        if (!await atomicWrites.TryRemoveScopeOwnerAsync(person, scope.Id))
         {
-            return output.WithErrors(update.Errors);
+            // Refused: either another request removed the row meanwhile, which is AF-22a's outcome, or
+            // the last live co-owner went, which is AF-22b's. The row tells which.
+            var ownsStill = await personReader.Query()
+                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(owned => owned.ScopeId == scope.Id));
+
+            return output.WithError(ownsStill
+                ? PersonMessages.ScopeWouldLoseLastOwner
+                : PersonMessages.PersonNotScopeOwner);
         }
 
         // UC-22 step 5.

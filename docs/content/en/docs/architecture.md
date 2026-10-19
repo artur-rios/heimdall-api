@@ -256,6 +256,16 @@ before either saved would both act on it. `IAtomicWrites` (Domain, implemented i
 `ExecuteUpdate`) makes each of those a single conditional `UPDATE … WHERE` whose affected-row count
 says who won, and charges every guess budget before the comparison it guards.
 
+**A person's state is written column by column.** The same whole-row save would write every column
+of a person back as the request read it, so a profile edit racing a restriction, a deletion or a
+lockout could undo it. The mapping therefore lets a whole-row save write a person's plain profile
+only — the name, the recorded basis and `UpdatedAt`. The address and its verified flag, the role and
+scope, the login lockout, and the deletion, erasure, restriction and anonymisation columns are each
+changed by a targeted write in `IAtomicWrites`, conditional on the state the change starts from: a
+restriction only while there is none, a deletion only of a live person, an address or role change
+only while the person still holds the address and role the request read (#237). Ownership rows are
+added and removed the same way, so neither writes the person at all.
+
 **One class owns both directions of the claims.** `IdentityUserMapper` writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a
 `PublicId`; an internal `bigint` never reaches a token (**NFR-15**).

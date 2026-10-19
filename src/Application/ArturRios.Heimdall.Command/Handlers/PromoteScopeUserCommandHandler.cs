@@ -1,8 +1,10 @@
 using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -24,7 +26,8 @@ public class PromoteScopeUserCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncRepository<Person, long> personWriter,
-    IScopeOwnershipChecker scopeOwnership)
+    IScopeOwnershipChecker scopeOwnership,
+    IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>
 {
     public async Task<DataOutput<PromoteScopeUserCommandOutput?>> HandleAsync(PromoteScopeUserCommand command, CancellationToken cancellationToken = default)
@@ -94,21 +97,35 @@ public class PromoteScopeUserCommandHandler(
             return output.WithError(PersonMessages.EmailAlreadyExists);
         }
 
-        // UC-23 steps 4-5, in one write. Neither join entity has a repository of its own, so both
-        // rows move through the person aggregate: severing the required ScopeMembership deletes the
+        // UC-23 steps 4-5, together. The role — with ScopeId, the membership's copy, cleared beside
+        // it — is a targeted write (#237), made only while the person is still the User they were
+        // read as, so a promotion, deletion or role change that landed since is never overwritten.
+        // Neither join entity has a repository of its own, so both rows move through the person
+        // aggregate, in the same transaction: severing the required ScopeMembership deletes the
         // SCOPE_USER row (as UC-08's role change does) and adding to ScopeOwnerships writes the
         // SCOPE_OWNER row (as UC-21 does). UpdatedAt is stamped by hand — no trigger maintains it.
-        person.RoleId = (long)Roles.ScopeAdmin;
-        person.ScopeMembership = null;
-        person.ScopeId = null;
-        person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
-        person.UpdatedAt = DateTime.UtcNow;
+        DataOutput<Person>? save = null;
 
-        var update = await personWriter.UpdateAsync(person);
+        var change = await atomicWrites.TryChangeEmailAndRoleAsync(
+            person, person.Email, (long)Roles.ScopeAdmin, DateTime.UtcNow,
+            async () =>
+            {
+                person.ScopeMembership = null;
+                person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
 
-        if (!update.Success)
+                save = await personWriter.UpdateAsync(person);
+
+                return save.Success;
+            });
+
+        switch (change)
         {
-            return output.WithErrors(update.Errors);
+            case AccountChangeOutcome.SaveFailed:
+                return output.WithErrors(save!.Errors);
+            case AccountChangeOutcome.AddressTaken:
+                return output.WithError(RelationalErrors.UniqueViolationMessage);
+            case AccountChangeOutcome.Stale:
+                return output.WithError(RelationalErrors.ConcurrencyMessage);
         }
 
         // UC-23 step 6: return the updated person. The scope just granted is the whole of what they

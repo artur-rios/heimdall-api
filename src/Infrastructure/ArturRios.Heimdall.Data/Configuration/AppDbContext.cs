@@ -32,6 +32,7 @@ public class AppDbContext(
     public DbSet<AuditLog> AuditLogs { get; init; }
     public DbSet<ErasedSubject> ErasedSubjects { get; init; }
     public DbSet<AttemptNoticeBudget> AttemptNoticeBudgets { get; init; }
+    public DbSet<GoogleIdTokenUse> GoogleIdTokenUses { get; init; }
 
     /// <summary>
     ///     ASP.NET Core's Data Protection key ring, kept in the database rather than on a local
@@ -79,5 +80,6 @@ public class AppDbContext(
         modelBuilder.Entity<AuditLog>().Configure();
         modelBuilder.Entity<ErasedSubject>().Configure();
         modelBuilder.Entity<AttemptNoticeBudget>().Configure();
+        modelBuilder.Entity<GoogleIdTokenUse>().Configure();
     }
 }

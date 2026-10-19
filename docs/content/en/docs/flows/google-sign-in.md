@@ -55,6 +55,11 @@ sequenceDiagram
         H-->>C: 401 google authentication failed
     end
 
+    H->>DB: INSERT google_id_token_use (digest of jti) ON CONFLICT DO NOTHING
+    alt already recorded — the token was used before (FR-GO-21)
+        H-->>C: 401 google authentication failed
+    end
+
     H->>DB: SELECT scope WHERE PublicId = scopeId<br/>AND NOT IsDeleted AND GoogleSignInEnabled
     alt missing, deleted, or disabled (AF-25b)
         H-->>C: 403 google sign-in unavailable
@@ -84,6 +89,18 @@ sequenceDiagram
 about which scopes exist. It is also what answers a request that omitted the token entirely — which
 is why UC-25 needs no 400 flow at all.
 
+**A token is accepted once** (**FR-GO-21**). Once it has been verified, and before the scope is
+read, its use is recorded under the SHA-256 digest of its `jti` claim — or, when it carries none, of
+its signed part, the `header.payload` its signature covers, so that a respelling of the signature
+segment is still the same token — by one `INSERT … ON CONFLICT DO NOTHING`. A token already recorded
+answers exactly as an invalid one, `401` "Google authentication failed.", and nothing is created; of
+two requests presenting one token at the same moment, one is refused. The token is spent from that
+moment, even when the request then fails — the scope unavailable (AF-25b), an address conflict
+(AF-25c), a deleted account (AF-25d), an unverified address (AF-25f), or a server error — so a retry
+with the same token answers `401` too. Clients must therefore ask Google for a new ID token for every
+attempt of every call that takes one, including an erasure request's proof of presence. The records
+are purged with the single-use tokens once the token has expired and the grace period has passed.
+
 **AF-25b answers alike for three different situations** — the scope is missing, logically deleted, or
 has the feature switched off. The alternative flow names all three as one outcome, so one filter
 answers for all three.
@@ -93,7 +110,8 @@ client that sent one to Google when asking for the ID token sends the same value
 token's `nonce` claim must equal it exactly; a token with another nonce, or none, answers as an
 unverifiable token does. The nonce is a client-side check that the token it presents was issued for
 its own sign-in request; whether a token is accepted rests on its signature, issuer, audience and
-expiry (NFR-13). A request without `nonce` compares nothing, as before.
+expiry (NFR-13), and on its not having been used before (FR-GO-21). A request without `nonce`
+compares nothing, as before.
 
 **Only an address Google vouches for can sign up** (**FR-GO-07**, AF-25f). A first sign-in whose
 token does not carry `email_verified: true` — false, or absent — creates nothing and answers `403`

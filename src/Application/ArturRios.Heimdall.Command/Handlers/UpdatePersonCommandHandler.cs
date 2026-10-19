@@ -1,4 +1,5 @@
 using ArturRios.Data.Relational.Core.Interfaces;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
@@ -195,21 +196,6 @@ public class UpdatePersonCommandHandler(
 
         var previousEmail = person.Email;
 
-        if (emailChanged)
-        {
-            person.EmailVerified = false;
-        }
-
-        // FR-PE-10: a System Admin belongs to no scope, so the membership and ownership rows are
-        // severed — which deletes them, since both relationships are required and cascade.
-        if (roleChange.Applies)
-        {
-            person.RoleId = roleChange.TargetRoleId;
-            person.ScopeMembership = null;
-            person.ScopeId = null;
-            person.ScopeOwnerships.Clear();
-        }
-
         // FR-AU-11: the address is what account recovery is sent to, so a new one is a credential
         // change and revokes every token the person holds — whoever makes the change, and when they
         // make it themselves, the token making it too. Before the save, in its own targeted write: if
@@ -220,16 +206,57 @@ public class UpdatePersonCommandHandler(
             await atomicWrites.RotateSecurityStampAsync(person);
         }
 
-        // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it).
+        // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it). The name and
+        // UpdatedAt are the plain profile a whole-row save still writes.
+        var now = DateTime.UtcNow;
+
         person.Name = command.Name;
-        person.Email = newEmail;
-        person.UpdatedAt = DateTime.UtcNow;
+        person.UpdatedAt = now;
 
-        var update = await personWriter.UpdateAsync(person);
-
-        if (!update.Success)
+        if (emailChanged || roleChange.Applies)
         {
-            return output.WithErrors(update.Errors);
+            // UC-08 steps 4 and 5 (#237): the address — with EmailVerified cleared beside it (AF-08b)
+            // — and the role are written by one targeted write, only while the person still holds
+            // the address and role they were read with, so a change that landed since is never
+            // overwritten. The save of everything else runs in its transaction, once it is written.
+            DataOutput<Person>? save = null;
+
+            var change = await atomicWrites.TryChangeEmailAndRoleAsync(
+                person, newEmail, roleChange.TargetRoleId, now,
+                async () =>
+                {
+                    // FR-PE-10: a System Admin belongs to no scope, so the membership and ownership
+                    // rows are severed — which deletes them, since both relationships are required
+                    // and cascade. Only now, so a refused change leaves nothing staged.
+                    if (roleChange.Applies)
+                    {
+                        person.ScopeMembership = null;
+                        person.ScopeOwnerships.Clear();
+                    }
+
+                    save = await personWriter.UpdateAsync(person);
+
+                    return save.Success;
+                });
+
+            switch (change)
+            {
+                case AccountChangeOutcome.SaveFailed:
+                    return output.WithErrors(save!.Errors);
+                case AccountChangeOutcome.AddressTaken:
+                    return output.WithError(RelationalErrors.UniqueViolationMessage);
+                case AccountChangeOutcome.Stale:
+                    return output.WithError(RelationalErrors.ConcurrencyMessage);
+            }
+        }
+        else
+        {
+            var update = await personWriter.UpdateAsync(person);
+
+            if (!update.Success)
+            {
+                return output.WithErrors(update.Errors);
+            }
         }
 
         // FR-AU-11 again, once the new address is saved: a sign-in between the first rotation and

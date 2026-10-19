@@ -14,8 +14,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
 ///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47),
-///     spent application credentials (UC-55) and ended registration-attempt notice budgets (FR-SR-14)
-///     whose retention period has run out. All failures
+///     spent application credentials (UC-55), ended registration-attempt notice budgets (FR-SR-14)
+///     and the records of used Google ID tokens (FR-GO-21) whose retention period has run out. All failures
 ///     are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
@@ -41,6 +41,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         cutoff. An ended window counts nothing — the next notice starts a new one — so the row is
 ///         only a digest of an address waiting to be removed, and the grace keeps it no longer than a
 ///         token is kept.
+///     </para>
+///     <para>
+///         A <see cref="GoogleIdTokenUse" /> purges on the token's own expiry, as the tokens above do:
+///         an expired Google ID token is refused by its verifier whether or not its use is recorded,
+///         so after the grace the record guards nothing.
 ///     </para>
 ///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token
@@ -70,6 +75,8 @@ public class PurgeExpiredTokensCommandHandler(
     IAsyncRepository<ApplicationCredential, long> applicationCredentialWriter,
     IAsyncReadOnlyRepository<AttemptNoticeBudget, long> attemptNoticeBudgetReader,
     IAsyncRepository<AttemptNoticeBudget, long> attemptNoticeBudgetWriter,
+    IAsyncReadOnlyRepository<GoogleIdTokenUse, string> googleIdTokenUseReader,
+    IAsyncRepository<GoogleIdTokenUse, string> googleIdTokenUseWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -120,6 +127,13 @@ public class PurgeExpiredTokensCommandHandler(
                 .OrderBy(budget => budget.WindowEndsAt),
             attemptNoticeBudgetWriter);
 
+        // FR-GO-21: an expired Google ID token cannot be accepted again, used or not.
+        var googleIdTokenUses = await PurgeAsync(
+            googleIdTokenUseReader.Query()
+                .Where(use => use.ExpiresAt <= cutoff)
+                .OrderBy(use => use.ExpiresAt),
+            googleIdTokenUseWriter);
+
         // Every table is attempted before the run reports, so one failing table does not hide
         // whether the others were cleared — and the next run retries whatever was missed.
         var errors = passwordResetTokens.Errors
@@ -128,6 +142,7 @@ public class PurgeExpiredTokensCommandHandler(
             .Concat(pendingRegistrations.Errors)
             .Concat(applicationCredentials.Errors)
             .Concat(attemptNoticeBudgets.Errors)
+            .Concat(googleIdTokenUses.Errors)
             .ToList();
 
         if (errors.Count > 0)
@@ -145,7 +160,8 @@ public class PurgeExpiredTokensCommandHandler(
                 TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
                 PendingRegistrationsPurged = pendingRegistrations.Count,
                 ApplicationCredentialsPurged = applicationCredentials.Count,
-                AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count
+                AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count,
+                GoogleIdTokenUsesPurged = googleIdTokenUses.Count
             })
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }
@@ -154,9 +170,11 @@ public class PurgeExpiredTokensCommandHandler(
     ///     Removes at most <c>PurgeBatchSize</c> of the candidates and reports how many rows were
     ///     actually removed, or the persistence errors if the delete failed.
     /// </summary>
-    private async Task<(int Count, IEnumerable<string> Errors)> PurgeAsync<T>(
+    private async Task<(int Count, IEnumerable<string> Errors)> PurgeAsync<T, TKey>(
         IQueryable<T> candidates,
-        IAsyncRepository<T, long> writer) where T : Entity<long>
+        IAsyncRepository<T, TKey> writer)
+        where T : Entity<TKey>
+        where TKey : IEquatable<TKey>
     {
         var ids = await candidates
             .Take(retention.PurgeBatchSize)

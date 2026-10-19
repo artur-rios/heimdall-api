@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
@@ -20,7 +21,8 @@ public class DeleteScopeCommandHandlerTests
         AsyncFakeRepository<Application, long> Applications)
     {
         public DeleteScopeCommandHandler Handler() => new(
-            Scopes, Scopes, Persons, Persons, GoogleUsers, GoogleUsers, Applications, Applications);
+            Scopes, Scopes, Persons, GoogleUsers, GoogleUsers, Applications, Applications,
+            InMemoryAtomicWrites.Instance);
     }
 
     private static async Task<Fakes> EmptyFakes()

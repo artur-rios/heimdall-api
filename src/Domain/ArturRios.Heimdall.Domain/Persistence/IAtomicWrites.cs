@@ -1,4 +1,5 @@
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Enums;
 
 namespace ArturRios.Heimdall.Domain.Persistence;
 
@@ -101,8 +102,7 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     FR-AU-12: after a second factor checks out at sign-in, clears the failure counter, any lock,
-    ///     and the lockout count that sets how long the next lock lasts. Also how anonymisation clears
-    ///     them (NFR-20).
+    ///     and the lockout count that sets how long the next lock lasts.
     /// </summary>
     Task ClearSecondFactorAttemptsAsync(Person person);
 
@@ -130,8 +130,7 @@ public interface IAtomicWrites
         Person person, int maxFailures, DateTime now, DateTime windowStartedBy, DateTime pausedUntil);
 
     /// <summary>
-    ///     FR-AU-13: after a re-authentication succeeds, clears the window's count and any pause. Also
-    ///     how anonymisation clears them (NFR-20).
+    ///     FR-AU-13: after a re-authentication succeeds, clears the window's count and any pause.
     /// </summary>
     Task ClearReauthenticationAttemptsAsync(Person person);
 
@@ -155,9 +154,6 @@ public interface IAtomicWrites
     /// </remarks>
     Task<AccountEmailReservation> TryReserveAccountEmailAsync(
         Person person, int maxPerWindow, DateTime now, DateTime lastSentBefore, DateTime windowEndsAt);
-
-    /// <summary>FR-PE-16: clears the account-email budget — how anonymisation clears it (NFR-20).</summary>
-    Task ClearAccountEmailsAsync(Person person);
 
     /// <summary>
     ///     FR-2F-10: makes <paramref name="challengeId" /> the configuration's one outstanding
@@ -248,13 +244,6 @@ public interface IAtomicWrites
     Task<bool> TryMarkEmailVerifiedAsync(Person person, DateTime now);
 
     /// <summary>
-    ///     NFR-20: empties the person's password hash and salt, writing no other column, for
-    ///     anonymisation. Like the stamp, the two are written only by targeted writes once the row
-    ///     exists, so a whole-row save of an anonymised copy does not clear them.
-    /// </summary>
-    Task ClearPasswordAsync(Person person);
-
-    /// <summary>
     ///     UC-56: records a token exchange — sets <c>LastUsedAt</c> to <paramref name="now" /> and writes
     ///     no other column — while the credential is still live at <paramref name="now" />
     ///     (<see cref="ApplicationCredential.LiveAt" />). <c>false</c> means it was revoked or expired
@@ -280,4 +269,143 @@ public interface IAtomicWrites
     ///     what it revoked, which is why the mapping never lets such a save write this column.
     /// </remarks>
     Task RotateSecurityStampAsync(Person person);
+
+    /// <summary>
+    ///     UC-08 and UC-23: writes the person's address and role — the email, <c>EmailVerified</c>
+    ///     cleared when the address changes (AF-08b), the role with <c>ScopeId</c> cleared when the role
+    ///     changes (FR-PE-10), and <c>UpdatedAt</c> — while the person still holds the address and role
+    ///     they were read with and is neither logically deleted nor anonymised. Then, in the same
+    ///     transaction, runs <paramref name="saveAlongside" />: the caller's own save of what the change
+    ///     brings with it, the membership and ownership rows and the plain profile columns.
+    /// </summary>
+    /// <param name="person">The person as the caller read them.</param>
+    /// <param name="email">The address to hold; the one read for no address change.</param>
+    /// <param name="roleId">The role to hold; the one read for no role change.</param>
+    /// <param name="now">The time stamped as <c>UpdatedAt</c>.</param>
+    /// <param name="saveAlongside">
+    ///     Runs only once the change is written, and returns whether its save succeeded. When it did
+    ///     not, the change is rolled back with it.
+    /// </param>
+    /// <remarks>
+    ///     <para>
+    ///         The address, its verification flag and the role are written only here, and the mapping
+    ///         keeps every whole-row save off them. A save of a copy read before an address change
+    ///         would otherwise put the old address back, or the verification flag that belonged to it;
+    ///         one read before a role change, the old role.
+    ///     </para>
+    ///     <para>
+    ///         The address and the flag go in one statement, so no verification read against the old
+    ///         address can land between them (FR-PE-17): <see cref="TryMarkEmailVerifiedAsync" />
+    ///         writes only while the address is the one it read. A refusal leaves nothing pending on
+    ///         the caller's tracked entities, so a later save of anything else in the same unit of
+    ///         work cannot write half of the change.
+    ///     </para>
+    /// </remarks>
+    Task<AccountChangeOutcome> TryChangeEmailAndRoleAsync(
+        Person person, string email, long roleId, DateTime now, Func<Task<bool>> saveAlongside);
+
+    /// <summary>
+    ///     UC-09 and UC-04's cascade: logically deletes the person — <c>IsDeleted</c>, <c>DeletedAt</c>,
+    ///     <c>DeletionKind</c> and <c>UpdatedAt</c>, and no other column — unless they already are.
+    ///     <c>false</c> means they were, possibly since the caller read them, and the first deletion's
+    ///     time and kind stand.
+    /// </summary>
+    Task<bool> TryMarkDeletedAsync(Person person, DeletionKinds kind, DateTime at);
+
+    /// <summary>
+    ///     UC-42: records the person's erasure request — when it was made and its deadline — lifts any
+    ///     restriction on processing as UC-45 does for a subject lifting their own, and either suspends
+    ///     the person (a subject-requested logical deletion dated <paramref name="requestedAt" />) or,
+    ///     when <paramref name="blockedReason" /> is given (AF-42d), records why it cannot yet. Only
+    ///     while no request was recorded and the person is neither deleted nor anonymised: <c>false</c>
+    ///     means one of those changed after the caller read them, and nothing was written.
+    /// </summary>
+    Task<bool> TryRecordErasureRequestAsync(
+        Person person, DateTime requestedAt, DateTime dueAt, string? blockedReason);
+
+    /// <summary>
+    ///     NFR-20: suspends a person whose erasure request was blocked (AF-42d) once the block has
+    ///     cleared — the logical deletion dated from the request, and the block's reason cleared — while
+    ///     the request is still blocked, the person not deleted, and processing not restricted.
+    ///     <c>false</c> means one of those changed after the caller read them.
+    /// </summary>
+    Task<bool> TrySuspendBlockedErasureAsync(Person person, DateTime now);
+
+    /// <summary>
+    ///     UC-44: restricts processing on <paramref name="ground" /> from <paramref name="at" />,
+    ///     clearing any earlier lift notice, while processing is not already restricted and the record
+    ///     is not anonymised. <c>false</c> means it was restricted, possibly since the caller read it,
+    ///     and the first restriction stands.
+    /// </summary>
+    Task<bool> TryRestrictProcessingAsync(Person person, int ground, DateTime at);
+
+    /// <summary>
+    ///     UC-45: lifts the restriction the caller read — the one in force since the time the instance
+    ///     holds — recording <paramref name="notifiedAt" /> as when the subject was told (Art. 18(3)), or
+    ///     <c>null</c> when nobody had to be. <c>false</c> means it was lifted, or replaced by another,
+    ///     after the caller read it, so a notice sent about one restriction cannot lift a later one.
+    /// </summary>
+    Task<bool> TryLiftRestrictionAsync(Person person, DateTime? notifiedAt, DateTime now);
+
+    /// <summary>
+    ///     NFR-20: anonymises a logically deleted person — the placeholder name and address, the
+    ///     password hash and salt emptied, the verification flag, the login lockout, the factor
+    ///     budgets, the account-email budget and any erasure block cleared, and <c>AnonymisedAt</c> and
+    ///     <c>UpdatedAt</c> stamped — while they are still deleted, not yet anonymised, and not under a
+    ///     restriction (NFR-24). <c>false</c> means one of those changed after the caller selected
+    ///     them, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     One statement, so a record is either anonymised whole or not at all: never left with its
+    ///     name gone and its password hash kept, which the next pass would no longer select.
+    /// </remarks>
+    Task<bool> TryAnonymiseAsync(Person person, string name, string email, DateTime at);
+
+    /// <summary>
+    ///     NFR-25: anonymises a person a restore brought back, as <see cref="TryAnonymiseAsync" /> does,
+    ///     and marks them a subject-requested deletion — dated when they were deleted, or
+    ///     <paramref name="at" /> if the restored row is live — whatever their state, so long as they are
+    ///     not anonymised already. <c>false</c> means they were, possibly since the caller read them.
+    /// </summary>
+    Task<bool> TryReapplyErasureAsync(Person person, string name, string email, DateTime at);
+
+    /// <summary>
+    ///     UC-21: makes the person an owner of scope <paramref name="scopeId" /> — inserts the
+    ///     <c>SCOPE_OWNER</c> row and writes nothing on the person — while they are a live
+    ///     <c>ScopeAdmin</c> or <c>SystemAdmin</c> (AF-21b) and do not own it already (AF-21d).
+    ///     <c>false</c> means one of those changed after the caller read them, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     A row of its own rather than a save of the person aggregate (#237): that save would write the
+    ///     person's plain profile back as the caller read it, over any change made meanwhile. On success
+    ///     the row joins the instance's <see cref="Person.ScopeOwnerships" />.
+    /// </remarks>
+    Task<bool> TryAddScopeOwnerAsync(Person person, long scopeId);
+
+    /// <summary>
+    ///     UC-22: removes the person's <c>SCOPE_OWNER</c> row for scope <paramref name="scopeId" /> —
+    ///     writing nothing on the person — while another live person owns the scope (AF-22b, NFR-12).
+    ///     <c>false</c> means the row was already gone, or no live co-owner is left, and nothing was
+    ///     removed.
+    /// </summary>
+    /// <remarks>
+    ///     The co-owner condition is evaluated by the same statement that deletes, so a co-owner deleted
+    ///     between the caller's check and this write is seen. On success the row leaves the instance's
+    ///     <see cref="Person.ScopeOwnerships" />.
+    /// </remarks>
+    Task<bool> TryRemoveScopeOwnerAsync(Person person, long scopeId);
+
+    /// <summary>
+    ///     FR-GO-21: records that a Google ID token was accepted, under <paramref name="tokenHash" /> —
+    ///     the digest of its <c>jti</c>, or of its signed part when it carries none
+    ///     (<see cref="GoogleIdTokenUse.KeyOf" />) — until <paramref name="expiresAt" />, the token's own
+    ///     expiry. <c>false</c> means it was already recorded: the token was used before, and must be
+    ///     refused as an invalid one is.
+    /// </summary>
+    /// <remarks>
+    ///     One <c>INSERT … ON CONFLICT DO NOTHING</c>, so of any number of simultaneous requests
+    ///     presenting one token exactly one records it. The row is kept until the token has expired
+    ///     and the single-use grace has passed, then purged (NFR-19).
+    /// </remarks>
+    Task<bool> TryRecordGoogleIdTokenUseAsync(string tokenHash, DateTime expiresAt);
 }

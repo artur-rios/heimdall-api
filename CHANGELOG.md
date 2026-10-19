@@ -7,6 +7,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-19
+
+### Fixed
+
+- A person's lifecycle columns are no longer written by whole-row saves (#237). The address and its verified flag,
+  the role and scope, the login lockout, and the deletion, erasure-request, restriction and anonymisation columns are
+  each written by a conditional write of their own, so a request that read the person before another changed them
+  can no longer put the earlier values back: a profile edit no longer undoes a restriction, a deletion or a lockout
+  made meanwhile. Adding and removing a scope owner now write only the ownership row, and removing one re-checks
+  that a live co-owner remains in the same statement. **Clients:** only requests that race another change to the
+  same person answer differently. An address or role change through `PUT /api/persons/{id}` or a promotion through
+  `POST /api/scopes/{scopeId}/users/{personId}/promote` whose person changed meanwhile answers `409` with
+  "Concurrency conflict: the record was modified or removed by another process."; a restriction, lift, erasure
+  request, deletion or ownership change that lost such a race answers as the request that won leaves it, with the
+  existing message for that state.
+
+### Security
+
+- A Google ID token is accepted once (FR-GO-21). After it is verified, and before anything is created or issued on its
+  strength (at sign-in, before any scope or account is read; for an erasure request, once its subject has been
+  compared with the Google User's), its use is recorded under the SHA-256 digest of its `jti` claim (of its signed
+  part, the header and payload, when it has none) in the new `google_id_token_use` table; a token already recorded is
+  refused exactly as an invalid one, and of two simultaneous presentations one is refused. The records are purged with
+  the single-use tokens once the token has expired and the grace period has passed. This closes the replay of a copied
+  token within its hour of validity (Threat Model TH-19). **Clients:** obtain a new ID token from Google for every
+  call that takes one, a retry included: a verified token is spent even when the call then fails, for example with a
+  `403` (scope unavailable, unverified address), a `409` or a `5xx`. Presenting a token a second time — to
+  `POST /api/auth/google`, or as the proof of presence of `POST /api/auth/erasure-request` — now answers `401` with
+  "Google authentication failed." or "The credential presented was not accepted." respectively. The optional `nonce`
+  is unchanged. **Operators:** the migration adds one table; the runtime role's schema-wide grants and default
+  privileges cover it, so no grant changes.
+
 ## [1.6.0] - 2026-10-16
 
 ### Security
@@ -533,7 +565,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/artur-rios/heimdall-api/compare/v1.3.0...v1.4.0
