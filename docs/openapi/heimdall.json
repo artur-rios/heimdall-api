@@ -4926,6 +4926,29 @@
           }
         ]
       }
+    },
+    "/.well-known/jwks.json": {
+      "get": {
+        "tags": [
+          "SigningKeys"
+        ],
+        "summary": "The public keys Heimdall's tokens are signed with, as an RFC 7517 JSON Web Key Set: the\ncurrent key first, then the previous one while a rotation is in progress. Public — no\nauthentication required, and any bearer token on the request is ignored.",
+        "description": "The body is the key set itself, not the `DataOutput` envelope every other endpoint\nanswers, so a standard JWKS reader can consume it unchanged. It carries no private member.\nCacheable for five minutes. Limited to ten requests a minute per address, a budget shared\nwith the other anonymous credential endpoints; a rejection answers 429 \"Too many requests.\"\nwith a `Retry-After` header.\n\n**Anonymous** — no bearer token required.",
+        "operationId": "SigningKeys_KeySet",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonWebKeySetDocument"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
     }
   },
   "components": {
@@ -7372,6 +7395,63 @@
           }
         },
         "additionalProperties": false
+      },
+      "JsonWebKeyDocument": {
+        "type": "object",
+        "properties": {
+          "kty": {
+            "type": "string",
+            "description": "The key type, always `EC`.",
+            "nullable": true
+          },
+          "crv": {
+            "type": "string",
+            "description": "The curve, always `P-256`.",
+            "nullable": true
+          },
+          "x": {
+            "type": "string",
+            "description": "The public point's x coordinate, base64url without padding.",
+            "nullable": true
+          },
+          "y": {
+            "type": "string",
+            "description": "The public point's y coordinate, base64url without padding.",
+            "nullable": true
+          },
+          "kid": {
+            "type": "string",
+            "description": "The key's RFC 7638 thumbprint, the `kid` in the header of every token it signed.",
+            "nullable": true
+          },
+          "use": {
+            "type": "string",
+            "description": "The key's use, always `sig`.",
+            "nullable": true
+          },
+          "alg": {
+            "type": "string",
+            "description": "The algorithm, always `ES256`.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One public key of the set. Documentation only. A key never carries a private member such as\n`d`."
+      },
+      "JsonWebKeySetDocument": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonWebKeyDocument"
+            },
+            "description": "The public keys: the current signing key, then the previous one during a rotation.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The RFC 7517 key set `GET /.well-known/jwks.json` answers with: the public keys Heimdall's\ntokens verify under, the current key first. Documentation only — the endpoint writes the set\nfrom `TokenSigningKeys.JwksJson` and never serializes this type."
       },
       "LiftProcessingRestrictionCommand": {
         "type": "object",
@@ -9872,6 +9952,9 @@
     },
     {
       "name": "ScopePermission"
+    },
+    {
+      "name": "SigningKeys"
     }
   ]
 }
