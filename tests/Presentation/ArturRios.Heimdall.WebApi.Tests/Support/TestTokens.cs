@@ -6,11 +6,12 @@ using Npgsql;
 namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
 /// <summary>
-///     Mints the application's own HMAC JWT directly for functional tests that are not themselves
+///     Mints the application's own ES256 JWT directly for functional tests that are not themselves
 ///     about logging in. Tokens are built by the production <see cref="IdentityUserMapper" />, so a
 ///     change to the claim vocabulary can never leave the suite passing against a stale token
-///     format, and signed with the same secret/issuer/audience the host under test validates against
-///     (published into the environment by <see cref="PostgresFixture" />).
+///     format, and signed with the same key, issuer and audience the host under test signs and
+///     validates with (published into the environment by <see cref="PostgresFixture" />).
+///     <see cref="Legacy" /> mints the HS256 token a 2.x process issued, for the overlap.
 /// </summary>
 /// <remarks>
 ///     Authentication runs in <c>ClaimsOnly</c> mode, so no database read happens per request — but
@@ -30,7 +31,6 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </remarks>
 public static class TestTokens
 {
-    private const string SecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const string IssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string AudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
     private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
@@ -94,6 +94,61 @@ public static class TestTokens
         Create(user, audience: audience, issuer: issuer);
 
     /// <summary>
+    ///     Builds a full token for <paramref name="user" /> signed ES256 with <paramref name="key" />
+    ///     rather than the host's current key: the token a caller held before a rotation, or one from a
+    ///     key the host never accepted.
+    /// </summary>
+    public static string SignedWith(JwtKey key, IdentityUser user) => Create(user, key: key);
+
+    /// <summary>
+    ///     Builds the HS256 bearer token a 2.x process issued: signed with
+    ///     <see cref="PostgresFixture.TokenSecret" /> (or <paramref name="secret" />), no <c>kid</c>,
+    ///     the person's current stamp, and issued ten minutes ago, before the host under test started,
+    ///     as every genuine HS256 token was. The host accepts it only during the overlap.
+    /// </summary>
+    /// <param name="personId">The <c>PublicId</c> the token names.</param>
+    /// <param name="role">The role value it carries.</param>
+    /// <param name="secret">The secret it is signed with; omitted, the host's legacy secret.</param>
+    /// <param name="issuedAt">
+    ///     When it claims to have been issued, for a test proving a token issued after the host started
+    ///     is refused; omitted, ten minutes ago.
+    /// </param>
+    public static string Legacy(Guid personId, int role, string? secret = null, DateTime? issuedAt = null)
+    {
+        var now = DateTime.UtcNow;
+        var claims = new IdentityUserMapper(Audiences)
+            .ToClaims(new IdentityUser(personId, role) { SecurityStamp = StampOf(personId) })
+            .ToDictionary(claim => claim.Key, object (claim) => claim.Value);
+
+        return UnitSigningKeys.TokenAt(
+            UnitSigningKeys.Hs256(secret ?? PostgresFixture.TokenSecret),
+            claims,
+            Issuer,
+            Audiences.Person,
+            issuedAt ?? now.AddMinutes(-10),
+            now.AddMinutes(-10),
+            now.AddMinutes(30));
+    }
+
+    /// <summary>
+    ///     Builds a UC-38 challenge token, signed with the host's key and right in every respect but
+    ///     its lifetime, which ran out a minute ago: the one way the suite presents an expired
+    ///     challenge, without waiting for one to lapse.
+    /// </summary>
+    public static string ExpiredMfaPending(Guid personId, int role)
+    {
+        var claims = new IdentityUserMapper(Audiences)
+            .ToClaims(new IdentityUser(personId, role)
+            {
+                MfaPending = true, ChallengeId = SeededChallengeId, SecurityStamp = StampOf(personId)
+            })
+            .ToDictionary(claim => claim.Key, object (claim) => claim.Value);
+
+        return UnitSigningKeys.ExpiredToken(
+            UnitSigningKeys.Es256(PostgresFixture.SigningKey), claims, Issuer, Audiences.TwoFactorChallenge);
+    }
+
+    /// <summary>
     ///     The issuer the host under test issues every token under, as <see cref="PostgresFixture" />
     ///     publishes it.
     /// </summary>
@@ -138,14 +193,25 @@ public static class TestTokens
     }
 
     private static string Create(
-        IdentityUser user, TimeSpan? lifetime = null, string? audience = null, string? issuer = null)
+        IdentityUser user,
+        TimeSpan? lifetime = null,
+        string? audience = null,
+        string? issuer = null,
+        JwtKey? key = null)
     {
+        var signingKey = key ?? PostgresFixture.SigningKey;
+
         var configuration = new JwtConfiguration(
             lifetime?.TotalSeconds ?? 3600,
             issuer ?? Issuer,
             audience ?? Audiences.Person,
-            Environment.GetEnvironmentVariable(SecretVariable) ?? string.Empty,
-            new IdentityUserMapper(Audiences).ToClaims(user));
+            string.Empty,
+            new IdentityUserMapper(Audiences).ToClaims(user))
+        {
+            Algorithm = JwtAlgorithms.ES256,
+            Keys = [signingKey],
+            SigningKeyId = signingKey.Id
+        };
 
         return new JwtHandler().CreateToken(configuration);
     }

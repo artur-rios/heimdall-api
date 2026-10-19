@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
+using ArturRios.Jwt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -22,14 +23,12 @@ public sealed class PostgresFixture : IAsyncLifetime
 {
     private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
     private const string DatabaseTypeVariable = "HEIMDALL_DATA_DATABASETYPE";
-    private const string TokenSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
-    private const string PreviousTokenSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
     private const string TokenIssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
 
     /// <summary>
     ///     The audience the host under test gives application tokens (UC-56). Published here for the
-    ///     reason <see cref="PreviousTokenSecret" /> is: the API reads it once, at start-up.
+    ///     reason <see cref="TokenSecret" /> is: the API reads it once, at start-up.
     /// </summary>
     public const string ApplicationTokenAudience = "heimdall-tests-applications";
 
@@ -42,20 +41,45 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>
     ///     The caller key the host under test trusts, so the suite can prove a client system holding
     ///     it is rate limited per end user. Published here for the reason
-    ///     <see cref="PreviousTokenSecret" /> is: the API reads it once, at start-up.
+    ///     <see cref="TokenSecret" /> is: the API reads it once, at start-up.
     /// </summary>
     public const string TrustedCallerKey = "functional-tests-trusted-caller-key-0123456789";
 
     /// <summary>
-    ///     The retired signing secret the host under test still accepts, so the suite can prove a
-    ///     token signed before a rotation keeps working (Threat Model TH-22).
+    ///     The legacy HS256 secret the host under test accepts during the overlap, and
+    ///     <see cref="TestTokens.Legacy" /> signs with: what a 2.x process signed every token with.
     /// </summary>
     /// <remarks>
     ///     Published here rather than in a test because the API reads its key material once, at
     ///     start-up. A test that set this afterwards would be configuring a host that had already
     ///     decided which keys it accepts.
     /// </remarks>
+    public const string TokenSecret = "functional-tests-signing-secret-key";
+
+    /// <summary>
+    ///     The retired legacy secret the host under test still accepts, so the suite can prove an HS256
+    ///     token signed before a secret rotation (Threat Model TH-22) keeps working during the overlap.
+    ///     Published here for the reason <see cref="TokenSecret" /> is.
+    /// </summary>
     public const string PreviousTokenSecret = "functional-tests-previous-signing-secret";
+
+    // Generated once per test run, in memory, so no test depends on a key any environment signs with.
+    private static readonly (JwtKey Key, string EnvValue) Current = UnitSigningKeys.Create();
+    private static readonly (JwtKey Key, string EnvValue) Previous = UnitSigningKeys.Create();
+
+    /// <summary>
+    ///     The ES256 key the host under test signs every token with, private half included, so
+    ///     <see cref="TestTokens" /> signs exactly as the host does. Published for the reason
+    ///     <see cref="TokenSecret" /> is.
+    /// </summary>
+    public static JwtKey SigningKey => Current.Key;
+
+    /// <summary>
+    ///     The ES256 key a rotation has moved off: the host under test publishes its public half and
+    ///     still accepts what it signed. Its private half is kept here, so the suite can mint the token a
+    ///     caller was holding before the rotation.
+    /// </summary>
+    public static JwtKey PreviousSigningKey => Previous.Key;
 
     /// <summary>
     ///     Secret the suite's stand-in Google ID tokens are signed with (UC-25). Long enough for
@@ -106,14 +130,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ConnectionStringVariable, ConnectionString);
         Environment.SetEnvironmentVariable(DatabaseTypeVariable, "PostgreSql");
 
-        // Startup refuses to boot without a signing secret, since an empty one makes every request
-        // fail inside the token validator. This value is for tests only.
-        Environment.SetEnvironmentVariable(TokenSecretVariable, "functional-tests-signing-secret-key");
-
-        // The key a rotation has moved off but not yet withdrawn. Configuring it here means
-        // every functional test runs against a host that accepts two keys, so the ordinary
-        // suite doubles as proof that doing so breaks nothing.
-        Environment.SetEnvironmentVariable(PreviousTokenSecretVariable, PreviousTokenSecret);
+        // Startup refuses to boot without an ES256 signing key. The previous key is a rotation in
+        // progress, and the legacy secrets are the overlap after the switch from HS256: configuring
+        // all four means every functional test runs against a host that accepts two ES256 keys and
+        // the HS256 tokens issued before it started, so the ordinary suite doubles as proof that
+        // doing so breaks nothing. These values are for tests only.
+        Environment.SetEnvironmentVariable(TokenSigningKeys.SigningKeyVariable, Current.EnvValue);
+        Environment.SetEnvironmentVariable(TokenSigningKeys.PreviousSigningKeyVariable, Previous.EnvValue);
+        Environment.SetEnvironmentVariable(TokenSigningSecrets.SecretVariable, TokenSecret);
+        Environment.SetEnvironmentVariable(TokenSigningSecrets.PreviousSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(ApplicationTokenOptions.AudienceVariable, ApplicationTokenAudience);

@@ -1,0 +1,17 @@
+meta {
+  name: Signing keys
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/.well-known/jwks.json
+  body: none
+  auth: none
+}
+
+docs {
+  Anonymous. Outside /api.
+
+  The public keys Heimdall's tokens verify under, as an RFC 7517 key set: the current key first, then the previous one during a rotation. Cacheable for five minutes. The body is the key set itself, not the DataOutput envelope.
+}

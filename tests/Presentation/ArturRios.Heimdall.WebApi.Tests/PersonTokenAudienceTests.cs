@@ -1,12 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
-using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
-using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
-using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -14,7 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for the audiences of the tokens Heimdall issues to a person (TH-06, TH-35). The
-// challenge token and the subject-rights-only token are signed with the full token's keys under its
+// challenge token and the subject-rights-only token are signed with the full token's key under its
 // issuer, so the audience is what tells a consumer they are not a sign-in: each issuer must stamp its
 // own, and a consumer that pins the person audience must refuse both while it accepts a full token —
 // asserted here with nothing but the standard handler, as a consumer would validate.
@@ -22,20 +20,19 @@ public class PersonTokenAudienceTests
 {
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
-    private const string Secret = "unit-tests-person-token-signing-secret-0123456789";
 
     private static readonly PersonTokenAudiences Audiences = new(PersonAudience);
 
     private static readonly IdentityUserMapper Mapper = new(Audiences);
 
-    private static JwtConfiguration Configuration() =>
-        new(3600, Issuer, PersonAudience, Secret, []) { Keys = [new JwtKey("current", Secret)] };
+    // Heimdall's issuers and readers over one ES256 key, as start-up wires them; no legacy secret.
+    private readonly UnitTokenReaders _readers = new([], issuer: Issuer, personAudience: PersonAudience);
 
-    private static JwtTwoFactorChallengeTokenIssuer ChallengeIssuer() =>
-        new(Configuration(), Audiences, new JwtHandler(), Mapper);
+    private JwtConfiguration Configuration() => _readers.Configuration;
 
-    private static JwtAuthTokenIssuer AuthIssuer() =>
-        new(Configuration(), Audiences, new JwtHandler(), Mapper, new UnreadPermissions());
+    private JwtTwoFactorChallengeTokenIssuer ChallengeIssuer() => _readers.Challenge;
+
+    private JwtAuthTokenIssuer AuthIssuer() => _readers.AuthIssuer;
 
     /// <summary>A System Admin, whose full token claims no scope and so reads no permissions.</summary>
     private static AuthTokenSubject SystemAdmin() =>
@@ -44,29 +41,32 @@ public class PersonTokenAudienceTests
     private static string AudienceOf(string token) =>
         Assert.Single(new JwtSecurityTokenHandler().ReadJwtToken(token).Audiences);
 
-    /// <summary>What a consumer such as fortuna-api checks: signature, issuer, the person audience, lifetime.</summary>
-    private static TokenValidationParameters ConsumerParameters() =>
+    /// <summary>
+    ///     What a consumer such as fortuna-api checks: the signature under the published public key,
+    ///     ES256 alone, the issuer, the person audience and the lifetime.
+    /// </summary>
+    private TokenValidationParameters ConsumerParameters() =>
         new()
         {
             ValidIssuer = Issuer,
             ValidateIssuer = true,
             ValidAudience = PersonAudience,
             ValidateAudience = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(Secret)),
+            IssuerSigningKey = _readers.Keys.Current.ToPublicKey().ToSecurityKey(),
             ValidateIssuerSigningKey = true,
-            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+            ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
             ValidateLifetime = true
         };
 
     /// <summary>A consumer validating with <see cref="JwtSecurityTokenHandler" />.</summary>
-    private static void ValidateAsAConsumer(string token) =>
+    private void ValidateAsAConsumer(string token) =>
         new JwtSecurityTokenHandler().ValidateToken(token, ConsumerParameters(), out _);
 
     /// <summary>
     ///     A consumer validating with <see cref="JsonWebTokenHandler" />, which ASP.NET Core's
     ///     <c>AddJwtBearer</c> uses by default — fortuna-api's runtime path.
     /// </summary>
-    private static Task<TokenValidationResult> ValidateAsAJwtBearerConsumerAsync(string token) =>
+    private Task<TokenValidationResult> ValidateAsAJwtBearerConsumerAsync(string token) =>
         new JsonWebTokenHandler().ValidateTokenAsync(token, ConsumerParameters());
 
     [UnitFact]
@@ -237,52 +237,25 @@ public class PersonTokenAudienceTests
     public async Task GivenAChallengeUnderAnHmacAlgorithm_WhenValidatedForVerification_ThenOnlyHs256IsAccepted(
         string algorithm, bool accepted)
     {
-        // Given — the challenge's issuer, audience and claims with the right key, signed under each
-        // algorithm from one descriptor, so only the algorithm differs. The key is long enough for HS512.
+        // Given — during the overlap, a legacy challenge as a 2.x process issued it: the right legacy
+        // secret, issued before this process started, signed under each algorithm from one descriptor,
+        // so only the algorithm differs. The secret is long enough for HS512.
         const string longSecret = "unit-tests-person-token-signing-secret-long-enough-for-hs512-0123456789";
-        var configuration = new JwtConfiguration(3600, Issuer, PersonAudience, longSecret, [])
-        {
-            Keys = [new JwtKey("current", longSecret)]
-        };
-        var reader = new JwtTwoFactorChallengeTokenIssuer(configuration, Audiences, new JwtHandler(), Mapper);
-        var identity = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
-        {
-            MfaPending = true, ChallengeId = Guid.NewGuid(), SecurityStamp = Guid.NewGuid()
-        };
-        var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
-        {
-            Issuer = Issuer,
-            Audience = Audiences.TwoFactorChallenge,
-            Claims = Mapper.ToClaims(identity).ToDictionary(claim => claim.Key, object (claim) => claim.Value),
-            Expires = DateTime.UtcNow.AddMinutes(10),
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm)
-        });
+        var readers = new UnitTokenReaders(
+            TokenSigningSecrets.Parse(longSecret, null), issuer: Issuer, personAudience: PersonAudience);
+        var token = readers.TokenFor(
+            LegacyTokenValidator.ChallengeReader,
+            new SigningCredentials(new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm));
         Assert.Equal(algorithm, new JsonWebToken(token).Alg);
 
         // When
-        var principal = await reader.ValidateAsync(token);
+        var principal = await readers.Challenge.ValidateAsync(token);
 
         // Then
         Assert.Equal(
             accepted
-                ? new TwoFactorChallengePrincipal(identity.Id, identity.ChallengeId!.Value, identity.SecurityStamp)
+                ? new TwoFactorChallengePrincipal(readers.Person.Id, readers.ChallengeId, readers.Person.SecurityStamp)
                 : null,
             principal);
-    }
-
-    /// <summary>
-    ///     The permission reader a System Admin's full token never touches, since they act within no
-    ///     scope. Every member throws, so a read would fail the test rather than pass unnoticed.
-    /// </summary>
-    private sealed class UnreadPermissions : IAsyncReadOnlyRepository<ScopePermission, long>
-    {
-        public IQueryable<ScopePermission> Query() => throw new InvalidOperationException("Not read.");
-
-        public Task<DataOutput<IEnumerable<ScopePermission>>> GetAllAsync(CancellationToken ct = default) =>
-            throw new InvalidOperationException("Not read.");
-
-        public Task<DataOutput<ScopePermission?>> GetByIdAsync(long id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("Not read.");
     }
 }

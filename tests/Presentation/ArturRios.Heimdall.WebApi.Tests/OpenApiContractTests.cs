@@ -62,13 +62,19 @@ public class OpenApiContractTests
         Assert.True(violations.Count == 0, Report(violations));
     }
 
+    // The one path allowed outside /api/: the signing key set. It is not for the web UI, and the UI host
+    // never serves it — consumers fetch it from the API's own host or the edge network
+    // (http://heimdall-api.<env>:8080), never through the web UI's host. Compared for equality, so
+    // the exemption cannot go stale.
+    private static readonly string[] PathsOutsideApi = ["/.well-known/jwks.json"];
+
     // yggdrasil hands the web UI's host to the API only for paths under /api/ (its
     // heimdall-api.proxy.yml); anything else on that host is served by heimdall-ui's nginx, which
     // answers every unknown path with index.html. A route outside /api/ therefore works locally, where
     // the UI calls the API directly, and fails in every deployed environment — which is how the health
     // screen broke in production on 2026-10-09.
     [UnitFact]
-    public void GivenPublishedDocument_WhenPathsInspected_ThenEveryPathIsUnderApi()
+    public void GivenPublishedDocument_WhenPathsInspected_ThenOnlyTheKeySetIsOutsideApi()
     {
         using var document = LoadDocument();
 
@@ -77,8 +83,9 @@ public class OpenApiContractTests
             .Where(path => !path.StartsWith("/api/", StringComparison.Ordinal))
             .ToList();
 
-        Assert.True(outside.Count == 0,
-            $"{outside.Count} published path(s) are outside /api/ and unreachable from the web UI:"
+        Assert.True(
+            PathsOutsideApi.SequenceEqual(outside),
+            $"Expected exactly [{string.Join(", ", PathsOutsideApi)}] outside /api/, found {outside.Count}:"
             + Environment.NewLine
             + string.Join(Environment.NewLine, outside));
     }

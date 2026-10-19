@@ -2736,7 +2736,7 @@ sequenceDiagram
     API-->>C: 200 OK — applicationId, name, scopeId, credentialId, expiresAt
 ```
 
-1. The system validates the token: signature against the current and previous keys, HS256 only, the issuer (when one is configured), the application audience, the lifetime with zero clock skew, and `tokenKind = application`.
+1. The system validates the token: signature against the published ES256 key named by the token's `kid`, ES256 only (HS256 only for a legacy token during the overlap), the issuer (when one is configured), the application audience, the lifetime with zero clock skew, and `tokenKind = application`.
 2. The system confirms the credential named in the token is live, and that the application and scope it names are live and match the token (FR-AP-15).
 3. The system answers `200 OK` with `applicationId`, `name`, `scopeId`, `credentialId` and `expiresAt`.
 

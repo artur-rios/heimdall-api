@@ -125,9 +125,10 @@ refuse it: any token carrying `tokenKind` is refused where a person token is exp
 
 A consumer can validate the token without calling Heimdall. It must check all of these:
 
-- the algorithm is HS256, and nothing else is accepted;
-- the signature, against **both** signing keys while a rotation is in progress
-  (`HEIMDALL_AUTH_TOKEN_SECRET` and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`);
+- the algorithm is ES256, and nothing else is accepted: application tokens are signed ES256 and carry
+  a `kid`;
+- the signature, against the key whose `kid` the token names, from the key set at
+  `/.well-known/jwks.json` (the current key, and the previous one while a rotation is in progress);
 - the issuer, when Heimdall is configured with one (Heimdall itself requires its own issuer, or none
   when none is configured, and the application audience as the token's only audience — NFR-30);
 - **the audience is the application audience**, the value of `HEIMDALL_APPLICATION_TOKEN_AUDIENCE`;

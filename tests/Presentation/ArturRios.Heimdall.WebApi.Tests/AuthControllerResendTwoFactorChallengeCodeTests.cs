@@ -276,9 +276,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         var unknown = TestTokens.ForMfaPending(Guid.NewGuid(), (int)Roles.SystemAdmin);
         var fullBearer = TestTokens.For(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
-        var expired = TestTokens.ForMfaPending(
-            appOnlyPerson.PublicId, (int)Roles.SystemAdmin, TimeSpan.FromSeconds(1));
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        var expired = TestTokens.ExpiredMfaPending(appOnlyPerson.PublicId, (int)Roles.SystemAdmin);
 
         var cases = new (string Name, string Token)[]
         {

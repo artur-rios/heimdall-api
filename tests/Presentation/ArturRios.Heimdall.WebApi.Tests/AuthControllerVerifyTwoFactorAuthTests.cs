@@ -539,9 +539,10 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenAChallengeTokenJustOutsideItsWindow_WhenPostVerify_ThenUnauthorized()
     {
-        // The outside half (AF-38a). The token is allowed to expire on the wall clock rather than
-        // being minted already expired, so what is asserted is the lifetime check itself — the
-        // validator runs with no clock skew, so a lapsed token is lapsed the instant it lapses.
+        // The outside half (AF-38a). The token is signed with the host's key under its issuer and the
+        // challenge audience, names the outstanding challenge and the person's current stamp, and was
+        // valid from twenty minutes ago until a minute ago: right in every respect but its lifetime,
+        // so what is asserted is the lifetime check itself. The inside half above is its control.
         //
         // The code is deliberately left live: the only thing that has run out is the challenge, and
         // that alone must be enough to refuse.
@@ -549,10 +550,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
 
-        var challengeToken = TestTokens.ForMfaPending(
-            person.PublicId, (int)Roles.SystemAdmin, TimeSpan.FromSeconds(1));
-
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        var challengeToken = TestTokens.ExpiredMfaPending(person.PublicId, (int)Roles.SystemAdmin);
 
         // When
         var response = await VerifyAsync(challengeToken, EmailCode);

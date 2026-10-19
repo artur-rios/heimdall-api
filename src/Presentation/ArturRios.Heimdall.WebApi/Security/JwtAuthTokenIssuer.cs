@@ -8,12 +8,14 @@ using Microsoft.EntityFrameworkCore;
 namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
-///     Issues UC-11's authentication token as the application's own HMAC-signed JWT (FR-AU-03),
+///     Issues UC-11's authentication token as the application's own ES256-signed JWT (FR-AU-03),
 ///     using the same <see cref="IAuthenticatedUserMapper" /> the middleware validates incoming
 ///     tokens with — so a token this class issues is one the API can always read back.
 /// </summary>
 /// <remarks>
-///     Expiry comes from the registered <see cref="JwtConfiguration" />, which reads it from the
+///     The token is signed with the current key, which its <c>kid</c> names by thumbprint
+///     (<see cref="TokenSigningKeys" />), as is every other kind Heimdall issues. Expiry comes from
+///     the registered <see cref="JwtConfiguration" />, which reads it from the
 ///     environment (NFR-03), and is reported to the caller so a client need not decode the token to
 ///     know when to re-authenticate. At issuance the acting scope's permissions whose
 ///     <see cref="ScopePermission.IncludeAsJwtClaim" /> flag is set are read from the database
@@ -36,7 +38,7 @@ public class JwtAuthTokenIssuer(
     {
         var permissionClaims = await LoadScopePermissionClaimsAsync(subject);
 
-        // The issued token carries this login's claims; everything else — secret, issuer, audience,
+        // The issued token carries this login's claims; everything else — key, issuer, audience,
         // lifetime — comes from the configuration the validator also uses.
         var user = new IdentityUser(
             subject.PersonId, subject.RoleId, subject.ScopeId, subject.OwnedScopeIds)

@@ -12,3 +12,8 @@ GET {{host}}/api/healthcheck
 # Run auth.http's "Login" first. Names each dependency and its status.
 GET {{host}}/api/healthcheck/detailed
 Authorization: Bearer {{token}}
+
+### Signing keys — anonymous.
+# The public keys Heimdall's tokens verify under, as an RFC 7517 key set: the current key first, then
+# the previous one during a rotation. Outside /api, and served by the API's own host only.
+GET {{host}}/.well-known/jwks.json
