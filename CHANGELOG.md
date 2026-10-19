@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-19
+
 ### Upgrading from 1.x to 2.0
 
 - **Clients:** a Scope Admin's `POST /api/scopes/{scopeId}/owners/{personId}` answers `202` with `invited: true`
@@ -625,7 +627,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...v2.0.0
 [1.7.0]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0
