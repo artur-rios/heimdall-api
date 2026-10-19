@@ -5,9 +5,10 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for how the three endpoints that create a person with a password are wired: each derives
-// an Argon2id hash, so each is under the per-actor account-creation limit (Threat Model TH-03). The
-// limit itself is exercised against the real limiter in AccountCreationRateLimitTests.
+// Unit tests for how the four endpoints that create a person with a password, or invite one and mail
+// them, are wired: each derives an Argon2id hash or mails a third party, so each is under the per-actor
+// account-creation limit (Threat Model TH-03). The limit itself is exercised against the real limiter
+// in AccountCreationRateLimitTests.
 public class AccountCreationRateLimitPolicyTests
 {
     private static void AssertUnderTheAccountCreationPolicy(MethodInfo action)
@@ -21,18 +22,22 @@ public class AccountCreationRateLimitPolicyTests
     [UnitFact]
     public void GivenThePersonCreationActions_WhenInspected_ThenEachIsUnderTheAccountCreationPolicy()
     {
-        // Given / When
+        // Given
         string[] actions =
         [
             nameof(PersonController.CreateAdmin),
             nameof(PersonController.CreateUser),
-            nameof(PersonController.CreateScopeOwner)
+            nameof(PersonController.CreateScopeOwner),
+            nameof(PersonController.AddScopeOwner)
         ];
 
+        // When
+        var methods = actions.Select(action => typeof(PersonController).GetMethod(action)!);
+
         // Then
-        foreach (var action in actions)
+        foreach (var method in methods)
         {
-            AssertUnderTheAccountCreationPolicy(typeof(PersonController).GetMethod(action)!);
+            AssertUnderTheAccountCreationPolicy(method);
         }
     }
 }

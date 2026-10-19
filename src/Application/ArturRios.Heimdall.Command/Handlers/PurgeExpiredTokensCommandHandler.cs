@@ -15,8 +15,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     Handles <see cref="PurgeExpiredTokensCommand" /> (NFR-19): removes password reset tokens,
 ///     email verification tokens, two-factor email codes, unconfirmed pending registrations (UC-47),
 ///     spent application credentials (UC-55), ended registration-attempt notice budgets (FR-SR-14)
-///     and the records of used Google ID tokens (FR-GO-21) whose retention period has run out. All failures
-///     are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
+///     and the records of used Google ID tokens (FR-GO-21) whose retention period has run out, and
+///     scope owner invitations ended or expired more than 90 days ago (FR-SC-18). All failures are
+///     returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -48,6 +49,12 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         so after the grace the record guards nothing.
 ///     </para>
 ///     <para>
+///         A <see cref="ScopeOwnerInvitation" /> keeps a period of its own,
+///         <see cref="DataRetentionOptions.ScopeInvitationRetention" />, counted from its end — or, for
+///         one that ran out unanswered and was never ended, from its expiry. An ended invitation does
+///         nothing; the period lets a scope's owners see who declined or let it lapse.
+///     </para>
+///     <para>
 ///         <b>Why a live token is never at risk.</b> The cutoff is strictly in the past, so a token
 ///         that has not yet expired cannot match however the grace period is configured — the
 ///         options type refuses a zero or negative one. A person mid-recovery is never affected by
@@ -77,6 +84,8 @@ public class PurgeExpiredTokensCommandHandler(
     IAsyncRepository<AttemptNoticeBudget, long> attemptNoticeBudgetWriter,
     IAsyncReadOnlyRepository<GoogleIdTokenUse, string> googleIdTokenUseReader,
     IAsyncRepository<GoogleIdTokenUse, string> googleIdTokenUseWriter,
+    IAsyncReadOnlyRepository<ScopeOwnerInvitation, long> scopeOwnerInvitationReader,
+    IAsyncRepository<ScopeOwnerInvitation, long> scopeOwnerInvitationWriter,
     DataRetentionOptions retention)
     : ICommandHandlerAsync<PurgeExpiredTokensCommand, PurgeExpiredTokensCommandOutput>
 {
@@ -134,6 +143,16 @@ public class PurgeExpiredTokensCommandHandler(
                 .OrderBy(use => use.ExpiresAt),
             googleIdTokenUseWriter);
 
+        // FR-SC-18: an invitation that ended, or ran out unanswered, is kept 90 days and then removed.
+        var invitationCutoff = DateTime.UtcNow - retention.ScopeInvitationRetention;
+
+        var scopeOwnerInvitations = await PurgeAsync(
+            scopeOwnerInvitationReader.Query()
+                .Where(invitation => (invitation.EndedAt != null && invitation.EndedAt <= invitationCutoff) ||
+                                     (invitation.EndedAt == null && invitation.ExpiresAt <= invitationCutoff))
+                .OrderBy(invitation => invitation.EndedAt ?? invitation.ExpiresAt),
+            scopeOwnerInvitationWriter);
+
         // Every table is attempted before the run reports, so one failing table does not hide
         // whether the others were cleared — and the next run retries whatever was missed.
         var errors = passwordResetTokens.Errors
@@ -143,6 +162,7 @@ public class PurgeExpiredTokensCommandHandler(
             .Concat(applicationCredentials.Errors)
             .Concat(attemptNoticeBudgets.Errors)
             .Concat(googleIdTokenUses.Errors)
+            .Concat(scopeOwnerInvitations.Errors)
             .ToList();
 
         if (errors.Count > 0)
@@ -161,7 +181,8 @@ public class PurgeExpiredTokensCommandHandler(
                 PendingRegistrationsPurged = pendingRegistrations.Count,
                 ApplicationCredentialsPurged = applicationCredentials.Count,
                 AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count,
-                GoogleIdTokenUsesPurged = googleIdTokenUses.Count
+                GoogleIdTokenUsesPurged = googleIdTokenUses.Count,
+                ScopeOwnerInvitationsPurged = scopeOwnerInvitations.Count
             })
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }

@@ -1,4 +1,7 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Auditing;
+using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
@@ -96,6 +99,36 @@ public class AuditingCommandHandlerTests
 
         // Then
         writer.Verify(w => w.WriteAsync(nameof(StubCommand), null, false, "first"), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenAuditInsertFails_WhenHandling_ThenResultIsUnchangedAndWarningIsLogged()
+    {
+        // Given a real writer whose repository reports the failed insert in its output rather than
+        // throwing; this used to vanish without a trace
+        var targetId = Guid.NewGuid();
+        var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutput>>();
+        inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>()))
+            .ReturnsAsync(DataOutput<StubOutput?>.New.WithData(new StubOutput { Id = targetId }));
+        var repository = new Mock<IAsyncRepository<AuditLog, long>>();
+        repository.Setup(r => r.CreateAsync(It.IsAny<AuditLog>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataOutput<long>.New.WithError("insert failed"));
+        var writer = new AuditLogWriter(repository.Object, new Mock<IActorAccessor>().Object);
+        var logger = new Mock<ILogger<AuditingCommandHandler<StubCommand, StubOutput>>>();
+        var handler = new AuditingCommandHandler<StubCommand, StubOutput>(inner.Object, writer, logger.Object);
+
+        // When
+        var result = await handler.HandleAsync(new StubCommand());
+
+        // Then the command's answer is untouched and the failure was logged
+        Assert.True(result.Success);
+        Assert.Equal(targetId, result.Data!.Id);
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+                It.Is<Exception>(e => e.Message.Contains("insert failed")),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     [UnitFact]

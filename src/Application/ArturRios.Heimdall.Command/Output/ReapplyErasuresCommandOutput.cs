@@ -18,4 +18,10 @@ public class ReapplyErasuresCommandOutput : CommandOutput
     ///     naming somebody the restore did not reinstate is the expected case, not a mistake.
     /// </summary>
     public IEnumerable<Guid> NotFound { get; set; } = [];
+
+    /// <summary>
+    ///     Unended scope owner invitations of the persons this run anonymised again, voided (FR-SC-17).
+    ///     Each is recorded in the audit trail as <c>ScopeOwnerInvitationVoided</c>, on that invitation.
+    /// </summary>
+    public int ScopeOwnerInvitationsVoided { get; set; }
 }

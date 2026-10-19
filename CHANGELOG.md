@@ -7,6 +7,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-19
+
+### Upgrading from 1.x to 2.0
+
+- **Clients:** a Scope Admin's `POST /api/scopes/{scopeId}/owners/{personId}` answers `202` with `invited: true`
+  and an invitation instead of `201` and an added owner; the person becomes an owner only when they accept. Treat
+  `202` (or `invited: true`) as "invited", not "added". A System Admin's request is unchanged.
+- **Deploy order:** deploy the heimdall-ui release that carries scope invitations before this one.
+- **Operators:** nothing is required. `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` is optional (default 7 days),
+  and the one migration only adds the `scope_owner_invitation` table, covered by the runtime role's schema-wide
+  grants.
+
+### Added
+
+- Scope owner invitations. New endpoints: `GET /api/scopes/{scopeId}/owner-invitations` and `DELETE
+  /api/scopes/{scopeId}/owner-invitations/{invitationId}` (`204`) for the scope's owners and System Admins, to list and
+  withdraw open invitations; `GET /api/persons/me/scope-invitations`, `POST
+  /api/scope-invitations/{invitationId}/accept` and `…/decline` for the invited administrator. Accepting ends the
+  invitation and creates the ownership in one transaction. New messages: "The invitation was sent." (`202`),
+  "The invitation was not found or is no longer open." (`404`, for an unknown, ended, expired or somebody else's
+  invitation, and for one voided because its scope was deleted or its invitee is no longer an eligible
+  administrator), "The invitation was accepted." and "The invitation was declined." (`200`).
+- `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS`, optional: how long an invitation can be accepted, 604800 (seven
+  days) by default, 3600 to 2592000; anything else falls back to the default.
+- A migration, `AddScopeOwnerInvitation`, adds the `scope_owner_invitation` table, whose `public_id` is guarded like the
+  other entity tables'. Invitations are purged 90 days after they ended, or 90 days after they expired if they never
+  ended. Each invitation created, withdrawn, accepted, declined or voided is audited.
+- An invitation notice and an answer notice, neither with a link or token. The invitee is mailed "<inviter name>
+  invited you to co-own the scope <scope name>. Sign in to Heimdall to accept or decline. The invitation expires on
+  <date>."; the notice is skipped for a repeat while the invitation is open, for someone invited within
+  `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` and for someone whose processing is restricted. The inviter is told of
+  either answer, unless they are deleted, anonymised or processing-restricted.
+- Erasing a person voids the unended invitations made to those anonymised in that run, clears them as inviter, and
+  audits each void; every scheduled run also catches up anonymised persons still named.
+
+### Changed
+
+- **Behaviour change:** a Scope Admin's `POST /api/scopes/{scopeId}/owners/{personId}` used to answer `201` and add
+  the owner at once. It now answers `202` "The invitation was sent." with `invited: true`, `invitationId` and
+  `invitationExpiresAt`, writes no ownership, and opens an invitation the person must accept; a person who already
+  owns the scope still gets `200` "Person is already an owner of this scope.". **Clients:** a client that treats any
+  `2xx` from this endpoint as "added" must change; treat `202` as "invited". A System Admin's request is unchanged:
+  `201`, or `200` for an existing owner, with `invited: false`. The endpoint now shares the account-creation rate limit
+  (thirty a minute per administrator and per address) for every caller, a System Admin included. **Deploy order:**
+  deploy the heimdall-ui release that carries scope invitations before the heimdall-api release that carries them: an
+  older UI shows the `202` as a plain success while the person does not appear among the owners. A Scope Admin who
+  owns no live scope cannot sign in (AF-11e), so cannot accept an invitation; a System Admin adds such a person
+  directly. **Operators:** no setting is required; the runtime role's schema-wide grants and default privileges cover
+  the new table.
+
+### Fixed
+
+- An audit log entry that fails to save is now logged as a warning, naming its action and the database error. The
+  repository reports a failed insert in its result rather than throwing, and the writer discarded that result, so
+  the entry was lost without a trace. The request's answer is unchanged.
+
+### Security
+
+- A Scope Admin can no longer make another existing administrator a co-owner of a scope on their own: the ownership
+  starts only when that person accepts, signed in as themselves. This closes the acceptance residual of Threat Model
+  TH-41 (residual closed); the threat itself stays on the register.
+
 ## [1.7.0] - 2026-10-19
 
 ### Fixed
@@ -565,7 +627,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...v2.0.0
 [1.7.0]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/artur-rios/heimdall-api/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/artur-rios/heimdall-api/compare/v1.4.0...v1.5.0

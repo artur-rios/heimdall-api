@@ -86,6 +86,9 @@ public sealed record DataRetentionOptions
     /// <summary>365 days — twelve months, the period the retention schedule sets for logs.</summary>
     public static readonly TimeSpan DefaultLogRetention = TimeSpan.FromDays(365);
 
+    /// <summary>Ninety days — how long an ended or expired scope owner invitation is kept.</summary>
+    public static readonly TimeSpan DefaultScopeInvitationRetention = TimeSpan.FromDays(90);
+
     /// <summary>Fifteen minutes — long enough to see a pattern, short enough to still be news.</summary>
     public static readonly TimeSpan DefaultMonitoringWindow = TimeSpan.FromMinutes(15);
 
@@ -246,6 +249,13 @@ public sealed record DataRetentionOptions
     ///     which a log that had already expired never contributed to.
     /// </remarks>
     public TimeSpan LogRetention { get; init; } = DefaultLogRetention;
+
+    /// <summary>
+    ///     How long a scope owner invitation is kept after it ended or expired, before the purge removes it
+    ///     (FR-SC-18). Long enough for an owner to see who declined or let an invitation lapse, and short:
+    ///     an ended invitation does nothing. Fixed by the Data Retention Schedule, so no variable sets it.
+    /// </summary>
+    public TimeSpan ScopeInvitationRetention { get; init; } = DefaultScopeInvitationRetention;
 
     /// <summary>Whether security signal detection is registered at start-up (NFR-26).</summary>
     public bool SecurityMonitoringEnabled { get; init; } = true;

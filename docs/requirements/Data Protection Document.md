@@ -229,6 +229,23 @@ not data about anybody that a subject could ask for. What bounds it is its reten
 the token's remaining lifetime, an hour at most, plus the grace period, and is then purged whether or
 not anyone asked.
 
+### `SCOPE_OWNER_INVITATION`
+
+| Column | Purpose |
+| --- | --- |
+| `PublicId` | The reference a scope's owners withdraw an invitation by, and the invitee answers it by (UC-58, UC-60, UC-61). Random, so it discloses nothing by itself |
+| `ScopeId` | The scope the invitee is asked to co-own, and so whose owners may see and withdraw the invitation |
+| `InviteePersonId` | Who is asked; only they may accept or decline. Their unended invitations are voided when they are anonymised |
+| `InvitedByPersonId` | Who asked, so the invitee knows who it came from and the answer can be sent back. Cleared when that person is anonymised, and set to null when they are hard-deleted |
+| `CreatedAt`, `ExpiresAt` | When it was made and when it stops being acceptable (`HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS`); `CreatedAt` also bounds the invitee's notices to one per administrator-mail cooldown |
+| `EndedAt`, `Outcome` | Whether and how it ended (accepted, declined, withdrawn or voided; no outcome when it ran out), so it ends exactly once and is purged 90 days later (Data Retention Schedule) |
+
+The scope's owners and System Admins can read an open invitation's id, the invitee's name and address,
+the inviter's name and the two times through the API (UC-58); the invitee reads their own, with the
+scope's name (UC-59). Ended invitations are never listed. Under NFR-24 a processing-restricted invitee's
+invitations are withheld from the scope's listing, and the inviter's name is shown in either listing only
+while the inviter is neither logically deleted nor restricted.
+
 ### Two decisions this review settled
 
 **`ProfilePictureUrl` stays, and it is the weakest case here.** The issue that prompted this review

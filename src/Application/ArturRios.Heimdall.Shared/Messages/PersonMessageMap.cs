@@ -66,6 +66,8 @@ public static class PersonMessageMap
             [PersonMessages.AlreadyScopeOwner] = HttpStatusCodes.Ok,
             // AF-21b — the named person is not a usable ScopeAdmin.
             [PersonMessages.PersonNotValidScopeAdmin] = HttpStatusCodes.BadRequest,
+            // UC-21 for a Scope Admin actor (FR-SC-14) — the person was invited, not added.
+            [ScopeInvitationMessages.InvitationSent] = HttpStatusCodes.Accepted,
             // UC-22 main flow — ownership removed. AF-22a reuses ScopeNotFound (404) for its scope half,
             // AF-22b reuses ScopeWouldLoseLastOwner (409) and AF-22c NotScopeOwner (403).
             [PersonMessages.ScopeOwnerRemovedSuccessfully] = HttpStatusCodes.Ok,

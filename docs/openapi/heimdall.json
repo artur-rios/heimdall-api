@@ -2728,8 +2728,8 @@
         "tags": [
           "Person"
         ],
-        "summary": "Adds an existing `ScopeAdmin` or `SystemAdmin` person as an additional owner\nof a scope (UC-21, FR-SC-08/FR-SC-09). The attribute keeps a `User` out — they can\nnever be a System Admin nor an existing owner — while the rules that depend on data it\ncannot see are the handler's: whether the acting Scope Admin owns this scope (AF-21c),\nwhether the scope is active (AF-21a), whether the named person is a usable administrator\n(AF-21b), and whether they already own it (AF-21d).",
-        "description": "**Requires role:** System Admin or Scope Admin.",
+        "summary": "Adds an existing `ScopeAdmin` or `SystemAdmin` person as an additional owner of a scope\n(UC-21, FR-SC-08/FR-SC-09). A System Admin adds them at once (201, or 200 when they already own\nit). A Scope Admin owning the scope invites them instead (202 \"The invitation was sent.\", FR-SC-14):\nthey own nothing until they accept (UC-60), and a repeat while it is open answers the same and\nmails nothing. The attribute keeps a `User` out; the handler checks the scope (AF-21a), the\nownership (AF-21c), the person (AF-21b) and an existing ownership (AF-21d).",
+        "description": "It can mail a third party, so it shares the account-creation limit: thirty requests a minute per\nacting person and thirty per address; a rejection answers 429 \"Too many requests.\" with a\n`Retry-After` header.\n\n**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_AddScopeOwner",
         "parameters": [
           {
@@ -2754,6 +2754,46 @@
         "responses": {
           "200": {
             "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4172,6 +4212,291 @@
         ]
       }
     },
+    "/api/scopes/{scopeId}/owner-invitations": {
+      "get": {
+        "tags": [
+          "ScopeInvitation"
+        ],
+        "summary": "Lists the scope's open owner invitations (UC-58, FR-SC-15), newest first: each one's id, the invitee's\nid, name and address, the inviter's name, and when it was made and expires. A System Admin or an\nowner of the scope may call it; the attribute keeps a `User` out, and the handler checks the\nscope (AF-58a) and the ownership (AF-58b).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ScopeInvitation_ListForScope",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeOwnerInvitationOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeOwnerInvitationOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeOwnerInvitationOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scopes/{scopeId}/owner-invitations/{invitationId}": {
+      "delete": {
+        "tags": [
+          "ScopeInvitation"
+        ],
+        "summary": "Withdraws an open owner invitation of the scope (UC-58, FR-SC-15): 204 with no body. An ended,\nexpired or unknown invitation, or another scope's, answers 404 \"The invitation was not found or is\nno longer open.\" (AF-58c). Same actors as the listing.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ScopeInvitation_Withdraw",
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/persons/me/scope-invitations": {
+      "get": {
+        "tags": [
+          "ScopeInvitation"
+        ],
+        "summary": "Lists the caller's own open scope owner invitations (UC-59, FR-SC-16), soonest to expire first: each\none's id, the scope's id and name, the inviter's name, and when it was made and expires. Any signed-in\nScope Admin or System Admin may call it; a `User` cannot be invited, so the attribute keeps them\nout.",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ScopeInvitation_ListMine",
+        "parameters": [
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyScopeInvitationOutputPaginatedOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyScopeInvitationOutputPaginatedOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyScopeInvitationOutputPaginatedOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scope-invitations/{invitationId}/accept": {
+      "post": {
+        "tags": [
+          "ScopeInvitation"
+        ],
+        "summary": "Accepts a scope owner invitation (UC-60, FR-SC-17): the invitation ends as accepted and the caller\nbecomes an owner of the scope, together. Only the invitee may; everybody else, and an ended or expired\ninvitation, gets 404 \"The invitation was not found or is no longer open.\" (AF-60a). An invitation whose\nscope was deleted, or whose invitee is no longer an unrestricted administrator, is voided and answered\nthe same (AF-60b).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ScopeInvitation_Accept",
+        "parameters": [
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/api/scope-invitations/{invitationId}/decline": {
+      "post": {
+        "tags": [
+          "ScopeInvitation"
+        ],
+        "summary": "Declines a scope owner invitation (UC-61, FR-SC-17). Same caller and refusals as UC-60 (AF-61a).",
+        "description": "**Requires role:** System Admin or Scope Admin.",
+        "operationId": "ScopeInvitation_Decline",
+        "parameters": [
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
+          },
+          "403": {
+            "description": "The token is valid but the caller does not hold a required role."
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/api/scopes/{scopeId}/permissions": {
       "post": {
         "tags": [
@@ -4605,6 +4930,51 @@
   },
   "components": {
     "schemas": {
+      "AcceptScopeOwnerInvitationCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AcceptScopeOwnerInvitationCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutput"
+          }
+        },
+        "additionalProperties": false
+      },
       "AddScopeOwnerCommandOutput": {
         "type": "object",
         "properties": {
@@ -4618,6 +4988,19 @@
           },
           "alreadyOwner": {
             "type": "boolean"
+          },
+          "invited": {
+            "type": "boolean"
+          },
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "invitationExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5835,6 +6218,47 @@
           "reason": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeclineScopeOwnerInvitationCommandOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeclineScopeOwnerInvitationCommandOutputDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutput"
           }
         },
         "additionalProperties": false
@@ -7094,6 +7518,88 @@
         },
         "additionalProperties": false
       },
+      "MyScopeInvitationOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "invitedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MyScopeInvitationOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyScopeInvitationOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PasswordRecoveryCommand": {
         "type": "object",
         "properties": {
@@ -7538,6 +8044,10 @@
               "format": "uuid"
             },
             "nullable": true
+          },
+          "scopeOwnerInvitationsVoided": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -8160,6 +8670,92 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ScopeOutput"
+            },
+            "nullable": true
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScopeOwnerInvitationOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inviteeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inviteeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "inviteeEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "invitedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScopeOwnerInvitationOutputPaginatedOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScopeOwnerInvitationOutput"
             },
             "nullable": true
           },
@@ -9270,6 +9866,9 @@
     },
     {
       "name": "Scope"
+    },
+    {
+      "name": "ScopeInvitation"
     },
     {
       "name": "ScopePermission"

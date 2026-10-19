@@ -109,11 +109,16 @@ graph LR
 | FR-SC-06 | The system shall allow System Admins to **hard delete** a scope, permanently removing it and its associated users and applications | High |
 | FR-SC-07 | Logically deleted scopes shall not appear in default query results unless explicitly requested | Medium |
 | FR-SC-08 | A scope shall be able to have **one or more owners**, each of which must be a person with the `ScopeAdmin` or `SystemAdmin` role. A System Admin governs every scope whether or not they own it; owning one makes them a named owner of it, which FR-AP-03 and NFR-12 then count | High |
-| FR-SC-09 | The system shall allow System Admins and existing owners of a scope to **add** an existing Scope Admin or System Admin as an additional owner of that scope | High |
+| FR-SC-09 | The system shall allow System Admins to **add** an existing Scope Admin or System Admin as an additional owner of a scope, and existing owners of the scope to **invite** one (FR-SC-14) | High |
 | FR-SC-10 | The system shall allow System Admins and existing owners of a scope to **remove** an owner from a scope, provided at least one owner remains | High |
 | FR-SC-11 | A scope shall be able to contain **one or more Persons** with the `User` role | High |
 | FR-SC-12 | The system shall allow System Admins and existing owners of a scope to add a new co-owner by **creating a brand-new `ScopeAdmin` person**, directly made an owner of that scope | High |
 | FR-SC-13 | The system shall allow System Admins and existing owners of a scope to add a new co-owner by **promoting an existing `User` of that scope** to `ScopeAdmin`, making them a co-owner and removing their `User` scope membership | High |
+| FR-SC-14 | When an existing owner who is not a System Admin adds an existing Scope Admin or System Admin as an owner, the system shall open an **invitation** instead of the ownership, notify the person by email with no link and no token, and answer `202`; the ownership starts only when the person accepts it (FR-SC-17). A repeat while an invitation is open shall answer with that invitation and send nothing, and no notice shall go to a person who is processing-restricted or was invited within the administrator-mail cooldown. A System Admin's add shall stay immediate | High |
+| FR-SC-15 | The system shall allow System Admins and existing owners of a scope to **list** its open owner invitations and to **withdraw** one | High |
+| FR-SC-16 | The system shall allow a signed-in Scope Admin or System Admin to **list their own** open owner invitations | High |
+| FR-SC-17 | The system shall allow only the invited person, signed in as themselves, to **accept** or **decline** an open invitation. Accepting shall end the invitation and create the ownership in one transaction, only while the scope is live and the person a live, unrestricted administrator, and void the invitation otherwise, including when that stops being so just before the write; every refusal shall answer alike. The inviter shall be told the answer unless they are deleted, anonymised or processing-restricted (NFR-24). When a person is anonymised, their unended invitations shall be voided and they shall be cleared as the inviter of every other | High |
+| FR-SC-18 | An invitation shall expire after `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` (default 604800, accepted 3600 to 2592000); at most one shall be open per scope and person; and one that ended shall be purged 90 days after it ended, and one that ran out unanswered 90 days after it expired | High |
 
 ### 3.2 Person Management
 
@@ -312,12 +317,12 @@ graph LR
 
 ### 4.0 Identifier Strategy
 
-Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`) has two identifiers:
+Every top-level entity (`Scope`, `Role`, `Person`, `Application`, `Google User`, `Scope Permission`, `Scope Owner Invitation`) has two identifiers:
 
 - **`Id`** — an auto-incrementing `bigint`, the physical primary key used for storage and all foreign keys (`ScopeId`, `RoleId`, `OwnerId`, `PersonId`, and the columns of `SCOPE_OWNER`/`SCOPE_USER`). Never exposed outside the database.
-- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). It is immutable, enforced by trigger, on every table listed above and on `APPLICATION_CREDENTIAL` and `PENDING_REGISTRATION`, no new row of those tables may take a `PublicId` that another of them holds, and a new `PERSON` or `GOOGLE_USER` row may not take one that an audit entry names (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
+- **`PublicId`** — a GUID generated at creation time, used as the entity's identifier everywhere it is addressed from outside the database: API path segments (e.g. `/api/scopes/{id}`), response bodies, and authentication token claims (e.g. the `personId`/`scopeId` claims in FR-AU-04). It is immutable, enforced by trigger, on every table listed above and on `APPLICATION_CREDENTIAL`, `PENDING_REGISTRATION` and `SCOPE_OWNER_INVITATION`, no new row of those tables may take a `PublicId` that another of them holds, and a new `PERSON` or `GOOGLE_USER` row may not take one that an audit entry names (#199): the audit trail's retention rules read it as proof that an id names a person (NFR-21).
 
-`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
+`PASSWORD_RESET_TOKEN` and `EMAIL_VERIFICATION_TOKEN` use only an internal `bigint Id` — they are never addressed by ID at all; the caller-facing reference is the random `Token` string already required by FR-PR-02/FR-EV-02. `PENDING_REGISTRATION` is reached the same way by the registrant — through the mailed token, of which only the hash is stored — and also carries a `PublicId`, the administrative reference by which a scope's owners list and discard it (FR-SR-11, FR-SR-12). `SCOPE_OWNER` and `SCOPE_USER` are join rows, not independently addressable resources, so they carry no `PublicId` either — their `ScopeId`/`PersonId` columns are internal `bigint` foreign keys. `SCOPE_OWNER_INVITATION` is the exception among the ownership tables: it carries a `PublicId`, the reference by which a scope's owners withdraw an invitation and the invitee accepts or declines it (UC-58, UC-60, UC-61). `TWO_FACTOR_AUTH` and `TWO_FACTOR_RECOVERY_CODE` follow the same no-`PublicId` pattern as the token tables: a person's two-factor configuration is reached implicitly through their own authenticated identity, never by ID in a path.
 
 This split keeps sequential record counts and creation order — which a raw auto-increment `Id` would reveal — out of anything a caller can see, while still giving the database compact integer keys for joins and indexes.
 
@@ -335,6 +340,8 @@ erDiagram
     SCOPE ||--o{ GOOGLE_USER : "contains"
     SCOPE ||--o{ SCOPE_PERMISSION : "defines"
     SCOPE ||--o{ PENDING_REGISTRATION : "awaits confirmation of"
+    SCOPE ||--o{ SCOPE_OWNER_INVITATION : "is offered through"
+    PERSON ||--o{ SCOPE_OWNER_INVITATION : "is invited by or invites"
     PERSON ||--o| TWO_FACTOR_AUTH : "configures"
     TWO_FACTOR_AUTH ||--o{ TWO_FACTOR_RECOVERY_CODE : "issues"
 
@@ -426,6 +433,18 @@ erDiagram
         datetime ExpiresAt "Expiration timestamp"
         datetime CreatedAt "When the registration was stored"
         int FailedAttempts "Wrong confirmation passwords so far; the row is discarded at 10"
+    }
+
+    SCOPE_OWNER_INVITATION {
+        bigint Id PK "Internal auto-increment identifier, never exposed"
+        guid PublicId "External identifier; the reference withdrawn and answered by (UC-58, UC-60, UC-61)"
+        bigint ScopeId FK "Scope the invitee is asked to co-own (internal Id)"
+        bigint InviteePersonId FK "Person invited (internal Id)"
+        bigint InvitedByPersonId FK "Person who invited; optional, cleared on anonymisation"
+        datetime CreatedAt "When the invitation was made"
+        datetime ExpiresAt "When it stops being acceptable (FR-SC-18)"
+        datetime EndedAt "Null while open"
+        smallint Outcome "1 accepted, 2 declined, 3 withdrawn, 4 voided; null while open or when unanswered"
     }
 
     ATTEMPT_NOTICE_BUDGET {
@@ -577,6 +596,22 @@ when a `User` is created, cleared by a promotion (UC-23) or a role change (UC-08
 
 A scope may have many rows (one or more owners); a person may have many rows (a Scope Admin may own several scopes). Composite key `(ScopeId, PersonId)` must be unique. This join table has no `PublicId` — it is not an independently addressable API resource.
 
+### 4.5a Scope Owner Invitation Fields
+
+| Field | Type | Constraints |
+| ------- | ------ | ------------- |
+| Id | BigInt | Primary key, auto-increment, internal only |
+| PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row when inserted (#199) |
+| ScopeId | BigInt | Foreign key to Scope.Id (internal), required; deleted with the scope |
+| InviteePersonId | BigInt | Foreign key to Person.Id (internal), required; deleted with the person |
+| InvitedByPersonId | BigInt | Foreign key to Person.Id (internal), optional; set to null when that person is hard-deleted, cleared when they are anonymised |
+| CreatedAt | DateTime | Auto-set on creation |
+| ExpiresAt | DateTime | Required; `CreatedAt` + `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` |
+| EndedAt | DateTime | Null while open; set once when it ends — to `ExpiresAt` when a new invitation for the pair closes an expired one |
+| Outcome | SmallInt | Null while open and when it ran out unanswered; 1 accepted, 2 declined, 3 withdrawn, 4 voided; only on an ended row |
+
+At most one row per `(ScopeId, InviteePersonId)` has a null `EndedAt` (a partial unique index).
+
 ### 4.6 Scope User Fields
 
 | Field | Type | Constraints |
@@ -668,11 +703,13 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | PUT | `/api/scopes/{id}` | Update a scope | SystemAdmin |
 | DELETE | `/api/scopes/{id}` | Logically delete a scope | SystemAdmin |
 | DELETE | `/api/scopes/{id}/hard` | Hard delete a scope | SystemAdmin |
-| POST | `/api/scopes/{id}/owners/{personId}` | Add an existing Scope Admin as an owner of the scope | SystemAdmin, existing Owner |
+| POST | `/api/scopes/{id}/owners/{personId}` | Add an existing Scope Admin or System Admin as an owner (SystemAdmin: `201`, or `200` if already one), or invite them (existing Owner: `202`, FR-SC-14) | SystemAdmin, existing Owner |
 | POST | `/api/scopes/{id}/owners` | Create a brand-new `ScopeAdmin` person, directly made an owner of the scope | SystemAdmin, existing Owner |
 | POST | `/api/scopes/{id}/users/{personId}/promote` | Promote an existing `User` of the scope to `ScopeAdmin`, making them a co-owner | SystemAdmin, existing Owner |
 | GET | `/api/scopes/{id}/owners` | List the owners of a scope | SystemAdmin, existing Owner |
 | DELETE | `/api/scopes/{id}/owners/{personId}` | Remove an owner from the scope (at least one must remain) | SystemAdmin, existing Owner |
+| GET | `/api/scopes/{id}/owner-invitations` | List the scope's open owner invitations (FR-SC-15) | SystemAdmin, existing Owner |
+| DELETE | `/api/scopes/{id}/owner-invitations/{invitationId}` | Withdraw an open owner invitation; `204` (FR-SC-15) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/google-signin` | Enable or disable Google Sign-In for the scope (`{ enabled: bool }`) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/self-registration` | Open or close self-registration for a scope (FR-SR-01, FR-SR-02) | SystemAdmin, existing Owner |
 | PUT | `/api/scopes/{id}/email-links` | Set, or with null or empty clear, the scope's verification and password-reset link bases (FR-SR-10) | SystemAdmin, existing Owner |
@@ -694,6 +731,9 @@ Every `{id}`, `{scopeId}`, `{personId}` (etc.) path segment below refers to the 
 | DELETE | `/api/persons/{id}/hard` | Hard delete a person | SystemAdmin |
 | POST | `/api/persons/{id}/verification-email` | Send a fresh verification link to the person's own address (FR-EV-06, FR-EV-07) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
 | POST | `/api/persons/{id}/password-reset` | Send a password-reset link to the person's own address (FR-PR-05, FR-PR-06) | SystemAdmin, ScopeAdmin (Users of an owned scope) |
+| GET | `/api/persons/me/scope-invitations` | List the caller's own open owner invitations (FR-SC-16) | SystemAdmin, ScopeAdmin |
+| POST | `/api/scope-invitations/{invitationId}/accept` | Accept an owner invitation (FR-SC-17) | The invitee |
+| POST | `/api/scope-invitations/{invitationId}/decline` | Decline an owner invitation (FR-SC-17) | The invitee |
 
 ### 5.3 Application Endpoints
 
@@ -1192,7 +1232,7 @@ Notes on cascading behavior:
 | --------- | ------------- |
 | Person CRUD | FR-PE-01 through FR-PE-19 |
 | Application CRUD and authentication | FR-AP-01 through FR-AP-16 |
-| Scope CRUD & Ownership | FR-SC-01 through FR-SC-13 |
+| Scope CRUD & Ownership | FR-SC-01 through FR-SC-18 |
 | Role Assignment | FR-RO-01 through FR-RO-06 |
 | Authentication | FR-AU-01 through FR-AU-13 |
 | Password Recovery | FR-PR-01 through FR-PR-08 |

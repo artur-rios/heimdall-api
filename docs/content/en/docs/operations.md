@@ -463,10 +463,11 @@ unthrottled. The person update is limited whether or not it checks a password, a
 updates included. The verification-link resend (`POST /api/auth/resend-verification`) shares it too,
 because every call mails the account's address.
 
-**Per administrator — account creation.** The three endpoints that create a person with a password —
-`POST /api/persons`, `POST /api/scopes/{id}/persons` and `POST /api/scopes/{id}/owners` — each derive
-an Argon2id hash, and need nothing but an administrator's token. They are limited to **30 requests a
-minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
+**Per administrator — account creation.** The four endpoints that create a person with a password
+or invite an existing administrator — `POST /api/persons`, `POST /api/scopes/{id}/persons`,
+`POST /api/scopes/{id}/owners` and `POST /api/scopes/{id}/owners/{personId}` — the first three derive
+an Argon2id hash, and all need nothing but an administrator's token. They are limited to **30
+requests a minute per acting person and 30 a minute per address**, both at once; a rejection is the same `429`
 with `Retry-After`. Only administrators' access tokens count against the address, so other requests
 — without a token, or with a User's, a two-factor challenge or a subject-rights token — cannot use
 up an address administrators share. Thirty a minute is more than anyone creates by
@@ -636,6 +637,7 @@ powers over the accounts they manage are:
 | --- | --- |
 | A person's own: verification link asked for again (UC-15), two-factor setup code (UC-36, email method), notice to the previous address after an own email change (UC-08) | One budget per person across all three (FR-PE-16), so an own email change counts toward it and the new address's verification link, asked for straight after, waits out the cooldown: one per `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` (five minutes) and five in each day-long window, which starts at the first send, reserved by one conditional write before anything is sent. `429` "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, `429` "You have reached the limit for account emails. Try again later." once the window's five are spent; both carry `Retry-After`, the seconds until a send would be accepted (for the limit, the later of the window's end and the cooldown's) |
 | Verification link or password reset an administrator asks for (UC-51, UC-52) | One of each kind per person per cooldown, counting every link of that kind issued for them; not charged to the person's own budget, so an administrator can still help someone who has spent theirs |
+| Scope owner invitation notice (UC-21) and the answer to its inviter (UC-60, UC-61) | One notice per new invitation; none for a repeat while one is open, none for a new invitation to someone invited within the cooldown, and none to a processing-restricted invitee; the endpoint shares the account-creation limit (thirty a minute per administrator and per address). One answer per invitation, to whoever invited, unless they are deleted, anonymised or processing-restricted |
 | Password recovery requested anonymously (UC-12) | One reset link per person per cooldown — never longer than the link's lifetime — whoever asks; further requests send nothing and are answered as before |
 | Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), sent to the registered address; a person's own email change is refused while the email method is on (FR-PE-18) |
 | Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
@@ -710,7 +712,8 @@ of a setting here.
 default, removing password reset tokens, email verification tokens, and two-factor email codes that
 are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
 application credentials, self-registration attempt-notice budgets whose day has ended, and the
-records of used Google ID tokens past their expiry by the grace period. Each run removes at most a bounded batch per table,
+records of used Google ID tokens past their expiry by the grace period. It also removes scope owner
+invitations 90 days after they end, or 90 days after they expire if never answered. Each run removes at most a bounded batch per table,
 oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).
@@ -1108,6 +1111,7 @@ validates them offline must be given both keys for the same period.
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | | `300`; `0` → no cooldown; outside 0–86400 → `300` |
+| `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | | `604800` (seven days); outside 3600–2592000 → `604800` |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
