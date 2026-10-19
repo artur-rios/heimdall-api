@@ -3,10 +3,12 @@ using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for TokenSigningSecrets (TH-22): the signing secret is required, and it and any
-// previous secret must be at least 32 bytes of ASCII, or start-up stops with a message that names the
-// variable and never the value. An unset, blank or empty-quoted previous secret means no rotation is
-// in progress, so no key is made of it.
+// Unit tests for TokenSigningSecrets (TH-22, spec decision 5): the HS256 secret is optional legacy,
+// read only to accept tokens issued before the switch to ES256. An unset, blank or empty-quoted
+// secret makes no key; a previous secret without it stops start-up. A secret that is set, and any
+// previous secret, must be at least 32 bytes of ASCII, or start-up stops with a message that names
+// the variable and never the value. An unset, blank or empty-quoted previous secret means no rotation
+// is in progress, so no key is made of it.
 public class TokenSigningSecretsTests
 {
     private const string Secret = "unit-tests-current-signing-secret-0123456789";
@@ -66,13 +68,33 @@ public class TokenSigningSecretsTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public void GivenNoSecret_WhenParsed_ThenStartUpIsRefused(string? secret)
+    [InlineData("\"\"")]
+    [InlineData(" \"\" ")]
+    public void GivenNoSecret_WhenParsed_ThenNoLegacyKeyIsMade(string? secret)
     {
-        // Given / When
-        var error = Assert.Throws<InvalidOperationException>(() => TokenSigningSecrets.Parse(secret, null));
+        // Given — unset, or what an env file's empty value, quoted or not, reaches the process as
+
+        // When
+        var keys = TokenSigningSecrets.Parse(secret, null);
 
         // Then
-        Assert.Contains(TokenSigningSecrets.SecretVariable, error.Message);
+        Assert.Empty(keys);
+    }
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("\"\"")]
+    public void GivenAPreviousSecretWithoutTheSecret_WhenParsed_ThenStartUpIsRefusedNamingBoth(string? secret)
+    {
+        // Given / When
+        var error = Assert.Throws<InvalidOperationException>(() => TokenSigningSecrets.Parse(secret, PreviousSecret));
+
+        // Then
+        Assert.Contains($"'{TokenSigningSecrets.PreviousSecretVariable}'", error.Message);
+        Assert.Contains($"'{TokenSigningSecrets.SecretVariable}'", error.Message);
+        Assert.Contains("Refusing to start", error.Message);
+        Assert.DoesNotContain(PreviousSecret, error.Message);
     }
 
     [UnitFact]

@@ -1064,35 +1064,110 @@ Google sign-in also requires the scope itself to have it switched on, through
 `PUT /api/scopes/{id}/google-signin` — it is off by default. See
 [Google Sign-In](../flows/google-sign-in/).
 
-## Rotating the signing secret
+## Signing key
 
-`HEIMDALL_AUTH_TOKEN_SECRET` signs every token the API issues, so replacing it used to invalidate
-every token in flight the moment the new value took effect. `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`
-makes that a rotation instead: both secrets are accepted while only the current one signs.
+Heimdall signs every token it issues (person, subject-rights-only, two-factor challenge and
+application) with ES256, using the private key in `HEIMDALL_AUTH_SIGNING_KEY`. The key is one value
+per environment: the one-line base64 of a P-256 PKCS#8 PEM. Only Heimdall holds it; everything that
+verifies a token holds public keys only (Threat Model TH-43).
 
-1. Set `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` to the secret currently in use, set
-   `HEIMDALL_AUTH_TOKEN_SECRET` to a new one, and restart. Tokens issued before the restart keep
-   working; new ones are signed with the new secret.
-2. Wait one `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` — an hour by default — so that no token
-   signed with the old secret can still be alive.
-3. Clear `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and restart again.
+1. **Generate** the key:
+   `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`
+2. **Set** the variable to `base64 -w0 signing.pem`, keep the PEM only as long as you need it, and
+   delete the file. The key is a secret and goes in the environment's variable store, never in a
+   template or a log.
+3. **Publish.** Nothing to do: the public half is served at `GET /.well-known/jwks.json` as soon as
+   the API runs. Each token's header carries a `kid`, the RFC 7638 thumbprint of its key, derived
+   from the key and never configured.
 
-Do step 3 immediately when the reason for rotating is that the old secret leaked. Withdrawing a key
-invalidates its tokens at once, which is the point: signing everybody out is the correct response to
-a compromised key and the wrong response to a routine replacement.
+The API refuses to start without a P-256 private key in the variable, with a message that names the
+variable and never the value (NFR-31). At start-up it logs
+`Tokens: signed ES256 with key {KeyId}; published keys {KeyIds}; HS256 tokens {LegacyState}`, which
+is the line to check after a deploy: the key id it names is the one a consumer will see in the
+key set.
 
-Every instance must carry the same pair, so roll the change out to all of them before step 3 — an
-instance that has already dropped the old secret will refuse tokens its neighbours still accept.
+### Rotating the key
 
-Both secrets must be at least 32 bytes of ASCII, or the API refuses to start, naming the variable and
-never the value (NFR-31); `openssl rand -base64 48` gives 64. An empty previous variable, including
-one holding just `""`, means no previous key, so clearing it in step 3 is safe whatever the env file
-quoting.
+A rotation replaces the key without signing anyone out. The old key stays published and its tokens
+stay valid; it never signs again.
 
-Application tokens (UC-56) are signed with the same keys, so the same rotation covers them. Step 2
-waits out the longer of the two lifetimes, `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` and
-`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default), and a consumer that
-validates them offline must be given both keys for the same period.
+1. Set `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` to the value currently in
+   `HEIMDALL_AUTH_SIGNING_KEY`, set `HEIMDALL_AUTH_SIGNING_KEY` to a newly generated key, and
+   redeploy. The key set now lists both, the new one first. New tokens carry the new `kid`; tokens
+   issued before the redeploy keep working.
+2. Wait the longest token lifetime: the longest of `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` (an
+   hour by default), `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` (ten minutes by default) and
+   the two-factor challenge token's fixed ten minutes, so that no token signed with the old key can
+   still be alive.
+3. Clear `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` and redeploy again. The old key leaves the key set.
+
+Every instance must carry the same pair, so roll the change out to all of them before step 3: an
+instance that has already dropped the old key refuses tokens its neighbours still accept. Both
+variables are held to the same format, and an empty previous variable (including one holding just
+`""`) means no previous key.
+
+### Emergency rotation
+
+When the old key leaked, do not keep it: set `HEIMDALL_AUTH_SIGNING_KEY` to a new key, leave
+`HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` empty, and redeploy. Withdrawing a key invalidates its tokens
+at once, which signs everybody out. That is the correct response to a compromised key and the wrong
+one to a routine replacement. Then follow the [Incident Response Document](../requirements/incident-response-document/).
+
+Consumers learn of the new key without being told, but not at once. Fortuna keeps trusting the
+leaked key until a token with the new `kid` reaches it: that first token replaces Fortuna's cached
+key set, throttled to at most one fetch a minute, and Fortuna ignores `Cache-Control`, so the
+`max-age=300` on the key set does not matter. Any fresh sign-in issues a new-`kid` token, so sign in
+once through Fortuna right after the redeploy to make that happen promptly. Until then tokens with the
+new `kid` are refused; once it lands, tokens signed with the leaked key (unknown `kid`) are refused.
+When the leaked material is the HS256 secret instead, also remove `HEIMDALL_AUTH_TOKEN_SECRET` and
+`_PREVIOUS`.
+
+### Ending the overlap
+
+While `HEIMDALL_AUTH_TOKEN_SECRET` is set, Heimdall also accepts HS256 tokens issued before the
+upgrade, and issues none. It is not a 24-hour window: acceptance lasts as long as the secret is set,
+bounded per process. A legacy token is accepted only when it carries no `kid`, is HS256, was issued
+before the process started, and expires within one lifetime of that start, so every restart moves the
+bound forward. The 24 hours is the operator's rule for when the secret may go.
+
+Each accepted legacy token logs
+`Verified a legacy HS256 {Reader} token; HS256 tokens are accepted until HEIMDALL_AUTH_TOKEN_SECRET is removed`,
+without the token or the identity. Search the logs for the prefix `Verified a legacy HS256`. Remove the
+secret only when both hold: it is not before T0 + 24 h, where T0 is the 3.0.0 production deploy, and
+there has been no `Verified a legacy HS256` line for the longest token lifetime, with every consumer
+verifying through the key set. Then clear `HEIMDALL_AUTH_TOKEN_SECRET` and
+`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and redeploy. A previous secret without the current one stops
+start-up. Heimdall 4.0.0 stops reading both variables.
+
+In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's value, so Fortuna's
+references are removed first, and its 4.0.0 release must stop reading the secret, before Heimdall's
+value is unset. The 4.0.0 releases carry that procedure (Part E).
+
+### Rolling back to 2.x
+
+Rolling Heimdall back to 2.x signs out everything 3.0.0 issued: person and subject-rights sessions,
+challenges in flight, and application tokens, because 2.x verifies HS256 alone. At Fortuna 3.0.0,
+ES256 tokens keep verifying from its cached key set until they expire. After a Fortuna restart the
+key-set fetch fails, since 2.x serves no key set, and they are refused. HS256 tokens issued after the
+rollback verify through Fortuna's legacy secret. Fortuna must stay at 3.0.0 or later while Heimdall
+runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` is still set, because
+2.0.0's compose file requires it.
+
+### Consumers
+
+- **Where to fetch the keys.** Inside the platform, use the internal edge URL
+  `http://heimdall-api.<environment>:8080/.well-known/jwks.json`. Anyone else uses
+  `https://<PUBLIC_HOST>/.well-known/jwks.json`; the UI host does not serve it.
+- **Pin ES256.** Accept the `ES256` algorithm only, never the one a token's `alg` header names, and
+  resolve the key by `kid`.
+- **Refetch on an unknown `kid`**, at most once a minute, and replace the cached set with the one
+  fetched. The response says `Cache-Control: public, max-age=300` and `application/json`; the body
+  is a raw RFC 7517 key set, not the usual response envelope.
+- **Mind the budget.** The key set shares the `AuthAnonymous` rate limit with the other anonymous
+  credential endpoints: 10 requests a minute per address. A consumer that fetches only on an
+  unknown `kid` stays far below it.
+- Keep checking the issuer and the audience; the signature alone does not say a token was issued
+  for you.
 
 ## Environment variables at a glance
 
@@ -1100,12 +1175,14 @@ validates them offline must be given both keys for the same period.
 | --- | --- | --- |
 | `HEIMDALL_DATA_CONNECTIONSTRING` | ✅ | — |
 | `HEIMDALL_DATA_DATABASETYPE` | ✅ | — (`PostgreSql`) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | ✅ | — (at least 32 bytes of ASCII) |
+| `HEIMDALL_AUTH_SIGNING_KEY` | ✅ | — (base64 of a P-256 PKCS#8 PEM, one line) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | ✅ | — (must differ from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it) |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | ✅ | — |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty (when set, at least 32 bytes of ASCII) |
+| `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | | empty (set only while rotating; same format) |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | | empty (legacy HS256 secret; while set, at least 32 bytes of ASCII, and pre-3.0.0 tokens stay valid) |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty (legacy; refused without the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |

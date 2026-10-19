@@ -2,8 +2,11 @@ using System.Text;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Security;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
 using ArturRios.Util.Test.Attributes;
+using ArturRios.Util.WebApi.Security.Configuration;
+using ArturRios.Util.WebApi.Security.Enums;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -12,32 +15,43 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Unit tests for JwtApplicationTokenService (UC-56, UC-57, TH-34, TH-35): the token it issues carries
 // the application claims and no role, is accepted by its own validator under the current or the
 // previous key, and is refused for every other audience, kind, signature, algorithm or lifetime,
-// including none at all. Negative cases
-// mint their tokens directly, so each varies exactly one thing.
+// including none at all. Negative cases mint their tokens directly, so each varies exactly one thing.
 public class JwtApplicationTokenServiceTests
 {
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
     private const string ApplicationAudience = "heimdall-unit-applications";
-    // Longer than 512 bits, so an HS512 token signed with it is valid in every respect but its
-    // algorithm: IdentityModel refuses a shorter key for HS512 outright, which would hide whether
-    // the validator restricts the algorithm at all.
-    private const string CurrentSecret =
+    // The legacy HS256 secret, accepted during the overlap. Longer than 512 bits, so an HS512 token
+    // signed with it is valid in every respect but its algorithm: IdentityModel refuses a shorter key
+    // for HS512 outright, which would hide whether the validator restricts the algorithm at all.
+    private const string LegacySecret =
         "unit-tests-current-signing-secret-0123456789-long-enough-to-sign-hs512-too";
-    private const string PreviousSecret = "unit-tests-previous-signing-secret-0123456789";
 
     private static readonly ApplicationTokenSubject Subject =
         new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Billing Service");
 
-    private static JwtConfiguration Configuration(string issuer = Issuer) =>
-        new(3600, issuer, PersonAudience, CurrentSecret, [])
-        {
-            Keys = [new JwtKey("current", CurrentSecret), new JwtKey("previous", PreviousSecret)]
-        };
+    // A rotation in progress: the current ES256 key, and the previous one, whose private half is kept
+    // here only to mint the token it signed before the rotation.
+    private static readonly (JwtKey Key, string EnvValue) Previous = UnitSigningKeys.Create();
+    private static readonly TokenSigningKeys Keys =
+        TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, Previous.EnvValue);
 
-    private static JwtApplicationTokenService Service(string issuer = Issuer) =>
-        new(Configuration(issuer), new JwtHandler(),
-            new ApplicationTokenOptions(ApplicationAudience, TimeSpan.FromMinutes(10)));
+    private static readonly ApplicationTokenOptions Options = new(ApplicationAudience, TimeSpan.FromMinutes(10));
+
+    private static JwtConfiguration Configuration(string issuer = Issuer) =>
+        Keys.ApplyTo(new JwtConfiguration(3600, issuer, PersonAudience, string.Empty, []));
+
+    private static JwtApplicationTokenService Service(string issuer = Issuer)
+    {
+        var configuration = Configuration(issuer);
+        var mapper = new IdentityUserMapper(PersonTokenAudiences.From(configuration));
+        var legacy = new LegacyTokenValidator(
+            TokenSigningSecrets.Parse(LegacySecret, null), configuration, new JwtHandler(), mapper,
+            new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly },
+            new RecordingLogger<LegacyTokenValidator>(), DateTimeOffset.UtcNow.AddMinutes(-2));
+
+        return new JwtApplicationTokenService(configuration, new JwtHandler(), Options, legacy);
+    }
 
     private static Dictionary<string, object> ApplicationClaims() => new()
     {
@@ -51,10 +65,9 @@ public class JwtApplicationTokenServiceTests
     private static string Mint(
         IDictionary<string, object> claims,
         string audience = ApplicationAudience,
-        string secret = CurrentSecret,
+        SigningCredentials? credentials = null,
         DateTime? expires = null,
         string issuer = Issuer,
-        string algorithm = SecurityAlgorithms.HmacSha256,
         bool withLifetime = true)
     {
         var expiry = expires ?? DateTime.UtcNow.AddMinutes(10);
@@ -69,8 +82,7 @@ public class JwtApplicationTokenServiceTests
                 NotBefore = withLifetime ? expiry.AddMinutes(-20) : null,
                 IssuedAt = withLifetime ? expiry.AddMinutes(-20) : null,
                 Expires = withLifetime ? expiry : null,
-                SigningCredentials = new SigningCredentials(
-                    new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret)), algorithm)
+                SigningCredentials = credentials ?? UnitSigningKeys.Es256(Keys.Current)
             });
     }
 
@@ -130,7 +142,7 @@ public class JwtApplicationTokenServiceTests
     public async Task GivenATokenSignedWithThePreviousKey_WhenValidated_ThenItIsAccepted()
     {
         // Given — signed before a rotation (TH-22)
-        var token = Mint(ApplicationClaims(), secret: PreviousSecret);
+        var token = Mint(ApplicationClaims(), credentials: UnitSigningKeys.Es256(Previous.Key));
 
         // When
         var principal = await Service().ValidateAsync(token);
@@ -143,7 +155,7 @@ public class JwtApplicationTokenServiceTests
     public async Task GivenATokenSignedWithAnUnknownKey_WhenValidated_ThenItIsRefused()
     {
         // Given
-        var token = Mint(ApplicationClaims(), secret: "some-other-signing-secret-0123456789abcdef");
+        var token = Mint(ApplicationClaims(), credentials: UnitSigningKeys.Es256(UnitSigningKeys.Create().Key));
 
         // When
         var principal = await Service().ValidateAsync(token);
@@ -236,10 +248,16 @@ public class JwtApplicationTokenServiceTests
     }
 
     [UnitFact]
-    public async Task GivenATokenSignedHs512WithTheCurrentKey_WhenValidated_ThenItIsRefused()
+    public async Task GivenATokenSignedHs512WithTheLegacySecret_WhenValidated_ThenItIsRefused()
     {
-        // Given — the right key, but only HS256 is ever issued, so only HS256 is accepted
-        var token = Mint(ApplicationClaims(), algorithm: SecurityAlgorithms.HmacSha512);
+        // Given — during the overlap, the legacy secret and a lifetime a 2.x process could have issued
+        // (from fifteen minutes ago to five from now), but HS512: only HS256 was ever issued, so only
+        // HS256 is accepted on the legacy path
+        var token = Mint(
+            ApplicationClaims(),
+            credentials: new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(LegacySecret)), SecurityAlgorithms.HmacSha512),
+            expires: DateTime.UtcNow.AddMinutes(5));
 
         // When
         var principal = await Service().ValidateAsync(token);

@@ -70,7 +70,7 @@ flowchart LR
 | TB-2 | An authenticated caller → data belonging to a tenant | Every other tenant's persons, applications and permissions |
 | TB-3 | The API → its database | Password hashes, TOTP secrets, reset tokens, the key ring |
 | TB-4 | The API → Google | Whoever a Google ID token claims to be |
-| TB-5 | An operator → configuration, logs and images; a service holding the signing key → the API | The signing secret, the master account, delivered tokens |
+| TB-5 | An operator → configuration, logs and images; an operator holding the signing key → the API; consumers hold public keys only | The signing key, the master account, delivered tokens |
 
 ## 4. TB-1 — Anonymous internet to the authentication endpoints
 
@@ -428,33 +428,35 @@ FR-GO-07 would not expect it.
 
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
-| TH-22 | Minting a valid token for any identity, using the signing secret | The secret is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` keeps the retired key acceptable while the new one signs. Start-up refuses a current or previous secret shorter than 32 bytes or holding a character outside ASCII, naming the variable and never the value, and an empty previous secret is no key at all (NFR-31); tokens are accepted under HS256 only (`ArturRios.Jwt` 1.3.0) | Test + inspection | Low |
-| TH-43 | Creating a token that Heimdall accepts, by a service that holds the signing key | Every reader of a Heimdall token checks, beside the signature and lifetime, that it names Heimdall's issuer and exactly one of the audiences that reader accepts (NFR-30) | Test | Medium: a service holding the signing key can create tokens; asymmetric signing is planned |
+| TH-22 | Minting a valid token for any identity, using the signing key | The key is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` keeps the retired key published and its tokens acceptable while the new one signs. Start-up refuses a missing or unusable key, current or previous, naming the variable and never the value, and an empty previous key is no key at all (NFR-31); each configuration accepts its own algorithm only, so a token's `alg` header never chooses the key type. While the legacy secret is set, the same refusals apply to it | Test + inspection | Low |
+| TH-43 | Creating a token that Heimdall accepts, by a service that holds the signing key | Every reader of a Heimdall token checks, beside the signature and lifetime, that it names Heimdall's issuer and exactly one of the audiences that reader accepts (NFR-30) | Test | Heimdall's tokens are signed ES256 and verified with the public keys at `/.well-known/jwks.json`, so a consumer cannot create one. Residual: Medium until the shared secret is removed, because while `HEIMDALL_AUTH_TOKEN_SECRET` is set, any service holding it can still create an HS256 token Heimdall accepts. Heimdall accepts it for as long as the secret is set (bounded per process start); the operator removes it no earlier than 24 hours after the 3.0.0 production deploy and once no legacy token is being verified, and TH-43 closes in 4.0.0 (Part E) |
 | TH-23 | Reading a delivered verification, reset or 2FA code — or a recipient address — out of the logs | Production fails startup when email delivery is unconfigured, rather than falling back to logging the token; and no log statement writes an address in any environment, a reference to it instead (NFR-22) | Inspection + test | Medium |
 | TH-24 | Using the seeded master account | Credentials are supplied by environment and required at startup | Inspection | Medium |
 | TH-42 | Reading personal data or request details from an internet-facing instance's diagnostics: EF Core's parameter logging and detailed errors, on in every environment but Production, and the developer exception page, on in Development and Local | On an instance whose configuration names a public host — `PUBLIC_HOST`, `UI_HOST`, the verification or reset URL, or a CORS origin naming anything but this machine — all three are off, by one decision taken at start-up, unless `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true` (NFR-28). Setting it is the operator's statement, in the deployment's own configuration, that the instance holds made-up people only (Operations & Infrastructure Document §0.2). Either way start-up logs a warning naming the hosts; nothing refuses to start | Test + inspection | Low: the API cannot check the statement, and an instance reachable from outside whose configuration names no public host is taken as private. What such an instance logs about delivered codes is TH-23's |
 
-TH-43 follows from symmetric signing; asymmetric signing is planned, and until then the key is
-handled as TH-22 describes.
+TH-43 followed from symmetric signing, which let every verifier mint tokens. Tokens are now signed
+ES256 and consumers hold public keys only. Until the shared secret is removed (heimdall-api 4.0.0),
+the legacy secret is handled as TH-22 describes and the residual stands. Heimdall accepts legacy
+HS256 tokens for as long as the secret is set, bounded per process start (issued before it, expiring
+within one lifetime of it), not for a fixed 24 hours.
 
 **TH-22 was Medium because there was no rotation story, and it now has one.** A leaked signing
-secret is total — it mints any identity at any role — and the only remediation available was a hard
-cutover: change the secret, and every token in flight dies at once. A remediation that is also an
-outage is one nobody performs pre-emptively, which is why the secret was in practice never rotated.
+key is total: it mints any identity at any role. With one shared secret the only remediation was a
+hard cutover that killed every token in flight, an outage nobody performs pre-emptively, which is
+why the secret was in practice never rotated. The ES256 key is held by Heimdall alone, so a leak
+means Heimdall's own deployment, not any verifier.
 
-`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` is the other half. Both secrets are handed to
-`JwtConfiguration.Keys`, so a token signed with either is accepted while new tokens are signed with
-the current one. Rotating is three steps and no outage: set the previous variable to the secret in
-use, set the current variable to a new one, restart; then an hour later — one token lifetime — clear
-the previous variable and restart again. Withdrawing a key still invalidates its tokens immediately,
-which is what makes the shortened version of that procedure the right response to a leak.
+`HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is the other half. Both public keys are published and a token
+signed with either is accepted while new tokens are signed with the current one. Rotating is three
+steps and no outage: set the previous variable to the key in use, set the current variable to a new
+one, redeploy; then, once the longest token lifetime has passed, clear the previous variable and
+redeploy again. Withdrawing a key still invalidates its tokens immediately, which is what makes the
+emergency version of that procedure (no previous key) the right response to a leak.
 
-No `kid` is written to the tokens, deliberately. The library supports it, but the identifiers here are
-positional — today's "current" is tomorrow's "previous" — so stamping one would make every token
-issued before a rotation name the wrong key afterwards and be refused, which is precisely the failure
-this closes. Deriving stable identifiers from the secrets instead would publish something computed
-from a signing key on every token, a poor trade for saving one HMAC against two keys. Validation
-tries both.
+Every token carries a `kid`, the RFC 7638 thumbprint of its key. It is derived from the key and
+never configured, so it stays stable across a rotation: "current" becoming "previous" does not
+change which key a token names, and a consumer resolves the key by `kid` from the published set.
+The thumbprint is computed from the public half, so it discloses nothing about the private key.
 
 **TH-23 now covers the address as well as the token, and the two halves differ in scope.** The
 token control is environmental: Production refuses to start with delivery unconfigured, so the
@@ -556,7 +558,7 @@ this document has been worth.
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
 | TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists, `public_id` immutable on the identity tables and every table they are checked against, never shared by a new row of any of them, and never one the trail names on a new identity — see §6.1. Closed against the API's credentials where the two-role setup of NFR-29 is applied (TH-18) |
-| TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 |
+| TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 (2.x; superseded by the ES256 key in 3.0.0) |
 | TH-35 | Finding: Heimdall's middleware validates signature and lifetime only, not the audience (`ArturRios.Jwt` `IsTokenValidAsync`), so an application token, signed with the person tokens' keys, would pass it | Response: `IdentityUserMapper` refuses any token carrying `tokenKind`; a functional test pins an application token's `401` on a person endpoint. It also holds the challenge and subject-rights audiences to their claims, so a token whose audience and claims disagree is refused too |
 | TH-36 | A person's token outlived a password reset, an email change and a change of second factor, and an address change or a new second factor needed no proof of identity beyond a token | The security stamp (FR-AU-11): tokens are now revoked on credential events, the one that made the change included. An own email change needs the password and the active second factor (FR-PE-14), adding a second factor needs the password (FR-2F-18), and the previous address is told of any email change (FR-PE-15). Offline consumers remain bounded by the token lifetime |
 

@@ -335,7 +335,7 @@ Then fill it in. These are **required** — the API fails to start without them:
 | --- | --- |
 | `HEIMDALL_DATA_CONNECTIONSTRING` | A PostgreSQL connection string |
 | `HEIMDALL_DATA_DATABASETYPE` | `PostgreSql` |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | The JWT signing secret: at least 32 bytes, ASCII only. Startup throws if it is unset, shorter or holds another character, naming the variable and never the value |
+| `HEIMDALL_AUTH_SIGNING_KEY` | The ES256 private key every token is signed with: the one-line base64 of a P-256 PKCS#8 PEM (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`). Startup throws if it is unset or unusable, naming the variable and never the value |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | The `aud` of application tokens (UC-56). Startup throws if it is unset, or equal to `HEIMDALL_AUTH_TOKEN_AUDIENCE`: a distinct audience is what stops a consumer taking an application token for a person's. `docker-compose.yml` defaults it to `heimdall-applications` and the `docker/*.env.example` templates preset that value; the Web API's `Environments/.env` holds only a placeholder |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | Credentials for the first system administrator. Only consulted when the database holds no system admin yet, but the seeder refuses to start without them in that case |
 
@@ -345,7 +345,9 @@ The rest are optional and fall back to a default:
 | --- | --- |
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (set only while rotating the signing secret, to a value held to the same rules as the secret) |
+| `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | Empty (set only while rotating the signing key, to the key being retired, in the same format: its public half stays published and its tokens stay valid, but it never signs) |
+| `HEIMDALL_AUTH_TOKEN_SECRET` | Empty. Optional, legacy: the former HS256 secret. While it is set, HS256 tokens issued before 3.0.0 are still accepted (none is issued); at least 32 bytes, ASCII only |
+| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (legacy; refused at start-up when set without the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | `600` (10 minutes) |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
@@ -522,7 +524,7 @@ Then, from the repository root:
 docker compose --env-file docker/local.env up -d --build
 ```
 
-The real env files are gitignored: they hold the database password, the token signing secret and the
+The real env files are gitignored: they hold the database password, the token signing key and the
 master user's credentials.
 
 **Development, homologation and production** share one Ubuntu VPS and are deployed by
@@ -530,7 +532,7 @@ master user's credentials.
 `stacks/heimdall-api.proxy.yml` on top of this Compose file — no host port, Traefik in front with a
 wildcard certificate, the project named `heimdall-api-<environment>` — and reads the env file from
 `/etc/yggdrasil/<environment>/heimdall-api.env` on the VPS, filled in from the matching template.
-Each environment has its own database, login, signing secret and master user. Development and
+Each environment has its own database, login, signing key and master user. Development and
 homologation run only while they are used: a deploy leaves a stopped environment stopped, and
 `scripts/ygg.sh env start <environment>` on the VPS turns one on (`env stop` turns it off again).
 

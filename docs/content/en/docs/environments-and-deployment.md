@@ -133,21 +133,28 @@ Copy-Item docker/local.env.example docker/local.env -Confirm
 filled in silently un-fills it, and the next `up` fails with `required variable ... is missing a
 value` — which reads like the file was never written rather than like it was overwritten.
 
-`docker/local.env` is gitignored — it holds the database password, the token signing secret and the
+`docker/local.env` is gitignored — it holds the database password, the token signing key and the
 master user's credentials. Open it and fill in at least:
 
 | Variable | Value |
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | The login from step 2 |
 | `DB_NAME` | `heimdall_local` |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value, unique to this environment: at least 32 bytes of ASCII, or the API will not start (`openssl rand -base64 48`) |
+| `HEIMDALL_AUTH_SIGNING_KEY` | Required, unique to this environment: the one-line base64 of a P-256 PKCS#8 PEM, or the API will not start (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`). `HEIMDALL_AUTH_TOKEN_SECRET` is optional and legacy; leave it empty on a new install |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
 
-`DB_HOST=host.docker.internal` is already correct for Docker Desktop. To generate the secret:
+`DB_HOST=host.docker.internal` is already correct for Docker Desktop. To generate the signing key, on one line:
+
+```bash
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | base64 -w0
+```
+
+On Windows, write the PEM with OpenSSL and encode it:
 
 ```powershell
-[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("signing.pem"))
 ```
 
 Every other variable has a default that suits a local deployment: Swagger and the developer exception
@@ -365,7 +372,7 @@ Replace `example.com` with the real domain, then fill in at least:
 | --- | --- |
 | `DB_USER` / `DB_PASSWORD` | That environment's runtime login (`…_svc`) from step 2 |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | Optional: the owner role's whole connection string, when the environment has one ([Database roles](../operations/#database-roles--th-18)) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | A long random value of its own (`openssl rand -base64 48`), at least 32 bytes of ASCII or the API will not start — every service that validates Heimdall's tokens with this key is given the same value |
+| `HEIMDALL_AUTH_SIGNING_KEY` | Required, and a key of its own, never another environment's: the one-line base64 of a P-256 PKCS#8 PEM (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`), or the API will not start. Only Heimdall holds it: consumers verify with the public keys at `/.well-known/jwks.json`. `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` are optional and legacy: keep them until no legacy token is verified and at least 24 hours have passed since the 3.0.0 production deploy, then remove them ([Operations](../operations/#ending-the-overlap)) |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it: the API will not start otherwise. The templates preset `heimdall-applications`. `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` is optional and defaults to `600` |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | That environment's first system administrator, seeded on the first run against its empty database |
 | `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | Production only — it refuses to start without them |
@@ -455,7 +462,8 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | --- | --- | --- |
 | `set DB_USER in the env file` at `up` | Compose interpolation found the variable empty | Fill it in — the `:?` markers in the Compose file fail loudly rather than starting a container that cannot connect |
 | Container restarts; log ends at `entrypoint: applying EF Core migrations...` | The bundle cannot reach PostgreSQL | Re-run the two probes above; the address in the error names which side is wrong |
-| Container restarts; log ends with `Environment variable 'HEIMDALL_AUTH_TOKEN_SECRET…' is … bytes` or `… holds characters outside ASCII` | A signing secret, current or previous, shorter than 32 bytes or with a character outside ASCII (NFR-31) | Replace it with `openssl rand -base64 48`; the message names the variable, never the value. Leave the previous one empty when not rotating |
+| `set HEIMDALL_AUTH_SIGNING_KEY in the env file` at `up`; or the container restarts and its log ends with `Environment variable 'HEIMDALL_AUTH_SIGNING_KEY' is unset`, `… holds a PEM itself`, `… is not the base64 of a PEM` or `… is not a P-256 private key` | The signing key is missing, is the PEM instead of its base64, is the base64 of something other than the PEM text (such as the key's DER), or is not a P-256 private key (NFR-31) | Generate one with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem` and set the variable to `base64 -w0 signing.pem`; the message names the variable, never the value. `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is held to the same format and stays empty when not rotating |
+| Container restarts; log ends with `Environment variable 'HEIMDALL_AUTH_TOKEN_SECRET…' is … bytes`, `… holds characters outside ASCII` or `Environment variable 'HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS' is set without 'HEIMDALL_AUTH_TOKEN_SECRET'` | A legacy HS256 secret, current or previous, shorter than 32 bytes or with a character outside ASCII, or a previous one set without the current (NFR-31) | Replace it with `openssl rand -base64 48`, or remove both once the overlap has ended; the message names the variable, never the value. Leave the previous one empty, and never set it without the current one |
 | Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Re-run the grants in [Database roles](../operations/#database-roles--th-18) |
 | No developer exception page, and no EF parameter values in the log | Expected when the instance serves a public host: NFR-28 keeps them off, and start-up logs one warning naming the hosts | Set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` only if the environment holds made-up people and the diagnostics are wanted; see [Operations](../operations/#diagnostics-on-a-public-host--nfr-28) |
 | `no pg_hba.conf entry for host "..."` | The connection arrives from an address no rule covers | Add a `host` rule for that address, then `systemctl reload postgresql` |

@@ -117,7 +117,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
             600,
             issuer,
             audience,
-            Environment.GetEnvironmentVariable(TokenSigningSecrets.SecretVariable)!,
+            string.Empty,
             new Dictionary<string, string>
             {
                 [ApplicationTokenClaims.TokenKind] = ApplicationTokenClaims.ApplicationKind,
@@ -125,7 +125,12 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
                 [ApplicationTokenClaims.ScopeId] = scope.PublicId.ToString(),
                 [ApplicationTokenClaims.CredentialId] = credential.PublicId.ToString(),
                 [ApplicationTokenClaims.Name] = application.Name
-            }));
+            })
+        {
+            Algorithm = JwtAlgorithms.ES256,
+            Keys = [PostgresFixture.SigningKey],
+            SigningKeyId = PostgresFixture.SigningKey.Id
+        });
 
     /// <summary>A full person token under two audiences, Heimdall's first — which Heimdall never issues.</summary>
     private static string TwoAudienceToken(Person person) =>
@@ -140,10 +145,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
                 new IdentityUserMapper(TestTokens.Audiences).ToClaims(FullIdentity(person))
                     .Select(claim => new System.Security.Claims.Claim(claim.Key, claim.Value))),
             Expires = DateTime.UtcNow.AddMinutes(10),
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(
-                    Environment.GetEnvironmentVariable(TokenSigningSecrets.SecretVariable)!)),
-                SecurityAlgorithms.HmacSha256)
+            SigningCredentials = UnitSigningKeys.Es256(PostgresFixture.SigningKey)
         });
 
     private Task<HttpOutput<DataOutput<object?>?>> ReadAsync(Person person) =>
