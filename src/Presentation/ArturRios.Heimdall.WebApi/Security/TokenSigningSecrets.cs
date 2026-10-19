@@ -1,14 +1,23 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ArturRios.Jwt;
 
 namespace ArturRios.Heimdall.WebApi.Security;
 
 /// <summary>
-///     The signing secret, and the previous one during a rotation (Threat Model TH-22), read once at
-///     start-up from <c>HEIMDALL_AUTH_TOKEN_SECRET</c> and <c>HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS</c>
-///     and turned into the keys tokens are signed and validated with.
+///     The legacy HS256 secret, and the previous one during a rotation (Threat Model TH-22), read once
+///     at start-up from <c>HEIMDALL_AUTH_TOKEN_SECRET</c> and <c>HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS</c>
+///     and turned into the keys <see cref="LegacyTokenValidator" /> verifies HS256 tokens with.
 /// </summary>
 /// <remarks>
+///     <para>
+///         <b>Legacy, and optional.</b> Heimdall signs every token ES256 (<see cref="TokenSigningKeys" />)
+///         and never signs with these secrets. They are read only so that, during the overlap after
+///         the switch, the HS256 tokens Heimdall issued earlier stay valid until they expire (spec
+///         decision 5). An unset secret means the overlap is over: no key is made, and every HS256
+///         token is refused. A previous secret set without the secret is a half-removed
+///         configuration, so it stops start-up rather than being ignored.
+///     </para>
 ///     <para>
 ///         <b>Why a secret is refused rather than used.</b> HMAC-SHA256 needs a key at least as long
 ///         as its 256-bit output, so a secret shorter than <see cref="MinimumBytes" /> bytes is
@@ -19,21 +28,22 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         variable and never its value, as every other unusable security setting does.
 ///     </para>
 ///     <para>
-///         <b>An empty previous secret is no previous secret.</b> Unset, blank, or two double quotes
-///         (<c>""</c>, what an env file's empty quoted value becomes when nothing strips the quotes)
-///         all mean "no rotation in progress", so nothing is passed to the library as a key. A
-///         previous secret equal to the current one is ignored as well: the same value under two ids
-///         says nothing has been rotated yet. Any other previous secret is held to the same rules as
-///         the current one.
+///         <b>An empty secret is no secret.</b> Unset, blank, or two double quotes (<c>""</c>, what an
+///         env file's empty quoted value becomes when nothing strips the quotes) all mean "not
+///         configured", for either variable. An empty previous secret means no rotation is in
+///         progress, so nothing is passed to the library as a key. A previous secret equal to the
+///         current one is ignored as well: the same value under two ids says nothing has been rotated
+///         yet. Any other previous secret is held to the same rules as the current one.
 ///     </para>
 ///     <para>
-///         The keys carry ids because <see cref="JwtKey" /> requires them, but no <c>kid</c> is
-///         written to the tokens; see <c>Startup.BuildJwtConfiguration</c> for why.
+///         The keys carry ids because <see cref="JwtKey" /> requires them, but Heimdall never wrote a
+///         <c>kid</c> to an HS256 token, so <see cref="LegacyTokenValidator" /> refuses any HS256
+///         token that carries one.
 ///     </para>
 /// </remarks>
 public static class TokenSigningSecrets
 {
-    /// <summary>The variable carrying the secret new tokens are signed with. Required.</summary>
+    /// <summary>The variable carrying the legacy secret HS256 tokens were signed with. Optional.</summary>
     public const string SecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
 
     /// <summary>The variable carrying the secret a rotation has moved off but not yet withdrawn. Optional.</summary>
@@ -42,34 +52,39 @@ public static class TokenSigningSecrets
     /// <summary>The shortest secret accepted, in bytes: the 256-bit output of HMAC-SHA256.</summary>
     public const int MinimumBytes = 32;
 
-    /// <summary>The id of the key new tokens are signed with.</summary>
+    /// <summary>The id of the key made of the legacy secret.</summary>
     public const string CurrentKeyId = "current";
 
-    /// <summary>The id of the key a rotation still accepts.</summary>
+    /// <summary>The id of the key made of the previous legacy secret.</summary>
     public const string PreviousKeyId = "previous";
 
     /// <summary>
-    ///     A previous secret's value that means "none": two double quotes, left behind when an env
-    ///     file's empty quoted value reaches the process with its quotes intact.
+    ///     A secret's value that means "none": two double quotes, left behind when an env file's empty
+    ///     quoted value reaches the process with its quotes intact.
     /// </summary>
     private const string EmptyQuotedValue = "\"\"";
 
     /// <summary>
     ///     Builds the keys from raw values: the current secret first, then the previous one when a
-    ///     rotation is in progress.
+    ///     rotation is in progress; none when the secret is not set.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    ///     <paramref name="secret" /> is blank, either secret is shorter than <see cref="MinimumBytes" />
-    ///     bytes, or either holds a character outside ASCII. The message names the variable and never
-    ///     the value.
+    ///     <paramref name="previousSecret" /> is set without <paramref name="secret" />, either secret is
+    ///     shorter than <see cref="MinimumBytes" /> bytes, or either holds a character outside ASCII. The
+    ///     message names the variable and never the value.
     /// </exception>
     public static IReadOnlyList<JwtKey> Parse(string? secret, string? previousSecret)
     {
-        if (string.IsNullOrWhiteSpace(secret))
+        if (!IsSet(secret))
         {
-            throw new InvalidOperationException(
-                $"Environment variable '{SecretVariable}' is unset. The API cannot validate tokens " +
-                "without a signing secret.");
+            if (IsSet(previousSecret))
+            {
+                throw new InvalidOperationException(
+                    $"Environment variable '{PreviousSecretVariable}' is set without '{SecretVariable}'. " +
+                    "Set both or neither. Refusing to start.");
+            }
+
+            return [];
         }
 
         EnsureUsable(SecretVariable, secret);
@@ -78,17 +93,17 @@ public static class TokenSigningSecrets
 
         if (IsSet(previousSecret) && previousSecret != secret)
         {
-            EnsureUsable(PreviousSecretVariable, previousSecret!);
-            keys.Add(new JwtKey(PreviousKeyId, previousSecret!));
+            EnsureUsable(PreviousSecretVariable, previousSecret);
+            keys.Add(new JwtKey(PreviousKeyId, previousSecret));
         }
 
         return keys;
     }
 
-    /// <summary>Whether a previous secret is configured at all: neither blank nor an empty quoted value.</summary>
-    private static bool IsSet(string? previousSecret) =>
-        !string.IsNullOrWhiteSpace(previousSecret) &&
-        !string.Equals(previousSecret.Trim(), EmptyQuotedValue, StringComparison.Ordinal);
+    /// <summary>Whether a secret is configured at all: neither blank nor an empty quoted value.</summary>
+    private static bool IsSet([NotNullWhen(true)] string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        !string.Equals(value.Trim(), EmptyQuotedValue, StringComparison.Ordinal);
 
     private static void EnsureUsable(string variable, string value)
     {
