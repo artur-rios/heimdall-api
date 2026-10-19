@@ -87,12 +87,12 @@ public class SigningKeyRotationReaderTests
         // Given — a rotation in progress: a new current key, and the previous one's public half
         var previous = UnitSigningKeys.Create();
         var keys = TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, previous.EnvValue);
-        var readers = new UnitTokenReaders([], keys);
-        var challenge = readers.TokenFor(LegacyTokenValidator.ChallengeReader, UnitSigningKeys.Es256(previous.Key));
+        var readers = new UnitTokenReaders(keys);
+        var challenge = readers.TokenFor(UnitTokenReaders.ChallengeReader, UnitSigningKeys.Es256(previous.Key));
         Assert.Equal(keys.Previous!.Id, new JsonWebToken(challenge).Kid);
 
         // When
-        var accepted = await readers.AcceptsAsync(LegacyTokenValidator.ChallengeReader, challenge);
+        var accepted = await readers.AcceptsAsync(UnitTokenReaders.ChallengeReader, challenge);
 
         // Then
         Assert.True(accepted);

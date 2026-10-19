@@ -16,15 +16,13 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
 /// <summary>
 ///     Heimdall's issuers and its three token readers, wired as <c>Startup</c> wires them: over one
-///     ES256 configuration built through <see cref="TokenSigningKeys.ApplyTo" />, and one
-///     <see cref="LegacyTokenValidator" /> holding the legacy secrets given (none: the overlap is over)
-///     and a known process start.
+///     ES256 configuration built through <see cref="TokenSigningKeys.ApplyTo" />.
 /// </summary>
 /// <remarks>
-///     The process started two minutes ago, in whole seconds as a token's NumericDate claims are, so a
-///     test can mint a legacy token issued before it, or after it, that is still live now, even under
-///     the challenge token's ten-minute lifetime. <see cref="TokenFor" /> mints, for each reader, a
-///     token right in every respect but the key it is signed with.
+///     The process is taken to have started two minutes ago, in whole seconds as a token's NumericDate
+///     claims are, so a test can mint the token a 2.x process issued before it that is still live now,
+///     even under the challenge token's ten-minute lifetime. <see cref="TokenFor" /> mints, for each
+///     reader, a token right in every respect but the key it is signed with.
 /// </remarks>
 public sealed class UnitTokenReaders
 {
@@ -37,13 +35,19 @@ public sealed class UnitTokenReaders
     /// <summary>The application audience.</summary>
     public const string ApplicationAudience = "heimdall-tests-applications";
 
+    /// <summary>The bearer reader's name: <see cref="PersonTokenValidator" />.</summary>
+    public const string BearerReader = "bearer";
+
+    /// <summary>The challenge reader's name: <see cref="JwtTwoFactorChallengeTokenIssuer" />.</summary>
+    public const string ChallengeReader = "challenge";
+
+    /// <summary>The application reader's name: <see cref="JwtApplicationTokenService" />.</summary>
+    public const string ApplicationReader = "application";
+
     /// <summary>A person token's lifetime: <c>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</c>'s default.</summary>
     public static readonly TimeSpan PersonLifetime = TimeSpan.FromHours(1);
 
-    /// <summary>
-    ///     An application token's lifetime: twenty minutes, distinct from both other kinds', so a test
-    ///     can tell which lifetime a reader bounds a legacy token by.
-    /// </summary>
+    /// <summary>An application token's lifetime: twenty minutes, distinct from both other kinds'.</summary>
     public static readonly TimeSpan ApplicationLifetime = TimeSpan.FromMinutes(20);
 
     /// <summary>The person every person-shaped token names.</summary>
@@ -55,12 +59,10 @@ public sealed class UnitTokenReaders
     /// <summary>The application every application-shaped token names.</summary>
     public readonly ApplicationTokenSubject Subject = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Billing");
 
-    /// <param name="legacySecrets">The legacy keys, from <see cref="TokenSigningSecrets.Parse" />.</param>
     /// <param name="keys">The signing keys; omitted, a fresh key and no previous one.</param>
     /// <param name="issuer">The configured issuer.</param>
     /// <param name="personAudience">The configured person audience.</param>
     public UnitTokenReaders(
-        IReadOnlyList<JwtKey> legacySecrets,
         TokenSigningKeys? keys = null,
         string issuer = DefaultIssuer,
         string personAudience = DefaultPersonAudience)
@@ -75,16 +77,14 @@ public sealed class UnitTokenReaders
         var handler = new JwtHandler();
         var options = new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly };
 
-        Legacy = new LegacyTokenValidator(
-            legacySecrets, Configuration, handler, Mapper, options, Log, ProcessStart);
         Bearer = new PersonTokenValidator(
-            new JwtTokenValidator(Configuration, handler, Mapper, options), Legacy, Configuration, Audiences);
-        Challenge = new JwtTwoFactorChallengeTokenIssuer(Configuration, Audiences, handler, Mapper, Legacy);
-        Application = new JwtApplicationTokenService(Configuration, handler, ApplicationOptions, Legacy);
+            new JwtTokenValidator(Configuration, handler, Mapper, options), Configuration, Audiences);
+        Challenge = new JwtTwoFactorChallengeTokenIssuer(Configuration, Audiences, handler, Mapper);
+        Application = new JwtApplicationTokenService(Configuration, handler, ApplicationOptions);
         AuthIssuer = new JwtAuthTokenIssuer(Configuration, Audiences, handler, Mapper, new UnreadPermissions());
     }
 
-    /// <summary>When the process started: two minutes ago, in whole seconds.</summary>
+    /// <summary>When the process is taken to have started: two minutes ago, in whole seconds.</summary>
     public DateTimeOffset ProcessStart { get; } =
         DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeSeconds());
 
@@ -98,11 +98,6 @@ public sealed class UnitTokenReaders
     public IdentityUserMapper Mapper { get; }
 
     public ApplicationTokenOptions ApplicationOptions { get; }
-
-    /// <summary>What <see cref="Legacy" /> logs: one line per acceptance a reader records.</summary>
-    public RecordingLogger<LegacyTokenValidator> Log { get; } = new();
-
-    public LegacyTokenValidator Legacy { get; }
 
     /// <summary>The bearer reader.</summary>
     public PersonTokenValidator Bearer { get; }
@@ -123,19 +118,20 @@ public sealed class UnitTokenReaders
     public DateTime At(TimeSpan sinceStart) => ProcessStart.Add(sinceStart).UtcDateTime;
 
     /// <summary>
-    ///     The claims and the audience a token must carry to be read by <paramref name="reader" /> (one of
-    ///     <see cref="LegacyTokenValidator" />'s reader names): the person's under the person audience,
-    ///     the challenge's under the challenge audience, or the application's under its own.
+    ///     The claims and the audience a token must carry to be read by <paramref name="reader" />
+    ///     (<see cref="BearerReader" />, <see cref="ChallengeReader" /> or <see cref="ApplicationReader" />):
+    ///     the person's under the person audience, the challenge's under the challenge audience, or the
+    ///     application's under its own.
     /// </summary>
     public (Dictionary<string, object> Claims, string Audience) PayloadFor(string reader) => reader switch
     {
-        LegacyTokenValidator.BearerReader => (ClaimsOf(Mapper.ToClaims(Person)), Audiences.Person),
-        LegacyTokenValidator.ChallengeReader => (ClaimsOf(Mapper.ToClaims(
+        BearerReader => (ClaimsOf(Mapper.ToClaims(Person)), Audiences.Person),
+        ChallengeReader => (ClaimsOf(Mapper.ToClaims(
             new IdentityUser(Person.Id, Person.RoleId)
             {
                 MfaPending = true, ChallengeId = ChallengeId, SecurityStamp = Person.SecurityStamp
             })), Audiences.TwoFactorChallenge),
-        LegacyTokenValidator.ApplicationReader => (new Dictionary<string, object>
+        ApplicationReader => (new Dictionary<string, object>
         {
             [ApplicationTokenClaims.TokenKind] = ApplicationTokenClaims.ApplicationKind,
             [ApplicationTokenClaims.Id] = Subject.ApplicationId.ToString(),
@@ -150,14 +146,9 @@ public sealed class UnitTokenReaders
     ///     A token <paramref name="reader" /> would read, signed with <paramref name="credentials" />:
     ///     its payload, under the configured issuer unless another is named, issued and valid from three
     ///     minutes before the process started, and expiring eight minutes after it, within every kind's
-    ///     lifetime. Only the key, or an instant a test names, can then make a reader refuse it.
+    ///     lifetime. Only the key can then make a reader refuse it.
     /// </summary>
-    public string TokenFor(
-        string reader,
-        SigningCredentials credentials,
-        string? issuer = null,
-        TimeSpan? issuedAt = null,
-        TimeSpan? expires = null)
+    public string TokenFor(string reader, SigningCredentials credentials, string? issuer = null)
     {
         var (claims, audience) = PayloadFor(reader);
 
@@ -166,9 +157,9 @@ public sealed class UnitTokenReaders
             claims,
             issuer ?? Configuration.Issuer,
             audience,
-            At(issuedAt ?? TimeSpan.FromMinutes(-3)),
             At(TimeSpan.FromMinutes(-3)),
-            At(expires ?? TimeSpan.FromMinutes(8)));
+            At(TimeSpan.FromMinutes(-3)),
+            At(TimeSpan.FromMinutes(8)));
     }
 
     /// <summary>
@@ -178,12 +169,12 @@ public sealed class UnitTokenReaders
     /// </summary>
     public async Task<bool> AcceptsAsync(string reader, string token) => reader switch
     {
-        LegacyTokenValidator.BearerReader =>
+        BearerReader =>
             (await Bearer.ValidateAsync(token, new DefaultHttpContext())).User?.Id == Person.Id,
-        LegacyTokenValidator.ChallengeReader =>
+        ChallengeReader =>
             await Challenge.ValidateAsync(token) ==
             new TwoFactorChallengePrincipal(Person.Id, ChallengeId, Person.SecurityStamp),
-        LegacyTokenValidator.ApplicationReader =>
+        ApplicationReader =>
             await Application.ValidateAsync(token) is { } principal &&
             (principal.ApplicationId, principal.ScopeId, principal.CredentialId) ==
             (Subject.ApplicationId, Subject.ScopeId, Subject.CredentialId),
@@ -196,16 +187,11 @@ public sealed class UnitTokenReaders
     /// </summary>
     public async Task<bool> RefusesAsync(string reader, string token) => reader switch
     {
-        LegacyTokenValidator.BearerReader => (await Bearer.ValidateAsync(token, new DefaultHttpContext())).User is null,
-        LegacyTokenValidator.ChallengeReader => await Challenge.ValidateAsync(token) is null,
-        LegacyTokenValidator.ApplicationReader => await Application.ValidateAsync(token) is null,
+        BearerReader => (await Bearer.ValidateAsync(token, new DefaultHttpContext())).User is null,
+        ChallengeReader => await Challenge.ValidateAsync(token) is null,
+        ApplicationReader => await Application.ValidateAsync(token) is null,
         _ => throw new ArgumentOutOfRangeException(nameof(reader), reader, null)
     };
-
-    /// <summary>The line <see cref="LegacyTokenValidator.Accepted" /> writes for <paramref name="reader" />.</summary>
-    public static string AcceptedLine(string reader) =>
-        $"Verified a legacy HS256 {reader} token; HS256 tokens are accepted until " +
-        $"{TokenSigningSecrets.SecretVariable} is removed";
 
     private static Dictionary<string, object> ClaimsOf(Dictionary<string, string> claims) =>
         claims.ToDictionary(claim => claim.Key, object (claim) => claim.Value);

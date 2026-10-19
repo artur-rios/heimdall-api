@@ -5,8 +5,6 @@ using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
 using ArturRios.Util.Test.Attributes;
-using ArturRios.Util.WebApi.Security.Configuration;
-using ArturRios.Util.WebApi.Security.Enums;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -21,10 +19,10 @@ public class JwtApplicationTokenServiceTests
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
     private const string ApplicationAudience = "heimdall-unit-applications";
-    // The legacy HS256 secret, accepted during the overlap. Longer than 512 bits, so an HS512 token
-    // signed with it is valid in every respect but its algorithm: IdentityModel refuses a shorter key
-    // for HS512 outright, which would hide whether the validator restricts the algorithm at all.
-    private const string LegacySecret =
+    // A secret of the kind the retired shared secret was. Longer than 512 bits, so an HS512 token
+    // signed with it is refused for its algorithm rather than its key length: IdentityModel refuses a
+    // shorter key for HS512 outright, which would hide whether the validator restricts the algorithm.
+    private const string HmacSecret =
         "unit-tests-current-signing-secret-0123456789-long-enough-to-sign-hs512-too";
 
     private static readonly ApplicationTokenSubject Subject =
@@ -43,14 +41,7 @@ public class JwtApplicationTokenServiceTests
 
     private static JwtApplicationTokenService Service(string issuer = Issuer)
     {
-        var configuration = Configuration(issuer);
-        var mapper = new IdentityUserMapper(PersonTokenAudiences.From(configuration));
-        var legacy = new LegacyTokenValidator(
-            TokenSigningSecrets.Parse(LegacySecret, null), configuration, new JwtHandler(), mapper,
-            new AuthenticationOptions { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly },
-            new RecordingLogger<LegacyTokenValidator>(), DateTimeOffset.UtcNow.AddMinutes(-2));
-
-        return new JwtApplicationTokenService(configuration, new JwtHandler(), Options, legacy);
+        return new JwtApplicationTokenService(Configuration(issuer), new JwtHandler(), Options);
     }
 
     private static Dictionary<string, object> ApplicationClaims() => new()
@@ -248,15 +239,14 @@ public class JwtApplicationTokenServiceTests
     }
 
     [UnitFact]
-    public async Task GivenATokenSignedHs512WithTheLegacySecret_WhenValidated_ThenItIsRefused()
+    public async Task GivenATokenSignedHs512WithASecret_WhenValidated_ThenItIsRefused()
     {
-        // Given — during the overlap, the legacy secret and a lifetime a 2.x process could have issued
-        // (from fifteen minutes ago to five from now), but HS512: only HS256 was ever issued, so only
-        // HS256 is accepted on the legacy path
+        // Given — every application claim and a live lifetime, but HMAC-signed: only ES256 is
+        // accepted (HS256 is TokenAlgorithmConfusionTests')
         var token = Mint(
             ApplicationClaims(),
             credentials: new SigningCredentials(
-                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(LegacySecret)), SecurityAlgorithms.HmacSha512),
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(HmacSecret)), SecurityAlgorithms.HmacSha512),
             expires: DateTime.UtcNow.AddMinutes(5));
 
         // When

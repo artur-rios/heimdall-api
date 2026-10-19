@@ -10,13 +10,10 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     <para>
 ///         <b>Why it exists.</b> <c>ArturRios.Jwt</c> checks only the signature and lifetime, and a
 ///         signature does not say whose token it is. Heimdall's ES256 key signs every kind of token it
-///         issues, so a valid signature alone would let one kind pass for another; and during the
-///         overlap the readers also accept the legacy HS256 secret, which is shared with other
-///         services (Threat Model TB-5), so a token signed with it for another service's audience, or
-///         under another issuer, would be read here as one of Heimdall's own. Each reader names the
-///         audiences it takes: the bearer-token validator the three person audiences
-///         (<see cref="PersonTokenAudiences" />), the challenge reader the challenge audience alone,
-///         and the application-token reader the application audience alone.
+///         issues, so a valid signature alone would let one kind pass for another (Threat Model TB-5).
+///         Each reader names the audiences it takes: the bearer-token validator the three person
+///         audiences (<see cref="PersonTokenAudiences" />), the challenge reader the challenge audience
+///         alone, and the application-token reader the application audience alone.
 ///     </para>
 ///     <para>
 ///         <b>Exact.</b> The issuer must equal the configured one, ordinally; a token without an

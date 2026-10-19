@@ -25,10 +25,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string DatabaseTypeVariable = "HEIMDALL_DATA_DATABASETYPE";
     private const string TokenIssuerVariable = "HEIMDALL_AUTH_TOKEN_ISSUER";
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
+    private const string RetiredSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
+    private const string RetiredPreviousSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
 
     /// <summary>
     ///     The audience the host under test gives application tokens (UC-56). Published here for the
-    ///     reason <see cref="TokenSecret" /> is: the API reads it once, at start-up.
+    ///     reason <see cref="SigningKey" /> is: the API reads it once, at start-up.
     /// </summary>
     public const string ApplicationTokenAudience = "heimdall-tests-applications";
 
@@ -41,25 +43,20 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <summary>
     ///     The caller key the host under test trusts, so the suite can prove a client system holding
     ///     it is rate limited per end user. Published here for the reason
-    ///     <see cref="TokenSecret" /> is: the API reads it once, at start-up.
+    ///     <see cref="SigningKey" /> is: the API reads it once, at start-up.
     /// </summary>
     public const string TrustedCallerKey = "functional-tests-trusted-caller-key-0123456789";
 
     /// <summary>
-    ///     The legacy HS256 secret the host under test accepts during the overlap, and
-    ///     <see cref="TestTokens.Legacy" /> signs with: what a 2.x process signed every token with.
+    ///     The retired shared HS256 secret: what a 2.x process signed every token with, and what
+    ///     <see cref="TestTokens.Legacy" /> signs with. The host under test still has it set, and
+    ///     refuses every token signed with it (Threat Model TH-43).
     /// </summary>
-    /// <remarks>
-    ///     Published here rather than in a test because the API reads its key material once, at
-    ///     start-up. A test that set this afterwards would be configuring a host that had already
-    ///     decided which keys it accepts.
-    /// </remarks>
     public const string TokenSecret = "functional-tests-signing-secret-key";
 
     /// <summary>
-    ///     The retired legacy secret the host under test still accepts, so the suite can prove an HS256
-    ///     token signed before a secret rotation (Threat Model TH-22) keeps working during the overlap.
-    ///     Published here for the reason <see cref="TokenSecret" /> is.
+    ///     The previous shared secret, from a rotation of it (Threat Model TH-22), retired with it. The
+    ///     host under test still has it set too, and refuses every token signed with it.
     /// </summary>
     public const string PreviousTokenSecret = "functional-tests-previous-signing-secret";
 
@@ -69,9 +66,13 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     /// <summary>
     ///     The ES256 key the host under test signs every token with, private half included, so
-    ///     <see cref="TestTokens" /> signs exactly as the host does. Published for the reason
-    ///     <see cref="TokenSecret" /> is.
+    ///     <see cref="TestTokens" /> signs exactly as the host does.
     /// </summary>
+    /// <remarks>
+    ///     Published here rather than in a test because the API reads its key material once, at
+    ///     start-up. A test that set this afterwards would be configuring a host that had already
+    ///     decided which keys it accepts.
+    /// </remarks>
     public static JwtKey SigningKey => Current.Key;
 
     /// <summary>
@@ -131,14 +132,14 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(DatabaseTypeVariable, "PostgreSql");
 
         // Startup refuses to boot without an ES256 signing key. The previous key is a rotation in
-        // progress, and the legacy secrets are the overlap after the switch from HS256: configuring
-        // all four means every functional test runs against a host that accepts two ES256 keys and
-        // the HS256 tokens issued before it started, so the ordinary suite doubles as proof that
-        // doing so breaks nothing. These values are for tests only.
+        // progress, and the retired shared secrets are what an environment not yet cleaned up still
+        // has set: configuring all four means every functional test runs against a host that accepts
+        // two ES256 keys and ignores the secrets, so the ordinary suite doubles as proof that doing so
+        // breaks nothing. These values are for tests only.
         Environment.SetEnvironmentVariable(TokenSigningKeys.SigningKeyVariable, Current.EnvValue);
         Environment.SetEnvironmentVariable(TokenSigningKeys.PreviousSigningKeyVariable, Previous.EnvValue);
-        Environment.SetEnvironmentVariable(TokenSigningSecrets.SecretVariable, TokenSecret);
-        Environment.SetEnvironmentVariable(TokenSigningSecrets.PreviousSecretVariable, PreviousTokenSecret);
+        Environment.SetEnvironmentVariable(RetiredSecretVariable, TokenSecret);
+        Environment.SetEnvironmentVariable(RetiredPreviousSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(ApplicationTokenOptions.AudienceVariable, ApplicationTokenAudience);

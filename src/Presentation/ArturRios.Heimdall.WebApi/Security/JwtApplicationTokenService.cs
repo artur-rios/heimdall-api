@@ -26,22 +26,14 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         expected issuer would refuse every token. <see cref="TokenOrigin" /> then holds the token to
 ///         exactly what Heimdall issues — the configured issuer, or none when none is configured, and
 ///         the application audience as its only audience — so a token signed under another issuer is
-///         refused either way (TB-5).
-///     </para>
-///     <para>
-///         <b>The overlap.</b> A token that pass refuses is validated once more, with the same
-///         parameters, under HS256 alone and the keys <see cref="LegacyTokenValidator.SecurityKeysFor" />
-///         offers: the legacy secrets, and only for a token Heimdall could have issued before this
-///         process started within an application token's lifetime. No EC key is in that pass, and no
-///         other key is tried, so neither algorithm's keys ever verify the other's tokens. An
-///         acceptance by that pass is logged once the token has proved to be an application token.
+///         refused either way (TB-5). An HS256 token is refused, whatever it is signed with: no HMAC
+///         key is held, and HS256 is not a valid algorithm (Threat Model TH-43).
 ///     </para>
 /// </remarks>
 public class JwtApplicationTokenService(
     JwtConfiguration configuration,
     JwtHandler jwtHandler,
-    ApplicationTokenOptions options,
-    LegacyTokenValidator legacy) : IApplicationTokenIssuer, IApplicationTokenValidator
+    ApplicationTokenOptions options) : IApplicationTokenIssuer, IApplicationTokenValidator
 {
     private static readonly JsonWebTokenHandler Reader = new();
 
@@ -78,19 +70,19 @@ public class JwtApplicationTokenService(
             return null;
         }
 
-        var result = await ValidateUnderAsync(token, _keys, SecurityAlgorithms.EcdsaSha256);
-        var byLegacy = false;
-
-        if (!result.IsValid && legacy.Enabled)
+        var result = await Reader.ValidateTokenAsync(token, new TokenValidationParameters
         {
-            var legacyKeys = legacy.SecurityKeysFor(token, options.Lifetime);
-
-            if (legacyKeys.Count > 0)
-            {
-                result = await ValidateUnderAsync(token, legacyKeys, SecurityAlgorithms.HmacSha256);
-                byLegacy = result.IsValid;
-            }
-        }
+            ValidIssuer = configuration.Issuer,
+            ValidateIssuer = !string.IsNullOrWhiteSpace(configuration.Issuer),
+            ValidAudience = options.Audience,
+            ValidateAudience = true,
+            IssuerSigningKeys = _keys,
+            ValidateIssuerSigningKey = true,
+            ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
+            ValidateLifetime = true,
+            RequireExpirationTime = true,
+            ClockSkew = TimeSpan.Zero
+        });
 
         if (!result.IsValid ||
             !TokenOrigin.IsIssuedFor(token, configuration.Issuer, options.Audience) ||
@@ -102,33 +94,8 @@ public class JwtApplicationTokenService(
             return null;
         }
 
-        if (byLegacy)
-        {
-            legacy.Accepted(LegacyTokenValidator.ApplicationReader);
-        }
-
         return new ApplicationTokenPrincipal(applicationId, scopeId, credentialId, result.SecurityToken.ValidTo);
     }
-
-    /// <summary>
-    ///     Validates <paramref name="token" /> under <paramref name="keys" /> and <paramref name="algorithm" />
-    ///     alone, with the issuer, the application audience, a required lifetime and no clock skew.
-    /// </summary>
-    private Task<TokenValidationResult> ValidateUnderAsync(
-        string token, IEnumerable<SecurityKey> keys, string algorithm) =>
-        Reader.ValidateTokenAsync(token, new TokenValidationParameters
-        {
-            ValidIssuer = configuration.Issuer,
-            ValidateIssuer = !string.IsNullOrWhiteSpace(configuration.Issuer),
-            ValidAudience = options.Audience,
-            ValidateAudience = true,
-            IssuerSigningKeys = keys,
-            ValidateIssuerSigningKey = true,
-            ValidAlgorithms = [algorithm],
-            ValidateLifetime = true,
-            RequireExpirationTime = true,
-            ClockSkew = TimeSpan.Zero
-        });
 
     private static string? Claim(TokenValidationResult result, string name) =>
         result.Claims.TryGetValue(name, out var value) ? value?.ToString() : null;
