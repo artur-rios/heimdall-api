@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
@@ -37,8 +38,10 @@ public class LegacyTokenValidatorTests
         new() { EnableJwt = true, JwtMode = JwtValidationMode.ClaimsOnly };
 
     // The process started half an hour ago, so a test token can be issued, or become valid, after the
-    // start and still be live now.
-    private readonly DateTimeOffset _start = DateTimeOffset.UtcNow.AddMinutes(-30);
+    // start and still be live now. Whole seconds, as a token's NumericDate claims are, so a claim can
+    // fall exactly on the start.
+    private readonly DateTimeOffset _start =
+        DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeSeconds());
 
     private readonly IdentityUser _user = new(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
@@ -76,6 +79,9 @@ public class LegacyTokenValidatorTests
 
     // An instant relative to the process start.
     private DateTime At(TimeSpan sinceStart) => _start.Add(sinceStart).UtcDateTime;
+
+    // The same instant as a NumericDate, for a payload written by hand.
+    private long UnixAt(TimeSpan sinceStart) => _start.Add(sinceStart).ToUnixTimeSeconds();
 
     // Whether each read path accepts the token: the bearer reader's, the challenge reader's, and the
     // application reader's HS256 pass, which validates under SecurityKeysFor's keys with HS256 alone.
@@ -200,6 +206,50 @@ public class LegacyTokenValidatorTests
             ? UnitSigningKeys.Es256(UnitSigningKeys.Create().Key)
             : new SigningCredentials(new ECDsaSecurityKey(ecdsa), SecurityAlgorithms.EcdsaSha256);
 
+        var token = Legacy(credentials);
+
+        // When
+        var outcome = await ReadByEveryPath(validator, token, Lifetime);
+
+        // Then — not even offered the HS256 keys
+        Assert.Empty(validator.SecurityKeysFor(token, Lifetime));
+        Assert.Equal((false, false, false), outcome);
+    }
+
+    [UnitFact]
+    public async Task GivenTheSecret_WhenAnUnsignedTokenArrives_ThenNoPathAcceptsItAndNoKeyIsOffered()
+    {
+        // Given — alg none, no kid, the times and claims of a legacy token, and an empty signature
+        var validator = Validator(TokenSigningSecrets.Parse(Secret, null));
+        var payload = Claims();
+        payload[JwtRegisteredClaimNames.Iss] = Issuer;
+        payload[JwtRegisteredClaimNames.Aud] = Audience;
+        payload[JwtRegisteredClaimNames.Iat] = UnixAt(TimeSpan.FromMinutes(-10));
+        payload[JwtRegisteredClaimNames.Nbf] = UnixAt(TimeSpan.FromMinutes(-10));
+        payload[JwtRegisteredClaimNames.Exp] = UnixAt(TimeSpan.FromMinutes(50));
+        var token = Base64UrlEncoder.Encode("""{"alg":"none","typ":"JWT"}""") + "." +
+                    Base64UrlEncoder.Encode(JsonSerializer.Serialize(payload)) + ".";
+
+        // When
+        var outcome = await ReadByEveryPath(validator, token, Lifetime);
+
+        // Then
+        Assert.Empty(validator.SecurityKeysFor(token, Lifetime));
+        Assert.Equal((false, false, false), outcome);
+    }
+
+    [UnitTheory]
+    [InlineData("SPKI DER")]
+    [InlineData("JWK x and y")]
+    public async Task GivenAnHs256TokenKeyedWithAnEs256PublicKey_WhenItArrives_ThenEveryPathRefusesIt(string form)
+    {
+        // Given — the algorithm-confusion attack: HMAC keyed with the published public key, no kid
+        var validator = Validator(TokenSigningSecrets.Parse(Secret, PreviousSecret));
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var point = ecdsa.ExportParameters(false).Q;
+        var publicKey = form == "SPKI DER" ? ecdsa.ExportSubjectPublicKeyInfo() : [.. point.X!, .. point.Y!];
+        var credentials = new SigningCredentials(new SymmetricSecurityKey(publicKey), SecurityAlgorithms.HmacSha256);
+
         // When
         var outcome = await ReadByEveryPath(validator, Legacy(credentials), Lifetime);
 
@@ -289,6 +339,28 @@ public class LegacyTokenValidatorTests
         // Then
         Assert.Equal((false, false, false), underItsLifetime);
         Assert.Equal((true, true, true), underALongerOne);
+    }
+
+    [UnitTheory]
+    [InlineData("iat")]
+    [InlineData("nbf")]
+    [InlineData("exp")]
+    public async Task GivenAClaimExactlyOnItsBound_WhenItArrives_ThenEveryPathAcceptsIt(string claim)
+    {
+        // Given — iat or nbf at the start itself, or exp exactly one lifetime after it
+        var validator = Validator(TokenSigningSecrets.Parse(Secret, null));
+        var token = claim switch
+        {
+            "iat" => Legacy(issuedAt: TimeSpan.Zero),
+            "nbf" => Legacy(notBefore: TimeSpan.Zero),
+            _ => Legacy(expires: Lifetime)
+        };
+
+        // When
+        var outcome = await ReadByEveryPath(validator, token, Lifetime);
+
+        // Then
+        Assert.Equal((true, true, true), outcome);
     }
 
     [UnitFact]

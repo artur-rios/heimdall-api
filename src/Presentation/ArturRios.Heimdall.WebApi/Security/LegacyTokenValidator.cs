@@ -26,6 +26,10 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     </para>
 ///     <list type="bullet">
 ///         <item>
+///             its <c>alg</c> header is <c>HS256</c>, so an ES256 or unsigned (<c>none</c>) token is
+///             never handed an HS256 key;
+///         </item>
+///         <item>
 ///             it carries no <c>kid</c> header. Heimdall never wrote one to an HS256 token, and a
 ///             <c>kid</c> naming a secret's id would make <see cref="JwtHandler" /> check that secret
 ///             alone, which a forgery could aim at;
@@ -155,7 +159,7 @@ public sealed class LegacyTokenValidator(
 
     /// <summary>
     ///     Whether the token looks like one Heimdall issued before this process started: no
-    ///     <c>kid</c>; an <c>iat</c>, and no <c>iat</c> or <c>nbf</c> after the start; an <c>exp</c>
+    ///     <c>kid</c>; <c>alg</c> HS256; an <c>iat</c>, and no <c>iat</c> or <c>nbf</c> after the start; an <c>exp</c>
     ///     within <paramref name="maximumLifetime" /> of the start. Unverified, so it only narrows.
     /// </summary>
     private bool CouldBeIssuedEarlier(string token, TimeSpan maximumLifetime)
@@ -177,6 +181,12 @@ public sealed class LegacyTokenValidator(
         }
 
         if (read.TryGetHeaderValue<object>(JwtHeaderParameterNames.Kid, out _))
+        {
+            return false;
+        }
+
+        // An ES256 token, or an unsigned one, is never handed an HS256 key.
+        if (read.Alg != SecurityAlgorithms.HmacSha256)
         {
             return false;
         }
