@@ -1084,7 +1084,7 @@ The API refuses to start without a P-256 private key in the variable, with a mes
 variable and never the value (NFR-31). At start-up it logs
 `Tokens: signed ES256 with key {KeyId}; published keys {KeyIds}; HS256 tokens {LegacyState}`, which
 is the line to check after a deploy: the key id it names is the one a consumer will see in the
-key set.
+key set. `LegacyState` is always `refused`: no HS256 token is accepted.
 
 ### Rotating the key
 
@@ -1119,39 +1119,30 @@ key set, throttled to at most one fetch a minute, and Fortuna ignores `Cache-Con
 `max-age=300` on the key set does not matter. Any fresh sign-in issues a new-`kid` token, so sign in
 once through Fortuna right after the redeploy to make that happen promptly. Until then tokens with the
 new `kid` are refused; once it lands, tokens signed with the leaked key (unknown `kid`) are refused.
-When the leaked material is the HS256 secret instead, also remove `HEIMDALL_AUTH_TOKEN_SECRET` and
-`_PREVIOUS`.
 
 ### Ending the overlap
 
-While `HEIMDALL_AUTH_TOKEN_SECRET` is set, Heimdall also accepts HS256 tokens issued before the
-upgrade, and issues none. It is not a 24-hour window: acceptance lasts as long as the secret is set,
-bounded per process. A legacy token is accepted only when it carries no `kid`, is HS256, was issued
-before the process started, and expires within one lifetime of that start, so every restart moves the
-bound forward. The 24 hours is the operator's rule for when the secret may go.
+This is history: the overlap ended with heimdall-api 4.0.0.
 
-Each accepted legacy token logs
-`Verified a legacy HS256 {Reader} token; HS256 tokens are accepted until HEIMDALL_AUTH_TOKEN_SECRET is removed`,
-without the token or the identity. Search the logs for the prefix `Verified a legacy HS256`. Remove the
-secret only when both hold: it is not before T0 + 24 h, where T0 is the 3.0.0 production deploy, and
-there has been no `Verified a legacy HS256` line for the longest token lifetime, with every consumer
-verifying through the key set. Then clear `HEIMDALL_AUTH_TOKEN_SECRET` and
-`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and redeploy. A previous secret without the current one stops
-start-up. Heimdall 4.0.0 stops reading both variables.
+3.x signed every token ES256 but, while `HEIMDALL_AUTH_TOKEN_SECRET` was set, still accepted the
+HS256 tokens Heimdall had issued before the upgrade, signed with that secret or `_PREVIOUS`, and
+logged each one as `Verified a legacy HS256 {Reader} token`. The secrets were to be removed no
+earlier than 24 hours after the 3.0.0 production deploy, and only once no such line had appeared
+for the longest token lifetime, with every consumer verifying through the key set.
 
-In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's value, so Fortuna's
-references are removed first, and its 4.0.0 release must stop reading the secret, before Heimdall's
-value is unset. The 4.0.0 releases carry that procedure (Part E).
+4.0.0 no longer reads either variable: every reader refuses an HS256 token, whatever it is signed
+with, and the compose file no longer passes them. While either is still set, start-up logs
+`{Variable} is set but no longer read; remove it` at Warning, naming the variable and never its
+value. Remove both from the environment. In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a
+`${ref:}` to Heimdall's value, so Fortuna's references are removed first (fortuna-api 4.0.0 no
+longer reads it), then Heimdall's value is unset.
 
-### Rolling back to 2.x
+### Rolling back
 
-Rolling Heimdall back to 2.x signs out everything 3.0.0 issued: person and subject-rights sessions,
-challenges in flight, and application tokens, because 2.x verifies HS256 alone. At Fortuna 3.0.0,
-ES256 tokens keep verifying from its cached key set until they expire. After a Fortuna restart the
-key-set fetch fails, since 2.x serves no key set, and they are refused. HS256 tokens issued after the
-rollback verify through Fortuna's legacy secret. Fortuna must stay at 3.0.0 or later while Heimdall
-runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` is still set, because
-2.0.0's compose file requires it.
+Rolling 4.0.0 back to 3.x needs nothing: 3.x does not require the secret, and without it 3.x refuses
+HS256 tokens too. A rollback to 2.x is no longer possible once the secret has been removed: 2.x
+signs and verifies HS256 with it alone, its compose file requires it, and consumers at 4.0.0 or later
+no longer verify HS256.
 
 ### Consumers
 
@@ -1181,8 +1172,6 @@ runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` 
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | | empty (set only while rotating; same format) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | | empty (legacy HS256 secret; while set, at least 32 bytes of ASCII, and pre-3.0.0 tokens stay valid) |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty (legacy; refused without the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |

@@ -233,7 +233,7 @@ Six things about this pipeline are worth knowing before reading any handler:
 **Authentication reads no database.** `AddTokenAuthentication<IdentityUserMapper>` is configured with
 `JwtValidationMode.ClaimsOnly` and `TokenSource.Header`: the `IdentityUser` is rebuilt from the
 token's claims alone, and nothing is looked up while the token is validated. The library's validator
-checks the signature (ES256 only, plus HS256 during the overlap) and lifetime;
+checks the signature (ES256 only) and lifetime;
 `PersonTokenValidator` takes its place, wrapping it, and also requires `HEIMDALL_AUTH_TOKEN_ISSUER` and exactly one of the three person audiences
 (**NFR-30**), so a correctly signed token Heimdall did not issue for itself is refused like a forged
 one.
@@ -243,8 +243,8 @@ one.
 without a usable P-256 key. The current key signs every token, with its RFC 7638 thumbprint as the
 `kid`; the previous key is only published and accepted. `GET /.well-known/jwks.json` serves the
 public halves, so consumers verify tokens without holding anything secret. The ES256 configuration
-accepts ES256 only. While `HEIMDALL_AUTH_TOKEN_SECRET` is set, `LegacyTokenValidator` lets the three
-readers also accept HS256 tokens issued before the upgrade, and nothing else.
+accepts ES256 only, so every reader refuses an HS256 token: the shared secret Heimdall signed with
+before 3.0.0 is retired, and 4.0.0 no longer reads it (Threat Model TH-43).
 
 **But the identity it names is checked.** `ActorLivenessFilter` runs globally, right after the
 challenge-token guard, and refuses a token whose person or Google User is absent or logically

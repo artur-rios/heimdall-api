@@ -104,8 +104,8 @@ A request that is missing a field, carries a secret over 100 characters, or is n
 
 ## The token
 
-An application token is a JWT signed with HMAC-SHA256 under the same keys as person tokens, valid for
-ten minutes by default (`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS`).
+An application token is a JWT signed ES256 with the same key as person tokens, valid for ten minutes
+by default (`HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS`).
 
 | Claim | Value |
 | --- | --- |
