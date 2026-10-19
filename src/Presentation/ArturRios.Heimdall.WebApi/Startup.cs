@@ -905,7 +905,8 @@ public class Startup : WebApiStartup
             provider.GetRequiredService<IAuthenticatedUserMapper>(),
             provider.GetRequiredService<AuthenticationOptions>(),
             provider.GetRequiredService<ILogger<LegacyTokenValidator>>(),
-            processStart));
+            processStart,
+            TimeProvider.System));
 
         ReplaceLibraryTokenValidator(Builder.Services);
 

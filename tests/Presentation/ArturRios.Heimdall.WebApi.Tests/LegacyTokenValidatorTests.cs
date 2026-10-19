@@ -53,9 +53,10 @@ public class LegacyTokenValidatorTests
     private LegacyTokenValidator Validator(
         IReadOnlyList<JwtKey> secrets,
         RecordingLogger<LegacyTokenValidator>? logger = null,
-        DateTimeOffset? processStart = null) =>
+        DateTimeOffset? processStart = null,
+        TimeProvider? clock = null) =>
         new(secrets, Configuration(), new JwtHandler(), Mapper, Options,
-            logger ?? new RecordingLogger<LegacyTokenValidator>(), processStart ?? _start);
+            logger ?? new RecordingLogger<LegacyTokenValidator>(), processStart ?? _start, clock);
 
     private Dictionary<string, object> Claims() =>
         Mapper.ToClaims(_user).ToDictionary(claim => claim.Key, object (claim) => claim.Value);
@@ -363,6 +364,25 @@ public class LegacyTokenValidatorTests
         Assert.Equal((true, true, true), outcome);
     }
 
+    [UnitTheory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task GivenTheClockPastOneLifetimeAfterTheStart_WhenAValidLegacyTokenArrives_ThenEveryPathRefusesIt(
+        int secondsPastTheBound, bool accepted)
+    {
+        // Given — a token right in every respect and live by the handler's own clock; only the
+        // validator's clock has moved, to the bound itself or one second past it, when no token
+        // Heimdall issued before the start can still be live
+        var clock = new FixedClock(_start + Lifetime + TimeSpan.FromSeconds(secondsPastTheBound));
+        var validator = Validator(TokenSigningSecrets.Parse(Secret, null), clock: clock);
+
+        // When
+        var outcome = await ReadByEveryPath(validator, Legacy(), Lifetime);
+
+        // Then
+        Assert.Equal((accepted, accepted, accepted), outcome);
+    }
+
     [UnitFact]
     public async Task GivenATokenWithoutAnIssuedAt_WhenItArrives_ThenEveryPathRefusesIt()
     {
@@ -426,5 +446,11 @@ public class LegacyTokenValidatorTests
 
         // Then
         Assert.Empty(logger.Entries);
+    }
+
+    // A clock that reads one fixed instant.
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

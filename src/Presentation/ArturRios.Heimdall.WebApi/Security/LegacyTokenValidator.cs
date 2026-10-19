@@ -41,6 +41,10 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         </item>
 ///     </list>
 ///     <para>
+///         Once the clock, too, is past the start by its kind's longest lifetime, no genuine legacy
+///         token can be live, so every one is refused before its claims are read.
+///     </para>
+///     <para>
 ///         The claims are read before the signature is checked, so they only ever narrow what is
 ///         accepted; the signature check that follows is what proves them. A restart moves the start
 ///         forward, so the bound holds per process: across restarts a token minted between two of
@@ -69,6 +73,10 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     When this process started, the moment from which Heimdall issued no HS256 token. It is
 ///     recorded once, at start-up.
 /// </param>
+/// <param name="clock">
+///     The time against which the start's lifetime bound is checked; omitted,
+///     <see cref="TimeProvider.System" />.
+/// </param>
 public sealed class LegacyTokenValidator(
     IReadOnlyList<JwtKey> secrets,
     JwtConfiguration configuration,
@@ -76,8 +84,11 @@ public sealed class LegacyTokenValidator(
     IAuthenticatedUserMapper mapper,
     AuthenticationOptions options,
     ILogger<LegacyTokenValidator> logger,
-    DateTimeOffset processStart)
+    DateTimeOffset processStart,
+    TimeProvider? clock = null)
 {
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
     /// <summary>The bearer reader's name in <see cref="AcceptedTemplate" />: <see cref="PersonTokenValidator" />.</summary>
     public const string BearerReader = "bearer";
 
@@ -160,11 +171,19 @@ public sealed class LegacyTokenValidator(
     /// <summary>
     ///     Whether the token looks like one Heimdall issued before this process started: no
     ///     <c>kid</c>; <c>alg</c> HS256; an <c>iat</c>, and no <c>iat</c> or <c>nbf</c> after the start; an <c>exp</c>
-    ///     within <paramref name="maximumLifetime" /> of the start. Unverified, so it only narrows.
+    ///     within <paramref name="maximumLifetime" /> of the start. Unverified, so it only narrows. And
+    ///     never once the clock is more than <paramref name="maximumLifetime" /> past the start.
     /// </summary>
     private bool CouldBeIssuedEarlier(string token, TimeSpan maximumLifetime)
     {
         if (!Enabled || string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        // Once one lifetime has passed since the start, no token issued before it can be live, so
+        // every one is refused, whatever its exp claims.
+        if (_clock.GetUtcNow() > processStart + maximumLifetime)
         {
             return false;
         }
