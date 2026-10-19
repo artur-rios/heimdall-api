@@ -7,6 +7,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Upgrading from 2.x to 3.0
+
+- **Operators:** set `HEIMDALL_AUTH_SIGNING_KEY` before deploying, one key per environment: generate it with
+  `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem` and set the variable to
+  `base64 -w0 signing.pem`. It is required: start-up refuses to run without a P-256 private key there, naming the
+  variable and never its value. Keep `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS` as they are for the 24-hour
+  overlap, counted from the production deploy: while set, the HS256 tokens issued before the upgrade stay valid.
+  Remove them only once every consumer verifies through the key set and the longest token lifetime has passed;
+  4.0.0 stops reading them.
+- **Consumers:** every token (person, subject-rights-only, two-factor challenge and application) is now signed
+  ES256 and carries a `kid`, the RFC 7638 thumbprint of its key. Claims, issuer, audiences and lifetimes are
+  unchanged. Verify tokens with the keys at `GET /.well-known/jwks.json` (inside yggdrasil
+  `http://heimdall-api.<environment>:8080/.well-known/jwks.json`; anyone else
+  `https://<PUBLIC_HOST>/.well-known/jwks.json`), accept ES256 only, and fetch the set again, at most once a
+  minute, when a token names a `kid` you do not know. A consumer that verifies HS256 with the shared secret
+  refuses every token issued after this upgrade.
+- **alexandria-api and cerberus-api** verify HS256 only (alexandria-api#136, cerberus-api#120), so they cannot
+  verify 3.0.0 tokens. Both are out of scope for this release and neither is deployed against Heimdall.
+- **Deploy order:** fortuna-api 3.0.0 or later first.
+
+### Added
+
+- `GET /.well-known/jwks.json`: the public ES256 keys, as a JSON Web Key Set (RFC 7517, not the usual envelope),
+  anonymous, under the anonymous rate limit, with `Cache-Control: public, max-age=300`. It lists the current key
+  and, during a rotation, the previous one.
+- `HEIMDALL_AUTH_SIGNING_KEY` (required) and `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` (optional): base64 of a P-256
+  PKCS#8 PEM. The previous key is only published and accepted, never used to sign.
+
+### Changed
+
+- `HEIMDALL_AUTH_TOKEN_SECRET` is optional. While it is set (with `_PREVIOUS`), HS256 tokens signed with it are
+  still accepted, but none is issued, and each accepted one is logged without the token or the identity.
+  `_PREVIOUS` without the secret stops start-up.
+
+### Security
+
+- Only Heimdall holds a key that can sign its tokens (Threat Model TH-43; the threat closes when 4.0.0 removes the
+  shared secret). Each key verifies its own algorithm only, so a token's `alg` header never selects the kind of key.
+
 ## [2.0.0] - 2026-10-19
 
 ### Upgrading from 1.x to 2.0

@@ -760,7 +760,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-17 (challenge token) | Test | `NonFunctionalRequirementTests` — lifetime, the pending claim, rejection elsewhere, and that the token a login issues expires with the FR-2F-03 code it was issued with rather than before it; `TwoFactorLifetimesTests` pins the same agreement at its source; `AuthControllerVerifyTwoFactorAuthTests` pins the window's two edges and redeems a code in its final seconds | Verified |
 | NFR-18 (password verification cost) | Measurement | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
 | NFR-30 (token issuer and audience) | Test | `TokenIssuerAndAudienceTests` — a correctly signed token under another issuer or audience is refused, and Heimdall's own is accepted, on the bearer path, the subject-rights endpoints, the challenge and UC-57; `TokenOriginTests`, `PersonTokenAudienceTests` and `JwtApplicationTokenServiceTests` for each reader | Verified |
-| NFR-31 (signing secrets) | Test | `TokenSigningSecretsTests` — length, ASCII, the empty previous secret, and messages that never carry the value; `TokenOriginTests` for HS384 and HS512 refused | Verified |
+| NFR-31 (signing keys and secrets) | Test | `TokenSigningKeysTests` — the P-256 key, its base64 form, the empty previous key, and messages that never carry the value; `TokenSigningSecretsTests` for the legacy secret — length, ASCII, the empty previous secret; `TokenAlgorithmConfusionTests` — a token's `alg` never chooses the key type; `JwksEndpointTests` — the published key set and its headers; `TokenOriginTests` for HS384 and HS512 refused | Verified |
 
 ### 11.2 What this does not cover
 

@@ -199,7 +199,7 @@ Jenkins; the fourth is the developer's own machine. `example.com` stands for the
 | `homologation` | The VPS, on demand | Jenkins, on every push of a `release/x.y.z` branch | `Staging` | `heimdall-api-hml.example.com`; `/api/` under `heimdall-hml.example.com` | `heimdall_homologation`, PostgreSQL on the VPS |
 | `production` | The VPS, always on | Jenkins, on a green `release/x.y.z → main` pull request, which it then merges and tags | `Production` | `heimdall-api.example.com`; `/api/` under `heimdall.example.com` | `heimdall`, PostgreSQL on the VPS |
 
-Each environment has its own database **and its own database login**, its own token signing secret
+Each environment has its own database **and its own database login**, its own token signing key
 and its own master user, so nothing issued or stored in one is accepted or readable in another. The
 env files of the three VPS environments are kept on the VPS (`/etc/yggdrasil/<environment>/`), filled
 in from the repository's `docker/<environment>.env.example` templates.

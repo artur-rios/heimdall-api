@@ -75,8 +75,9 @@ a supervisory authority is also owed notice, seventy-two hours.
 
 ## 5. The procedure
 
-1. **Contain.** Stop the bleeding before investigating. Revoke the signing secret
-   (`HEIMDALL_AUTH_TOKEN_SECRET`, rotating through `_PREVIOUS`), restrict or suspend the identities
+1. **Contain.** Stop the bleeding before investigating. Compromise of the signing key means an
+   emergency rotation: replace `HEIMDALL_AUTH_SIGNING_KEY` and leave `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS`
+   empty, so the leaked key's tokens stop at once (and, while it is set, remove `HEIMDALL_AUTH_TOKEN_SECRET`), restrict or suspend the identities
    involved (UC-44), and if a scope is implicated, consider disabling its Google sign-in.
 2. **Record the time of awareness.** In the register, before anything else. Every deadline in §4
    counts from this timestamp, and reconstructing it afterwards from memory is how a 72-hour

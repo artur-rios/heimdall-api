@@ -205,9 +205,29 @@ The API also answers both at the root, `/healthcheck` and `/healthcheck/detailed
 health check and yggdrasil's status page, which call it on its own port. Behind Traefik, only the
 `/api/` addresses reach it from the web UI's host.
 
+## Signing keys — `/.well-known/jwks.json`
+
+| Method & path | Who | Use case |
+| --- | --- | --- |
+| `GET /.well-known/jwks.json` | Anonymous | The public ES256 keys every token can be verified with |
+
+This one sits outside `/api` and is the exception to the response envelope below: the body is a raw
+JSON Web Key Set (RFC 7517), the current key first and, during a rotation, the previous one. It
+never carries a private member.
+
+```json
+{"keys":[{"kty":"EC","crv":"P-256","x":"…","y":"…","kid":"…","use":"sig","alg":"ES256"}]}
+```
+
+The response is `application/json` with `Cache-Control: public, max-age=300`. It shares the
+`AuthAnonymous` rate limit, 10 requests a minute per address, and answers 429 beyond it. Platform
+consumers read it at `http://heimdall-api.<environment>:8080/.well-known/jwks.json`; anyone else at
+`https://<PUBLIC_HOST>/.well-known/jwks.json` (the UI host does not serve it). See
+[Operations](../operations/#consumers).
+
 ## Response shape
 
-Every endpoint answers one of two envelopes:
+Every other endpoint answers one of two envelopes:
 
 ```jsonc
 // DataOutput<T>

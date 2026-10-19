@@ -70,7 +70,7 @@ flowchart LR
 | TB-2 | An authenticated caller → data belonging to a tenant | Every other tenant's persons, applications and permissions |
 | TB-3 | The API → its database | Password hashes, TOTP secrets, reset tokens, the key ring |
 | TB-4 | The API → Google | Whoever a Google ID token claims to be |
-| TB-5 | An operator → configuration, logs and images; a service holding the signing key → the API | The signing secret, the master account, delivered tokens |
+| TB-5 | An operator → configuration, logs and images; an operator holding the signing key → the API; consumers hold public keys only | The signing secret, the master account, delivered tokens |
 
 ## 4. TB-1 — Anonymous internet to the authentication endpoints
 
@@ -428,25 +428,25 @@ FR-GO-07 would not expect it.
 
 | ID | Threat | Control | Verification | Residual |
 | --- | --- | --- | --- | --- |
-| TH-22 | Minting a valid token for any identity, using the signing secret | The secret is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` keeps the retired key acceptable while the new one signs. Start-up refuses a current or previous secret shorter than 32 bytes or holding a character outside ASCII, naming the variable and never the value, and an empty previous secret is no key at all (NFR-31); tokens are accepted under HS256 only (`ArturRios.Jwt` 1.3.0) | Test + inspection | Low |
-| TH-43 | Creating a token that Heimdall accepts, by a service that holds the signing key | Every reader of a Heimdall token checks, beside the signature and lifetime, that it names Heimdall's issuer and exactly one of the audiences that reader accepts (NFR-30) | Test | Medium: a service holding the signing key can create tokens; asymmetric signing is planned |
+| TH-22 | Minting a valid token for any identity, using the signing key | The key is supplied by environment and never logged, and can be rotated: `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` keeps the retired key published and its tokens acceptable while the new one signs. Start-up refuses a missing or unusable key, current or previous, naming the variable and never the value, and an empty previous key is no key at all (NFR-31); each configuration accepts its own algorithm only, so a token's `alg` header never chooses the key type. While the legacy secret is set, the same refusals apply to it | Test + inspection | Low |
+| TH-43 | Creating a token that Heimdall accepts, by a service that holds the signing key | Every reader of a Heimdall token checks, beside the signature and lifetime, that it names Heimdall's issuer and exactly one of the audiences that reader accepts (NFR-30) | Test | Heimdall's tokens are signed ES256 and verified with the public keys at `/.well-known/jwks.json`, so a consumer cannot create one. Residual: Medium until the shared secret is removed, because while `HEIMDALL_AUTH_TOKEN_SECRET` is set, any service holding it can still create an HS256 token Heimdall accepts. Heimdall accepts it for 24 hours after the 3.0.0 deploy; it is removed, and TH-43 closes, in 4.0.0 (Part E) |
 | TH-23 | Reading a delivered verification, reset or 2FA code — or a recipient address — out of the logs | Production fails startup when email delivery is unconfigured, rather than falling back to logging the token; and no log statement writes an address in any environment, a reference to it instead (NFR-22) | Inspection + test | Medium |
 | TH-24 | Using the seeded master account | Credentials are supplied by environment and required at startup | Inspection | Medium |
 | TH-42 | Reading personal data or request details from an internet-facing instance's diagnostics: EF Core's parameter logging and detailed errors, on in every environment but Production, and the developer exception page, on in Development and Local | On an instance whose configuration names a public host — `PUBLIC_HOST`, `UI_HOST`, the verification or reset URL, or a CORS origin naming anything but this machine — all three are off, by one decision taken at start-up, unless `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` is `true` (NFR-28). Setting it is the operator's statement, in the deployment's own configuration, that the instance holds made-up people only (Operations & Infrastructure Document §0.2). Either way start-up logs a warning naming the hosts; nothing refuses to start | Test + inspection | Low: the API cannot check the statement, and an instance reachable from outside whose configuration names no public host is taken as private. What such an instance logs about delivered codes is TH-23's |
 
-TH-43 follows from symmetric signing; asymmetric signing is planned, and until then the key is
-handled as TH-22 describes.
+TH-43 followed from symmetric signing, which let every verifier mint tokens. Tokens are now signed
+ES256 and consumers hold public keys only. Until the shared secret is removed (heimdall-api 4.0.0),
+the legacy secret is handled as TH-22 describes and the residual stands.
 
 **TH-22 was Medium because there was no rotation story, and it now has one.** A leaked signing
 secret is total — it mints any identity at any role — and the only remediation available was a hard
 cutover: change the secret, and every token in flight dies at once. A remediation that is also an
 outage is one nobody performs pre-emptively, which is why the secret was in practice never rotated.
 
-`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` is the other half. Both secrets are handed to
-`JwtConfiguration.Keys`, so a token signed with either is accepted while new tokens are signed with
-the current one. Rotating is three steps and no outage: set the previous variable to the secret in
-use, set the current variable to a new one, restart; then an hour later — one token lifetime — clear
-the previous variable and restart again. Withdrawing a key still invalidates its tokens immediately,
+`HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is the other half. Both public keys are published and a token
+signed with either is accepted while new tokens are signed with the current one. Rotating is three
+steps and no outage: set the previous variable to the key in use, set the current variable to a new
+one, redeploy; then one token lifetime later clear the previous variable and redeploy again. Withdrawing a key still invalidates its tokens immediately,
 which is what makes the shortened version of that procedure the right response to a leak.
 
 No `kid` is written to the tokens, deliberately. The library supports it, but the identifiers here are
