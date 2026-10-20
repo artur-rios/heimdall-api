@@ -218,7 +218,7 @@ one asks is what that reader can do with what they find.
 | TH-15 | Recovering TOTP secrets from stolen rows | Encrypted at rest with ASP.NET Data Protection (NFR-16) | Test | Medium |
 | TH-16 | Replaying a stolen second-factor recovery code, or recovering one from a stolen row | 80 bits from a CSPRNG, sixteen characters of Crockford's base32 (FR-2F-20), stored as a SHA-256 digest, single-use (NFR-16) — spent by a conditional write, so two simultaneous requests cannot both redeem it (NFR-27). A digest is not reversible by search at this entropy: finding one code takes about 2^79 SHA-256 evaluations, and because the digest is unsalted a search over every stored code at once divides that by their number — at a million codes still about 2^60, years of one GPU, for one code of an account nobody chose, which is good only beside that account's password. A slow hash would cost a derivation per unused code on every presentation for no gain at this entropy; a pepper held outside the database is the next step should the table grow by orders of magnitude. **Accepted residual:** codes issued before FR-2F-20 keep their earlier strength until they are used or regenerated (UC-40), and regenerating moves a person to the current format | Test | Low |
 | TH-17 | Injecting SQL through a caller-supplied value | EF Core parameterises every query; no string-concatenated SQL | Inspection | Low |
-| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User — on record, or tombstoned by a hard delete and gone — once due (NFR-21); a trigger on `ERASED_SUBJECT` accepts a tombstone only for a person or Google User that exists, `public_id` is immutable on `PERSON`, `GOOGLE_USER` and every table whose ids the identity check trusts, no new row of those tables may take an id another holds, and a new person or Google User may not take an id an audit entry names (#199), so with DML alone no existing target that is not a person's can be made clearable. The triggers bind every role but the tables' owner and a superuser, so the supported deployment runs the API as a role that owns nothing (NFR-29; operations guide, "Database roles"): migrations run as a separate owner role (`HEIMDALL_MIGRATIONS_CONNECTIONSTRING`, or out of band), and the API's role has row privileges only — no `DELETE` on `audit_log`, no `TRUNCATE`, no `CREATE` — so it cannot disable, drop or replace a trigger or its function. The operator creates the roles and applies the grants; nothing in the API can | Test (the triggers) + review (the grants, checked by hand against PostgreSQL 18; no committed test applies them) | Low where the two-role setup is applied — but see below on superusers and §6.1's insert race. Medium where the API's role owns the schema |
+| TH-18 | Denying an action that was taken | Every write produces an audit entry (NFR-09); database triggers refuse `DELETE` and `TRUNCATE` outright and permit exactly two kinds of `UPDATE` — clearing the actor attribution once due, and clearing a target that names a person or Google User — on record, or tombstoned by a hard delete and gone — once due (NFR-21); a trigger on `ERASED_SUBJECT` accepts a tombstone only for a person or Google User that exists, `public_id` is immutable on `PERSON`, `GOOGLE_USER` and every table whose ids the identity check trusts, no new row of those tables may take an id another holds, and a new person or Google User may not take an id an audit entry names (#199), so with DML alone no existing target that is not a person's can be made clearable. The triggers bind every role but the tables' owner and a superuser, so the supported deployment runs the API as a role that owns nothing (NFR-29; operations guide, "Database roles"): migrations run as a separate owner role (`HEIMDALL_MIGRATIONS_CONNECTIONSTRING`, or out of band), and the API's role has row privileges only — no `DELETE` on `audit_log`, no `TRUNCATE`, no `CREATE` — so it cannot disable, drop or replace a trigger or its function. The operator creates the roles and applies the grants with `scripts/sql` (`new-deployment.sql`, or `separate-owner.sql` for a database the API's login owns); nothing in the API can | Test (the triggers; and the grants: `DatabaseRoleTests` applies both scripts to PostgreSQL 18 and is refused each of those statements as the runtime login, and the whole functional suite runs as that login) | Low where the two-role setup is applied — but see below on superusers and §6.1's insert race. Medium in a single-login deployment, where the API's login owns the schema: there the guarantee does not hold against the API's credentials, and every environment created by the earlier deployment guide is one until it is separated |
 
 **TH-14 was a straightforward inconsistency, and it is now fixed.** `PasswordResetService` and
 `EmailVerificationService` both used to write the token they had just generated straight into the
@@ -257,8 +257,8 @@ against an ordinary caller and none at all against anyone who reached the databa
 
 A trigger now refuses `UPDATE`, `DELETE` and `TRUNCATE` on the table. A trigger rather than a
 permission grant alone, because a grant depends on the deployment connecting as a role that lacks
-those rights, and this repository's compose file, the functional suite and most development setups
-all connect as the owner; a trigger travels with the schema and holds for every role but the
+those rights, and a deployment that has not separated its roles, as most development setups have
+not, connects as the owner; a trigger travels with the schema and holds for every role but the
 table's owner and a superuser.
 `TRUNCATE` needs naming separately because it skips `BEFORE DELETE` entirely, and the triggers fire
 per statement rather than per row so that a `DELETE` matching nothing is refused too — otherwise the
@@ -278,13 +278,24 @@ grants the operations guide gives ("Database roles"). `audit_log` keeps `UPDATE`
 that role, because the retention pass writes the rows it clears whole; which updates are accepted
 stays the triggers' decision, and the role cannot change them.
 
-The grants were reviewed and checked by hand against PostgreSQL 18, in a throwaway database: as the
-runtime role, changing or disabling a trigger, replacing or dropping a trigger function, `TRUNCATE`,
-`DELETE FROM audit_log`, `CREATE` in any schema and `SET session_replication_role` were refused,
-and the API and its handlers ran their functional suite connected as it. No committed test applies
-them, so a migration that needs a new privilege is caught only by that review. The setup is the
-operator's to apply, and the API cannot tell whether it has been, so the row above is rated by
-deployment.
+The grants are committed scripts, and they are tested. `scripts/sql/new-deployment.sql` creates the
+two roles for a new database; `scripts/sql/separate-owner.sql` moves a database the API's login owns
+to a new owner, in one transaction, and grants the login back what the API needs; both share
+`runtime-grants.sql`, which also sets the default privileges that grant every table a later
+migration creates as the owner, so no migration has to grant its own. `DatabaseRoleTests` applies
+both to PostgreSQL 18, the second to a database migrated the old way, twice: as the runtime login,
+disabling, dropping or replacing a trigger or its function, `TRUNCATE` and `DELETE` on `audit_log`,
+`SET session_replication_role`, `CREATE` in either schema and an `ALTER TABLE` on every table are
+each refused for want of privilege — not stopped by a trigger — and the login owns nothing. The
+functional suite runs as that login, so a migration or a feature that needs a privilege the grants
+lack fails it. `scripts/sql/check-runtime-login.sql` runs the same refusals for an operator.
+
+**The guarantee holds in the two-role deployment, and does not in a single-login one.** Where the
+API's login owns the tables — what the deployment guide created until the two-role setup, and what
+an environment remains until its operator runs `separate-owner.sql` — that login can switch the
+triggers off, and the rest of this section and §6.1 do not hold against its credentials. The setup
+is the operator's to apply, and the API cannot tell whether it has been, so the row above is rated
+by deployment.
 
 ### 6.1 The writes the trail now permits, and why it is still Low
 
@@ -383,8 +394,9 @@ triggers (`ALTER TABLE … DISABLE TRIGGER`, or `session_replication_role` as a 
 anything here, as with the audit triggers themselves. That is the tables' owner or a superuser,
 which the API's role is not once the two-role setup under TH-18 is applied.
 
-**Residual risk: Low.** The property this threat is about — that an action cannot be denied — is
-intact: with DML alone, a target can be cleared only when it names an identity that has held its id
+**Residual risk: Low**, in the two-role deployment of TH-18. In a single-login one the credentials
+this section is about own the triggers, and the residual is TH-18's Medium. The property this threat
+is about — that an action cannot be denied — is intact: with DML alone, a target can be cleared only when it names an identity that has held its id
 since it was created, or one the actor planted in the same moment as the entity it shares an id
 with. What became time-limited is attribution, which is what storage limitation requires of it, and
 the person an action was taken on is forgotten on the same terms. `AuditActorClearingTests` and
@@ -557,7 +569,7 @@ this document has been worth.
 | TH-08 | A demoted account kept its authority until its token expired, and could spend that window promoting itself back permanently | `ActorLivenessFilter` compares the role claim against the row it was already reading, and refuses a token whose role is out of date |
 | TH-21 | Nobody had established what a Google sign-in does with an address that already belongs to a password account | Traced: resolution is by Google's `sub`, the token names the Google User's own `PublicId`, and the role is always `User`. Two tests state the answer |
 | TH-03 | The per-IP rate limiter was the only bound on login's memory demand, and one address could ask for 6 GB of Argon2id working set a minute within policy | `PasswordHashGate`: four concurrent derivations process-wide, every derivation on a request path, `503` rather than an unbounded queue. Measured at no latency cost |
-| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists, `public_id` immutable on the identity tables and every table they are checked against, never shared by a new row of any of them, and never one the trail names on a new identity — see §6.1. Closed against the API's credentials where the two-role setup of NFR-29 is applied (TH-18) |
+| TH-18 | The audit log was append-only by convention; the API's own credentials could rewrite the trail | Triggers refusing `DELETE` and `TRUNCATE` per statement, so an empty `DELETE` is refused too, and permitting only the two `UPDATE`s NFR-21 requires, clearing the actor attribution and clearing a person target, on record or tombstoned, with tombstones accepted only for a person or Google User that exists, `public_id` immutable on the identity tables and every table they are checked against, never shared by a new row of any of them, and never one the trail names on a new identity — see §6.1. Closed against the API's credentials where the two-role setup of NFR-29 is applied, with `scripts/sql`, and pinned by `DatabaseRoleTests`; open in a single-login deployment (TH-18) |
 | TH-43 | Every service that verified Heimdall's tokens held the shared HS256 secret, and so could create a token Heimdall accepted | ES256 signing with a key only Heimdall holds and the public keys at `/.well-known/jwks.json` (3.0.0), then the shared secret retired (4.0.0): no reader accepts HS256, and its variables are no longer read |
 | TH-22 | The signing secret could not be replaced without invalidating every token in flight, so it was never rotated | `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: both keys are accepted while the current one signs, on `ArturRios.Jwt` 1.1.0 and `ArturRios.Util.WebApi` 3.2.0 (2.x; superseded by the ES256 key in 3.0.0) |
 | TH-35 | Finding: Heimdall's middleware validates signature and lifetime only, not the audience (`ArturRios.Jwt` `IsTokenValidAsync`), so an application token, signed with the person tokens' keys, would pass it | Response: `IdentityUserMapper` refuses any token carrying `tokenKind`; a functional test pins an application token's `401` on a person endpoint. It also holds the challenge and subject-rights audiences to their claims, so a token whose audience and claims disagree is refused too |

@@ -7,6 +7,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Upgrading
+
+- **Operators:** nothing changes until you opt in. Without `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` the entrypoint
+  migrates, and the API runs, as the one login it always has. To make the audit triggers hold against the API's
+  credentials, separate the roles with the operations guide's "Separating the migration owner from the runtime
+  login": back up, run `scripts/sql/separate-owner.sql`, set the owner's password, store the owner's connection
+  string as `HEIMDALL_MIGRATIONS_CONNECTIONSTRING`, redeploy, and run `scripts/sql/check-runtime-login.sql`. Once a
+  database is separated, a container that migrates without the variable fails, so it is stored before the next
+  deploy. The API, the HTTP API and the OpenAPI document are unchanged.
+
+### Added
+
+- `scripts/sql`, the database roles of NFR-29 as psql scripts, parameterised by the variables `owner`, `runtime`
+  and `database`, holding no password, and safe to run again. `new-deployment.sql` creates an owner role, a
+  runtime login, the database owned by the owner, the `heimdall` schema and the grants. `separate-owner.sql` moves
+  a database the API's login owns to a new owner in one transaction, with a five-second `lock_timeout`: the
+  database, then `REASSIGN OWNED` for the schema, tables, sequences, trigger functions and migration history. Both
+  share `runtime-grants.sql`, which revokes everything the login holds and grants again `SELECT`, `INSERT`,
+  `UPDATE` and `DELETE` on the `heimdall` tables, `audit_log` without `DELETE`, sequence `USAGE` and `SELECT`, and
+  `SELECT` on the migration history, with default privileges for the owner so tables later migrations add are
+  granted as they are created. They refuse, changing nothing, a login that is a superuser, may create roles, is a
+  member of the owner or still owns anything; a database that belongs to another role; and, for
+  `separate-owner.sql`, a login that also owns another database or a tablespace, which `REASSIGN OWNED` would
+  move too. `check-runtime-login.sql`, run as the runtime login, fails listing every statement it is not refused
+  for want of privilege, and rolls everything back.
+- `scripts/migrations.py` migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when the chosen environment file
+  sets it, as the entrypoint does, and with `HEIMDALL_DATA_CONNECTIONSTRING` otherwise.
+
+### Changed
+
+- The deployment guide, the README and the operations guide create each database with
+  `scripts/sql/new-deployment.sql` instead of `createdb --owner heimdall_svc`, and the operations guide's
+  "Database roles" now has the runbook for an existing deployment. The env templates and `docker-compose.yml`
+  point at the scripts.
+- The functional suite sets its database up with `new-deployment.sql` and runs the API as the runtime login, so a
+  privilege the grants lack fails it.
+
+### Security
+
+- TH-18 holds in the two-role deployment: the API's login owns nothing, and cannot disable, drop or replace the
+  audit triggers or their functions, nor delete or truncate audit rows. `DatabaseRoleTests` applies both scripts
+  to PostgreSQL 18, the second to a database migrated the old way, and is refused each of those statements as the
+  runtime login for want of privilege. In a single-login deployment, where the API's login owns the tables, the
+  guarantee still does not hold; the Threat Model rates that Medium.
+
 ## [4.0.0] - 2026-10-20
 
 ### Upgrading from 3.x to 4.0

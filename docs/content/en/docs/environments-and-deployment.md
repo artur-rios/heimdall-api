@@ -82,15 +82,23 @@ docker context ls
 The context marked `*` should be `desktop-linux`. If the command fails, start Docker Desktop and wait
 for the whale icon to stop animating.
 
-### 2. Create the database and its login
+### 2. Create the database and its logins
 
-Each service on the shared instance gets its own database and its own role. With `psql` on `PATH`
-(`C:\Program Files\PostgreSQL\18\bin`), as the `postgres` superuser:
+Each service on the shared instance gets its own database and its own roles: an owner, which the
+migrations run as, and a login the API runs as, which owns nothing — so the API's credentials can
+never switch off the audit trail's triggers ([Database roles](../operations/#database-roles--th-18)).
+With `psql` on `PATH` (`C:\Program Files\PostgreSQL\18\bin`), as the `postgres` superuser, from
+the repository root:
 
 ```powershell
-psql -U postgres -c "CREATE ROLE heimdall_svc LOGIN PASSWORD '<pick-a-password>';"
-psql -U postgres -c "CREATE DATABASE heimdall_local OWNER heimdall_svc;"
+psql -U postgres -X -v owner=heimdall_local_owner -v runtime=heimdall_svc -v database=heimdall_local -f scripts/sql/new-deployment.sql
+psql -U postgres -c "\password heimdall_local_owner"
+psql -U postgres -c "\password heimdall_svc"
 ```
+
+The script holds no password; the two `\password` prompts set them. Run the first line once more
+after the first start in step 5, which creates the tables: the second run takes `DELETE` on the audit
+trail away from `heimdall_svc`.
 
 {{% alert title="Do not name the login heimdall" color="warning" %}}
 The entities live in a schema called `heimdall`, and PostgreSQL's default search path — `"$user",
@@ -138,8 +146,9 @@ master user's credentials. Open it and fill in at least:
 
 | Variable | Value |
 | --- | --- |
-| `DB_USER` / `DB_PASSWORD` | The login from step 2 |
+| `DB_USER` / `DB_PASSWORD` | The login from step 2, `heimdall_svc` |
 | `DB_NAME` | `heimdall_local` |
+| `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | The owner's whole connection string: `Host=host.docker.internal;Port=5432;Database=heimdall_local;Username=heimdall_local_owner;Password=<its password>;Search Path=public` |
 | `HEIMDALL_AUTH_SIGNING_KEY` | Required, unique to this environment: the one-line base64 of a P-256 PKCS#8 PEM, or the API will not start (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem`, then `base64 -w0 signing.pem`). |
 | `HEIMDALL_APPLICATION_TOKEN_AUDIENCE` | Required, and different from `HEIMDALL_AUTH_TOKEN_AUDIENCE` and the audiences derived from it. `local.env.example` presets `heimdall-applications`; keep it unless a consumer pins another |
 | `HEIMDALL_MASTER_USER_NAME` / `_EMAIL` / `_PASSWORD` | The first system administrator, seeded on the first run against an empty database |
@@ -296,20 +305,20 @@ The supported setup runs the migrations as an owner role and the API as a role t
 (NFR-29), so each environment has two logins. For a new environment:
 
 ```bash
-sudo -u postgres createuser --pwprompt heimdall_development_owner
-sudo -u postgres createuser --pwprompt heimdall_development_svc
-sudo -u postgres createdb --owner heimdall_development_owner heimdall_development
-
-sudo -u postgres createuser --pwprompt heimdall_homologation_owner
-sudo -u postgres createuser --pwprompt heimdall_homologation_svc
-sudo -u postgres createdb --owner heimdall_homologation_owner heimdall_homologation
+sudo -u postgres psql -X -v owner=heimdall_development_owner -v runtime=heimdall_development_svc \
+    -v database=heimdall_development -f scripts/sql/new-deployment.sql
+sudo -u postgres psql -X -v owner=heimdall_homologation_owner -v runtime=heimdall_homologation_svc \
+    -v database=heimdall_homologation -f scripts/sql/new-deployment.sql
 ```
 
-then apply the grants and the rest of the steps in
-[Operations, "Database roles"](../operations/#database-roles--th-18) ("A new deployment").
-Production's pair is `heimdall_owner` and `heimdall_svc`. An environment whose database belongs to
-the API's own login is moved to this setup with the steps in the same section ("Switching an
-existing deployment over"). Skip what an environment already has.
+from a copy of the repository's `scripts/sql` on the VPS, then set each login's password with
+`sudo -u postgres psql -c '\password <login>'` and follow the rest of
+[Operations, "Database roles"](../operations/#database-roles--th-18) ("A new deployment"): the
+script runs once more after the first deploy. Production's pair is `heimdall_owner` and
+`heimdall_svc`. An environment whose database belongs to the API's own login — what this guide used
+to create with `createdb --owner` — is moved to this setup with `scripts/sql/separate-owner.sql`, in
+the same section ("Separating the migration owner from the runtime login"). Skip what an environment
+already has.
 
 Then, in `/etc/postgresql/<version>/main/pg_hba.conf`, one rule
 per login for the Docker range, below the loopback rules — each login reaches its own database and no
@@ -464,7 +473,8 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | Container restarts; log ends at `entrypoint: applying EF Core migrations...` | The bundle cannot reach PostgreSQL | Re-run the two probes above; the address in the error names which side is wrong |
 | `set HEIMDALL_AUTH_SIGNING_KEY in the env file` at `up`; or the container restarts and its log ends with `Environment variable 'HEIMDALL_AUTH_SIGNING_KEY' is unset`, `… holds a PEM itself`, `… is not the base64 of a PEM` or `… is not a P-256 private key` | The signing key is missing, is the PEM instead of its base64, is the base64 of something other than the PEM text (such as the key's DER), or is not a P-256 private key (NFR-31) | Generate one with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem` and set the variable to `base64 -w0 signing.pem`; the message names the variable, never the value. `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is held to the same format and stays empty when not rotating |
 | Start-up logs `HEIMDALL_AUTH_TOKEN_SECRET is set but no longer read; remove it` (or `…_PREVIOUS …`) at Warning | The retired HS256 secret, current or previous, is still in the environment. Nothing reads it, and the API runs | Remove the variable; in yggdrasil, Fortuna's references to it first ([Operations](../operations/#ending-the-overlap)). The message names the variable, never the value |
-| Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Re-run the grants in [Database roles](../operations/#database-roles--th-18) |
+| Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Run `scripts/sql/new-deployment.sql` again, or `separate-owner.sql` for a database the login still owns ([Database roles](../operations/#database-roles--th-18)) |
+| Container restarts; the migrations fail with `permission denied …` or `must be owner of …` | The database was separated, but `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` is not set, so the entrypoint migrates as the runtime login, which owns nothing | Set it to the owner's connection string and redeploy ([Database roles](../operations/#separating-the-migration-owner-from-the-runtime-login)) |
 | No developer exception page, and no EF parameter values in the log | Expected when the instance serves a public host: NFR-28 keeps them off, and start-up logs one warning naming the hosts | Set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` only if the environment holds made-up people and the diagnostics are wanted; see [Operations](../operations/#diagnostics-on-a-public-host--nfr-28) |
 | `no pg_hba.conf entry for host "..."` | The connection arrives from an address no rule covers | Add a `host` rule for that address, then `systemctl reload postgresql` |
 | `relation "role" already exists` on the second run | The login is named `heimdall`, so `"$user"` resolves to the entities' schema | Rename the login, or keep `Search Path=public` in every connection string |

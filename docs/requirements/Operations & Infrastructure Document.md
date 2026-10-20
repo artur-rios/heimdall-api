@@ -215,9 +215,10 @@ parameter logging and the developer exception page off (NFR-28), unless the env 
 
 The supported database setup gives each environment an owner role of its own for the migrations
 (`HEIMDALL_MIGRATIONS_CONNECTIONSTRING`) and an API login that owns nothing and has only the row
-privileges it needs (NFR-29, Threat Model TH-18). The operations guide, "Database roles", has the
-grants, the checks and the steps for a new environment and for switching one over; the operator
-applies them.
+privileges it needs (NFR-29, Threat Model TH-18). `scripts/sql` holds the scripts that set it up,
+for a new environment and for one whose database the API's login owns, and the check an operator
+runs as that login; the operations guide, "Database roles", gives the order. The operator applies
+them, and until then an environment runs as one login, as before.
 
 The step-by-step setup of each environment is on the documentation site, under
 [Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/).
