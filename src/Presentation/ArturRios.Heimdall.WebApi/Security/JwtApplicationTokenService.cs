@@ -78,6 +78,9 @@ public class JwtApplicationTokenService(
             ValidateAudience = true,
             IssuerSigningKeys = _keys,
             ValidateIssuerSigningKey = true,
+            // Defence in depth, kept on purpose: the keys are EC keys alone, so an HS256, HS384 or
+            // HS512 token cannot verify against any of them, and this pin would refuse one even if an
+            // HMAC key were ever held.
             ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
             ValidateLifetime = true,
             RequireExpirationTime = true,
