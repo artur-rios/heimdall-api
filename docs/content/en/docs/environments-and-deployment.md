@@ -150,11 +150,13 @@ master user's credentials. Open it and fill in at least:
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | base64 -w0
 ```
 
-On Windows, write the PEM with OpenSSL and encode it:
+On Windows, write the PEM with OpenSSL, encode it, then delete the file, so the private key is not
+left on disk:
 
 ```powershell
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("signing.pem"))
+Remove-Item signing.pem
 ```
 
 Every other variable has a default that suits a local deployment: Swagger and the developer exception
@@ -463,7 +465,7 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | `set DB_USER in the env file` at `up` | Compose interpolation found the variable empty | Fill it in — the `:?` markers in the Compose file fail loudly rather than starting a container that cannot connect |
 | Container restarts; log ends at `entrypoint: applying EF Core migrations...` | The bundle cannot reach PostgreSQL | Re-run the two probes above; the address in the error names which side is wrong |
 | `set HEIMDALL_AUTH_SIGNING_KEY in the env file` at `up`; or the container restarts and its log ends with `Environment variable 'HEIMDALL_AUTH_SIGNING_KEY' is unset`, `… holds a PEM itself`, `… is not the base64 of a PEM` or `… is not a P-256 private key` | The signing key is missing, is the PEM instead of its base64, is the base64 of something other than the PEM text (such as the key's DER), or is not a P-256 private key (NFR-31) | Generate one with `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out signing.pem` and set the variable to `base64 -w0 signing.pem`; the message names the variable, never the value. `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` is held to the same format and stays empty when not rotating |
-| Start-up logs `HEIMDALL_AUTH_TOKEN_SECRET is set but no longer read; remove it` (or `…_PREVIOUS …`) at Warning | The retired HS256 secret, current or previous, is still in the environment. Nothing reads it, and the API runs | Remove the variable; in yggdrasil, Fortuna's references to it first ([Operations](../operations/#ending-the-overlap)). The message names the variable, never the value |
+| Start-up logs `HEIMDALL_AUTH_TOKEN_SECRET is set but no longer read; remove it` (or `…_PREVIOUS …`) at Warning | The retired HS256 secret, current or previous, is still in the environment. Nothing reads it, and the API runs | Remove the variable; in yggdrasil, Fortuna's references to it first ([Operations](../operations/#ending-the-overlap)). The message names the variable, never the value. A container started from the 4.0 compose file never sees either variable, so no warning there is no proof they are gone: check the store with `ygg vars list <scope> --keys` |
 | Migrations apply, then the API logs `permission denied for table …` | The API's login was switched to a runtime role, but the grants were not applied, or a migration ran as someone other than the owner | Re-run the grants in [Database roles](../operations/#database-roles--th-18) |
 | No developer exception page, and no EF parameter values in the log | Expected when the instance serves a public host: NFR-28 keeps them off, and start-up logs one warning naming the hosts | Set `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS=true` only if the environment holds made-up people and the diagnostics are wanted; see [Operations](../operations/#diagnostics-on-a-public-host--nfr-28) |
 | `no pg_hba.conf entry for host "..."` | The connection arrives from an address no rule covers | Add a `host` rule for that address, then `systemctl reload postgresql` |
