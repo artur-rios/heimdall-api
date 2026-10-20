@@ -2,7 +2,9 @@
 """Interactive menu for the Heimdall's EF Core migrations.
 
 Lists, creates and applies migrations for ArturRios.Heimdall.Data, loading the
-connection string from one of the environment files under the Web API's Environments folder.
+connection string from one of the environment files under the Web API's Environments folder:
+HEIMDALL_MIGRATIONS_CONNECTIONSTRING, the schema owner's, when the file sets it, and
+HEIMDALL_DATA_CONNECTIONSTRING otherwise, as the container entrypoint chooses.
 
 Usage (from anywhere in the repository):
 
@@ -24,6 +26,10 @@ DATA_PROJECT = REPO_ROOT / "src/Infrastructure/ArturRios.Heimdall.Data"
 STARTUP_PROJECT = DATA_PROJECT
 
 CONNECTION_STRING_VARIABLE = "HEIMDALL_DATA_CONNECTIONSTRING"
+# The schema owner's connection string, as the container entrypoint reads it: when an environment
+# file sets it, migrations run as the owner and the API's own login, which owns nothing, is never
+# asked to change the schema (the operations guide, "Database roles").
+MIGRATIONS_CONNECTION_STRING_VARIABLE = "HEIMDALL_MIGRATIONS_CONNECTIONSTRING"
 SECRET_KEYS = {"password", "pwd"}
 MIGRATION_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 
@@ -52,6 +58,19 @@ def parse_env_file(text):
         values[key] = value
 
     return values
+
+
+def migration_connection(variables):
+    """Pick the connection the EF tools use: the owner's when it is set, the API's otherwise.
+
+    Returns (variable name, connection string), the string empty when neither is set.
+    """
+    owner = variables.get(MIGRATIONS_CONNECTION_STRING_VARIABLE, "")
+
+    if owner.strip():
+        return MIGRATIONS_CONNECTION_STRING_VARIABLE, owner
+
+    return CONNECTION_STRING_VARIABLE, variables.get(CONNECTION_STRING_VARIABLE, "")
 
 
 def describe_connection(connection_string):
@@ -182,15 +201,17 @@ def main():
         return 1
 
     variables = parse_env_file(environment_file.read_text(encoding="utf-8"))
-    connection_string = variables.get(CONNECTION_STRING_VARIABLE, "")
+    variable, connection_string = migration_connection(variables)
 
     if not connection_string.strip():
         print(f"{environment_file.name} does not set {CONNECTION_STRING_VARIABLE}.")
         return 1
 
-    environ = {**os.environ, **variables}
+    # DesignTimeDbContextFactory reads HEIMDALL_DATA_CONNECTIONSTRING alone, so that is the name the
+    # chosen connection is given, for the EF tools' processes only.
+    environ = {**os.environ, **variables, CONNECTION_STRING_VARIABLE: connection_string}
 
-    print(f"\nLoaded {environment_file.name} -> {describe_connection(connection_string)}")
+    print(f"\nLoaded {environment_file.name} -> {variable}: {describe_connection(connection_string)}")
 
     if not ensure_ef_tool(environ):
         return 1
