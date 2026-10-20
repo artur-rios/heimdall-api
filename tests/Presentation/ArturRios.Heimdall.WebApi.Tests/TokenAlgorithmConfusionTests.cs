@@ -10,8 +10,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for algorithm confusion and key substitution against Heimdall's three readers (spec, "Each
 // configuration pins its algorithm"; rulings R1, R3). Every forgery is a token the reader would
-// otherwise accept — its payload, audience and kind, issued before the process started and live — so
-// the only thing that can refuse it is the signature or the algorithm. The sixth is the HS256 token a
+// otherwise accept — its payload, audience and kind, issued three minutes ago and live — so the only
+// thing that can refuse it is the signature or the algorithm. The sixth is the HS256 token a
 // 2.x process issued, signed with the shared secret 4.0.0 retired (TH-43): no reader accepts it any
 // more. The controls, signed ES256 with the same payload, show that each reader does accept such a
 // token.
