@@ -18,6 +18,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Rolling back:** to 3.x needs nothing, since 3.x does not require the secret; without it, 3.x refuses HS256
   tokens too.
 
+### Changed
+
+- The operations guide's "Bounding a distributed flood at the edge" now describes the credential-route limit
+  yggdrasil 0.7.4 ships: the `heimdall-api-<environment>-auth` router covers `/api/auth/` on both hosts for every
+  method but `GET`, `HEAD` and `OPTIONS`, 10 a minute with a burst of 10 per source. The relay router it proposed
+  for Fortuna is gone: a client system on the same host calls `http://heimdall-api.<environment>:8080/` and never
+  crosses the edge, as fortuna-api 3.1.0 does. A new paragraph tells the edge's `429` (plain text, `X-Retry-In`)
+  from the API's (JSON, no `X-Retry-In`). Trusted caller headers may also travel over a private network nothing
+  public routes to. The HTTP API and the OpenAPI document are unchanged.
+
 ### Removed
 
 - `HEIMDALL_AUTH_TOKEN_SECRET` and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: the compose file no longer passes them,
