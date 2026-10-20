@@ -8,15 +8,20 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for algorithm confusion and key substitution against Heimdall's three readers during the
-// overlap (spec, "Each configuration pins its algorithm"; rulings R1, R3). Every forgery is a token the
-// reader would otherwise accept — its payload, audience and kind, issued before the process started
-// and live — so the only thing that can refuse it is the signature or the algorithm. The controls,
-// signed correctly with the same payload, show that each reader does accept such a token.
+// Unit tests for algorithm confusion and key substitution against Heimdall's three readers (spec, "Each
+// configuration pins its algorithm"; rulings R1, R3). Every forgery is a token the reader would
+// otherwise accept — its payload, audience and kind, issued before the process started and live — so
+// the only thing that can refuse it is the signature or the algorithm. The sixth is the HS256 token a
+// 2.x process issued, signed with the shared secret 4.0.0 retired (TH-43): no reader accepts it any
+// more. The controls, signed ES256 with the same payload, show that each reader does accept such a
+// token.
 public class TokenAlgorithmConfusionTests
 {
-    // Generated for these tests (openssl rand -hex 20); no environment signs with them.
-    private const string TokenSecret = "unit-confusion-legacy-8c1f4e0d2b9a7f3e6c5d4b3a2f1e0d9c8b7a6f5e";
+    // The retired shared secret: what a 2.x process signed every token with, and what the functional
+    // suite's host still has set.
+    private const string TokenSecret = PostgresFixture.TokenSecret;
+
+    // Generated for these tests (openssl rand -hex 20); no environment signs with it.
     private const string OtherSecret = "unit-confusion-fortuna-0e9d8c7b6a5f4e3d2c1b0a9f8";
 
     private const string FortunaIssuer = "fortuna-local";
@@ -36,35 +41,25 @@ public class TokenAlgorithmConfusionTests
         return data;
     }
 
-    public static TheoryData<string, string> ReadersAndControls()
-    {
-        var data = new TheoryData<string, string>();
-
-        foreach (var reader in Readers)
-        {
-            data.Add(reader, "es256");
-            data.Add(reader, "legacy");
-        }
-
-        return data;
-    }
+    public static TheoryData<string> ReadersAlone() => new(Readers);
 
     private static readonly string[] Readers =
     [
-        LegacyTokenValidator.BearerReader, LegacyTokenValidator.ChallengeReader, LegacyTokenValidator.ApplicationReader
+        UnitTokenReaders.BearerReader, UnitTokenReaders.ChallengeReader, UnitTokenReaders.ApplicationReader
     ];
 
     private static readonly string[] Forgeries =
     [
         "1 hs256 keyed with the published key set",
-        "2 hs256 signed with the legacy secret, naming the current kid",
+        "2 hs256 signed with the retired secret, naming the current kid",
         "3 es256 from a fresh key renamed to the current kid",
         "4 alg none",
         "5 hs256 under fortuna-local with another secret",
-        "5b hs256 under fortuna-local with the legacy secret"
+        "5b hs256 under fortuna-local with the retired secret",
+        "6 hs256 signed with the retired secret, as a 2.x process signed it"
     ];
 
-    private static UnitTokenReaders ReadersDuringTheOverlap() => new(TokenSigningSecrets.Parse(TokenSecret, null));
+    private static UnitTokenReaders NewReaders() => new();
 
     private static string Forge(UnitTokenReaders readers, string reader, string forgery)
     {
@@ -78,6 +73,7 @@ public class TokenAlgorithmConfusionTests
             "4" => Unsigned(readers, reader),
             "5" => readers.TokenFor(reader, UnitSigningKeys.Hs256(OtherSecret), FortunaIssuer),
             "5b" => readers.TokenFor(reader, UnitSigningKeys.Hs256(TokenSecret), FortunaIssuer),
+            "6" => readers.TokenFor(reader, UnitSigningKeys.Hs256(TokenSecret)),
             _ => throw new ArgumentOutOfRangeException(nameof(forgery), forgery, null)
         };
     }
@@ -101,19 +97,17 @@ public class TokenAlgorithmConfusionTests
 
     [UnitTheory]
     [MemberData(nameof(ReadersAndForgeries))]
-    public async Task GivenAForgedToken_WhenAnyReaderReadsItDuringTheOverlap_ThenItIsRefused(
-        string reader, string forgery)
+    public async Task GivenAForgedToken_WhenAnyReaderReadsIt_ThenItIsRefused(string reader, string forgery)
     {
-        // Given — legacy secrets configured, and a forgery otherwise valid for this reader
-        var readers = ReadersDuringTheOverlap();
+        // Given — a forgery otherwise valid for this reader
+        var readers = NewReaders();
         var token = Forge(readers, reader, forgery);
 
         // When
         var refused = await readers.RefusesAsync(reader, token);
 
-        // Then — no user, no challenge, no application, and no legacy acceptance recorded
+        // Then — no user, no challenge, no application
         Assert.True(refused, $"the {reader} reader accepted forgery {forgery}");
-        Assert.Empty(readers.Log.Entries);
     }
 
     [UnitTheory]
@@ -121,13 +115,13 @@ public class TokenAlgorithmConfusionTests
     public void GivenAForgedToken_WhenItsHeaderIsRead_ThenItIsTheForgeryItClaimsToBe(string reader, string forgery)
     {
         // Given / When — the precondition of the theory above: each forgery is the attack it names
-        var readers = ReadersDuringTheOverlap();
+        var readers = NewReaders();
         var header = new JsonWebToken(Forge(readers, reader, forgery));
 
         // Then
         (string Alg, string? Kid) expected = forgery[..2].Trim() switch
         {
-            "1" or "5" or "5b" => ("HS256", null),
+            "1" or "5" or "5b" or "6" => ("HS256", null),
             "2" => ("HS256", readers.Keys.Current.Id),
             "3" => ("ES256", readers.Keys.Current.Id),
             "4" => ("none", null),
@@ -138,21 +132,17 @@ public class TokenAlgorithmConfusionTests
     }
 
     [UnitTheory]
-    [MemberData(nameof(ReadersAndControls))]
-    public async Task GivenACorrectlySignedToken_WhenEachReaderReadsItDuringTheOverlap_ThenItIsAccepted(
-        string reader, string signing)
+    [MemberData(nameof(ReadersAlone))]
+    public async Task GivenACorrectlySignedToken_WhenEachReaderReadsIt_ThenItIsAccepted(string reader)
     {
-        // Given — the forgeries' payload, signed ES256 with the current key, or HS256 with the legacy
-        // secret and no kid as a 2.x process signed it
-        var readers = ReadersDuringTheOverlap();
-        var token = readers.TokenFor(reader, signing == "es256"
-            ? UnitSigningKeys.Es256(readers.Keys.Current)
-            : UnitSigningKeys.Hs256(TokenSecret));
+        // Given — the forgeries' payload, signed ES256 with the current key
+        var readers = NewReaders();
+        var token = readers.TokenFor(reader, UnitSigningKeys.Es256(readers.Keys.Current));
 
         // When
         var accepted = await readers.AcceptsAsync(reader, token);
 
         // Then
-        Assert.True(accepted, $"the {reader} reader refused the {signing} control");
+        Assert.True(accepted, $"the {reader} reader refused the es256 control");
     }
 }

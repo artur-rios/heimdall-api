@@ -27,7 +27,7 @@ public class IssuedTokenTests
         // Given — the configuration start-up builds, keys.ApplyTo over the token settings, for a
         // fresh key and a previous one, which is published but must never sign
         var keys = TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, UnitSigningKeys.Create().EnvValue);
-        var readers = new UnitTokenReaders([], keys, Issuer, "heimdall-tests");
+        var readers = new UnitTokenReaders(keys, Issuer, "heimdall-tests");
 
         var (issue, audience) = kind switch
         {

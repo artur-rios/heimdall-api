@@ -25,8 +25,8 @@ public class PersonTokenAudienceTests
 
     private static readonly IdentityUserMapper Mapper = new(Audiences);
 
-    // Heimdall's issuers and readers over one ES256 key, as start-up wires them; no legacy secret.
-    private readonly UnitTokenReaders _readers = new([], issuer: Issuer, personAudience: PersonAudience);
+    // Heimdall's issuers and readers over one ES256 key, as start-up wires them.
+    private readonly UnitTokenReaders _readers = new(issuer: Issuer, personAudience: PersonAudience);
 
     private JwtConfiguration Configuration() => _readers.Configuration;
 
@@ -231,20 +231,18 @@ public class PersonTokenAudienceTests
     }
 
     [UnitTheory]
-    [InlineData(SecurityAlgorithms.HmacSha256, true)]
-    [InlineData(SecurityAlgorithms.HmacSha384, false)]
-    [InlineData(SecurityAlgorithms.HmacSha512, false)]
-    public async Task GivenAChallengeUnderAnHmacAlgorithm_WhenValidatedForVerification_ThenOnlyHs256IsAccepted(
-        string algorithm, bool accepted)
+    [InlineData(SecurityAlgorithms.HmacSha256)]
+    [InlineData(SecurityAlgorithms.HmacSha384)]
+    [InlineData(SecurityAlgorithms.HmacSha512)]
+    public async Task GivenAChallengeUnderAnHmacAlgorithm_WhenValidatedForVerification_ThenItIsRefused(string algorithm)
     {
-        // Given — during the overlap, a legacy challenge as a 2.x process issued it: the right legacy
-        // secret, issued before this process started, signed under each algorithm from one descriptor,
-        // so only the algorithm differs. The secret is long enough for HS512.
+        // Given — a challenge as a 2.x process issued it, signed with the shared secret 4.0.0 retired
+        // (TH-43) and issued before this process started, under each algorithm from one descriptor, so
+        // only the algorithm differs. The secret is long enough for HS512.
         const string longSecret = "unit-tests-person-token-signing-secret-long-enough-for-hs512-0123456789";
-        var readers = new UnitTokenReaders(
-            TokenSigningSecrets.Parse(longSecret, null), issuer: Issuer, personAudience: PersonAudience);
+        var readers = new UnitTokenReaders(issuer: Issuer, personAudience: PersonAudience);
         var token = readers.TokenFor(
-            LegacyTokenValidator.ChallengeReader,
+            UnitTokenReaders.ChallengeReader,
             new SigningCredentials(new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm));
         Assert.Equal(algorithm, new JsonWebToken(token).Alg);
 
@@ -252,10 +250,6 @@ public class PersonTokenAudienceTests
         var principal = await readers.Challenge.ValidateAsync(token);
 
         // Then
-        Assert.Equal(
-            accepted
-                ? new TwoFactorChallengePrincipal(readers.Person.Id, readers.ChallengeId, readers.Person.SecurityStamp)
-                : null,
-            principal);
+        Assert.Null(principal);
     }
 }

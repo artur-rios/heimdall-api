@@ -346,8 +346,6 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | Empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | Empty (set only while rotating the signing key, to the key being retired, in the same format: its public half stays published and its tokens stay valid, but it never signs) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | Empty. Optional, legacy: the former HS256 secret. While it is set, HS256 tokens issued before 3.0.0 are still accepted (none is issued); at least 32 bytes, ASCII only |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | Empty (legacy; refused at start-up when set without the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | `600` (10 minutes) |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |

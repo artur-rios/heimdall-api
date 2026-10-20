@@ -17,8 +17,9 @@
     <PackageReference Include="ArturRios.Messaging" />
     <PackageReference Include="ArturRios.Util.WebApi" />
     <!-- Arrives transitively via ArturRios.Util.WebApi, which asks for an older release. Declared
-         because this project signs and validates tokens with it directly, so the version that pins
-         HS256 and refuses short keys is a requirement of this project, not of the package. -->
+         because this project signs and validates tokens with it directly, so the version that signs
+         ES256 and pins each configuration's algorithm is a requirement of this project, not of the
+         package. -->
     <PackageReference Include="ArturRios.Jwt" />
     <!-- UC-25 verifies Google ID tokens itself (GoogleIdTokenVerifier) rather than through the
          library's IGoogleTokenVerifier, whose payload carries no name or picture claim and so cannot

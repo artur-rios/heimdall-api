@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Upgrading from 3.x to 4.0
+
+- **Operators:** remove `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS`; they are no longer read, and a warning names
+  them while set. Remove them from the environment after this release. In yggdrasil, fortuna-api's
+  `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's value, so Fortuna's references are removed first.
+  Nothing else changes: `HEIMDALL_AUTH_SIGNING_KEY` signs as before.
+- **Consumers:** HS256 tokens are refused; verify through `/.well-known/jwks.json` (fortuna-api 4.0.0 does).
+  Heimdall has issued none since 3.0.0.
+- **Rolling back:** to 3.x needs nothing, since 3.x does not require the secret; without it, 3.x refuses HS256
+  tokens too.
+
 ### Changed
 
 - The operations guide's "Bounding a distributed flood at the edge" now describes the credential-route limit
@@ -16,6 +27,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   crosses the edge, as fortuna-api 3.1.0 does. A new paragraph tells the edge's `429` (plain text, `X-Retry-In`)
   from the API's (JSON, no `X-Retry-In`). Trusted caller headers may also travel over a private network nothing
   public routes to. The HTTP API and the OpenAPI document are unchanged.
+
+### Removed
+
+- `HEIMDALL_AUTH_TOKEN_SECRET` and `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS`: the compose file no longer passes them,
+  and start-up no longer reads or checks them, so a value 3.x refused to start with no longer stops it. While
+  either is set, start-up logs `{Variable} is set but no longer read; remove it` at Warning, naming the variable
+  and never its value.
+- The overlap after the switch to ES256: no reader (bearer, two-factor challenge, application) accepts an HS256
+  token any more, whatever it is signed with, and the `Verified a legacy HS256 {Reader} token` line is gone. The
+  start-up line `Tokens: signed ES256 …; HS256 tokens {LegacyState}` keeps its template, with `refused`.
+
+### Security
+
+- TH-43 closed: the shared signing secret no longer exists. Only Heimdall holds a key that can sign its tokens,
+  and consumers hold public keys only.
 
 ## [3.0.0] - 2026-10-19
 

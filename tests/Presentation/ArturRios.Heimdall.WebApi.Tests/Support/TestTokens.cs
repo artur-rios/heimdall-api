@@ -11,7 +11,7 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 ///     change to the claim vocabulary can never leave the suite passing against a stale token
 ///     format, and signed with the same key, issuer and audience the host under test signs and
 ///     validates with (published into the environment by <see cref="PostgresFixture" />).
-///     <see cref="Legacy" /> mints the HS256 token a 2.x process issued, for the overlap.
+///     <see cref="Legacy" /> mints the HS256 token a 2.x process issued, which the host refuses.
 /// </summary>
 /// <remarks>
 ///     Authentication runs in <c>ClaimsOnly</c> mode, so no database read happens per request — but
@@ -104,16 +104,12 @@ public static class TestTokens
     ///     Builds the HS256 bearer token a 2.x process issued: signed with
     ///     <see cref="PostgresFixture.TokenSecret" /> (or <paramref name="secret" />), no <c>kid</c>,
     ///     the person's current stamp, and issued ten minutes ago, before the host under test started,
-    ///     as every genuine HS256 token was. The host accepts it only during the overlap.
+    ///     as every genuine HS256 token was. The host refuses it: the secret is retired (TH-43).
     /// </summary>
     /// <param name="personId">The <c>PublicId</c> the token names.</param>
     /// <param name="role">The role value it carries.</param>
-    /// <param name="secret">The secret it is signed with; omitted, the host's legacy secret.</param>
-    /// <param name="issuedAt">
-    ///     When it claims to have been issued, for a test proving a token issued after the host started
-    ///     is refused; omitted, ten minutes ago.
-    /// </param>
-    public static string Legacy(Guid personId, int role, string? secret = null, DateTime? issuedAt = null)
+    /// <param name="secret">The secret it is signed with; omitted, the retired secret.</param>
+    public static string Legacy(Guid personId, int role, string? secret = null)
     {
         var now = DateTime.UtcNow;
         var claims = new IdentityUserMapper(Audiences)
@@ -125,7 +121,7 @@ public static class TestTokens
             claims,
             Issuer,
             Audiences.Person,
-            issuedAt ?? now.AddMinutes(-10),
+            now.AddMinutes(-10),
             now.AddMinutes(-10),
             now.AddMinutes(30));
     }
