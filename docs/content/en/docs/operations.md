@@ -558,17 +558,20 @@ cannot stop this itself** (Threat Model Document, TH-03): those callers look lik
 global budget in the API would only let the attacker spend it and deny everybody at a lower cost.
 The bound belongs at the edge, where the request costs nothing to refuse.
 
-On the VPS that edge is Traefik (v3.6). Add these labels to the overlay that declares Heimdall's
-routers, yggdrasil's `stacks/heimdall-api.proxy.yml`, beside its `heimdall-api-${YGG_ENVIRONMENT}` and
-`heimdall-api-${YGG_ENVIRONMENT}-same-origin` routers. Every name carries `${YGG_ENVIRONMENT}`, because
-the environments share one Traefik.
+On the VPS that edge is Traefik (v3.6), and **yggdrasil 0.7.4 and later ship this limit**: the labels
+below are in its `stacks/heimdall-api.proxy.yml`, beside the `heimdall-api-${YGG_ENVIRONMENT}` and
+`heimdall-api-${YGG_ENVIRONMENT}-same-origin` routers. On an older yggdrasil, or any other overlay that
+declares Heimdall's routers, add them there. Every name carries `${YGG_ENVIRONMENT}`, because the
+environments share one Traefik.
 
 ```yaml
 labels:
   # The credential routes, on both hosts: the API's own and the web UI's same-origin /api/.
   # (?i): Traefik matches paths case-sensitively and ASP.NET does not, so /api/AUTH/login must not
-  # slip past on the main router.
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.rule=(Host(`${PUBLIC_HOST}`) || Host(`${UI_HOST}`)) && PathRegexp(`(?i)^/api/auth/`)
+  # slip past on the main router. Every method but GET, HEAD and OPTIONS, so the profile and admin
+  # pages' GETs under /api/auth/ stay on the other routers. The safe methods are excluded rather than
+  # POST named: Traefik matches a method case-sensitively too, and ASP.NET routes `post` to [HttpPost].
+  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.rule=(Host(`${PUBLIC_HOST}`) || Host(`${UI_HOST}`)) && PathRegexp(`(?i)^/api/auth/`) && !Method(`GET`) && !Method(`HEAD`) && !Method(`OPTIONS`)
   - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.entrypoints=websecure
   # The chain is replaced, not extended, so keep the headers every other router has.
   - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth.middlewares=secure-headers@file,heimdall-api-${YGG_ENVIRONMENT}-auth-limit
@@ -578,36 +581,26 @@ labels:
   - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.period=1m
   - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.burst=10
   - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-limit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=56
-
-  # A client system that signs its users in through Heimdall (Fortuna) reaches it from one source,
-  # so under the limit above all of its users would share one bucket of 10 a minute. It gets a
-  # router and a bucket of its own, matched on that source. Inside the API its users are counted
-  # apart only when it names each one's address with HEIMDALL_TRUSTED_CALLER_KEYS; until it does,
-  # they share one bucket there too.
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.rule=Host(`${PUBLIC_HOST}`) && PathRegexp(`(?i)^/api/auth/`) && ClientIP(`<fortuna-source>`)
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.priority=1000
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.entrypoints=websecure
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.middlewares=secure-headers@file,heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit
-  - traefik.http.routers.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna.service=heimdall-api-${YGG_ENVIRONMENT}
-  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.average=600
-  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.period=1m
-  - traefik.http.middlewares.heimdall-api-${YGG_ENVIRONMENT}-auth-fortuna-limit.ratelimit.burst=100
 ```
 
-- TLS is set on the `websecure` entrypoint, so the routers need nothing more. No priority is needed on
-  the first router: Traefik ranks the longer rule first, and it is longer than the main router's.
-  The relay router takes an explicit priority so it always wins over the first.
-- **Give each consumer its own bucket.** One router and one middleware per client system that relays
-  its users, each matched on that system's source and sized for its users; never one bucket shared
-  by every consumer, and never the public bucket for a relaying system. Replace `<fortuna-source>`
-  with Fortuna's address as Traefik sees it: the `ClientHost` of its requests in Traefik's access
-  log. Size `average` for the sign-ins Fortuna's users make in a minute at their busiest.
-- **Only a source that is Fortuna's alone.** If Fortuna's `ClientHost` is a Docker bridge gateway or
-  a NAT router's address — which it can be when it reaches Traefik through the public host, and which
-  other traffic then shows too (hairpinned clients, or IPv6 clients that Docker's port proxy
-  forwards) — do not use `ClientIP` for the exemption: everything behind that address would land in
-  the relay's large bucket. Route Fortuna by a source only it has, such as a private network to
-  Traefik or a host name of its own.
+- TLS is set on the `websecure` entrypoint, so the router needs nothing more. No priority is needed:
+  Traefik ranks the longer rule first, and it is longer than the main router's.
+- **A client system on the same host stays off the edge.** A client system that signs its users in
+  through Heimdall reaches it from one source, so through the edge all of its users would share one
+  bucket of 10 a minute. Inside yggdrasil it calls Heimdall at
+  `http://heimdall-api.<environment>:8080/`, the API's alias on the edge network, and never through
+  Traefik. fortuna-api 3.1.0 and later do so. Fortuna's caller key is trusted, so Heimdall counts
+  each of its users' sign-ins under that user's own address
+  ([A client system calling for its users](#a-client-system-calling-for-its-users--heimdall_trusted_caller_keys)).
+- **A relay that has to cross the edge needs a source of its own.** A client system on another host
+  that relays its users' sign-ins needs a router and a bucket of its own, matched on a source only it
+  has and sized for its users' sign-ins in a minute at their busiest; never one bucket shared by
+  every consumer, and never the public bucket. Do not match it with `ClientIP` when its `ClientHost`
+  in Traefik's access log is a Docker bridge gateway or a NAT router's address — which it can be when
+  it reaches Traefik through the public host, and which other traffic then shows too (hairpinned
+  clients, or IPv6 clients that Docker's port proxy forwards): everything behind that address would
+  land in the relay's large bucket. Route it by a private network to Traefik or a host name of its
+  own instead.
 - **Check the addresses first.** Before relying on any of this, confirm in Traefik's access log that
   `ClientHost` shows real client addresses, IPv6 ones included, rather than a proxy's or Docker's. A
   limiter keyed on the wrong address puts everybody in one bucket.
@@ -623,6 +616,24 @@ labels:
 - Do **not** add a global limit (one with `sourcecriterion.requesthost=true`) to the credential
   routes. It turns the flood into a denial of every caller at a lower cost, which is exactly what the
   API declines to do.
+
+**Edge 429 or the API's.** Either limit can refuse a credential request with a `429`, and the two
+answers differ. The edge counts with a token bucket, ten at once and then one more every six seconds;
+the API with a fixed window of ten a minute. A burst therefore meets the edge's `429` first, and a
+client that retries after a few seconds can get one request past the edge only to meet the API's
+`429`, with a longer `Retry-After`.
+
+| | Edge (Traefik) | API |
+| --- | --- | --- |
+| Body | `Too Many Requests`, plain text | The JSON error envelope, error `Too many requests.` |
+| Headers | `Retry-After` in whole seconds, rounded down (usually `1`, possibly `0`), `X-Retry-In` (a Go duration), and the `secure-headers` set, HSTS included | `Retry-After` from 1 to 60, and no `X-Retry-In` |
+| Traefik's access log | `DownstreamStatus` 429, `OriginStatus` 0 | `DownstreamStatus` 429, `OriginStatus` 429 |
+| Heimdall's log | Nothing: the request never reaches it | `Request finished` with `StatusCode` 429 |
+
+A client must not expect a JSON body on a `429`, and should wait out `Retry-After` whichever limit
+answered. heimdall-ui shows its rate-limited message for both, with no server message for the
+edge's. Fortuna's users never meet the edge's `429`, because Fortuna does not cross the edge: it
+relays the API's own.
 
 ### Bounds on the mail one address receives
 
@@ -669,8 +680,9 @@ under that user's address when it carries a key from `HEIMDALL_TRUSTED_CALLER_KE
 - **Rotating** a key needs no downtime: list the new key beside the old
   (`HEIMDALL_TRUSTED_CALLER_KEYS=<old>,<new>`), restart Heimdall, move the client system to the new
   key, then remove the old one and restart again.
-- Send the headers only from the client system's server, over TLS, never from a browser or a mobile
-  app, and keep the key in that system's secret store.
+- Send the headers only from the client system's server, over TLS, or over a private network nothing
+  public routes to, never from a browser or a mobile app, and keep the key in that system's secret
+  store.
 - A named address is counted in its own `caller:` namespace, apart from direct connections, so a key
   holder cannot spend the budget of a real caller by naming their address.
 - A leaked key lets its holder pick their own bucket, which only spreads credential guesses over
@@ -1084,7 +1096,7 @@ The API refuses to start without a P-256 private key in the variable, with a mes
 variable and never the value (NFR-31). At start-up it logs
 `Tokens: signed ES256 with key {KeyId}; published keys {KeyIds}; HS256 tokens {LegacyState}`, which
 is the line to check after a deploy: the key id it names is the one a consumer will see in the
-key set.
+key set. `LegacyState` is always `refused`: no HS256 token is accepted.
 
 ### Rotating the key
 
@@ -1119,39 +1131,30 @@ key set, throttled to at most one fetch a minute, and Fortuna ignores `Cache-Con
 `max-age=300` on the key set does not matter. Any fresh sign-in issues a new-`kid` token, so sign in
 once through Fortuna right after the redeploy to make that happen promptly. Until then tokens with the
 new `kid` are refused; once it lands, tokens signed with the leaked key (unknown `kid`) are refused.
-When the leaked material is the HS256 secret instead, also remove `HEIMDALL_AUTH_TOKEN_SECRET` and
-`_PREVIOUS`.
 
 ### Ending the overlap
 
-While `HEIMDALL_AUTH_TOKEN_SECRET` is set, Heimdall also accepts HS256 tokens issued before the
-upgrade, and issues none. It is not a 24-hour window: acceptance lasts as long as the secret is set,
-bounded per process. A legacy token is accepted only when it carries no `kid`, is HS256, was issued
-before the process started, and expires within one lifetime of that start, so every restart moves the
-bound forward. The 24 hours is the operator's rule for when the secret may go.
+This is history: the overlap ended with heimdall-api 4.0.0.
 
-Each accepted legacy token logs
-`Verified a legacy HS256 {Reader} token; HS256 tokens are accepted until HEIMDALL_AUTH_TOKEN_SECRET is removed`,
-without the token or the identity. Search the logs for the prefix `Verified a legacy HS256`. Remove the
-secret only when both hold: it is not before T0 + 24 h, where T0 is the 3.0.0 production deploy, and
-there has been no `Verified a legacy HS256` line for the longest token lifetime, with every consumer
-verifying through the key set. Then clear `HEIMDALL_AUTH_TOKEN_SECRET` and
-`HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` and redeploy. A previous secret without the current one stops
-start-up. Heimdall 4.0.0 stops reading both variables.
+3.x signed every token ES256 but, while `HEIMDALL_AUTH_TOKEN_SECRET` was set, still accepted the
+HS256 tokens Heimdall had issued before the upgrade, signed with that secret or `_PREVIOUS`, and
+logged each one as `Verified a legacy HS256 {Reader} token`. The secrets were to be removed no
+earlier than 24 hours after the 3.0.0 production deploy, and only once no such line had appeared
+for the longest token lifetime, with every consumer verifying through the key set.
 
-In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's value, so Fortuna's
-references are removed first, and its 4.0.0 release must stop reading the secret, before Heimdall's
-value is unset. The 4.0.0 releases carry that procedure (Part E).
+4.0.0 no longer reads either variable: every reader refuses an HS256 token, whatever it is signed
+with, and the compose file no longer passes them. While either is still set, start-up logs
+`{Variable} is set but no longer read; remove it` at Warning, naming the variable and never its
+value. Remove both from the environment. In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a
+`${ref:}` to Heimdall's value, so Fortuna's references are removed first (fortuna-api 4.0.0 no
+longer reads it), then Heimdall's value is unset.
 
-### Rolling back to 2.x
+### Rolling back
 
-Rolling Heimdall back to 2.x signs out everything 3.0.0 issued: person and subject-rights sessions,
-challenges in flight, and application tokens, because 2.x verifies HS256 alone. At Fortuna 3.0.0,
-ES256 tokens keep verifying from its cached key set until they expire. After a Fortuna restart the
-key-set fetch fails, since 2.x serves no key set, and they are refused. HS256 tokens issued after the
-rollback verify through Fortuna's legacy secret. Fortuna must stay at 3.0.0 or later while Heimdall
-runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` is still set, because
-2.0.0's compose file requires it.
+Rolling 4.0.0 back to 3.x needs nothing: 3.x does not require the secret, and without it 3.x refuses
+HS256 tokens too. A rollback to 2.x is no longer possible once the secret has been removed: 2.x
+signs and verifies HS256 with it alone, its compose file requires it, and consumers at 4.0.0 or later
+no longer verify HS256.
 
 ### Consumers
 
@@ -1181,8 +1184,6 @@ runs 3.x. A rollback to 2.x is possible only while `HEIMDALL_AUTH_TOKEN_SECRET` 
 | `HEIMDALL_AUTH_TOKEN_ISSUER` / `_AUDIENCE` | | empty |
 | `HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | | empty (set only while rotating; same format) |
-| `HEIMDALL_AUTH_TOKEN_SECRET` | | empty (legacy HS256 secret; while set, at least 32 bytes of ASCII, and pre-3.0.0 tokens stay valid) |
-| `HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS` | | empty (legacy; refused without the secret) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `600` |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | | `4` |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | | `86400` |

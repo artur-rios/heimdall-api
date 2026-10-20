@@ -11,9 +11,8 @@ using Microsoft.IdentityModel.Tokens;
 namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for TokenOrigin and PersonTokenValidator (Threat Model TB-5). Heimdall signs several
-// kinds of token with one key, and during the overlap its readers accept HS256 tokens signed with a
-// secret that is not Heimdall's alone, so a correct signature proves only that a key signed a token:
-// each reader also requires Heimdall's issuer and exactly one of the audiences it takes. The bearer
+// kinds of token with one key, so a correct signature proves only that the key signed a token: each
+// reader also requires Heimdall's issuer and exactly one of the audiences it takes. The bearer
 // validator applies that after the signature and lifetime check, and answers a refusal as it answers
 // a bad signature.
 public class TokenOriginTests
@@ -44,8 +43,8 @@ public class TokenOriginTests
 
     private static IdentityUser FullIdentity() => new(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
-    // The bearer reader over that key, as start-up wires it; no legacy secret.
-    private static PersonTokenValidator Validator() => new UnitTokenReaders([], Keys, Issuer, PersonAudience).Bearer;
+    // The bearer reader over that key, as start-up wires it.
+    private static PersonTokenValidator Validator() => new UnitTokenReaders(Keys, Issuer, PersonAudience).Bearer;
 
     // TokenOrigin
 
@@ -167,20 +166,19 @@ public class TokenOriginTests
     }
 
     [UnitTheory]
-    [InlineData(SecurityAlgorithms.HmacSha256, true)]
-    [InlineData(SecurityAlgorithms.HmacSha384, false)]
-    [InlineData(SecurityAlgorithms.HmacSha512, false)]
-    public async Task GivenTheRightKeyUnderAnHmacAlgorithm_WhenValidated_ThenOnlyHs256IsAccepted(
-        string algorithm, bool accepted)
+    [InlineData(SecurityAlgorithms.HmacSha256)]
+    [InlineData(SecurityAlgorithms.HmacSha384)]
+    [InlineData(SecurityAlgorithms.HmacSha512)]
+    public async Task GivenTheRetiredSecretUnderAnHmacAlgorithm_WhenValidated_ThenItIsRefused(string algorithm)
     {
-        // Given — during the overlap, a legacy token as a 2.x process issued it: the right legacy
-        // secret, issued before this process started. HS256 was the one algorithm Heimdall signed
-        // with, so it is the one the legacy path accepts. One descriptor for every case, with a key
+        // Given — a token as a 2.x process issued it, signed with the shared secret 4.0.0 retired
+        // (TH-43) and issued before this process started, under each HMAC algorithm. HS256 was the one
+        // Heimdall signed with; none is accepted any more. One descriptor for every case, with a key
         // long enough for HS512, so only the algorithm differs.
         const string longSecret = "unit-tests-token-origin-signing-secret-long-enough-for-hs512-0123456789";
-        var readers = new UnitTokenReaders(TokenSigningSecrets.Parse(longSecret, null), Keys, Issuer, PersonAudience);
+        var readers = new UnitTokenReaders(Keys, Issuer, PersonAudience);
         var token = readers.TokenFor(
-            LegacyTokenValidator.BearerReader,
+            UnitTokenReaders.BearerReader,
             new SigningCredentials(new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm));
         Assert.Equal(algorithm, new JsonWebToken(token).Alg);
 
@@ -188,16 +186,8 @@ public class TokenOriginTests
         var result = await readers.Bearer.ValidateAsync(token, new DefaultHttpContext());
 
         // Then
-        if (accepted)
-        {
-            Assert.Equal(readers.Person.Id, result.User?.Id);
-            Assert.Null(result.Error);
-        }
-        else
-        {
-            Assert.Null(result.User);
-            Assert.Equal(PersonTokenValidator.InvalidToken, result.Error);
-        }
+        Assert.Null(result.User);
+        Assert.Equal(PersonTokenValidator.InvalidToken, result.Error);
     }
 
     [UnitTheory]
@@ -207,7 +197,7 @@ public class TokenOriginTests
     {
         // Given — HEIMDALL_AUTH_TOKEN_AUDIENCE left empty, its documented default: a full token then
         // carries no aud claim, and a challenge carries the bare suffix
-        var readers = new UnitTokenReaders([], Keys, Issuer, string.Empty);
+        var readers = new UnitTokenReaders(Keys, Issuer, string.Empty);
         var audiences = readers.Audiences;
         var challenge = audience == audiences.TwoFactorChallenge;
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)

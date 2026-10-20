@@ -8,8 +8,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Functional tests for how start-up reads the token key material (spec, "Start-up rules"): Heimdall
 // signs every token ES256, so it refuses to start without a usable signing key, naming the variable
-// and never its value. An unset legacy secret is not a refusal — it only means the overlap is over,
-// which TokenOverlapTests covers.
+// and never its value. The retired shared secret is no refusal either way: RetiredSecretTests covers
+// a host that still has it set.
 [Collection(nameof(FunctionalCollection))]
 public class TokenSigningStartupTests
 {
