@@ -904,14 +904,19 @@ public class Startup : WebApiStartup
     /// </summary>
     private static void WarnOnRetiredTokenSecrets()
     {
-        foreach (var variable in RetiredTokenSecretVariables)
+        foreach (var variable in SetRetiredTokenSecretVariables(Environment.GetEnvironmentVariable))
         {
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(variable)))
-            {
-                Log.Warning("{Variable} is set but no longer read; remove it", variable);
-            }
+            Log.Warning("{Variable} is set but no longer read; remove it", variable);
         }
     }
+
+    /// <summary>
+    ///     The retired token secret variables <paramref name="read" /> finds set. A value that is empty
+    ///     or whitespace only is unset, as 3.x treated it: an env file's <c>VARIABLE=</c> reaches the
+    ///     process as the empty string.
+    /// </summary>
+    public static IReadOnlyList<string> SetRetiredTokenSecretVariables(Func<string, string?> read) =>
+        [.. RetiredTokenSecretVariables.Where(variable => !string.IsNullOrWhiteSpace(read(variable)))];
 
     /// <summary>
     ///     Believes <c>X-Forwarded-For</c> and <c>X-Forwarded-Proto</c> from the proxies
