@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-20
+
 ### Upgrading from 3.x to 4.0
 
 - **Operators:** remove `HEIMDALL_AUTH_TOKEN_SECRET` and `_PREVIOUS`; they are no longer read, and a warning names
@@ -713,7 +715,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/artur-rios/heimdall-api/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/artur-rios/heimdall-api/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...v2.0.0
 [1.7.0]: https://github.com/artur-rios/heimdall-api/compare/v1.6.0...v1.7.0
