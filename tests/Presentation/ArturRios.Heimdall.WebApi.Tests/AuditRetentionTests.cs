@@ -50,7 +50,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
 
-    private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context)
+    private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context, int batchSize = 500)
     {
         var entries = new EfRepository<AuditLog, long>(context);
         var tombstones = new EfRepository<ErasedSubject, Guid>(context);
@@ -60,7 +60,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
             new EfRepository<Person, long>(context),
             new EfRepository<GoogleUser, long>(context),
             tombstones, tombstones,
-            new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = 500 });
+            new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize });
     }
 
     /// <summary>
@@ -166,6 +166,52 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         var untouched = await verification.AuditLogs.SingleAsync(x => x.Id == recent.Id);
 
         Assert.Equal(actor.PublicId, untouched.ActorPersonId);
+    }
+
+    [FunctionalFact]
+    public async Task GivenABacklogOfThreeFullBatchesOnEveryGround_WhenThePassRunsOnce_ThenTheDatabaseAcceptsEveryWrite()
+    {
+        // Given nothing else due, then — with a batch of two — six entries due on each ground: past the
+        // period by and about a live person, by and about an erased one, and about a hard-deleted one (#206)
+        await DrainAsync();
+        await using var context = fixture.CreateContext();
+
+        var live = await SeedPersonAsync(context, anonymisedAt: null);
+        var erased = await SeedPersonAsync(context, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var removed = await SeedPersonAsync(context, anonymisedAt: null);
+        context.ErasedSubjects.Add(new ErasedSubject
+        {
+            Id = removed.PublicId, Kind = (int)ErasedSubjectKinds.Person, CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        await context.Persons.Where(x => x.Id == removed.Id).ExecuteDeleteAsync();
+
+        var entries = new List<AuditLog>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            entries.Add(await SeedEntryAsync(
+                context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)), live.PublicId));
+            entries.Add(await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3 - i), erased.PublicId));
+            entries.Add(await SeedEntryAsync(context, actorId: null, DateTime.UtcNow.AddDays(-3 - i), removed.PublicId));
+        }
+
+        // When — one run
+        await using var runContext = fixture.CreateContext();
+        var output = await Handler(runContext, batchSize: 2).HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — every part due is cleared, in nine batches of two, and nothing is left
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(12, output.Data!.EntriesPseudonymised);
+        Assert.Equal(18, output.Data.TargetsCleared);
+        Assert.Equal(0, output.Data.Backlog);
+
+        await using var verification = fixture.CreateContext();
+        var ids = entries.Select(entry => entry.Id).ToList();
+        var stored = await verification.AuditLogs.Where(x => ids.Contains(x.Id)).ToListAsync();
+
+        Assert.All(stored, entry => Assert.Null(entry.ActorPersonId));
+        Assert.All(stored, entry => Assert.Null(entry.TargetId));
     }
 
     [FunctionalFact]

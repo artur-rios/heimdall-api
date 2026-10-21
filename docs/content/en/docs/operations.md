@@ -826,6 +826,16 @@ or the person they acted on, for something they did this week; it is an anti-tam
 the retention period, which is eighteen months. A deployment upgrading to `AllowClearingAuditTarget`
 has its older person targets cleared over the next runs, one batch at a time.
 
+The pass finds what is due without reading the whole trail. Entries past the period are read through two
+partial indexes on `created_at` — over the entries that still have an actor, and over those that still have a
+target — and entries naming an anonymised or hard-deleted identity are found from those identities, so a run
+with nothing due costs a few index probes rather than a scan of eighteen months of entries. The one part that
+still grows with the trail is the check of old targets: an entry past the period whose target is a scope,
+an application or anything else that is not a person keeps its target for good, and each run looks at those
+again. The `AddAuditRetentionIndexes` migration builds the two indexes with `CREATE INDEX CONCURRENTLY`, so
+audit writes carry on while it runs; on a large trail it takes a while. If it is interrupted, drop the index
+it leaves marked invalid (`\d heimdall.audit_log` shows `INVALID`) before applying it again.
+
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |

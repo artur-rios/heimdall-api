@@ -242,6 +242,14 @@ namespace ArturRios.Heimdall.Data.Migrations
                     b.HasIndex("TargetId")
                         .HasDatabaseName("ix_audit_log_target_id");
 
+                    b.HasIndex(new[] { "CreatedAt" }, "ix_audit_log_created_at_attributed")
+                        .HasDatabaseName("ix_audit_log_created_at_attributed")
+                        .HasFilter("actor_person_id IS NOT NULL");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "ix_audit_log_created_at_targeted")
+                        .HasDatabaseName("ix_audit_log_created_at_targeted")
+                        .HasFilter("target_id IS NOT NULL");
+
                     b.ToTable("audit_log", "heimdall");
                 });
 

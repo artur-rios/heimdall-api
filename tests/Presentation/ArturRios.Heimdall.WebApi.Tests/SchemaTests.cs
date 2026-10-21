@@ -205,6 +205,37 @@ public class SchemaTests(PostgresFixture fixture)
         Assert.Contains("(target_id)", definition);
     }
 
+    [FunctionalTheory]
+    [InlineData("ix_audit_log_created_at_attributed", "(actor_person_id IS NOT NULL)")]
+    [InlineData("ix_audit_log_created_at_targeted", "(target_id IS NOT NULL)")]
+    public async Task GivenMigrationsApplied_WhenAuditRetentionIndexesInspected_ThenEachIsAValidPartialIndexOnCreatedAt(
+        string index, string predicate)
+    {
+        // Given the migrated schema. NFR-21's pass reads the entries past the attribution period through
+        // these, oldest first, instead of the whole trail (#206); built concurrently, so check it is valid.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select i.indexdef, x.indisvalid
+            from pg_indexes i
+            join pg_class c on c.relname = i.indexname
+            join pg_namespace n on n.oid = c.relnamespace and n.nspname = i.schemaname
+            join pg_index x on x.indexrelid = c.oid
+            where i.schemaname = 'heimdall' and i.tablename = 'audit_log' and i.indexname = @index
+            """,
+            connection);
+        command.Parameters.AddWithValue("index", index);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        // Then
+        Assert.True(await reader.ReadAsync(), $"{index} is missing");
+        Assert.Contains("(created_at) WHERE " + predicate, reader.GetString(0));
+        Assert.True(reader.GetBoolean(1), $"{index} is not valid");
+    }
+
     [FunctionalFact]
     public async Task GivenMigrationsApplied_WhenCredentialIndexesInspected_ThenHashAndPublicIdAreUnique()
     {

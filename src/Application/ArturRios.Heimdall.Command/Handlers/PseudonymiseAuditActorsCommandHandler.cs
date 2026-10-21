@@ -199,47 +199,169 @@ public class PseudonymiseAuditActorsCommandHandler(
     }
 
     /// <summary>One batch of the entries due, oldest first, each with the parts of it that are due.</summary>
-    private async Task<List<DueEntry>> SelectDueAsync(DateTime cutoff) =>
-        await Due(cutoff)
-            .OrderBy(row => row.Entry.CreatedAt)
-            .Take(retention.PurgeBatchSize)
+    /// <remarks>
+    ///     <para>
+    ///         <b>Simple queries, not one (#206).</b> The single query this replaced evaluated up to
+    ///         four correlated subqueries for every attributed entry in the attribution window, in
+    ///         <c>created_at</c> order, so a run with nothing due still read the whole window, on every
+    ///         instance, every run. Each ground is now its own query that projects ids rather than
+    ///         entities, and each is served by an index. The two grounds of age read a partial index on
+    ///         <c>created_at</c> over the entries that still have an actor, or a target
+    ///         (<c>AddAuditRetentionIndexes</c>), from the oldest up to the cutoff: an actor past the period is
+    ///         always cleared, so that range holds only the backlog; a target past the period stays when it
+    ///         names a scope or anything else that is not a person, so the target range also holds those,
+    ///         each checked against the identities by their unique index. The grounds of identity are
+    ///         reached from the anonymised identities and the tombstones, through the indexes on
+    ///         <c>actor_person_id</c> and <c>target_id</c>, so their cost follows the identities rather than
+    ///         the trail (see <see cref="DueGroundsAsync" />).
+    ///     </para>
+    ///     <para>
+    ///         <b>One batch bound still covers the run.</b> Each query takes its own oldest batch, by
+    ///         <c>created_at</c> and then id; the batch is the oldest of their union. An entry in it is
+    ///         necessarily in the batch of every ground it is due on — nothing older than it is due on that
+    ///         ground than is due at all — so the grounds a selected entry was returned by are exactly the
+    ///         parts of it that are due. That is what the clearing acts on, so a row selected for its target
+    ///         cannot have its actor cleared with it, nor the reverse, and an entry due on both grounds is
+    ///         selected, written and counted once, as before.
+    ///     </para>
+    /// </remarks>
+    private async Task<List<DueEntry>> SelectDueAsync(DateTime cutoff)
+    {
+        var size = retention.PurgeBatchSize;
+        var grounds = await DueGroundsAsync(cutoff);
+
+        var actorDue = new HashSet<long>();
+        var targetDue = new HashSet<long>();
+        var candidates = new Dictionary<long, DateTime>();
+
+        foreach (var (ground, isActor) in grounds)
+        {
+            var batch = await ground
+                .OrderBy(entry => entry.CreatedAt)
+                .ThenBy(entry => entry.Id)
+                .Select(entry => new { entry.Id, entry.CreatedAt })
+                .Take(size)
+                .ToListAsync();
+
+            foreach (var row in batch)
+            {
+                candidates[row.Id] = row.CreatedAt;
+                (isActor ? actorDue : targetDue).Add(row.Id);
+            }
+        }
+
+        var ids = candidates
+            .OrderBy(candidate => candidate.Value)
+            .ThenBy(candidate => candidate.Key)
+            .Take(size)
+            .Select(candidate => candidate.Key)
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        // By primary key: the batch is already chosen, and these are the rows the write needs.
+        var entries = await auditReader.Query()
+            .Where(entry => ids.Contains(entry.Id))
             .ToListAsync();
 
-    /// <summary>How many entries are still due: the backlog a run that stopped at its cap leaves.</summary>
-    private async Task<int> CountDueAsync(DateTime cutoff) => await Due(cutoff).CountAsync();
-
-    private IQueryable<DueEntry> Due(DateTime cutoff)
-    {
-        var persons = personReader.Query();
-        var googleUsers = googleUserReader.Query();
-        var tombstones = erasedSubjectReader.Query();
-
-        // One query over the union of both grounds, rather than one per part, so a single batch
-        // bound covers the run, an entry needing both is selected once, and each row carries the
-        // reason it was selected. The flags are what the loop above acts on, so a row selected for
-        // its target cannot have its actor cleared with it, nor the reverse.
-        return auditReader.Query()
+        return entries
+            .OrderBy(entry => entry.CreatedAt)
+            .ThenBy(entry => entry.Id)
             .Select(entry => new DueEntry
             {
                 Entry = entry,
-                ActorDue = entry.ActorPersonId != null
-                           && (entry.CreatedAt <= cutoff
-                               || persons.Any(person =>
-                                   person.PublicId == entry.ActorPersonId && person.AnonymisedAt != null)
-                               || googleUsers.Any(googleUser =>
-                                   googleUser.PublicId == entry.ActorPersonId && googleUser.AnonymisedAt != null)),
-                TargetDue = entry.TargetId != null
-                            && (persons.Any(person =>
-                                    person.PublicId == entry.TargetId
-                                    && (entry.CreatedAt <= cutoff || person.AnonymisedAt != null))
-                                || googleUsers.Any(googleUser =>
-                                    googleUser.PublicId == entry.TargetId
-                                    && (entry.CreatedAt <= cutoff || googleUser.AnonymisedAt != null))
-                                || (tombstones.Any(tombstone => tombstone.Id == entry.TargetId)
-                                    && !persons.Any(person => person.PublicId == entry.TargetId)
-                                    && !googleUsers.Any(googleUser => googleUser.PublicId == entry.TargetId)))
+                ActorDue = actorDue.Contains(entry.Id),
+                TargetDue = targetDue.Contains(entry.Id)
             })
-            .Where(row => row.ActorDue || row.TargetDue);
+            .ToList();
+    }
+
+    /// <summary>How many entries are still due: the backlog a run that stopped at its cap leaves.</summary>
+    private async Task<int> CountDueAsync(DateTime cutoff)
+    {
+        var due = (await DueGroundsAsync(cutoff))
+            .Select(ground => ground.Ground.Select(entry => entry.Id))
+            .Aggregate((all, next) => all.Union(next));
+
+        return await due.CountAsync();
+    }
+
+    /// <summary>
+    ///     The grounds on which an entry is due, each as a query over the entries due on it, and whether it
+    ///     clears the actor (otherwise the target). An entry is due when it is due on any of them.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Together these are exactly the rule the trigger enforces. The actor is due past the
+    ///         attribution period, or once the identity it names is anonymised. A target is due when it names
+    ///         a person or Google User and the entry is past the period, or when that identity is anonymised,
+    ///         or — at any age — when its id was tombstoned by a hard delete and no <c>person</c> or
+    ///         <c>google_user</c> row has it any more (#195).
+    ///     </para>
+    ///     <para>
+    ///         The grounds of identity are asked in two steps. First, which anonymised or hard-deleted
+    ///         identities the trail still names, asked from the identities' side: one probe of the index on
+    ///         <c>actor_person_id</c> or <c>target_id</c> each, so that when nothing is due — the usual case —
+    ///         the cost is the identities, not the trail. Then the entries naming those, by id. Asked in one
+    ///         step, as entries whose actor is in a subquery, PostgreSQL may walk <c>created_at</c> in order,
+    ///         or scan the table, expecting to meet such entries early: measured, it scanned the whole trail
+    ///         when nothing was due.
+    ///     </para>
+    /// </remarks>
+    private async Task<List<(IQueryable<AuditLog> Ground, bool IsActor)>> DueGroundsAsync(DateTime cutoff)
+    {
+        var entries = auditReader.Query();
+        var persons = personReader.Query();
+        var googleUsers = googleUserReader.Query();
+
+        var identities = persons.Select(person => person.PublicId)
+            .Concat(googleUsers.Select(googleUser => googleUser.PublicId));
+
+        var anonymised = persons.Where(person => person.AnonymisedAt != null).Select(person => person.PublicId)
+            .Concat(googleUsers.Where(googleUser => googleUser.AnonymisedAt != null)
+                .Select(googleUser => googleUser.PublicId));
+
+        var hardDeleted = erasedSubjectReader.Query()
+            .Where(tombstone => !persons.Any(person => person.PublicId == tombstone.Id)
+                                && !googleUsers.Any(googleUser => googleUser.PublicId == tombstone.Id))
+            .Select(tombstone => tombstone.Id);
+
+        var namedAsActor = await anonymised
+            .Where(id => entries.Any(entry => entry.ActorPersonId == id))
+            .ToListAsync();
+
+        var namedAsTarget = await anonymised.Concat(hardDeleted)
+            .Where(id => entries.Any(entry => entry.TargetId == id))
+            .ToListAsync();
+
+        List<(IQueryable<AuditLog> Ground, bool IsActor)> grounds =
+        [
+            // The actor, past the period: the partial index on created_at over attributed entries.
+            (entries.Where(entry => entry.ActorPersonId != null && entry.CreatedAt <= cutoff), true),
+
+            // A person target, past the period: the partial index on created_at over entries with a target.
+            (entries.Where(entry => entry.TargetId != null
+                                    && entry.CreatedAt <= cutoff
+                                    && identities.Contains(entry.TargetId.Value)), false)
+        ];
+
+        // The actor or a target anonymised, or a target hard-deleted: the entries naming those still named.
+        if (namedAsActor.Count > 0)
+        {
+            grounds.Add((entries.Where(entry =>
+                entry.ActorPersonId != null && namedAsActor.Contains(entry.ActorPersonId.Value)), true));
+        }
+
+        if (namedAsTarget.Count > 0)
+        {
+            grounds.Add((entries.Where(entry =>
+                entry.TargetId != null && namedAsTarget.Contains(entry.TargetId.Value)), false));
+        }
+
+        return grounds;
     }
 
     /// <summary>The tombstones past their grace that no audit entry names as its target any more.</summary>

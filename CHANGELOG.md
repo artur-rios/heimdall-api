@@ -27,6 +27,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   write throws. The retry of blocked erasure requests takes its batches the same way, each after the last
   request of the one before, so requests still blocked can no longer keep newer ones from being retried. The
   variable is in the `docker/*.env.example` templates and `operations.md` (#206).
+- The audit pseudonymisation pass no longer reads the whole attribution window on every run. It evaluated up to
+  four correlated subqueries for every attributed entry, so a run with nothing due still examined every entry of
+  the last eighteen months, on every instance. It now asks each ground separately, projecting ids: entries past
+  the period through two new partial indexes on `audit_log(created_at)` (over the entries that still have an
+  actor, and over those that still have a target), and entries naming an anonymised or hard-deleted identity
+  from those identities. What it clears is unchanged. On a 305,000-entry trail with nothing due the selection
+  went from 430 ms to about 80 ms, most of it the re-check of old entries whose target is not a person, which
+  keep their target for good. The `AddAuditRetentionIndexes` migration builds the indexes with
+  `CREATE INDEX CONCURRENTLY`, so audit writes are not blocked while it runs (#206).
 - One blocked erasure request that cannot be retried no longer stops every anonymisation. The retry now runs
   best-effort: its failure is logged and reported with the run's errors, and the identities that are due are still
   anonymised. The retry reads blocked requests `PurgeBatchSize` at a time, oldest first, where it loaded them all
