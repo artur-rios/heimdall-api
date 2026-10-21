@@ -57,6 +57,8 @@ public static class PersonMessageMap
             // AF-09c — caller may not delete the person; AF-09d / AF-10c — caller targeted themselves.
             [PersonMessages.NotAuthorizedToDeletePerson] = HttpStatusCodes.Forbidden,
             [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden,
+            // NFR-32 (AF-09f, AF-10d) — the person is the last active System Admin.
+            [PersonMessages.WouldRemoveLastSystemAdmin] = HttpStatusCodes.Conflict,
             // UC-10 main flow — person hard deleted. AF-10a reuses PersonNotFound (404), AF-10b reuses
             // ScopeWouldLoseLastOwner (409), and AF-10c reuses CannotDeleteSelf (403).
             [PersonMessages.PersonHardDeletedSuccessfully] = HttpStatusCodes.Ok,

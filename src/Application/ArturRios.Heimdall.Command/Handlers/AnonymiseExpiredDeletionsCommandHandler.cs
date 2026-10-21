@@ -359,10 +359,15 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///         <see cref="DataRetentionOptions.MaxBatchesPerTick" />. No request is tried twice in a run.
     ///     </para>
     ///     <para>
-    ///         <b>Each under the locks of the person's scopes (#202).</b> The guard and the suspension run in
-    ///         a transaction of their own per request, holding the rows of the scopes the person owns
-    ///         (<see cref="IInvariantLocks" />) as every writer that can take an owner out of a scope does,
-    ///         so a co-owner removed or deleted at the same moment is seen. A request still blocked commits
+    ///         <b>Both blocks (#203).</b> A request blocked because its subject was a scope's last owner
+    ///         (NFR-12) or the last active System Admin (NFR-32) is released once neither holds — whichever
+    ///         reason was recorded, both are asked again.
+    ///     </para>
+    ///     <para>
+    ///         <b>Each under the locks of the person's scopes (#202).</b> The guards and the suspension run in
+    ///         a transaction of their own per request, holding the rows of the scopes the person owns, and the
+    ///         System Admin set for an administrator (<see cref="IInvariantLocks" />), as every writer that can
+    ///         take an owner or a System Admin out does, so one removed or deleted at the same moment is seen. A request still blocked commits
     ///         that transaction too: nothing was written, and committing keeps the run's other tracked
     ///         requests tracked, which a rollback would clear.
     ///     </para>
@@ -404,12 +409,15 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                     {
                         await using var transaction = await transactions.BeginAsync();
 
-                        var ownedScopeIds =
-                            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+                        var systemAdmin = LastSystemAdminGuard.Applies(person);
+                        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(
+                            locks, personReader, person.Id, systemAdmin);
 
+                        // Released once neither NFR-12 nor NFR-32 blocks it, whichever blocked it first (#203).
                         // A targeted write (#237), made only while the request is still blocked and the record
                         // live and unrestricted, so a restriction or deletion that landed since stands.
-                        if (!await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
+                        if (!await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader) &&
+                            !(systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader)))
                         {
                             await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
                         }

@@ -17,16 +17,18 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     Handles <see cref="DeletePersonCommand" /> (UC-09): locates the person (AF-09a), refuses a
 ///     self-deletion (AF-09d), enforces the per-actor rule (AF-09c), serves an already-deleted person
 ///     as an idempotent no-op (AF-09b), and otherwise sets <c>IsDeleted = true</c> — provided no scope
-///     would be left without an owner (AF-09e, NFR-12). Nothing cascades: the person's join rows,
+///     would be left without an owner (AF-09e, NFR-12) and the system not without an active System Admin
+///     (AF-09f, NFR-32). Nothing cascades: the person's join rows,
 ///     tokens, and owned applications are untouched. All failures are returned as errors on the
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
-///     <b>Under the locks of the person's scopes</b> (#202). The last-owner guard and the deletion run in
-///     one transaction holding the rows of the scopes the person owns (<see cref="IInvariantLocks" />), as
-///     every writer that can take an owner out of a scope does. Deleting one owner while the other is
+///     <b>Under the locks of the person's scopes</b> (#202), and of the System Admin set when the person is
+///     one (#203). The guards and the deletion run in one transaction holding the rows of the scopes the
+///     person owns, and then the System Admin set (<see cref="IInvariantLocks" />), as every writer that
+///     can take an owner or a System Admin out does. Deleting one of the last two while the other is
 ///     removed or deleted therefore runs one after the other, and the second is refused, where both used
-///     to see the other owner still there.
+///     to see the other still there.
 /// </remarks>
 public class DeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -81,7 +83,9 @@ public class DeletePersonCommandHandler(
         // rolls back.
         await using var transaction = await transactions.BeginAsync();
 
-        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+        var systemAdmin = LastSystemAdminGuard.Applies(person);
+        var ownedScopeIds =
+            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
 
         // AF-09e (NFR-12): a soft-deleted owner can no longer authenticate, so deleting the last one
         // would leave the scope effectively ownerless. Asked under the locks, so it is still true when
@@ -89,6 +93,14 @@ public class DeletePersonCommandHandler(
         if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
+        }
+
+        // AF-09f (NFR-32): nor may it leave the system without an active System Admin. AF-09d already
+        // keeps an administrator from deleting themselves; this is the other one, deleted by someone
+        // who — restricted, or deleting them at the same moment — would leave none.
+        if (systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
+        {
+            return output.WithError(PersonMessages.WouldRemoveLastSystemAdmin);
         }
 
         // UC-09 step 3: flip the flag and stamp UpdatedAt (no DB trigger maintains it).

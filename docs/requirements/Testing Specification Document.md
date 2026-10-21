@@ -758,7 +758,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-09 (audit trail) | Test | `AuditLoggingTests`, `AuditingCommandHandlerTests` — both outcomes | Verified |
 | NFR-10 (input validation) | Test | Every `*ValidatorTests` class, plus the 400 cases in the controller suites | Verified |
 | NFR-11 (hard delete cascades a person) | Test | `HardDeletePersonCommandHandlerTests` | Verified |
-| NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10 and UC-22 suites | Verified |
+| NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10, UC-22 and UC-42 suites; `ScopeOwnerRaceTests` — two requests taking out a scope's last two owners at once, one held before its write, leave one refused and an active owner (#202) | Verified |
 | NFR-13 (Google token verification) | Test + inspection | `GoogleIdTokenValidationSettingsTests` pins the audience constraint this application supplies; `LocalGoogleIdTokenVerifierTests` requires the suite's substitute verifier to refuse a wrong signature, issuer, audience or expiry; inspection for Google's own validator | Partly verified — see 11.2 |
 | NFR-14 (hard delete cascades Google Users) | Test | `HardDeleteScopeCommandHandlerTests` | Verified |
 | NFR-15 (no internal ids exposed) | Test | `OpenApiContractTests` over the published document; `SchemaTests` on the shape | Verified |
@@ -767,6 +767,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-18 (password verification cost) | Measurement | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
 | NFR-30 (token issuer and audience) | Test | `TokenIssuerAndAudienceTests` — a correctly signed token under another issuer or audience is refused, and Heimdall's own is accepted, on the bearer path, the subject-rights endpoints, the challenge and UC-57; `TokenOriginTests`, `PersonTokenAudienceTests` and `JwtApplicationTokenServiceTests` for each reader | Verified |
 | NFR-31 (signing keys and secrets) | Test | `TokenSigningKeysTests` — the P-256 key, its base64 form, the empty previous key, and messages that never carry the value; `TokenAlgorithmConfusionTests` — a token's `alg` never chooses the key type, and an HS256 token signed with the retired secret is refused by every reader; `RetiredSecretTests` — with the retired secret still set, an HS256 token is `401`, the key set is served, and start-up warns once per retired variable that is set, naming it and never its value; `JwksEndpointTests` — the published key set and its headers; `TokenOriginTests` for HS256, HS384 and HS512 refused | Verified |
+| NFR-32 (an active System Admin remains) | Test | `DeletePersonCommandHandlerTests`, `HardDeletePersonCommandHandlerTests`, `RequestErasureCommandHandlerTests` and `AnonymiseExpiredDeletionsCommandHandlerTests` — the last active one is not deleted, their erasure is blocked and released once another exists; `SystemAdminRaceTests` — the only two deleting each other at once, in a database of their own, leave one (#203) | Verified |
 
 ### 11.2 What this does not cover
 

@@ -1145,4 +1145,43 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(1, fakes.Transactions.Committed);
         Assert.Equal(0, fakes.Transactions.RolledBack);
     }
+
+    // #203 (NFR-32): the last active System Admin's blocked request is released once another exists.
+
+    private static Task<Person> SeedBlockedSystemAdminAsync(Fakes fakes, DateTime requestedAt) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastSystemAdmin,
+            role: Roles.SystemAdmin);
+
+    [UnitFact]
+    public async Task GivenTheLastSystemAdminsBlockedRequest_WhenNoOtherIsActive_ThenItIsLeftAlone()
+    {
+        var fakes = Fakes.New();
+        var blocked = await SeedBlockedSystemAdminAsync(fakes, DateTime.UtcNow.AddDays(-5));
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(blocked.IsDeleted);
+        Assert.Equal(ErasureMessages.BlockedByLastSystemAdmin, blocked.ErasureBlockedReason);
+        Assert.Equal(1, fakes.Locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenTheLastSystemAdminsBlockedRequest_WhenAnotherIsActiveNow_ThenItIsReleased()
+    {
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-5);
+        var blocked = await SeedBlockedSystemAdminAsync(fakes, requestedAt);
+        await SeedPersonAsync(fakes, deletedAt: null, kind: null, isDeleted: false, role: Roles.SystemAdmin);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Suspended from the request, as any released request is
+        Assert.True(blocked.IsDeleted);
+        Assert.Equal(requestedAt, blocked.DeletedAt);
+        Assert.Null(blocked.ErasureBlockedReason);
+    }
 }

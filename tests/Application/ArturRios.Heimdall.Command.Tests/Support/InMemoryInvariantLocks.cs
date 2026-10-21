@@ -14,6 +14,9 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
 
     private readonly List<IReadOnlyCollection<long>> _scopeLocks = [];
 
+    /// <summary>How many <see cref="LockAsync" /> calls also locked the System Admin set.</summary>
+    public int SystemAdminLocks { get; private set; }
+
     /// <summary>The scope ids of each <see cref="LockAsync" /> call, in order.</summary>
     public IReadOnlyList<IReadOnlyCollection<long>> ScopeLocks
     {
@@ -26,11 +29,16 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
         }
     }
 
-    public Task LockAsync(IReadOnlyCollection<long> scopeIds)
+    public Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false)
     {
         lock (_scopeLocks)
         {
             _scopeLocks.Add(scopeIds.ToList());
+
+            if (systemAdmins)
+            {
+                SystemAdminLocks++;
+            }
         }
 
         return Task.CompletedTask;

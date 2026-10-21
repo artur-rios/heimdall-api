@@ -130,6 +130,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   order), and deleting or hard-deleting a scope locks its row too, so a second such request waits for the first
   and is then refused with `409` (AF-22b, AF-09e, AF-10b) or blocked (AF-42d). The runtime login needs no new
   grant (#202).
+- The system now always keeps an active System Admin (NFR-32): one not deleted, not restricted and not waiting on
+  an erasure. Deleting or hard-deleting the last one (`DELETE /api/persons/{id}`, `DELETE /api/persons/{id}/hard`)
+  is refused with `409` "This change would leave the system without an active System Admin. Add another System
+  Admin first." (AF-09f, AF-10d), where two administrators deleting each other at once both succeeded. The last
+  one's erasure request (`POST /api/auth/erasure-request`) is recorded with its deadline but blocked, as a last
+  scope owner's is (AF-42e), and the anonymisation pass releases it once another active System Admin exists. Each
+  decision holds one transaction-scoped advisory lock on the System Admin set, taken after the scope row locks. A
+  restriction on processing is never refused, and `PUT /api/persons/{id}` never demotes a System Admin (#203).
 
 ### Changed
 

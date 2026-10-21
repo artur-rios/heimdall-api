@@ -506,7 +506,7 @@ public class RemoveScopeOwnerCommandHandlerTests
     /// <summary>Deletes the scope as the lock is taken: the competing deletion the lock waited for.</summary>
     private sealed class DeletingOnLock(Scope scope) : IInvariantLocks
     {
-        public Task LockAsync(IReadOnlyCollection<long> scopeIds)
+        public Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false)
         {
             scope.IsDeleted = true;
             return Task.CompletedTask;

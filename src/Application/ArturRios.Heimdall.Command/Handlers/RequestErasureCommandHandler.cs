@@ -63,11 +63,18 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         later change move an obligation that had already attached.
 ///     </para>
 ///     <para>
-///         <b>Why the block is decided under a lock</b> (#202). The last-owner guard and the write it
-///         decides run in one transaction holding the rows of the scopes the person owns
-///         (<see cref="IInvariantLocks" />), as every writer that can take an owner out of a scope does.
-///         Otherwise two co-owners asking at once would each see the other still there, and both be
-///         suspended. The password is checked before the transaction opens, so no lock waits on Argon2.
+///         <b>Why the last System Admin is blocked too</b> (#203). NFR-32 keeps an active System Admin, and
+///         suspending the last one would leave nobody able to create a scope, change a role or run the
+///         retention tooling. The request is recorded and blocked exactly as the last owner's is, and the
+///         anonymisation pass carries it out once another active System Admin exists.
+///     </para>
+///     <para>
+///         <b>Why the block is decided under a lock</b> (#202, #203). The guards and the write they decide
+///         run in one transaction holding the rows of the scopes the person owns, and the System Admin set
+///         when the person is one (<see cref="IInvariantLocks" />), as every writer that can take an owner
+///         or a System Admin out does. Otherwise two co-owners, or two administrators, asking at once would
+///         each see the other still there, and both be suspended. The password is checked before the
+///         transaction opens, so no lock waits on Argon2.
 ///     </para>
 /// </remarks>
 public class RequestErasureCommandHandler(
@@ -158,12 +165,20 @@ public class RequestErasureCommandHandler(
         // before the commit rolls back.
         await using var transaction = await transactions.BeginAsync();
 
-        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+        var systemAdmin = LastSystemAdminGuard.Applies(person);
+        var ownedScopeIds =
+            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
 
         // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
-        // ownerless, so the suspension waits — but the request and its deadline do not.
-        var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader);
-        var blockedReason = blocked ? ErasureMessages.BlockedByLastScopeOwnership : null;
+        // ownerless, so the suspension waits — but the request and its deadline do not. AF-42e
+        // (NFR-32): likewise the last active System Admin.
+        var blockedReason =
+            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader)
+                ? ErasureMessages.BlockedByLastScopeOwnership
+                : systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader)
+                    ? ErasureMessages.BlockedByLastSystemAdmin
+                    : null;
+        var blocked = blockedReason is not null;
 
         // The request, the lifted restriction (see LiftRestriction), and the suspension or the
         // reason it waits, as one targeted write of those columns alone (#237) — made only while no

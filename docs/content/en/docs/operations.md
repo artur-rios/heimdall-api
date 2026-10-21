@@ -841,9 +841,10 @@ existed carry no reason and take the longer one.
 
 A subject's request stores its own deadline when it is made, and that stored value wins over the
 configured window: a later change to the setting must not move an obligation already owed. Where
-NFR-12 blocked a request — the subject was a scope's last owner — the pass retries it once ownership
-has been transferred, dating the suspension from the request rather than from the moment the block
-cleared, so a long-blocked request is due immediately rather than handed a fresh deadline.
+NFR-12 blocked a request — the subject was a scope's last active owner — the pass retries it once
+ownership has been transferred, and where NFR-32 blocked one — the subject was the last active System
+Admin — once another System Admin exists. It dates the suspension from the request rather than from the
+moment the block cleared, so a long-blocked request is due immediately rather than handed a fresh deadline.
 `GET /api/auth/erasure-requests` is the queue that surfaces those before they are late.
 
 Anonymisation overwrites rather than removes, because NFR-07 requires every foreign key to keep

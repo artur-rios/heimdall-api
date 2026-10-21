@@ -387,4 +387,91 @@ public class DeletePersonCommandHandlerTests
         Assert.Equal([1L], Assert.Single(locks.ScopeLocks));
         Assert.Equal(0, transactions.Committed);
     }
+
+    // #203 (NFR-32): no deletion may leave the system without an active System Admin.
+
+    private static Person SystemAdmin(long id) => new()
+    {
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"system-admin-{id}",
+        Email = $"system-admin-{id}@test.local",
+        RoleId = (long)Roles.SystemAdmin,
+        UpdatedAt = Stamp
+    };
+
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenTheOnlyOtherSystemAdminIsInactive_WhenDeletingTheActiveOne_ThenReturnsWouldRemoveLastSystemAdmin(
+        InactiveOwner how)
+    {
+        // Given — AF-09f: the actor is the other administrator, restricted or waiting on their erasure
+        var target = SystemAdmin(10);
+        var actor = InactiveOwners.Make(SystemAdmin(11), how);
+        var persons = await PersonsWith(target, actor);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: actor.PublicId);
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — refused under the System Admin lock, and the administrator stays
+        Assert.Equal([PersonMessages.WouldRemoveLastSystemAdmin], output.Errors);
+        Assert.False(target.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherActiveSystemAdmin_WhenDeletingASystemAdmin_ThenDeletedUnderTheSystemAdminLock()
+    {
+        // Given
+        var target = SystemAdmin(10);
+        var actor = SystemAdmin(11);
+        var persons = await PersonsWith(target, actor);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: actor.PublicId);
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(target.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOnlySystemAdmin_WhenDeletingThemselves_ThenReturnsCannotDeleteSelf()
+    {
+        // Given the last System Admin (AF-09d answers before anything is locked)
+        var target = SystemAdmin(10);
+        var persons = await PersonsWith(target);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: target.PublicId);
+
+        // When
+        var output = await HandlerFor(persons).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.CannotDeleteSelf], output.Errors);
+        Assert.False(target.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdmin_WhenHandlingDeletePerson_ThenTheSystemAdminSetIsNotLocked()
+    {
+        // Given — only a System Admin's deletion can touch NFR-32, so no other waits on the set
+        var target = ScopeAdmin(10, owned: Scope(1));
+        var coOwner = ScopeAdmin(11, owned: Scope(1));
+        var persons = await PersonsWith(target, coOwner);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(0, locks.SystemAdminLocks);
+    }
 }

@@ -201,8 +201,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Logically deletes a person by setting <c>IsDeleted = true</c> (UC-09, FR-PE-06). The
     ///     attribute keeps a plain <c>User</c> out; the owner rule (AF-09c) is data-dependent and is
-    ///     therefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner
-    ///     (AF-09e) refusals.
+    ///     therefore enforced by the handler, as are the self-deletion (AF-09d), last-owner (AF-09e)
+    ///     and last-System-Admin (AF-09f) refusals.
     /// </summary>
     [HttpDelete("persons/{id:guid}")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
@@ -220,8 +220,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Permanently (hard) deletes a person, removing the applications they own, their password
     ///     reset and email verification tokens, and their scope membership/ownership rows (UC-10,
-    ///     FR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the
-    ///     last-owner guard (AF-10b) are enforced by the handler.
+    ///     FR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c), the
+    ///     last-owner guard (AF-10b) and the last-System-Admin guard (AF-10d) are enforced by the
+    ///     handler.
     /// </summary>
     [HttpDelete("persons/{id:guid}/hard")]
     [RoleRequirement((int)Roles.SystemAdmin)]

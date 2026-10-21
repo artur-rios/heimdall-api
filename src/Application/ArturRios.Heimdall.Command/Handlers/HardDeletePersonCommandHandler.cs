@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="HardDeletePersonCommand" /> (UC-10): locates the person in any deletion state
 ///     (AF-10a), refuses a self-deletion (AF-10c), refuses to strip a scope of its last owner (AF-10b,
-///     NFR-12), then permanently deletes the applications the person owns (NFR-11) and their password
+///     NFR-12) or the system of its last active System Admin (AF-10d, NFR-32), then permanently deletes the applications the person owns (NFR-11) and their password
 ///     reset and email verification tokens, and finally the person — whose <c>ON DELETE CASCADE</c>
 ///     foreign keys remove the <c>SCOPE_USER</c>/<c>SCOPE_OWNER</c> join rows. The response reports the
 ///     totals of the removed dependents, counted regardless of their individual deletion state. All
@@ -37,10 +37,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         tombstone for a live row.
 ///     </para>
 ///     <para>
-///         <b>Under the locks of the person's scopes</b> (#202). The transaction opens before the
-///         last-owner guard and first locks the rows of the scopes the person owns
-///         (<see cref="IInvariantLocks" />), as every writer that can take an owner out of a scope does, so
-///         the guard's answer still holds when the person is deleted.
+///         <b>Under the locks of the person's scopes</b> (#202), and of the System Admin set when the
+///         person is a live one (#203). The transaction opens before the guards and first locks the rows of
+///         the scopes the person owns, then the System Admin set (<see cref="IInvariantLocks" />), as every
+///         writer that can take an owner or a System Admin out does, so the guards' answers still hold when
+///         the person is deleted.
 ///     </para>
 /// </remarks>
 public class HardDeletePersonCommandHandler(
@@ -85,7 +86,9 @@ public class HardDeletePersonCommandHandler(
 
         // The person's scopes, read and locked first (#202), so the guard below is still true when the
         // person is deleted.
-        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+        var systemAdmin = LastSystemAdminGuard.Applies(person);
+        var ownedScopeIds =
+            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
 
         // UC-10 step 3 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
         // deletion state: NFR-12 names hard-deleting the last owning person explicitly, and the guard
@@ -93,6 +96,13 @@ public class HardDeletePersonCommandHandler(
         if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
+        }
+
+        // AF-10d (NFR-32): nor may it leave the system without an active System Admin. Only a live one is
+        // guarded: a logically deleted administrator is no longer one of the set.
+        if (systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
+        {
+            return output.WithError(PersonMessages.WouldRemoveLastSystemAdmin);
         }
 
         // UC-10 step 4 (NFR-21, #195): tombstone the id before anything irreversible happens, so the

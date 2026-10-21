@@ -644,4 +644,40 @@ public class RequestErasureCommandHandlerTests
 
         Assert.Equal(0, transactions.Begun);
     }
+
+    // #203 (NFR-32): the last active System Admin's request is recorded but blocked (AF-42e).
+
+    [UnitFact]
+    public async Task GivenTheLastActiveSystemAdmin_WhenRequestingErasure_ThenItIsRecordedButBlocked()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.SystemAdmin);
+        InactiveOwners.Make(await SeedPersonAsync(persons, Roles.SystemAdmin), InactiveOwner.Restricted);
+        var locks = new InMemoryInvariantLocks();
+
+        var output = await Handler(persons, googleUsers, locks: locks).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Equal(ErasureMessages.ErasureRequestedButBlocked, output.Messages.First());
+        Assert.True(output.Data!.Blocked);
+        Assert.Equal(ErasureMessages.BlockedByLastSystemAdmin, output.Data.BlockedReason);
+        Assert.NotNull(person.ErasureRequestedAt);
+        Assert.False(person.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherActiveSystemAdmin_WhenASystemAdminRequestsErasure_ThenTheyAreSuspended()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.SystemAdmin);
+        await SeedPersonAsync(persons, Roles.SystemAdmin);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Data!.Blocked);
+        Assert.True(person.IsDeleted);
+    }
 }

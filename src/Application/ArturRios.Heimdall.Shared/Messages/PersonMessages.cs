@@ -84,6 +84,13 @@ public static class PersonMessages
     public const string ScopeWouldLoseLastOwner =
         "This change would leave a scope without an owner. Add another owner first.";
 
+    /// <summary>
+    ///     NFR-32 (AF-09f, AF-10d): the person is the last active System Admin, so deleting them would
+    ///     leave the system without one.
+    /// </summary>
+    public const string WouldRemoveLastSystemAdmin =
+        "This change would leave the system without an active System Admin. Add another System Admin first.";
+
     /// <summary>UC-08: the supplied role is not one of the three defined roles.</summary>
     public const string UnknownRole = "Role must be SystemAdmin, ScopeAdmin, or User.";
 

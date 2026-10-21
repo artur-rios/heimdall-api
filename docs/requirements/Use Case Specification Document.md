@@ -602,7 +602,9 @@ sequenceDiagram
    and removes the person's `SCOPE_USER` row, since a System Admin is a member of no scope (FR-PE-10).
    Their `SCOPE_OWNER` rows are kept: a System Admin may be a named owner (FR-SC-08), and keeping them
    is what keeps a scope the person owned, and the applications they own, with a valid owner. So the
-   promotion never strips a scope of an owner and NFR-12 does not refuse it. Any other target role is
+   promotion never strips a scope of an owner and NFR-12 does not refuse it. No change made here
+   demotes a System Admin, so none can leave the system without an active one (NFR-32): the last
+   System Admin changing their own role is refused by AF-08f like anyone else. Any other target role is
    refused: making someone a `ScopeAdmin` requires
    naming the scope they will own (FR-PE-11) and making someone a `User` requires naming the scope
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
@@ -669,12 +671,19 @@ sequenceDiagram
 | AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
 | AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
 | AF-09e | Person is the only active owner of one or more scopes, whatever their role: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-09f | Person is the last active System Admin: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is written |
 
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
 > person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
 > longer authenticate, so a scope whose only owner is soft-deleted is effectively ownerless — the
 > state NFR-12 exists to prevent. For the same reason a co-owner who is restricted (UC-44) or has
 > requested erasure (UC-42) does not count: neither can administer the scope (#211).
+>
+> **On AF-09f.** AF-09d keeps an administrator from deleting themselves, but not from deleting the
+> other one: two System Admins deleting each other at once each passed AF-09d, and no administrator was
+> left. The check and the deletion hold the System Admin set's lock (NFR-32, #203), so the second of
+> two such requests waits for the first and is refused. A restricted or erasure-requesting
+> administrator does not count as the one that remains, since neither can administer the system.
 >
 > **On the order of AF-09b and AF-09e.** An already-deleted person is answered before the last-owner
 > check runs. Such an owner is already out of the scope, so re-checking would turn the idempotent
@@ -720,6 +729,7 @@ application and token, and no tombstone is left for a person who still exists.
 | AF-10a | Person not found | Return `404 Not Found` |
 | AF-10b | Person is the only active owner of one or more scopes: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 | AF-10c | Actor is the person being deleted | Return `403 Forbidden` |
+| AF-10d | Person is a live System Admin and the last active one: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is removed. A logically deleted System Admin is no longer one of the set, so hard-deleting them is not refused |
 
 > **On AF-10c.** UC-10 grants a System Admin the right to remove a person, which would literally include
 > themselves. Self-deletion is refused so a single, irreversible call cannot destroy the caller's own
@@ -2193,6 +2203,7 @@ sequenceDiagram
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
 | AF-42d | The caller is the only active owner of a scope: no other owner is live, unrestricted and without an erasure request (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
+| AF-42e | The caller is the last active System Admin: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | As AF-42d, with the reason "The account is the last active System Admin; another System Admin must be added first." The anonymisation pass retries it once another active System Admin exists (UC-08 promotes one, UC-06 creates one). AF-42d's reason is recorded when both apply; the retry checks both |
 
 **Notes**
 
@@ -2233,6 +2244,7 @@ sequenceDiagram
 
 **Notes**
 
+- **Never refused for the last System Admin** (NFR-32). A restriction is the subject's right, so the last active System Admin may restrict their own processing, leaving none active until they lift it (UC-45) or another is added.
 - **Restriction is not deletion, and the two are independent states.** `IsDeleted` means the identity is on its way out — excluded from reads, cascaded by UC-04, eventually anonymised by NFR-20. A restriction means the opposite: the record is disputed and must be preserved exactly as it stands. Reusing the flag would start an erasure clock on data the subject has specifically asked be kept.
 - **No credential is required, unlike UC-42.** Erasure is irreversible and demands proof the person is present. A restriction destroys nothing and is liftable, and somebody asking for one may be doing so precisely because they believe the account is compromised — demanding the password of a person in that position would be the wrong way round.
 - **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them. Such a restriction holds the erasure until it is lifted (UC-45), because it is the subject's later instruction; the reverse order differs — an erasure request lifts a restriction already in place (UC-42).

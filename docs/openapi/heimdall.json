@@ -3096,7 +3096,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\ntherefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner\n(AF-09e) refusals.",
+        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\ntherefore enforced by the handler, as are the self-deletion (AF-09d), last-owner (AF-09e)\nand last-System-Admin (AF-09f) refusals.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_Delete",
         "parameters": [
@@ -3207,7 +3207,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the\nlast-owner guard (AF-10b) are enforced by the handler.",
+        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c), the\nlast-owner guard (AF-10b) and the last-System-Admin guard (AF-10d) are enforced by the\nhandler.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Person_HardDelete",
         "parameters": [

@@ -35,8 +35,10 @@ namespace ArturRios.Heimdall.Command.Services;
 public static class LastScopeOwnerGuard
 {
     /// <summary>
-    ///     Reads the scopes the person <paramref name="personId" /> owns and locks them, in the caller's
-    ///     transaction, so the guard asked next is still true when the caller writes. Returns them.
+    ///     Reads the scopes the person <paramref name="personId" /> owns and locks them — and then, when
+    ///     <paramref name="systemAdmins" /> is set, the System Admin set (NFR-32), in the one call the lock order
+    ///     asks for — in the caller's transaction, so the guards asked next are still true when the caller
+    ///     writes. Returns the scopes.
     /// </summary>
     /// <remarks>
     ///     Read inside the transaction, just before the lock, rather than taken from a copy the caller read
@@ -46,14 +48,15 @@ public static class LastScopeOwnerGuard
     ///     System Requirements record that residual.
     /// </remarks>
     public static async Task<IReadOnlyCollection<long>> LockOwnedScopesAsync(
-        IInvariantLocks locks, IAsyncReadOnlyRepository<Person, long> personReader, long personId)
+        IInvariantLocks locks, IAsyncReadOnlyRepository<Person, long> personReader, long personId,
+        bool systemAdmins = false)
     {
         var scopeIds = await personReader.Query()
             .Where(person => person.Id == personId)
             .SelectMany(person => person.ScopeOwnerships.Select(ownership => ownership.ScopeId))
             .ToListAsync();
 
-        await locks.LockAsync(scopeIds);
+        await locks.LockAsync(scopeIds, systemAdmins);
 
         return scopeIds;
     }
