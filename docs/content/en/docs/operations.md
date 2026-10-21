@@ -1182,11 +1182,14 @@ earlier than 24 hours after the 3.0.0 production deploy, and only once no such l
 for the longest token lifetime, with every consumer verifying through the key set.
 
 4.0.0 no longer reads either variable: every reader refuses an HS256 token, whatever it is signed
-with, and the compose file no longer passes them. While either is still set, start-up logs
-`{Variable} is set but no longer read; remove it` at Warning, naming the variable and never its
-value. Remove both from the environment. In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a
-`${ref:}` to Heimdall's value, so Fortuna's references are removed first (fortuna-api 4.0.0 no
-longer reads it), then Heimdall's value is unset.
+with, and the compose file no longer passes them. While either is still set in the API's own
+environment, start-up logs `{Variable} is set but no longer read; remove it` at Warning, naming the
+variable and never its value. A container started from the 4.0 compose file never sees them, so it
+never logs that warning, and its silence says nothing about the store: under yggdrasil, check the
+store with `ygg vars list <scope> --keys`, which prints names only. Remove both from the
+environment. In yggdrasil, Fortuna's `FORTUNA_AUTH_TOKEN_SECRET` is a `${ref:}` to Heimdall's
+value, so Fortuna's references are removed first (fortuna-api 4.0.0 no longer reads it), then
+Heimdall's value is unset.
 
 ### Rolling back
 

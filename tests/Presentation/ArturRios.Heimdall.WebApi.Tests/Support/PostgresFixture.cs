@@ -109,6 +109,19 @@ public sealed class PostgresFixture : IAsyncLifetime
     public static JwtKey PreviousSigningKey => Previous.Key;
 
     /// <summary>
+    ///     The keys as the host under test reads them from the variables this fixture publishes, so
+    ///     <see cref="TestTokens" /> configures a token through <see cref="TokenSigningKeys.ApplyTo" />, as
+    ///     the host does.
+    /// </summary>
+    public static TokenSigningKeys SigningKeys { get; } = TokenSigningKeys.Parse(Current.EnvValue, Previous.EnvValue);
+
+    /// <summary>
+    ///     The keys as a host read them before the rotation, when <see cref="PreviousSigningKey" /> was
+    ///     the current one: what the token a caller held then was signed under.
+    /// </summary>
+    public static TokenSigningKeys PreviousSigningKeys { get; } = TokenSigningKeys.Parse(Previous.EnvValue, null);
+
+    /// <summary>
     ///     Secret the suite's stand-in Google ID tokens are signed with (UC-25). Long enough for
     ///     HMAC-SHA256, which refuses a key shorter than its 256-bit output.
     /// </summary>

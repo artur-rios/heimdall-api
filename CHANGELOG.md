@@ -52,6 +52,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   runtime login for want of privilege. In a single-login deployment, where the API's login owns the tables, the
   guarantee still does not hold; the Threat Model rates that Medium.
 
+## [4.0.1] - 2026-10-21
+
+### Changed
+
+- The operations guide's "Ending the overlap" and the deployment guide's troubleshooting table now say that a
+  container started from the 4.0 compose file never sees `HEIMDALL_AUTH_TOKEN_SECRET` or `_PREVIOUS`, so it never
+  logs `{Variable} is set but no longer read; remove it`. Under yggdrasil, check the store with
+  `ygg vars list <scope> --keys` instead.
+
+### Fixed
+
+- The deployment guide's PowerShell recipe for the signing key now deletes `signing.pem` once it is encoded, so the
+  private key is not left on disk. The bash recipe pipes the key straight to `base64` and never writes the file.
+
 ## [4.0.0] - 2026-10-20
 
 ### Upgrading from 3.x to 4.0
@@ -760,7 +774,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/artur-rios/heimdall-api/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/artur-rios/heimdall-api/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/artur-rios/heimdall-api/compare/v1.7.0...v2.0.0

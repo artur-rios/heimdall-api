@@ -172,9 +172,9 @@ public class TokenOriginTests
     public async Task GivenTheRetiredSecretUnderAnHmacAlgorithm_WhenValidated_ThenItIsRefused(string algorithm)
     {
         // Given — a token as a 2.x process issued it, signed with the shared secret 4.0.0 retired
-        // (TH-43) and issued before this process started, under each HMAC algorithm. HS256 was the one
-        // Heimdall signed with; none is accepted any more. One descriptor for every case, with a key
-        // long enough for HS512, so only the algorithm differs.
+        // (TH-43) and still live, under each HMAC algorithm. HS256 was the one Heimdall signed with;
+        // none is accepted any more. One descriptor for every case, with a key long enough for HS512,
+        // so only the algorithm differs.
         const string longSecret = "unit-tests-token-origin-signing-secret-long-enough-for-hs512-0123456789";
         var readers = new UnitTokenReaders(Keys, Issuer, PersonAudience);
         var token = readers.TokenFor(

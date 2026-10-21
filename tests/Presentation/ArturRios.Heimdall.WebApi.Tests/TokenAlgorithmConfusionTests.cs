@@ -10,8 +10,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 
 // Unit tests for algorithm confusion and key substitution against Heimdall's three readers (spec, "Each
 // configuration pins its algorithm"; rulings R1, R3). Every forgery is a token the reader would
-// otherwise accept — its payload, audience and kind, issued before the process started and live — so
-// the only thing that can refuse it is the signature or the algorithm. The sixth is the HS256 token a
+// otherwise accept — its payload, audience and kind, issued three minutes ago and live — so the only
+// thing that can refuse it is the signature or the algorithm. The sixth is the HS256 token a
 // 2.x process issued, signed with the shared secret 4.0.0 retired (TH-43): no reader accepts it any
 // more. The controls, signed ES256 with the same payload, show that each reader does accept such a
 // token.
@@ -43,6 +43,21 @@ public class TokenAlgorithmConfusionTests
 
     public static TheoryData<string> ReadersAlone() => new(Readers);
 
+    public static TheoryData<string, string> ReadersAndAlgSpellings()
+    {
+        var data = new TheoryData<string, string>();
+
+        foreach (var reader in Readers)
+        {
+            foreach (var alg in AlgSpellings)
+            {
+                data.Add(reader, alg);
+            }
+        }
+
+        return data;
+    }
+
     private static readonly string[] Readers =
     [
         UnitTokenReaders.BearerReader, UnitTokenReaders.ChallengeReader, UnitTokenReaders.ApplicationReader
@@ -58,6 +73,10 @@ public class TokenAlgorithmConfusionTests
         "5b hs256 under fortuna-local with the retired secret",
         "6 hs256 signed with the retired secret, as a 2.x process signed it"
     ];
+
+    // HS256 and ES256 written in another case or with a trailing space. Algorithm names are compared
+    // ordinally, so none of them is the algorithm it resembles.
+    private static readonly string[] AlgSpellings = ["hs256", "HS256 ", "es256", "ES256 "];
 
     private static UnitTokenReaders NewReaders() => new();
 
@@ -79,10 +98,39 @@ public class TokenAlgorithmConfusionTests
     }
 
     // The reader's own payload under {"alg":"none"}, with an empty signature.
-    private static string Unsigned(UnitTokenReaders readers, string reader)
+    private static string Unsigned(UnitTokenReaders readers, string reader) =>
+        $"{Base64UrlEncoder.Encode("""{"alg":"none"}""")}.{Encode(Payload(readers, reader))}.";
+
+    // The reader's own payload under a header whose alg is written exactly as given, signed with what
+    // the algorithm it resembles signs with: the current key, named by its kid, for ES256, and the
+    // retired secret for HS256. Written "ES256", it is the control a reader accepts.
+    private static string UnderAlg(UnitTokenReaders readers, string reader, string alg)
+    {
+        var es256 = alg.Trim().Equals("ES256", StringComparison.OrdinalIgnoreCase);
+        var credentials = es256 ? UnitSigningKeys.Es256(readers.Keys.Current) : UnitSigningKeys.Hs256(TokenSecret);
+        var header = es256
+            ? new Dictionary<string, object> { ["alg"] = alg, ["kid"] = readers.Keys.Current.Id, ["typ"] = "JWT" }
+            : new Dictionary<string, object> { ["alg"] = alg, ["typ"] = "JWT" };
+        var signingInput = $"{Encode(header)}.{Encode(Payload(readers, reader))}";
+        var factory = credentials.Key.CryptoProviderFactory;
+        var signer = factory.CreateForSigning(credentials.Key, credentials.Algorithm);
+
+        try
+        {
+            return $"{signingInput}.{Base64UrlEncoder.Encode(signer.Sign(Encoding.ASCII.GetBytes(signingInput)))}";
+        }
+        finally
+        {
+            factory.ReleaseSignatureProvider(signer);
+        }
+    }
+
+    // The reader's own payload, issued and valid from three minutes ago and expiring in eight.
+    private static Dictionary<string, object> Payload(UnitTokenReaders readers, string reader)
     {
         var (claims, audience) = readers.PayloadFor(reader);
-        var payload = new Dictionary<string, object>(claims)
+
+        return new Dictionary<string, object>(claims)
         {
             [JwtRegisteredClaimNames.Iss] = readers.Configuration.Issuer,
             [JwtRegisteredClaimNames.Aud] = audience,
@@ -90,10 +138,10 @@ public class TokenAlgorithmConfusionTests
             [JwtRegisteredClaimNames.Nbf] = new DateTimeOffset(readers.At(TimeSpan.FromMinutes(-3))).ToUnixTimeSeconds(),
             [JwtRegisteredClaimNames.Exp] = new DateTimeOffset(readers.At(TimeSpan.FromMinutes(8))).ToUnixTimeSeconds()
         };
-
-        return $"{Base64UrlEncoder.Encode("""{"alg":"none"}""")}." +
-               $"{Base64UrlEncoder.Encode(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload)))}.";
     }
+
+    private static string Encode(Dictionary<string, object> part) =>
+        Base64UrlEncoder.Encode(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(part)));
 
     [UnitTheory]
     [MemberData(nameof(ReadersAndForgeries))]
@@ -144,5 +192,37 @@ public class TokenAlgorithmConfusionTests
 
         // Then
         Assert.True(accepted, $"the {reader} reader refused the es256 control");
+    }
+
+    [UnitTheory]
+    [MemberData(nameof(ReadersAndAlgSpellings))]
+    public async Task GivenAnAlgInAnotherCaseOrWithASpace_WhenAnyReaderReadsIt_ThenItIsRefused(string reader, string alg)
+    {
+        // Given — a token otherwise valid for this reader, its alg written as given
+        var readers = NewReaders();
+        var token = UnderAlg(readers, reader, alg);
+        Assert.Equal(alg, new JsonWebToken(token).Alg);
+
+        // When
+        var refused = await readers.RefusesAsync(reader, token);
+
+        // Then
+        Assert.True(refused, $"the {reader} reader accepted alg \"{alg}\"");
+    }
+
+    [UnitTheory]
+    [MemberData(nameof(ReadersAlone))]
+    public async Task GivenTheAlgWrittenES256_WhenEachReaderReadsTheSameConstruction_ThenItIsAccepted(string reader)
+    {
+        // Given — the theory above's construction with the alg as Heimdall writes it, so it is only the
+        // spelling that a refusal there turns on
+        var readers = NewReaders();
+        var token = UnderAlg(readers, reader, "ES256");
+
+        // When
+        var accepted = await readers.AcceptsAsync(reader, token);
+
+        // Then
+        Assert.True(accepted, $"the {reader} reader refused the hand-built es256 control");
     }
 }

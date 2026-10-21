@@ -113,7 +113,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     private static string ApplicationToken(
         Scope scope, Domain.Entities.Application application, ApplicationCredential credential,
         string issuer, string audience) =>
-        new JwtHandler().CreateToken(new JwtConfiguration(
+        new JwtHandler().CreateToken(PostgresFixture.SigningKeys.ApplyTo(new JwtConfiguration(
             600,
             issuer,
             audience,
@@ -125,12 +125,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
                 [ApplicationTokenClaims.ScopeId] = scope.PublicId.ToString(),
                 [ApplicationTokenClaims.CredentialId] = credential.PublicId.ToString(),
                 [ApplicationTokenClaims.Name] = application.Name
-            })
-        {
-            Algorithm = JwtAlgorithms.ES256,
-            Keys = [PostgresFixture.SigningKey],
-            SigningKeyId = PostgresFixture.SigningKey.Id
-        });
+            })));
 
     /// <summary>A full person token under two audiences, Heimdall's first — which Heimdall never issues.</summary>
     private static string TwoAudienceToken(Person person) =>

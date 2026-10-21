@@ -237,8 +237,8 @@ public class PersonTokenAudienceTests
     public async Task GivenAChallengeUnderAnHmacAlgorithm_WhenValidatedForVerification_ThenItIsRefused(string algorithm)
     {
         // Given — a challenge as a 2.x process issued it, signed with the shared secret 4.0.0 retired
-        // (TH-43) and issued before this process started, under each algorithm from one descriptor, so
-        // only the algorithm differs. The secret is long enough for HS512.
+        // (TH-43) and still live, under each algorithm from one descriptor, so only the algorithm
+        // differs. The secret is long enough for HS512.
         const string longSecret = "unit-tests-person-token-signing-secret-long-enough-for-hs512-0123456789";
         var readers = new UnitTokenReaders(issuer: Issuer, personAudience: PersonAudience);
         var token = readers.TokenFor(

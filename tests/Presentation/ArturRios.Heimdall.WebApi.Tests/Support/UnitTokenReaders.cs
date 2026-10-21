@@ -19,10 +19,10 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 ///     ES256 configuration built through <see cref="TokenSigningKeys.ApplyTo" />.
 /// </summary>
 /// <remarks>
-///     The process is taken to have started two minutes ago, in whole seconds as a token's NumericDate
-///     claims are, so a test can mint the token a 2.x process issued before it that is still live now,
-///     even under the challenge token's ten-minute lifetime. <see cref="TokenFor" /> mints, for each
-///     reader, a token right in every respect but the key it is signed with.
+///     Every token is timed against one fixed <see cref="Now" />, taken when the readers are built, in
+///     whole seconds as a token's NumericDate claims are, so its times do not drift while a test runs.
+///     <see cref="TokenFor" /> mints, for each reader, a token right in every respect but the key it is
+///     signed with, live now even under the challenge token's ten-minute lifetime.
 /// </remarks>
 public sealed class UnitTokenReaders
 {
@@ -84,9 +84,8 @@ public sealed class UnitTokenReaders
         AuthIssuer = new JwtAuthTokenIssuer(Configuration, Audiences, handler, Mapper, new UnreadPermissions());
     }
 
-    /// <summary>When the process is taken to have started: two minutes ago, in whole seconds.</summary>
-    public DateTimeOffset ProcessStart { get; } =
-        DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(-2).ToUnixTimeSeconds());
+    /// <summary>The instant every token is timed against: when the readers were built, in whole seconds.</summary>
+    public DateTimeOffset Now { get; } = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
     public TokenSigningKeys Keys { get; }
 
@@ -114,8 +113,8 @@ public sealed class UnitTokenReaders
     /// <summary>A fresh signing key and no previous one, as start-up reads them.</summary>
     public static TokenSigningKeys NewKeys() => TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, null);
 
-    /// <summary>An instant relative to <see cref="ProcessStart" />.</summary>
-    public DateTime At(TimeSpan sinceStart) => ProcessStart.Add(sinceStart).UtcDateTime;
+    /// <summary>An instant relative to <see cref="Now" />.</summary>
+    public DateTime At(TimeSpan fromNow) => Now.Add(fromNow).UtcDateTime;
 
     /// <summary>
     ///     The claims and the audience a token must carry to be read by <paramref name="reader" />
@@ -145,7 +144,7 @@ public sealed class UnitTokenReaders
     /// <summary>
     ///     A token <paramref name="reader" /> would read, signed with <paramref name="credentials" />:
     ///     its payload, under the configured issuer unless another is named, issued and valid from three
-    ///     minutes before the process started, and expiring eight minutes after it, within every kind's
+    ///     minutes before <see cref="Now" />, and expiring eight minutes after it, within every kind's
     ///     lifetime. Only the key can then make a reader refuse it.
     /// </summary>
     public string TokenFor(string reader, SigningCredentials credentials, string? issuer = null)
