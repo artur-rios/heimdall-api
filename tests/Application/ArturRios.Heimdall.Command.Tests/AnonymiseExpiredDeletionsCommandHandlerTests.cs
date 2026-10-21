@@ -467,6 +467,39 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAFullBatchInWhichNobodyCanBeAnonymised_WhenAnonymising_ThenTheBatchIsNotTakenAgain()
+    {
+        // Given four overdue persons, a batch of two, and writes that refuse every one of them without
+        // changing the row — so each would be selected again
+        var fakes = Fakes.New();
+
+        for (var i = 0; i < 4; i++)
+        {
+            await SeedPersonAsync(fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative);
+        }
+
+        var atomicWrites = new Mock<IAtomicWrites>();
+        atomicWrites
+            .Setup(writes => writes.TryAnonymiseAsync(
+                It.IsAny<Person>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ReturnsAsync(false);
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — one batch of two attempts, not the cap's worth over the same two, and the four still due
+        // are the backlog
+        Assert.True(output.Success);
+        atomicWrites.Verify(
+            writes => writes.TryAnonymiseAsync(
+                It.IsAny<Person>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()),
+            Times.Exactly(2));
+        Assert.Equal(0, output.Data!.PersonsAnonymised);
+        Assert.Equal(4, output.Data.Backlog);
+    }
+
+    [UnitFact]
     public async Task GivenAWriteThrowsInALaterBatch_WhenAnonymising_ThenTheRunReportsItAndTheLedgerNamesThoseAlreadyAnonymised()
     {
         // Given four overdue persons, a batch of two, and a write that throws on the fourth

@@ -33,7 +33,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         PurgeBatchSize = 500
     };
 
-    private static PurgeExpiredTokensCommandHandler Handler(AppDbContext context)
+    private static PurgeExpiredTokensCommandHandler Handler(AppDbContext context, DataRetentionOptions? retention = null)
     {
         var passwordResetTokens = new EfRepository<PasswordResetToken, long>(context);
         var emailVerificationTokens = new EfRepository<EmailVerificationToken, long>(context);
@@ -53,7 +53,45 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
             attemptNoticeBudgets, attemptNoticeBudgets,
             googleIdTokenUses, googleIdTokenUses,
             scopeOwnerInvitations, scopeOwnerInvitations,
-            Retention);
+            retention ?? Retention);
+    }
+
+    [FunctionalFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenPurging_ThenPostgreSqlCountsTheRowsStillDue()
+    {
+        // Given every table purged of what is due, then seven password reset tokens a month past expiry
+        await using (var drain = fixture.CreateContext())
+        {
+            for (var run = 0; run < 20 && (await Handler(drain).HandleAsync(new PurgeExpiredTokensCommand()))
+                     .Data!.TotalPurged > 0; run++)
+            {
+            }
+        }
+
+        await using var context = fixture.CreateContext();
+
+        var person = new Person
+        {
+            PublicId = Guid.NewGuid(), Name = "Backlog Subject", Email = $"backlog-{Guid.NewGuid():N}@functional.test",
+            RoleId = (long)Roles.User, EmailVerified = true
+        };
+        context.Persons.Add(person);
+        await context.SaveChangesAsync();
+
+        context.PasswordResetTokens.AddRange(Enumerable.Range(0, 7).Select(i => new PasswordResetToken
+        {
+            PersonId = person.Id, TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = DateTime.UtcNow.AddDays(-30 - i)
+        }));
+        await context.SaveChangesAsync();
+
+        // When — a batch of two, two batches
+        var output = await Handler(context, Retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — four removed, and the database counted the three still due
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(4, output.Data!.PasswordResetTokensPurged);
+        Assert.Equal(3, output.Data.Backlog);
     }
 
     [FunctionalFact]

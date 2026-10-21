@@ -34,6 +34,21 @@ public class PurgeExpiredTokensCommandHandlerTests
 
     // A token store whose deletes start failing after the first few, as when the database goes away
     // part-way through a run.
+    // A token store whose deletes succeed and remove nothing, as when another instance removed the rows
+    // between this run's select and its delete.
+    private sealed class RacedTokenRepository
+        : AsyncFakeRepository<PasswordResetToken, long>, IAsyncRepository<PasswordResetToken, long>
+    {
+        public int Deletes { get; private set; }
+
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<PasswordResetToken, long>.DeleteRangeAsync(
+            IEnumerable<long> ids, CancellationToken cancellationToken)
+        {
+            Deletes++;
+            return Task.FromResult(DataOutput<IEnumerable<long>>.New.WithData([]));
+        }
+    }
+
     private sealed class FailingAfterTokenRepository(int succeeding)
         : AsyncFakeRepository<PasswordResetToken, long>, IAsyncRepository<PasswordResetToken, long>
     {
@@ -339,6 +354,31 @@ public class PurgeExpiredTokensCommandHandlerTests
 
         Assert.Equal(3, second.Data!.PasswordResetTokensPurged);
         Assert.Equal(0, second.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenAFullBatchWhoseDeleteRemovesNothing_WhenPurging_ThenTheTableIsNotTakenAgain()
+    {
+        // Given four purgeable rows, a batch of two, and deletes that remove nothing — no progress
+        var passwordResetTokens = new RacedTokenRepository();
+        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+
+        for (var i = 0; i < 4; i++)
+        {
+            await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired.AddMinutes(i));
+        }
+
+        // When
+        var output = await Handler(
+                passwordResetTokens, new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(), Retention(batchSize: 2))
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — one batch, not the whole cap of them over the same rows, and the rows still due are reported
+        Assert.True(output.Success);
+        Assert.Equal(1, passwordResetTokens.Deletes);
+        Assert.Equal(0, output.Data!.PasswordResetTokensPurged);
+        Assert.Equal(4, output.Data.Backlog);
     }
 
     [UnitFact]

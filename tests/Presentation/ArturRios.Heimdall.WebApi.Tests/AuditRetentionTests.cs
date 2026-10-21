@@ -50,7 +50,8 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
 
-    private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context, int batchSize = 500)
+    private static PseudonymiseAuditActorsCommandHandler Handler(
+        AppDbContext context, int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick)
     {
         var entries = new EfRepository<AuditLog, long>(context);
         var tombstones = new EfRepository<ErasedSubject, Guid>(context);
@@ -60,7 +61,10 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
             new EfRepository<Person, long>(context),
             new EfRepository<GoogleUser, long>(context),
             tombstones, tombstones,
-            new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize });
+            new DataRetentionOptions
+            {
+                AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+            });
     }
 
     /// <summary>
@@ -212,6 +216,38 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         Assert.All(stored, entry => Assert.Null(entry.ActorPersonId));
         Assert.All(stored, entry => Assert.Null(entry.TargetId));
+    }
+
+    [FunctionalFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenThePassRuns_ThenPostgreSqlCountsTheEntriesStillDue()
+    {
+        // Given nothing else due, then seven entries due — four past the period by a live person, three by
+        // an erased one about a live person, so the count spans the grounds — a batch of two, two batches
+        await DrainAsync();
+        await using var context = fixture.CreateContext();
+
+        var live = await SeedPersonAsync(context, anonymisedAt: null);
+        var erased = await SeedPersonAsync(context, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+
+        for (var i = 0; i < 4; i++)
+        {
+            await SeedEntryAsync(context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)));
+        }
+
+        for (var i = 0; i < 3; i++)
+        {
+            await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3 - i), live.PublicId);
+        }
+
+        // When — one run, stopped at its cap
+        await using var runContext = fixture.CreateContext();
+        var output = await Handler(runContext, batchSize: 2, maxBatches: 2)
+            .HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — four cleared, and the database counted the three still due
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(4, output.Data!.EntriesPseudonymised);
+        Assert.Equal(3, output.Data.Backlog);
     }
 
     [FunctionalFact]
