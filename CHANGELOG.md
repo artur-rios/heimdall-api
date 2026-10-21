@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A first-time Google sign-up whose ID token carries no email claim, as when it was issued without the `email`
   scope, is now answered with AF-25a's `401 Unauthorized` — "Google authentication failed." — and creates nothing,
   where it used to fail with a 500 (#208). Use case 25's AF-25a now names the case.
+- `PUT /api/persons/{id}` refuses an email longer than 256 characters with the length message creation uses, where
+  it used to reach the database and fail on the index's row-size limit with a generic error (#223).
 
 ## [4.1.0] - 2026-10-21
 

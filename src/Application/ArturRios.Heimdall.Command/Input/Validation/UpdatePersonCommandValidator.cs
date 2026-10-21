@@ -17,9 +17,9 @@ public class UpdatePersonCommandValidator : AbstractValidator<UpdatePersonComman
             .NotEmpty().WithMessage(PersonMessages.NameRequired)
             .MaximumLength(200).WithMessage(PersonMessages.NameTooLong);
 
-        RuleFor(command => command.Email)
-            .NotEmpty().WithMessage(PersonMessages.EmailRequired)
-            .EmailAddress().WithMessage(PersonMessages.EmailInvalid);
+        // The same rule as creation, length limit included: person.email has no length constraint of its
+        // own, so without it an over-long address is refused only by the index's row-size limit.
+        RuleFor(command => command.Email).PersonEmail();
 
         // The role is optional: null means "leave it unchanged". When supplied it must name one of
         // the three defined roles; whether the transition is *allowed* is the handler's decision.

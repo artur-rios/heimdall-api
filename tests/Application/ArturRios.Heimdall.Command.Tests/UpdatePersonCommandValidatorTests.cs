@@ -125,4 +125,20 @@ public class UpdatePersonCommandValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(PersonMessages.EmailInvalid, result.Errors.Select(x => x.ErrorMessage));
     }
+
+    [UnitFact]
+    public async Task GivenAnEmailOf257Characters_WhenValidating_ThenReturnsEmailTooLong()
+    {
+        // Given an otherwise well-formed address one character over the limit creation applies
+        var validator = new UpdatePersonCommandValidator();
+        var command = Valid();
+        command.Email = new string('a', 257 - "@test.local".Length) + "@test.local";
+
+        // When
+        var result = await validator.ValidateAsync(command);
+
+        // Then
+        Assert.False(result.IsValid);
+        Assert.Contains(PersonMessages.EmailTooLong, result.Errors.Select(x => x.ErrorMessage));
+    }
 }
