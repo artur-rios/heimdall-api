@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.Http;
@@ -18,7 +19,8 @@ namespace ArturRios.Heimdall.WebApi.Controllers;
 ///     <see cref="Startup" /> rewrites to this address.
 /// </remarks>
 [Route("api/healthcheck")]
-public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCheck databaseHealthCheck) : Controller
+public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCheck databaseHealthCheck,
+    ReadinessCache readinessCache) : Controller
 {
     /// <summary>
     ///     Basic liveness check (UC-30, FR-HC-01): confirms the API process is up and responding.
@@ -47,13 +49,15 @@ public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCh
     ///     <c>DatabaseHealthCheck</c> alone and answers with the bare status, never a service
     ///     breakdown or a cause, which is why it can be anonymous where <c>detailed</c> cannot. The
     ///     cause is in the log, where <c>DatabaseHealthCheck</c> writes it.
+    ///     The answer is held for five seconds (<c>ReadinessCache</c>), so an anonymous caller
+    ///     cannot make the probe a database read per request.
     /// </remarks>
     [HttpGet]
     [Route("ready")]
     [AllowAnonymous]
     public async Task<ActionResult<DataOutput<string?>>> Ready()
     {
-        var healthy = await databaseHealthCheck.IsHealthyAsync();
+        var healthy = await readinessCache.IsReadyAsync(databaseHealthCheck.IsHealthyAsync);
 
         var result = DataOutput<string?>.New
             .WithData(healthy ? HealthStatuses.Healthy : HealthStatuses.Unhealthy);

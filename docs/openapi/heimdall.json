@@ -2300,7 +2300,7 @@
           "HealthCheck"
         ],
         "summary": "Readiness check (#215): `200 OK` when the database answers, `503 Service Unavailable`\nwhen it does not. Public — no authentication required.",
-        "description": "Liveness above reads no database, so an instance that has lost it stays \"healthy\" and keeps\nreceiving traffic it can only fail. This is the probe for that: an orchestrator or load\nbalancer stops routing to the instance without restarting it. It asks\n`DatabaseHealthCheck` alone and answers with the bare status, never a service\nbreakdown or a cause, which is why it can be anonymous where `detailed` cannot. The\ncause is in the log, where `DatabaseHealthCheck` writes it.\n\n**Anonymous** — no bearer token required.",
+        "description": "Liveness above reads no database, so an instance that has lost it stays \"healthy\" and keeps\nreceiving traffic it can only fail. This is the probe for that: an orchestrator or load\nbalancer stops routing to the instance without restarting it. It asks\n`DatabaseHealthCheck` alone and answers with the bare status, never a service\nbreakdown or a cause, which is why it can be anonymous where `detailed` cannot. The\ncause is in the log, where `DatabaseHealthCheck` writes it.\nThe answer is held for five seconds (`ReadinessCache`), so an anonymous caller\ncannot make the probe a database read per request.\n\n**Anonymous** — no bearer token required.",
         "operationId": "HealthCheck_Ready",
         "responses": {
           "200": {

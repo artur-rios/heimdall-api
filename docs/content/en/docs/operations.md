@@ -379,8 +379,8 @@ empty.
 
 | Endpoint | Who | What it does |
 | --- | --- | --- |
-| `GET /api/healthcheck` | Anonymous | Liveness. Confirms the process is up and responding. Reads no database. |
-| `GET /api/healthcheck/ready` | Anonymous | Readiness. `200` while the database answers, `503` when it does not. |
+| `GET /api/healthcheck` | Anonymous | Liveness: the process is up and responding. Reads no database. |
+| `GET /api/healthcheck/ready` | Anonymous | Readiness. `200` while the database answers, `503` when not. |
 | `GET /api/healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
 
 All three also answer at the root, `/healthcheck`, `/healthcheck/ready` and `/healthcheck/detailed`; the
@@ -405,8 +405,11 @@ Readiness says the instance can serve requests: it asks `DatabaseHealthCheck` al
 how the Compose health check uses it, so Traefik stops sending traffic to a container that can only answer
 `500`. Its body is the same envelope as liveness's with only the bare status as data, `"Healthy"` or
 `"Unhealthy"`, never a service name or a cause (the cause is in the log, at Warning, from
-`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, and it makes one small read
-per call; a probe every 15 seconds is nothing, but do not point a public uptime monitor at it at a high rate.
+`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, but it does not read the database per call: the
+answer, healthy or not, is held for **5 seconds** and shared by every caller in that window, so a flood of
+probes costs the database one small read per 5 seconds and, while it is down, writes one Warning per window
+rather than one per request. That is shorter than the Compose probe's 15-second interval, so the probe still
+sees a change at its next call.
 
 The liveness and readiness endpoints are anonymous because a load balancer cannot authenticate; the detailed
 one is System-Admin-only because "which of my dependencies is down" is operational intelligence, which a bare

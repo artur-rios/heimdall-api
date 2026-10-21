@@ -4,6 +4,9 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.WebApi.Controllers;
+using ArturRios.Heimdall.WebApi.Monitoring;
+using ArturRios.Mediator.Query;
+using Microsoft.Extensions.DependencyInjection;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -41,9 +44,11 @@ public class ReadinessProbeUnavailableTests
     [UnitFact]
     public async Task GivenTheDatabaseIsDown_WhenReadinessIsCalled_ThenServiceUnavailableWithTheBareStatus()
     {
-        // Given a database check whose read fails; the controller's mediator is not used by this action
+        // Given a database check whose read fails; the mediator serves the other actions and is not used here
         var check = new DatabaseHealthCheck(new ThrowingRoleRepository(), NullLogger<DatabaseHealthCheck>.Instance);
-        var controller = new HealthCheckController(null!, check);
+        var provider = new ServiceCollection().BuildServiceProvider();
+        var mediator = new QueryMediator(provider.GetRequiredService<IServiceScopeFactory>());
+        var controller = new HealthCheckController(mediator, check, new ReadinessCache(TimeProvider.System));
 
         // When
         var result = await controller.Ready();

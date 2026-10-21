@@ -475,6 +475,8 @@ public class Startup : WebApiStartup
         // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
         // handler resolves them all as IEnumerable, so new checks are added by registering another.
         // The readiness probe (#215) asks the database check alone, so it is also resolvable as itself.
+        Builder.Services.AddSingleton(TimeProvider.System);
+        Builder.Services.AddSingleton<ReadinessCache>();
         Builder.Services.AddScoped<DatabaseHealthCheck>();
         Builder.Services.AddScoped<IServiceHealthCheck>(provider => provider.GetRequiredService<DatabaseHealthCheck>());
         Builder.Services

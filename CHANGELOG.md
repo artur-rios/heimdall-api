@@ -25,8 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `GET /api/healthcheck/ready`, anonymous, answers `200` while the database responds and `503` when it does not,
   with only the bare status (`Healthy` or `Unhealthy`) in the body, so an orchestrator can tell an instance that
   has lost its database from one that is up. The container health check in `docker-compose.yml` now calls it
-  (`/healthcheck/ready` at the root), so Traefik stops routing to such an instance; `/healthcheck` stays the
-  liveness probe and reads no database. `operations.md` explains which to use for what (#215).
+  (`/healthcheck/ready` at the root), so Traefik stops routing to such an instance. The answer is cached for 5
+  seconds, so the probe costs the database one read per window however often it is called; `/healthcheck` stays
+  the liveness probe and reads no database. `operations.md` explains which to use for what (#215).
 - Every `5xx` a handler returns is now logged at Error with the route template, the status code and the trace
   id, and nothing of the query string, body or caller; a `503`, which is always a deliberate answer here, is
   logged at Warning. An unhandled exception was already logged, so it is not logged twice (#227).
