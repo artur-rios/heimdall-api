@@ -513,6 +513,18 @@ public class Startup : WebApiStartup
         Builder.Services.AddSingleton<IRegistrationQueue>(
             provider => provider.GetRequiredService<RegistrationQueue>());
         Builder.Services.AddScoped<RegistrationProcessor>();
+        // #206: the cap on a scope's live pending registrations, read once at start-up.
+        var registration = RegistrationOptions.FromEnvironment();
+
+        if (registration.RejectedMaxPendingPerScope is not null)
+        {
+            Log.Warning(
+                "Ignoring unusable {Variable}={Value}; using the default of {Default}",
+                RegistrationOptions.MaxPendingPerScopeVariable, registration.RejectedMaxPendingPerScope,
+                RegistrationOptions.DefaultMaxPendingPerScope);
+        }
+
+        Builder.Services.AddSingleton(registration);
         Builder.Services.AddScoped<IPendingRegistrationConfirmer, PendingRegistrationConfirmer>();
         Builder.Services.AddHostedService<RegistrationDispatcher>();
         AddEmailSenders();

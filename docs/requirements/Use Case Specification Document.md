@@ -2085,6 +2085,7 @@ sequenceDiagram
 | AF-47j | The link is followed again after the account exists | UC-14 AF-14c: `400 Bad Request` — "Invalid token". The registration was removed when the account was created, so there is nothing to claim and nothing is created |
 | AF-47k | The address already has three live pending registrations in the scope (FR-SR-13) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; the three links already sent keep working |
 | AF-47l | The address is held (AF-47b), and three attempt notices have gone to it within the current day, whichever scopes they were for (FR-SR-14) | `202 Accepted`, identical to the main flow. Nothing is created and no notice is sent |
+| AF-47m | The address is free, but the scope already holds `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (1000 by default) live pending registrations, whatever their addresses (FR-SR-15) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; a Warning with the marker `REGISTRATION_CAP_REACHED` and the scope's id is logged, never the address |
 
 > **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
 
@@ -2092,8 +2093,10 @@ sequenceDiagram
 > cannot see whether it did, so the bound has to be on the recipient rather than the caller: the
 > per-IP rate limit does nothing against a sender with many source addresses. AF-47k bounds the
 > confirmation mail to three live links per scope; AF-47l bounds the notices to three a day per
-> address across every scope. Both are applied after the response, like everything else that depends
-> on the address, so they change nothing the caller sees.
+> address across every scope; AF-47m bounds the scope, whatever the addresses, since many source
+> addresses outpace the per-IP limit and a pending registration is purged only once it expires. All
+> three are applied after the response, like everything else that depends on the address, so they
+> change nothing the caller sees.
 
 ---
 
@@ -2932,7 +2935,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11, FR-AU-13 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, FR-2F-20, FR-AU-11, FR-AU-13, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
-| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-SR-13 through FR-SR-15, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
 | UC-49: List Pending Registrations | FR-SR-11 |
 | UC-50: Discard a Pending Registration | FR-SR-12, NFR-09 |

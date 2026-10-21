@@ -352,6 +352,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five per day-long window); `0` turns the cooldown off |
 | `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | `604800` (7 days) — how long a Scope Admin's invitation to co-own a scope can be accepted; 3600 to 2592000, anything else falls back to the default |
+| `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` | `1000` — the most live pending self-registrations one scope may hold; a registration beyond it stores and mails nothing, is answered as any other, and is logged with `REGISTRATION_CAP_REACHED`. Any positive integer; anything else falls back to the default |
 | `HEIMDALL_LOG_DIRECTORY` | `logs` |
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |

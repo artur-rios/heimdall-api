@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- A scope now holds at most `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (default 1000) live pending
+  self-registrations, whatever their addresses (FR-SR-15, AF-47m). `POST /auth/register` had only the per-IP limit
+  against a caller with many source addresses, and each request stored a row and mailed a link, so the table grew
+  without bound. At the cap the request is answered exactly as one that was stored, stores and mails nothing, and
+  is logged at Warning with the marker `REGISTRATION_CAP_REACHED` and the scope's public id, never the address.
+  The existing bound of three live registrations per address (FR-SR-13) is unchanged. The variable is in the
+  `docker/*.env.example` templates, the README and `operations.md` (#206).
 - A scheduled pass that fails now logs at Error with the marker `SCHEDULED_PASS_FAILED` and the pass name, where
   it was logged at Information and no alert on Warning or above could fire; a pass that throws carries the marker
   too. Each pass also publishes `heimdall_scheduled_pass_rows_processed_total` and

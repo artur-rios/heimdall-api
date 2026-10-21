@@ -690,11 +690,23 @@ powers over the accounts they manage are:
 | Scope owner invitation notice (UC-21) and the answer to its inviter (UC-60, UC-61) | One notice per new invitation; none for a repeat while one is open, none for a new invitation to someone invited within the cooldown, and none to a processing-restricted invitee; the endpoint shares the account-creation limit (thirty a minute per administrator and per address). One answer per invitation, to whoever invited, unless they are deleted, anonymised or processing-restricted |
 | Password recovery requested anonymously (UC-12) | One reset link per person per cooldown — never longer than the link's lifetime — whoever asks; further requests send nothing and are answered as before |
 | Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), sent to the registered address; a person's own email change is refused while the email method is on (FR-PE-18) |
-| Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
+| Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope, and `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (1000) per scope whatever the addresses; further requests store and mail nothing |
 | "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
 
 The self-registration and recovery bounds are silent by design: the caller gets the same answer
 whatever happened, so the bound cannot be used to learn whether an address is registered.
+
+The per-scope cap on live pending registrations is there because the per-IP rate limit does not bound a
+caller with many source addresses, and the purge removes a registration only once it expires: without it the
+table, and the confirmation mail, grow with whatever arrives. A registration turned away by the cap is logged
+at **Warning** with the marker `REGISTRATION_CAP_REACHED` and the scope's public id — never the address. A
+scope that reaches it is either being flooded or has outgrown the cap: look at its pending registrations
+(UC-49) before raising `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`. Any positive integer is accepted; an
+unusable value falls back to 1000 with a start-up warning.
+
+```bash
+docker logs heimdall-api 2>&1 | grep REGISTRATION_CAP_REACHED
+```
 
 ### A client system calling for its users — `HEIMDALL_TRUSTED_CALLER_KEYS`
 
@@ -1290,6 +1302,7 @@ no longer verify HS256.
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | | `300`; `0` → no cooldown; outside 0–86400 → `300` |
 | `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | | `604800` (seven days); outside 3600–2592000 → `604800` |
+| `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` | | `1000`; not a positive integer → `1000` |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |

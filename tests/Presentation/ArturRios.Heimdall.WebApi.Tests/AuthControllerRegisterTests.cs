@@ -2,6 +2,7 @@ using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -241,6 +242,44 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
 
         // Then — the fourth answered alike and created nothing
         Assert.Equal(PendingRegistration.MaxLivePerAddress, (await PendingForAsync(scope, email)).Count);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAScopeAtItsCapOfLivePendingRegistrations_WhenRegistering_ThenTheSameAnswerAndNothingStored()
+    {
+        // Given — #206: a scope already holding the default cap of live pending registrations
+        var full = await SeedScopeAsync();
+        var open = await SeedScopeAsync();
+
+        await using (var context = db.CreateContext())
+        {
+            context.PendingRegistrations.AddRange(Enumerable.Range(0, RegistrationOptions.DefaultMaxPendingPerScope)
+                .Select(i => new PendingRegistration
+                {
+                    ScopeId = full.Id, Name = "Waiting", Email = UniqueEmail($"waiting{i}"), PasswordHash = [1],
+                    Salt = [2], TokenHash = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+                    ExpiresAt = DateTime.UtcNow.AddHours(12), CreatedAt = DateTime.UtcNow
+                }));
+            await context.SaveChangesAsync();
+        }
+
+        var email = UniqueEmail("capped-scope");
+
+        // When — one registration into the full scope, and one into an open one to compare with
+        var capped = await RegisterAsync(email, full.PublicId);
+        var accepted = await RegisterAsync(UniqueEmail("compare"), open.PublicId);
+        await SettleAsync();
+
+        // Then — answered exactly as the one that was stored, and nothing was stored for it
+        AssertGenericAcceptance(capped);
+        Assert.Equal(accepted.StatusCode, capped.StatusCode);
+        Assert.Equal(accepted.Body!.Messages, capped.Body!.Messages);
+        Assert.Empty(await PendingForAsync(full, email));
+
+        await using var verification = db.CreateContext();
+        Assert.Equal(
+            RegistrationOptions.DefaultMaxPendingPerScope,
+            await verification.PendingRegistrations.CountAsync(pending => pending.ScopeId == full.Id));
     }
 
     [FunctionalFact]
