@@ -37,6 +37,15 @@ public interface IPendingRegistrationConfirmer
 ///         guard against two instances confirming one address at once.
 ///     </para>
 ///     <para>
+///         <b>The claim stands only if the account is created</b> (#209). The claim, the re-checks and the
+///         insert share one <see cref="IWriteTransactions" /> transaction, committed only once the person
+///         exists, so a refusal — the scope closed, the address taken, the unique index — or a failed
+///         insert puts the row back as it was, and the registrant can follow the link again before it
+///         expires. A second request carrying the token waits on the first's claim and, once that
+///         commits, finds the row gone. Removing the address's other pending registrations runs after
+///         the commit and is best effort.
+///     </para>
+///     <para>
 ///         The link alone does not confirm: the password chosen at sign-up must accompany it, so a
 ///         squatter who registered someone else's address cannot be handed a working login by a scanner, a
 ///         mistaken click or the wrong one of two identical emails. A missing or wrong password is refused
@@ -69,6 +78,7 @@ public class PendingRegistrationConfirmer(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncRepository<Person, long> personWriter,
     IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
     ILogger<PendingRegistrationConfirmer> logger)
     : IPendingRegistrationConfirmer
 {
@@ -121,6 +131,32 @@ public class PendingRegistrationConfirmer(
             return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.PasswordIncorrect);
         }
 
+        // Opened after the password check, so no row lock waits on Argon2. Every return before the
+        // commit rolls the claim back.
+        await using (var transaction = await transactions.BeginAsync())
+        {
+            var outcome = await ClaimAndCreateAsync(pending, now);
+
+            if (outcome.Outcome != PendingRegistrationOutcome.Confirmed)
+            {
+                return outcome;
+            }
+
+            await transaction.CommitAsync();
+        }
+
+        await RemoveOtherPendingAsync(pending);
+
+        return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Confirmed);
+    }
+
+    /// <summary>
+    ///     Claims the row, re-checks the scope and the address, and creates the person, inside the
+    ///     caller's transaction: anything but <see cref="PendingRegistrationOutcome.Confirmed" /> is for the
+    ///     caller to roll back.
+    /// </summary>
+    private async Task<PendingRegistrationConfirmation> ClaimAndCreateAsync(PendingRegistration pending, DateTime now)
+    {
         var claim = await pendingWriter.DeleteRangeAsync([pending.Id]);
 
         if (!claim.Success)
@@ -176,8 +212,6 @@ public class PendingRegistrationConfirmer(
             return new(PendingRegistrationOutcome.Failed, creation.Errors.ToList());
         }
 
-        await RemoveOtherPendingAsync(pending);
-
         return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Confirmed);
     }
 
@@ -209,28 +243,45 @@ public class PendingRegistrationConfirmer(
                    googleUser.ScopeId == pending.ScopeId && googleUser.Email.ToLower() == email);
     }
 
+    /// <remarks>
+    ///     Harmless if it fails: the rows expire and are purged, and confirming one later is refused
+    ///     because the address is now taken. So a failure is logged, never reported, and it runs in a
+    ///     transaction of its own, which leaves nothing pending for the next save — the audit entry's —
+    ///     when it fails.
+    /// </remarks>
     private async Task RemoveOtherPendingAsync(PendingRegistration confirmed)
     {
-        var email = confirmed.Email.ToLower();
-
-        var others = await pendingReader.Query()
-            .Where(x => x.ScopeId == confirmed.ScopeId && x.Email.ToLower() == email)
-            .Select(x => x.Id)
-            .ToListAsync();
-
-        if (others.Count == 0)
+        try
         {
-            return;
+            var email = confirmed.Email.ToLower();
+
+            var others = await pendingReader.Query()
+                .Where(x => x.ScopeId == confirmed.ScopeId && x.Email.ToLower() == email)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (others.Count == 0)
+            {
+                return;
+            }
+
+            await using var transaction = await transactions.BeginAsync();
+
+            var removal = await pendingWriter.DeleteRangeAsync(others);
+
+            if (!removal.Success)
+            {
+                logger.LogWarning("Superseded pending registrations could not be removed: {Errors}",
+                    string.Join(" | ", removal.Errors));
+
+                return;
+            }
+
+            await transaction.CommitAsync();
         }
-
-        var removal = await pendingWriter.DeleteRangeAsync(others);
-
-        if (!removal.Success)
+        catch (Exception exception)
         {
-            // Harmless if it fails: the rows expire and are purged, and confirming one later is refused
-            // because the address is now taken.
-            logger.LogWarning("Superseded pending registrations could not be removed: {Errors}",
-                string.Join(" | ", removal.Errors));
+            logger.LogWarning(exception, "Superseded pending registrations could not be removed");
         }
     }
 }

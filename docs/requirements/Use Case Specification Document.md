@@ -903,7 +903,10 @@ requests; a person who receives nothing asks again, as for any email that does n
    full, challenge and subject-rights-only alike. It is one conditional write that repeats step 2's
    checks on the person and requires the address they were read with, so no sign-in can read the new
    password beside the old stamp, and a write refused because the person changed meanwhile leaves the
-   person, stamp included, as it was (answered as AF-13e).
+   person, stamp included, as it was (answered as AF-13e). Marking the token and writing the password
+   are one transaction: if the write fails, neither is kept, and the same link can be followed again
+   (#209). The person's other live reset tokens are then marked as used too; that is clean-up after the
+   reset, so a failure there is logged and does not change the answer.
 5. The system returns success. The person signs in again with the new password; a session opened with
    the old one, by them or by anybody else, ends at its next request.
 
@@ -953,7 +956,10 @@ sequenceDiagram
    now (FR-EV-08, AF-14d).
 3. The system sets `EmailVerified = true` on the person record, in one conditional write that repeats
    step 2's checks and requires the address the person was read with.
-4. The system marks the token as used.
+4. The system marks the token as used — in the same transaction as step 3, so if the write fails neither
+   is kept and the same link can be followed again (#209) — and then marks the person's other live
+   verification tokens as used, which is clean-up: a failure there is logged and does not change the
+   answer.
 5. The system returns success.
 
 **Alternative Flows:**
@@ -965,7 +971,7 @@ sequenceDiagram
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
 | AF-14d | The token's person may no longer be acted on, as UC-13's AF-13e (FR-EV-08) | As AF-14c: `400 Bad Request` — "Invalid token". Nothing is written, the token included |
 
-> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
+> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. The claim, the re-checks and the creation are one transaction: a refusal or a failed creation puts the registration back, so the link can be followed again until it expires (#209). An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
 
 ---
 
@@ -1804,7 +1810,9 @@ sequenceDiagram
 2. The system verifies each provided code against its method: the email code against its stored hash and expiry, then the TOTP code against the stored secret. The email code goes first because an accepted TOTP code is spent (FR-2F-14) and a wrong email code must not burn it: the caller retries with the same app code while its 30-second step lasts.
 3. Only once every required code checks out, the system replaces the person's security stamp, which
    revokes every token issued before the second factor was required, the caller's own included
-   (FR-AU-11).
+   (FR-AU-11). Spending the email code, this step, step 4 and step 5 are one transaction: if any of
+   them fails, none is kept, the email code can be presented again, and no recovery codes are left
+   that nobody was shown (#209). An accepted app code stays spent.
 4. The system generates ten random recovery codes, hashes each, and stores the hashes. Each is 80 bits, sixteen characters of Crockford's base32 shown as `XXXX-XXXX-XXXX-XXXX` (FR-2F-20).
 5. The system sets `IsActive = true`.
 6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.

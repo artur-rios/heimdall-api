@@ -10,6 +10,7 @@ using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Handlers;
 
@@ -46,12 +47,24 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         address change that lands between the check and the write wins (FR-PE-17), and a save of
 ///         the stale copy cannot put the old address back.
 ///     </para>
+///     <para>
+///         <b>The token is spent only with the write it unlocks</b> (#209). Spending it and writing the
+///         password share one transaction (<see cref="IWriteTransactions" />): spending it first is what
+///         lets only one of two requests carrying it go on, and the transaction is what stops a failed
+///         write from taking the token with it, so the person can follow the same link again. A write
+///         refused because the person changed is not a failure, and the token stays spent (FR-PR-08).
+///         Retiring the person's other links runs after that transaction has committed: it is clean-up
+///         after a reset that has happened, so a failure there is logged and the reset is still
+///         reported as done.
+///     </para>
 /// </remarks>
 public class ResetPasswordCommandHandler(
     IValidator<ResetPasswordCommand> validator,
     IAsyncReadOnlyRepository<PasswordResetToken, long> tokenReader,
     IAsyncRepository<PasswordResetToken, long> tokenWriter,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
+    ILogger<ResetPasswordCommandHandler> logger)
     : ICommandHandlerAsync<ResetPasswordCommand, ResetPasswordCommandOutput>
 {
     public async Task<DataOutput<ResetPasswordCommandOutput?>> HandleAsync(ResetPasswordCommand command, CancellationToken cancellationToken = default)
@@ -116,35 +129,42 @@ public class ResetPasswordCommandHandler(
 
         var (newHash, newSalt) = await PasswordHashGate.Shared.EncodeWithRandomSaltAsync(command.NewPassword);
 
-        // UC-13 step 4, for the presented token, brought forward and made atomic: the token is spent
-        // before the password changes, by a write only one request can win. Two requests carrying
-        // the same token both pass the checks above; only one may set a password with it, and the
-        // other is told what is now true — the token was used (AF-13b).
-        if (!await atomicWrites.TryConsumePasswordResetTokenAsync(token, now))
+        // The token and the password it unlocks land together or not at all (#209). Opened after the
+        // hash, so no row lock waits on Argon2.
+        await using (var transaction = await transactions.BeginAsync())
         {
-            return output.WithError(AuthMessages.TokenAlreadyUsed);
-        }
+            // UC-13 step 4, for the presented token, brought forward and made atomic: the token is
+            // spent before the password changes, by a write only one request can win. Two requests
+            // carrying the same token both pass the checks above; only one may set a password with it,
+            // and the other is told what is now true — the token was used (AF-13b).
+            if (!await atomicWrites.TryConsumePasswordResetTokenAsync(token, now))
+            {
+                return output.WithError(AuthMessages.TokenAlreadyUsed);
+            }
 
-        // UC-13 step 3 and FR-AU-11, in one conditional statement: the new hash and salt and a
-        // fresh security stamp, which revokes every token issued under the old password — a reset is
-        // the remedy for a password someone else may know. Written only while the person is still as
-        // found above (FR-PR-08, FR-PE-17); otherwise one of the account changes AF-13e refuses, or
-        // an address change, landed in between, the link is answered as AF-13e would now answer it,
-        // and nothing about the person changes, the stamp included. The token stays spent. One
-        // statement also means no sign-in can read the new password beside the old stamp, so no
-        // second rotation is needed.
-        if (!await atomicWrites.TrySetPasswordAsync(person, newHash, newSalt, now))
-        {
-            return output.WithError(AuthMessages.TokenInvalid);
+            // UC-13 step 3 and FR-AU-11, in one conditional statement: the new hash and salt and a
+            // fresh security stamp, which revokes every token issued under the old password — a reset
+            // is the remedy for a password someone else may know. Written only while the person is
+            // still as found above (FR-PR-08, FR-PE-17); otherwise one of the account changes AF-13e
+            // refuses, or an address change, landed in between, the link is answered as AF-13e would
+            // now answer it, and nothing about the person changes, the stamp included. One statement
+            // also means no sign-in can read the new password beside the old stamp, so no second
+            // rotation is needed.
+            var written = await atomicWrites.TrySetPasswordAsync(person, newHash, newSalt, now);
+
+            // Committed whether or not the password was written: a write refused because the person
+            // changed is an answer, not a failure, and the token stays spent (FR-PR-08). Only a write
+            // that fails — an exception, here — leaves the transaction to roll back.
+            await transaction.CommitAsync();
+
+            if (!written)
+            {
+                return output.WithError(AuthMessages.TokenInvalid);
+            }
         }
 
         // UC-13 step 4, for every other token the person still holds.
-        var consumption = await ConsumeTokensAsync(token, now);
-
-        if (consumption is not null)
-        {
-            return output.WithErrors(consumption);
-        }
+        await RetireOtherTokensAsync(token, now);
 
         // UC-13 step 5.
         return output
@@ -160,27 +180,47 @@ public class ResetPasswordCommandHandler(
     ///     again, from an inbox that may be the reason the reset was needed.
     /// </summary>
     /// <remarks>
-    ///     Already-expired tokens are left alone. They are refused by AF-13a either way, and
-    ///     rewriting them would only make a dead token report a different reason for being dead.
+    ///     <para>
+    ///         Already-expired tokens are left alone. They are refused by AF-13a either way, and
+    ///         rewriting them would only make a dead token report a different reason for being dead.
+    ///     </para>
+    ///     <para>
+    ///         Best effort (#209): the password has already been reset, so a failure here is logged and
+    ///         not reported — the links it leaves live expire within the hour. It runs in a transaction
+    ///         of its own so that a failure retires none of them and leaves nothing pending for the
+    ///         next save, the audit entry's.
+    ///     </para>
     /// </remarks>
-    private async Task<IEnumerable<string>?> ConsumeTokensAsync(PasswordResetToken token, DateTime now)
+    private async Task RetireOtherTokensAsync(PasswordResetToken token, DateTime now)
     {
-        var live = await tokenReader.Query()
-            .Where(x => x.PersonId == token.PersonId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
+        try
         {
-            outstanding.Used = true;
+            await using var transaction = await transactions.BeginAsync();
 
-            var update = await tokenWriter.UpdateAsync(outstanding);
+            var live = await tokenReader.Query()
+                .Where(x => x.PersonId == token.PersonId && !x.Used && x.ExpiresAt > now)
+                .ToListAsync();
 
-            if (!update.Success)
+            foreach (var outstanding in live)
             {
-                return update.Errors;
-            }
-        }
+                outstanding.Used = true;
 
-        return null;
+                var update = await tokenWriter.UpdateAsync(outstanding);
+
+                if (!update.Success)
+                {
+                    logger.LogWarning("The other password reset links of a reset password could not be retired: {Errors}",
+                        string.Join(" | ", update.Errors));
+
+                    return;
+                }
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "The other password reset links of a reset password could not be retired");
+        }
     }
 }

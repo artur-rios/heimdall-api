@@ -66,13 +66,16 @@ public class PendingRegistrationConfirmerTests
         // One per fixture, so the charges a test counts are its own.
         public InMemoryAtomicWrites AtomicWrites { get; } = new();
 
+        // One per fixture too, so a test can count what was committed.
+        public InMemoryWriteTransactions Transactions { get; } = new();
+
         public PendingRegistrationConfirmer Confirmer(
             IAsyncRepository<Person, long>? personWriter = null,
             IAsyncReadOnlyRepository<PendingRegistration, long>? pendingReader = null,
             IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
             ILogger<PendingRegistrationConfirmer>? logger = null) =>
             new(pendingReader ?? Pending, pendingWriter ?? Pending, Persons, GoogleUsers,
-                personWriter ?? Persons, AtomicWrites,
+                personWriter ?? Persons, AtomicWrites, Transactions,
                 logger ?? NullLogger<PendingRegistrationConfirmer>.Instance);
 
         public async Task<Scope> ScopeAsync(bool open = true, bool isDeleted = false)
@@ -131,6 +134,7 @@ public class PendingRegistrationConfirmerTests
         Assert.Equal(scope.Id, person.ScopeMembership!.ScopeId);
         Assert.NotNull(person.BasisRecordedAt);
         Assert.Empty(fixture.Waiting());
+        Assert.Equal(1, fixture.Transactions.Committed);
     }
 
     [UnitFact]
@@ -239,7 +243,9 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Empty(fixture.People());
-        Assert.Empty(fixture.Waiting());
+        // The claim is not committed, so the database puts the row back (#209); the fake cannot
+        // undo it, which the functional suite shows against PostgreSQL.
+        Assert.Equal(0, fixture.Transactions.Committed);
     }
 
     [UnitFact]
@@ -254,7 +260,9 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Empty(fixture.People());
-        Assert.Empty(fixture.Waiting());
+        // The claim is not committed, so the database puts the row back (#209); the fake cannot
+        // undo it, which the functional suite shows against PostgreSQL.
+        Assert.Equal(0, fixture.Transactions.Committed);
     }
 
     [UnitFact]
@@ -273,7 +281,9 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Equal("Holder", Assert.Single(fixture.People()).Name);
-        Assert.Empty(fixture.Waiting());
+        // The claim is not committed, so the database puts the row back (#209); the fake cannot
+        // undo it, which the functional suite shows against PostgreSQL.
+        Assert.Equal(0, fixture.Transactions.Committed);
     }
 
     [UnitFact]
@@ -291,7 +301,9 @@ public class PendingRegistrationConfirmerTests
 
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Empty(fixture.People());
-        Assert.Empty(fixture.Waiting());
+        // The claim is not committed, so the database puts the row back (#209); the fake cannot
+        // undo it, which the functional suite shows against PostgreSQL.
+        Assert.Equal(0, fixture.Transactions.Committed);
     }
 
     [UnitFact]
@@ -305,12 +317,13 @@ public class PendingRegistrationConfirmerTests
 
         var result = await ConfirmAsync(fixture.Confirmer(persons), token);
 
-        // The create was attempted (the index, not an earlier check, refused it), nothing was kept, and
-        // the claimed row is consumed.
+        // The create was attempted (the index, not an earlier check, refused it) and nothing was kept.
         Assert.Equal(PendingRegistrationOutcome.Refused, result.Outcome);
         Assert.Single(persons.Attempted);
         Assert.Empty(persons.Query().ToList());
-        Assert.Empty(fixture.Waiting());
+        // The claim is not committed, so the database puts the row back (#209); the fake cannot
+        // undo it, which the functional suite shows against PostgreSQL.
+        Assert.Equal(0, fixture.Transactions.Committed);
     }
 
     [UnitFact]

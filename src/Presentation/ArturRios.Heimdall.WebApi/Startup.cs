@@ -282,6 +282,8 @@ public class Startup : WebApiStartup
         // FR-SC-17: opening, answering, withdrawing and voiding scope owner invitations, each one
         // conditional write, and acceptance one transaction with the ownership it grants.
         Builder.Services.AddScoped<IScopeOwnerInvitations, ScopeOwnerInvitations>();
+        // #209, #212, #204: the transaction a command opens around the writes that must land together.
+        Builder.Services.AddScoped<IWriteTransactions, WriteTransactions>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();

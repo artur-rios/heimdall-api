@@ -91,6 +91,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The personal data export (`POST /api/auth/data-export`) now includes the audit entries where the caller is the
   target as well as those they made, such as an administrator's update of their account (#225). Each entry gains an
   `involvement` of `Actor` or `Target`; a `Target` entry does not name who acted.
+- A single-use link or code is now spent only together with the write it unlocks. Resetting a password, verifying
+  an address, confirming a pending registration and confirming two-factor setup each spent the token, code or
+  registration first and wrote afterwards, so a database failure in between cost the caller their link and
+  answered with an error; for a pending registration, a refusal after the claim (the scope closed, the address
+  taken) lost the registration for good. Each now spends and writes in one transaction, and a failure leaves the
+  link, code or registration usable. Retiring a person's other links, or an address's other pending
+  registrations, still runs after the write, and a failure there is logged at Warning instead of turning a reset
+  or verification that happened into an error. A reset or verification refused because the person changed
+  meanwhile still spends the link (FR-PR-08). Use cases 13, 14 and 37 say so (#209).
 
 ### Changed
 
