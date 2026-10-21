@@ -30,7 +30,8 @@ public static class LockWaits
     ///     advisory one — or until <paramref name="request" /> has finished without needing to. Watches,
     ///     rather than sleeps a guess: <c>pg_stat_activity</c> says when the process is blocked.
     /// </summary>
-    public static async Task WaitUntilBlockedOrDoneAsync(PostgresFixture db, int pid, Task request)
+    /// <returns>Whether the process was seen blocked.</returns>
+    public static async Task<bool> WaitUntilBlockedOrDoneAsync(PostgresFixture db, int pid, Task request)
     {
         await using var connection = new NpgsqlConnection(db.ConnectionString);
         await connection.OpenAsync();
@@ -44,7 +45,7 @@ public static class LockWaits
 
             if (await command.ExecuteScalarAsync() is "Lock")
             {
-                return;
+                return true;
             }
 
             if (DateTime.UtcNow > deadline)
@@ -54,5 +55,7 @@ public static class LockWaits
 
             await Task.Delay(20);
         }
+
+        return false;
     }
 }
