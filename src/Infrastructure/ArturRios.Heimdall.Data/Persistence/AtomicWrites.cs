@@ -544,6 +544,11 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         var emailChanged = !string.Equals(email, readEmail, StringComparison.Ordinal);
         var roleChanged = roleId != readRoleId;
 
+        // A change of case alone names the same mailbox — sign-in, recovery and uniqueness all match
+        // addresses case-insensitively — so the verification it earned stands (#225).
+        var mailboxChanged = emailChanged &&
+                             !string.Equals(email.ToLower(), readEmail.ToLower(), StringComparison.Ordinal);
+
         // The caller's save has to land with the change or not at all, so the two share a
         // transaction — one of their own, unless the caller already runs in one.
         await using var transaction = context.Database.CurrentTransaction is null
@@ -566,7 +571,11 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
                     if (emailChanged)
                     {
                         set.SetProperty(x => x.Email, email);
-                        set.SetProperty(x => x.EmailVerified, false);
+
+                        if (mailboxChanged)
+                        {
+                            set.SetProperty(x => x.EmailVerified, false);
+                        }
                     }
 
                     if (roleChanged)
@@ -597,7 +606,11 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         if (emailChanged)
         {
             Accept(person, x => x.Email, email);
-            Accept(person, x => x.EmailVerified, false);
+
+            if (mailboxChanged)
+            {
+                Accept(person, x => x.EmailVerified, false);
+            }
         }
 
         if (roleChanged)

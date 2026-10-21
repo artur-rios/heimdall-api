@@ -571,7 +571,10 @@ sequenceDiagram
      for nothing.
    - The system checks uniqueness per FR-PE-09 — among the scope's `User`s for a `User`, among all
      `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
-     after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
+     after this update — and resets `EmailVerified = false`, **unless the new address differs from the old
+     one only in case**: addresses compare case-insensitively everywhere in the system (sign-in,
+     recovery, uniqueness), so it is the same mailbox and keeps its verification. Everything else in this
+     step still applies to it. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
    - The system retires every live password-reset link and verification link the person holds
      (FR-PE-17): they were mailed to the address being replaced. It does so before the new address

@@ -285,6 +285,27 @@ public class PersonStaleSaveTests(PostgresFixture db)
     }
 
     [FunctionalFact]
+    public async Task GivenAnAddressChangeOnlyInCase_WhenChanged_ThenTheAddressStaysVerified()
+    {
+        // Given a verified person
+        var person = await SeedPersonAsync(p => p.EmailVerified = true);
+        var recased = person.Email.ToUpperInvariant();
+
+        // When only the case of the address changes (#225)
+        var stored = await StaleSaveAcrossAsync(person.Id, async (writes, current, context) =>
+            Assert.Equal(AccountChangeOutcome.Changed, await writes.TryChangeEmailAndRoleAsync(
+                current, recased, current.RoleId, Now(), async () =>
+                {
+                    await context.SaveChangesAsync();
+                    return true;
+                })));
+
+        // Then the new casing is stored and the verification stands
+        Assert.Equal(recased, stored.Email);
+        Assert.True(stored.EmailVerified);
+    }
+
+    [FunctionalFact]
     public async Task GivenACopyReadBeforeAPromotion_WhenSavedAsAWholeRow_ThenTheRoleAndOwnershipStand()
     {
         // Given a User of a scope

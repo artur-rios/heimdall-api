@@ -1024,10 +1024,12 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenItCountsAsAChange()
+    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenItCountsAsAChangeButStaysVerified()
     {
         // Given — a change is detected ordinally, as stored, so a different casing is a different
-        // address: it fails closed, revoking and notifying rather than letting a variant slip through
+        // address: it fails closed, revoking and notifying rather than letting a variant slip through.
+        // The mailbox is the same one, though — addresses compare case-insensitively everywhere else —
+        // so the verification it earned stands (#225)
         var target = User(10, Scope(1), email: "user@test.local");
         var stamp = target.SecurityStamp;
         var twoFactor = new TwoFactorState();
@@ -1041,7 +1043,8 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.NotEqual(stamp, target.SecurityStamp);
-        Assert.False(target.EmailVerified);
+        Assert.Equal("USER@test.local", target.Email);
+        Assert.True(target.EmailVerified);
         Assert.Equal(["user@test.local"], twoFactor.NoticesSentTo);
     }
 
