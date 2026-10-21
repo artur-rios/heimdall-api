@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The operations guide's "Ending the overlap" and the deployment guide's troubleshooting table now say that a
+  container started from the 4.0 compose file never sees `HEIMDALL_AUTH_TOKEN_SECRET` or `_PREVIOUS`, so it never
+  logs `{Variable} is set but no longer read; remove it`. Under yggdrasil, check the store with
+  `ygg vars list <scope> --keys` instead.
+
+### Fixed
+
+- The deployment guide's PowerShell recipe for the signing key now deletes `signing.pem` once it is encoded, so the
+  private key is not left on disk. The bash recipe pipes the key straight to `base64` and never writes the file.
+
 ## [4.0.0] - 2026-10-20
 
 ### Upgrading from 3.x to 4.0

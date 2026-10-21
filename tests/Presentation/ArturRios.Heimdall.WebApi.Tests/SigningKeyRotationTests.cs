@@ -38,7 +38,7 @@ public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Loc
     {
         // Given — the point of the whole feature: this is the token a caller was holding when the
         // rotation happened, and they must not be signed out by it
-        Authorize(TestTokens.SignedWith(PostgresFixture.PreviousSigningKey, SystemAdminIdentity()));
+        Authorize(TestTokens.SignedWith(PostgresFixture.PreviousSigningKeys, SystemAdminIdentity()));
 
         // When
         var response = await ReadSelfAsync();
@@ -53,7 +53,7 @@ public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Loc
         // Given — the control. Accepting the previous key must not have come at the cost of the
         // current one, and the rest of the suite, which signs every token with the current key, is the
         // wider version of this assertion
-        Authorize(TestTokens.SignedWith(PostgresFixture.SigningKey, SystemAdminIdentity()));
+        Authorize(TestTokens.SignedWith(PostgresFixture.SigningKeys, SystemAdminIdentity()));
 
         // When
         var response = await ReadSelfAsync();
@@ -67,7 +67,7 @@ public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Loc
     {
         // Given — accepting two keys is not accepting any key. A withdrawn key, or one that was never
         // ours, buys nothing, which is what makes withdrawing a leaked key an effective revocation
-        Authorize(TestTokens.SignedWith(UnitSigningKeys.Create().Key, SystemAdminIdentity()));
+        Authorize(TestTokens.SignedWith(UnitTokenReaders.NewKeys(), SystemAdminIdentity()));
 
         // When
         var response = await ReadSelfAsync();
