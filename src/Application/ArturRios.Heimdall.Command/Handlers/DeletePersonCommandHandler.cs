@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
@@ -70,7 +71,7 @@ public class DeletePersonCommandHandler(
 
         // AF-09e (NFR-12): a soft-deleted owner can no longer authenticate, so deleting the last one
         // would leave the scope effectively ownerless.
-        if (await WouldStripLastOwnerAsync(person))
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
@@ -123,28 +124,4 @@ public class DeletePersonCommandHandler(
             command.ActingRole, command.ActingPersonId, person.ScopeMembership.ScopeId);
     }
 
-    /// <summary>
-    ///     NFR-12. Gathers the scopes somebody *other* than this person owns and reports whether any
-    ///     scope this person owns is missing from them — the same guard
-    ///     <see cref="UpdatePersonCommandHandler" /> applies to its role change. Persons already
-    ///     logically deleted are excluded, since they no longer keep a scope owned.
-    /// </summary>
-    private async Task<bool> WouldStripLastOwnerAsync(Person person)
-    {
-        // Whatever the role: a SystemAdmin may own a scope too (FR-SC-08).
-        if (person.ScopeOwnerships.Count == 0)
-        {
-            return false;
-        }
-
-        var ownedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList();
-
-        var coOwnedScopeIds = await personReader.Query()
-            .Where(other => other.Id != person.Id && !other.IsDeleted)
-            .SelectMany(other => other.ScopeOwnerships.Select(ownership => ownership.ScopeId))
-            .Distinct()
-            .ToListAsync();
-
-        return ownedScopeIds.Any(scopeId => !coOwnedScopeIds.Contains(scopeId));
-    }
 }

@@ -394,6 +394,26 @@ public class RequestErasureCommandHandlerTests
         Assert.True(person.IsDeleted);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenTheOnlyOtherOwnerIsInactive_WhenRequestingErasure_ThenItIsRecordedButBlocked(InactiveOwner how)
+    {
+        // The other owner is restricted or waiting on their own erasure: neither can administer the
+        // scope, so suspending this one would leave it with no active owner (NFR-12, #211)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        InactiveOwners.Make(await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7), how);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.True(output.Data!.Blocked);
+        Assert.Equal(ErasureMessages.BlockedByLastScopeOwnership, person.ErasureBlockedReason);
+        Assert.False(person.IsDeleted);
+    }
+
     [UnitFact]
     public async Task GivenAGoogleUserWithAFreshToken_WhenRequestingErasure_ThenItIsRecorded()
     {

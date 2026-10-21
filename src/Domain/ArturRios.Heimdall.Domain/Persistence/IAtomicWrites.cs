@@ -384,9 +384,9 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     UC-22: removes the person's <c>SCOPE_OWNER</c> row for scope <paramref name="scopeId" /> —
-    ///     writing nothing on the person — while another live person owns the scope (AF-22b, NFR-12).
-    ///     <c>false</c> means the row was already gone, or no live co-owner is left, and nothing was
-    ///     removed.
+    ///     writing nothing on the person — while another active person (<see cref="Person.Active" />) owns
+    ///     the scope (AF-22b, NFR-12). <c>false</c> means the row was already gone, or no active co-owner is
+    ///     left, and nothing was removed.
     /// </summary>
     /// <remarks>
     ///     The co-owner condition is evaluated by the same statement that deletes, so a co-owner deleted

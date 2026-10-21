@@ -615,8 +615,8 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
         var ownership = person.ScopeOwnerships.FirstOrDefault(x => x.ScopeId == scopeId);
 
-        var liveCoOwner = persons.Any(other =>
-            other.Id != person.Id && !other.IsDeleted && other.ScopeOwnerships.Any(x => x.ScopeId == scopeId));
+        var liveCoOwner = persons.Where(Person.Active).Any(other =>
+            other.Id != person.Id && other.ScopeOwnerships.Any(x => x.ScopeId == scopeId));
 
         return Task.FromResult(ownership is not null && liveCoOwner && person.ScopeOwnerships.Remove(ownership));
     }

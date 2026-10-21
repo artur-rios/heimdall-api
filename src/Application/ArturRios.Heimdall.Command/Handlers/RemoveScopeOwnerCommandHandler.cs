@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
@@ -64,15 +65,11 @@ public class RemoveScopeOwnerCommandHandler(
             return output.WithError(PersonMessages.PersonNotScopeOwner);
         }
 
-        // AF-22b (UC-22 step 3, NFR-12): somebody else must be left owning the scope. Logically deleted
-        // co-owners do not count — they can no longer authenticate (FR-AU-07), so they do not keep a
-        // scope owned; without that exclusion an ownerless scope could be created by removing the only
-        // live owner while a deleted one remained on the row.
-        var hasLiveCoOwner = await personReader.Query().AnyAsync(other =>
-            other.Id != person.Id && !other.IsDeleted &&
-            other.ScopeOwnerships.Any(x => x.ScopeId == scope.Id));
-
-        if (!hasLiveCoOwner)
+        // AF-22b (UC-22 step 3, NFR-12): somebody else must be left owning the scope. Only an active
+        // co-owner counts (LastScopeOwnerGuard): one logically deleted, restricted or awaiting erasure
+        // cannot administer the scope (#211), so without that exclusion an ownerless scope could be
+        // created by removing the only active owner while an inactive one remained on the row.
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, [scope.Id], personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }

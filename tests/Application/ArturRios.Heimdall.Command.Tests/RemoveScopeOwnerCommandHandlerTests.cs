@@ -279,6 +279,29 @@ public class RemoveScopeOwnerCommandHandlerTests
         Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingRemoveScopeOwner_ThenScopeWouldLoseLastOwnerIsReported(
+        InactiveOwner how)
+    {
+        // Given the only co-owner is restricted, or waiting on their erasure: neither can administer
+        // the scope, so neither keeps it owned (AF-22b, #211)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        InactiveOwners.Make(await SeedPersonAsync(persons, ownedScopes: scope), how);
+        var handler = Handler(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
     [UnitFact]
     public async Task GivenLogicallyDeletedTargetWithLiveCoOwner_WhenHandlingRemoveScopeOwner_ThenStaleOwnershipIsRemoved()
     {

@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
@@ -76,7 +77,7 @@ public class HardDeletePersonCommandHandler(
         // UC-10 step 3 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
         // deletion state: NFR-12 names hard-deleting the last owning person explicitly, and the guard
         // keeps every scope row backed by at least one SCOPE_OWNER row.
-        if (await WouldStripLastOwnerAsync(person))
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
@@ -141,32 +142,6 @@ public class HardDeletePersonCommandHandler(
                 DeletedTokenCount = passwordResetTokens.Count + emailVerificationTokens.Count
             })
             .WithMessage(PersonMessages.PersonHardDeletedSuccessfully);
-    }
-
-    /// <summary>
-    ///     NFR-12. Gathers the scopes somebody *other* than this person owns and reports whether any
-    ///     scope this person owns is missing from them — the same guard
-    ///     <see cref="DeletePersonCommandHandler" /> and <see cref="UpdatePersonCommandHandler" />
-    ///     apply. Persons already logically deleted are excluded, since they no longer keep a scope
-    ///     owned.
-    /// </summary>
-    private async Task<bool> WouldStripLastOwnerAsync(Person person)
-    {
-        // Whatever the role: a SystemAdmin may own a scope too (FR-SC-08).
-        if (person.ScopeOwnerships.Count == 0)
-        {
-            return false;
-        }
-
-        var ownedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList();
-
-        var coOwnedScopeIds = await personReader.Query()
-            .Where(other => other.Id != person.Id && !other.IsDeleted)
-            .SelectMany(other => other.ScopeOwnerships.Select(ownership => ownership.ScopeId))
-            .Distinct()
-            .ToListAsync();
-
-        return ownedScopeIds.Any(scopeId => !coOwnedScopeIds.Contains(scopeId));
     }
 
     /// <summary>

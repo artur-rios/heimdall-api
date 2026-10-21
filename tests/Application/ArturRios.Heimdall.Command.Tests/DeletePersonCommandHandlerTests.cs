@@ -320,4 +320,26 @@ public class DeletePersonCommandHandlerTests
         Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
         Assert.False(target.IsDeleted);
     }
+
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError(
+        InactiveOwner how)
+    {
+        // Given — AF-09e: the scope's other owner is restricted or waiting on their erasure, and neither
+        // keeps the scope owned (#211)
+        var scope = Scope(1);
+        var target = ScopeAdmin(10, owned: scope);
+        var coOwner = InactiveOwners.Make(ScopeAdmin(11, owned: scope), how);
+        var persons = await PersonsWith(target, coOwner);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.False(target.IsDeleted);
+    }
 }

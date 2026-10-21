@@ -876,7 +876,8 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         var removed = await context.ScopeOwners
             .Where(x => x.ScopeId == scopeId && x.PersonId == personId &&
                         context.ScopeOwners.Any(other =>
-                            other.ScopeId == scopeId && other.PersonId != personId && !other.Person.IsDeleted))
+                            other.ScopeId == scopeId && other.PersonId != personId && !other.Person.IsDeleted &&
+                            other.Person.ErasureRequestedAt == null && other.Person.ProcessingRestrictedAt == null))
             .ExecuteDeleteAsync() == 1;
 
         if (removed)

@@ -668,12 +668,13 @@ sequenceDiagram
 | AF-09b | Already logically deleted | Return `200 OK` (idempotent) |
 | AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
 | AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
-| AF-09e | Person is the sole owner of one or more scopes, whatever their role (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-09e | Person is the only active owner of one or more scopes, whatever their role: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
 > person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
 > longer authenticate, so a scope whose only owner is soft-deleted is effectively ownerless — the
-> state NFR-12 exists to prevent.
+> state NFR-12 exists to prevent. For the same reason a co-owner who is restricted (UC-44) or has
+> requested erasure (UC-42) does not count: neither can administer the scope (#211).
 >
 > **On the order of AF-09b and AF-09e.** An already-deleted person is answered before the last-owner
 > check runs. Such an owner is already out of the scope, so re-checking would turn the idempotent
@@ -717,7 +718,7 @@ application and token, and no tombstone is left for a person who still exists.
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-10a | Person not found | Return `404 Not Found` |
-| AF-10b | Person is the sole owner of one or more scopes | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-10b | Person is the only active owner of one or more scopes: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 | AF-10c | Actor is the person being deleted | Return `403 Forbidden` |
 
 > **On AF-10c.** UC-10 grants a System Admin the right to remove a person, which would literally include
@@ -1271,7 +1272,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-22a | Scope not found, or person is not an owner of it | Return `404 Not Found` |
-| AF-22b | Scope has only one owner (this one) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-22b | No other active owner of the scope remains: every other owner, if any, is logically deleted, restricted or has requested erasure (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 | AF-22c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 
 ---
@@ -2185,7 +2186,7 @@ sequenceDiagram
 | AF-42a | The credential is absent, wrong, unverifiable, a Google ID token already used (FR-GO-21), or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
-| AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
+| AF-42d | The caller is the only active owner of a scope: no other owner is live, unrestricted and without an erasure request (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
 
 **Notes**
 

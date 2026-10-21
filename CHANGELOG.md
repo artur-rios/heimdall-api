@@ -116,6 +116,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   every member, password hash included; a hard delete of a scope reads only its members' ids and removes them
   2,000 to a statement, inside its one transaction: the 5,000 Users of a scope are deleted in one statement, and
   hard-deleted in three. Use cases 4 and 5 say so (#204).
+- A scope owner whose processing is restricted, or who has requested erasure, no longer counts as the co-owner
+  that lets another owner go (NFR-12). Neither can administer the scope, so removing an owner
+  (`DELETE /api/scopes/{scopeId}/owners/{personId}`), deleting or hard-deleting a person, or suspending them for
+  erasure could leave a scope whose only remaining owners could not act on it. These are now refused with `409`
+  "This change would leave a scope without an owner." (AF-22b, AF-09e, AF-10b), and an erasure request waits as
+  blocked (AF-42d), as when the co-owner is deleted. The rule is in one shared guard, and NFR-12 and the use cases
+  name it (#211).
 
 ### Changed
 

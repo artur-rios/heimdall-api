@@ -269,6 +269,29 @@ public class HardDeletePersonCommandHandlerTests
         Assert.Empty(fakes.ErasedSubjects.Recorded);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingHardDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError(
+        InactiveOwner how)
+    {
+        // Given — AF-10b: the scope's other owner is restricted or waiting on their erasure, and neither
+        // keeps the scope owned (#211)
+        var fakes = EmptyFakes();
+        var scope = Scope(1);
+        var target = await SeedScopeAdminAsync(fakes, owned: scope);
+        InactiveOwners.Make(await SeedScopeAdminAsync(fakes, owned: scope), how);
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then — refused, and nothing was removed
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal(2, (await fakes.Persons.GetAllAsync()).Data!.Count());
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
+    }
+
     [UnitFact]
     public async Task GivenSoleOwnerSystemAdmin_WhenHandlingHardDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError()
     {

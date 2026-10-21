@@ -274,8 +274,10 @@ its permission set unchanged. A *hard* delete does purge them, through the forei
 
 **Logically deleting a scope does not touch its owners.** A Scope Admin may own other, active scopes.
 
-**A scope must always retain at least one owner (NFR-12)** — removing the last owner, or hard-deleting
-the last owning person, is rejected. NFR-12 does not guard the other direction: hard-deleting a
+**A scope must always retain at least one owner (NFR-12)** — removing the last owner, or deleting the
+last owning person, is rejected, and their erasure request waits. Only an *active* owner counts: one
+who is not logically deleted, whose processing is not restricted, and who has not asked to be erased,
+since none of the others can administer the scope. NFR-12 does not guard the other direction: hard-deleting a
 *scope* can leave a Scope Admin owning nothing. That record is left in place on purpose (they may be
 about to be given another scope), and it grants no access in the meantime, because a `ScopeAdmin`
 with no live owned scope cannot authenticate (**FR-AU-07**).

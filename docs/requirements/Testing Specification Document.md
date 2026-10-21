@@ -595,10 +595,11 @@ class. It repeats UC-21's ordering test on the inverse operation and adds two sh
   right status while still deleting the row would pass a status-only test, so each 403/404/409/401
   case reads the join row back — from the fake repository at the unit layer, from PostgreSQL at the
   functional one.
-- **The last-owner guard is tested from both sides of "live".** `GivenSoleOwner_…` covers the plain
-  NFR-12 case, and `GivenOnlyCoOwnerIsLogicallyDeleted_…` covers the one that makes the guard's
-  `!IsDeleted` filter a tested claim: a deleted co-owner does not keep a scope owned, so removing the
-  only live owner is still refused. The mirror case,
+- **The last-owner guard is tested from both sides of "active".** `GivenSoleOwner_…` covers the plain
+  NFR-12 case, and `GivenOnlyCoOwnerIsLogicallyDeleted_…` and `GivenOnlyCoOwnerIsInactive_…` cover the
+  ones that make the guard's `Person.Active` filter a tested claim: a deleted, restricted or
+  erasure-requesting co-owner does not keep a scope owned, so removing the only active owner is still
+  refused (#211). The mirror case,
   `GivenLogicallyDeletedTargetWithLiveCoOwner_…`, pins that a deleted *target* is nonetheless
   removable — the stale row this endpoint exists to clear.
 

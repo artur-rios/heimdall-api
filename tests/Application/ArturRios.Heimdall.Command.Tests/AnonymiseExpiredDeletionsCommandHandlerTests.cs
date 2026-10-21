@@ -691,6 +691,32 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal("Ada Lovelace", blocked.Name);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenABlockedRequestWhoseOnlyCoOwnerIsInactive_WhenAnonymising_ThenItIsLeftAlone(InactiveOwner how)
+    {
+        // The co-owner is restricted or waiting on their own erasure, and neither keeps the scope owned
+        // (NFR-12, #211), so the block has not cleared
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var blocked = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+        var coOwner = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false, role: Roles.ScopeAdmin, ownedScopeIds: 7);
+        InactiveOwners.Make(coOwner, how);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(blocked.IsDeleted);
+        Assert.Equal(ErasureMessages.BlockedByLastScopeOwnership, blocked.ErasureBlockedReason);
+    }
+
     [UnitFact]
     public async Task GivenABlockedRequestThatCannotBeSaved_WhenAnonymising_ThenTheDueIdentityIsStillAnonymised()
     {
