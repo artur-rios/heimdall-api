@@ -4,12 +4,12 @@ using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
-using ArturRios.Heimdall.WebApi.Security;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -24,16 +24,17 @@ public class JwksEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
     private static string Published =>
         JwksDocument.From([PostgresFixture.SigningKey, PostgresFixture.PreviousSigningKey.ToPublicKey()]);
 
+    // The bearer token travels on this request alone, never on the client's default headers.
     private async Task<(HttpResponseMessage Response, string Body)> GetAsync(string? bearer = null)
     {
-        Gateway.Client.DefaultRequestHeaders.Remove("Authorization");
+        using var request = new HttpRequestMessage(HttpMethod.Get, Route);
 
         if (bearer is not null)
         {
-            Gateway.Client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {bearer}");
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {bearer}");
         }
 
-        var response = await Gateway.Client.GetAsync(Route);
+        var response = await Gateway.Client.SendAsync(request);
 
         return (response, await response.Content.ReadAsStringAsync());
     }
@@ -114,7 +115,6 @@ public class JwksEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
     public async Task GivenATokenHeimdallIssued_WhenAFortunaStyleReaderVerifiesItWithThePublishedSet_ThenItIsValid()
     {
         // Given — a sign-in
-        Gateway.Client.DefaultRequestHeaders.Remove("Authorization");
         var login = await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
             "/api/auth/login",
             new LoginCommand { Email = PostgresFixture.MasterUserEmail, Password = PostgresFixture.MasterUserPassword });

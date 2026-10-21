@@ -154,3 +154,40 @@ public class RetiredSecretTests() : WebApiTest<Program>(EnvironmentType.Local)
         Assert.Equal("refused", tokens.GetProperty("Properties").GetProperty("LegacyState").GetString());
     }
 }
+
+// Which retired variables start-up warns about, decided apart from the host: a value of nothing but
+// blanks is unset, as 3.x read it, and an env file's literal empty value reaches the process as one.
+// The functional theory above cannot present an empty value, because setting a process variable to
+// the empty string removes it.
+public class RetiredSecretValueTests
+{
+    private const string SecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
+    private const string PreviousSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(" \t\r\n ")]
+    public void GivenARetiredVariableUnsetEmptyOrBlank_WhenStartUpLooks_ThenItIsNotSet(string? value)
+    {
+        // Given / When — both variables hold the same value
+        var set = Startup.SetRetiredTokenSecretVariables(_ => value);
+
+        // Then
+        Assert.Empty(set);
+    }
+
+    [UnitFact]
+    public void GivenARetiredVariableHoldingAValue_WhenStartUpLooks_ThenItIsNamed()
+    {
+        // Given — only the previous secret holds anything, surrounded by blanks
+        var values = new Dictionary<string, string?> { [SecretVariable] = " ", [PreviousSecretVariable] = " x " };
+
+        // When
+        var set = Startup.SetRetiredTokenSecretVariables(variable => values[variable]);
+
+        // Then
+        Assert.Equal([PreviousSecretVariable], set);
+    }
+}

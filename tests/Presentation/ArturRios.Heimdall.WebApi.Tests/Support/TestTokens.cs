@@ -94,11 +94,11 @@ public static class TestTokens
         Create(user, audience: audience, issuer: issuer);
 
     /// <summary>
-    ///     Builds a full token for <paramref name="user" /> signed ES256 with <paramref name="key" />
-    ///     rather than the host's current key: the token a caller held before a rotation, or one from a
-    ///     key the host never accepted.
+    ///     Builds a full token for <paramref name="user" /> signed ES256 with the current key of
+    ///     <paramref name="keys" /> rather than the host's: the token a caller held before a rotation, or
+    ///     one from a key the host never accepted.
     /// </summary>
-    public static string SignedWith(JwtKey key, IdentityUser user) => Create(user, key: key);
+    public static string SignedWith(TokenSigningKeys keys, IdentityUser user) => Create(user, keys: keys);
 
     /// <summary>
     ///     Builds the HS256 bearer token a 2.x process issued: signed with
@@ -193,21 +193,14 @@ public static class TestTokens
         TimeSpan? lifetime = null,
         string? audience = null,
         string? issuer = null,
-        JwtKey? key = null)
+        TokenSigningKeys? keys = null)
     {
-        var signingKey = key ?? PostgresFixture.SigningKey;
-
-        var configuration = new JwtConfiguration(
+        var configuration = (keys ?? PostgresFixture.SigningKeys).ApplyTo(new JwtConfiguration(
             lifetime?.TotalSeconds ?? 3600,
             issuer ?? Issuer,
             audience ?? Audiences.Person,
             string.Empty,
-            new IdentityUserMapper(Audiences).ToClaims(user))
-        {
-            Algorithm = JwtAlgorithms.ES256,
-            Keys = [signingKey],
-            SigningKeyId = signingKey.Id
-        };
+            new IdentityUserMapper(Audiences).ToClaims(user)));
 
         return new JwtHandler().CreateToken(configuration);
     }

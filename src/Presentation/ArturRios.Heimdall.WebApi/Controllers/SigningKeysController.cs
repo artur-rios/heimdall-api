@@ -6,6 +6,10 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Controllers;
 
+/// <summary>
+///     The public halves of Heimdall's signing keys (NFR-31, Threat Model TH-43): the key set every
+///     consumer verifies Heimdall's ES256 tokens with.
+/// </summary>
 /// <remarks>
 ///     Outside <c>api/</c>, at the path RFC 8615 reserves for it, because consumers fetch the key set
 ///     from the API's own host or the edge network, never through the web UI's host — see
