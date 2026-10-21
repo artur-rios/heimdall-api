@@ -549,7 +549,9 @@ which is required if the environment ever runs more than one replica.
 
 The bundle migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set and with the API's
 own connection string otherwise. Set it to the schema owner's, and the API can run as a database
-role that owns nothing; the operations guide's "Database roles" has the grants.
+role that owns nothing, which is what makes the audit trail's triggers hold against the API's own
+credentials (Threat Model TH-18); `scripts/sql` sets the roles up, and the operations guide's
+"Database roles" gives the order.
 
 ### Metrics
 
@@ -574,16 +576,21 @@ own processes use, so an installation that only listens on `localhost` is unreac
   pair it with a firewall that does not expose 5432 publicly).
 - `pg_hba.conf` needs a line for the Docker bridge range, e.g.
   `host heimdall_development heimdall_development_svc 172.16.0.0/12 scram-sha-256`.
-- The database and its login must exist; each service and each environment on the shared instance
-  gets its own, so that development and homologation cannot reach production's data. On the VPS:
+- The database and its two roles must exist — an owner the migrations run as, and a login the API
+  runs as, which owns nothing; each service and each environment on the shared instance gets its
+  own, so that development and homologation cannot reach production's data. On the VPS, from a copy
+  of `scripts/sql`:
 
   ```bash
-  sudo -u postgres createuser --pwprompt heimdall_svc && sudo -u postgres createdb --owner heimdall_svc heimdall
-  sudo -u postgres createuser --pwprompt heimdall_development_svc && sudo -u postgres createdb --owner heimdall_development_svc heimdall_development
-  sudo -u postgres createuser --pwprompt heimdall_homologation_svc && sudo -u postgres createdb --owner heimdall_homologation_svc heimdall_homologation
+  sudo -u postgres psql -X -v owner=heimdall_owner -v runtime=heimdall_svc -v database=heimdall -f new-deployment.sql
+  sudo -u postgres psql -X -v owner=heimdall_development_owner -v runtime=heimdall_development_svc -v database=heimdall_development -f new-deployment.sql
+  sudo -u postgres psql -X -v owner=heimdall_homologation_owner -v runtime=heimdall_homologation_svc -v database=heimdall_homologation -f new-deployment.sql
   ```
 
-  with one `pg_hba.conf` line per pair, so each login reaches its own database and no other.
+  then each login's password with `\password`, and one `pg_hba.conf` line per login, so each reaches
+  its own database and no other. A database that belongs to the API's own login, as this README
+  used to create it, is moved over with `separate-owner.sql`; the operations guide's "Database roles"
+  has both procedures, in order.
 
 Docker Desktop on Windows is the exception: it forwards the connection through its own VM, so the
 Windows Postgres sees it arrive from `127.0.0.1` and the stock `pg_hba.conf` already covers it —
