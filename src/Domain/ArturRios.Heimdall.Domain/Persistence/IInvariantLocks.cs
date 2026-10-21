@@ -27,6 +27,8 @@ public interface IInvariantLocks
     ///     <paramref name="systemAdmins" /> is set, the System Admin set, waiting for any transaction holding
     ///     either.
     /// </summary>
-    /// <exception cref="InvalidOperationException">No transaction is open: the lock would end with the statement.</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     No transaction is open: the lock would end with the statement.
+    /// </exception>
     Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false);
 }

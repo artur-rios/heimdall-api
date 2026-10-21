@@ -16,8 +16,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// <summary>
 ///     Handles <see cref="HardDeletePersonCommand" /> (UC-10): locates the person in any deletion state
 ///     (AF-10a), refuses a self-deletion (AF-10c), refuses to strip a scope of its last owner (AF-10b,
-///     NFR-12) or the system of its last active System Admin (AF-10d, NFR-32), then permanently deletes the applications the person owns (NFR-11) and their password
-///     reset and email verification tokens, and finally the person — whose <c>ON DELETE CASCADE</c>
+///     NFR-12) or the system of its last active System Admin (AF-10d, NFR-32), then permanently deletes
+///     the applications the person owns (NFR-11) and their password reset and email verification
+///     tokens, and finally the person — whose <c>ON DELETE CASCADE</c>
 ///     foreign keys remove the <c>SCOPE_USER</c>/<c>SCOPE_OWNER</c> join rows. The response reports the
 ///     totals of the removed dependents, counted regardless of their individual deletion state. All
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.

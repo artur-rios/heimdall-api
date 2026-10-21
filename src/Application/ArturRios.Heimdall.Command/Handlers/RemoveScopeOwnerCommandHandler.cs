@@ -99,8 +99,8 @@ public class RemoveScopeOwnerCommandHandler(
         // and this endpoint reads deleted persons too, whose name anonymisation may have replaced
         // meanwhile. The write re-checks AF-22b itself; under the lock no owner-removing writer can have
         // run since the check above, but a co-owner restricting their own processing (UC-44) takes no
-        // lock, and the write sees that too. FR-PE-11 is deliberately not guarded here: SRD §8 names UC-22 as an operation that may
-        // leave a ScopeAdmin owning no scope.
+        // lock, and the write sees one that committed. FR-PE-11 is deliberately not guarded here: SRD §8
+        // names UC-22 as an operation that may leave a ScopeAdmin owning no scope.
         if (!await atomicWrites.TryRemoveScopeOwnerAsync(person, scope.Id))
         {
             // Refused: either another request removed the row meanwhile, which is AF-22a's outcome, or

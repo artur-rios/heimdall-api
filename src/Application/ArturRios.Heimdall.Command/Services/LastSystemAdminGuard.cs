@@ -38,7 +38,8 @@ public static class LastSystemAdminGuard
     ///     Whether no System Admin but the person <paramref name="personId" /> is active, so taking them out
     ///     would leave the system without one.
     /// </summary>
-    public static async Task<bool> WouldLeaveNoneAsync(long personId, IAsyncReadOnlyRepository<Person, long> personReader) =>
+    public static async Task<bool> WouldLeaveNoneAsync(
+        long personId, IAsyncReadOnlyRepository<Person, long> personReader) =>
         !await personReader.Query()
             .Where(Person.Active)
             .AnyAsync(other => other.Id != personId && other.RoleId == (long)Roles.SystemAdmin);
