@@ -13,7 +13,9 @@ The schema is managed with **EF Core migrations, applied explicitly**:
 python scripts/migrations.py
 ```
 
-The script asks which environment file to load (for the connection string), then offers **list**,
+The script asks which environment file to load (for the connection string: the owner's
+`HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when the file sets it, `HEIMDALL_DATA_CONNECTIONSTRING`
+otherwise — see [Database roles](#database-roles--th-18)), then offers **list**,
 **create (generate)**, and **apply**. It needs `dotnet tool restore` to have been run once, for the
 pinned EF Core CLI tool. Authoring a migration is covered in [Contributing](../contributing/#migrations).
 
@@ -81,71 +83,87 @@ restore that remaps ids — fails with `restrict_violation`.
 
 ## Database roles — TH-18
 
-The supported setup runs the migrations as an owner role and the API as a role that owns nothing
+The supported setup runs the migrations as an owner role and the API as a login that owns nothing
 (NFR-29). The owner holds the schema and everything in it, including the audit triggers and their
-functions; the API's role gets the row privileges it needs and nothing more. Two roles per
-environment, which the operator creates and applies:
+functions; the API's login gets the row privileges it needs and nothing more. Two roles per
+environment, which the operator creates with the scripts in `scripts/sql`:
 
 | Role | Example | Owns | Used by |
 | --- | --- | --- | --- |
 | Owner | `heimdall_owner` | The database, the `heimdall` schema, every table, sequence and trigger function, and the migrations history | Migrations only: the container entrypoint through `HEIMDALL_MIGRATIONS_CONNECTIONSTRING`, or `scripts/migrations.py` run out of band |
 | Runtime | `heimdall_svc` | Nothing | The API, through `HEIMDALL_DATA_CONNECTIONSTRING` (`DB_USER` in the env file) |
 
-The runtime role may connect, read and write rows, and nothing else: `SELECT`, `INSERT`, `UPDATE`
-and `DELETE` on the `heimdall` tables, except that `audit_log` gets no `DELETE`; `SELECT` on the
-migrations history, which the start-up seeder reads; no `TRUNCATE` anywhere and no `CREATE` on the
-database or a schema. `audit_log` keeps `UPDATE` because the retention pass writes the rows it
-clears whole; the triggers accept an update only when it clears the attribution or a person target
-once due (NFR-21). That covers everything the API does at runtime, `attempt_notice_budget`,
-`google_id_token_use` and the budget columns on `person` included.
+**Why it matters.** The triggers that keep `audit_log` append-only bind every role but the table's
+owner and a superuser: an owner may `ALTER TABLE … DISABLE TRIGGER USER`, drop a trigger or replace
+its function without being a superuser, and then rewrite or delete the trail. A deployment whose API
+login owns the tables — the single login the deployment guide used to create, and the setup an
+environment keeps until it is separated as below — therefore gets no protection from the triggers
+against the API's own credentials. In the two-role setup the API's login is refused all of that, and
+the property the triggers exist for, that an action can never be denied, holds against it too.
+
+Nothing changes until an operator opts in. Without `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` the
+entrypoint migrates with the API's own connection string, as it always has.
 
 Use one pair per environment, as the deployment guide does for logins: `heimdall_owner` and
 `heimdall_svc` for production, `heimdall_development_owner` and `heimdall_development_svc`, and so on.
-The SQL below is for production; substitute the names for another environment.
+The commands below are for production; substitute the names for another environment.
 
-### The grants
+### What the runtime login may do
 
-Run as a superuser (`sudo -u postgres psql -d heimdall`). Part 1 can run at any time, before the
-first migration too; part 2 needs the `audit_log` table, so it runs after the first migration.
+Connect, look objects up, and read and write rows: `SELECT`, `INSERT`, `UPDATE` and `DELETE` on
+every `heimdall` table except `audit_log`, which gets no `DELETE`; `USAGE` and `SELECT` on their
+sequences; `SELECT` on the migrations history in `public`, which the start-up seeder reads to refuse
+a schema that is behind. Nothing else: no ownership, no `TRUNCATE`, `REFERENCES`, `TRIGGER` or
+`MAINTAIN` anywhere, no `CREATE` on the database or a schema, no membership of the owner. No
+`EXECUTE` is granted: the API calls no function of its own, and the trigger functions run when their
+triggers fire. That covers everything the API does at runtime, `attempt_notice_budget`,
+`google_id_token_use` and the budget columns on `person` included — the functional suite runs as
+such a login.
 
-```sql
--- Part 1. Access: connect, use the schema, read and write rows, create nothing.
-GRANT CONNECT ON DATABASE heimdall TO heimdall_svc;
-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-CREATE SCHEMA IF NOT EXISTS heimdall AUTHORIZATION heimdall_owner;
-GRANT USAGE ON SCHEMA heimdall TO heimdall_svc;
+`audit_log` keeps `UPDATE` because the retention pass writes the rows it clears whole; the triggers
+accept an update only when it clears the attribution or a person target once due (NFR-21), and the
+login cannot change the triggers.
 
--- What exists already.
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA heimdall TO heimdall_svc;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA heimdall TO heimdall_svc;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO heimdall_svc;
+**Tables later migrations add get the same grants with no grant in the migration.** The scripts set
+default privileges for the owner (`ALTER DEFAULT PRIVILEGES FOR ROLE heimdall_owner IN SCHEMA
+heimdall GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES …`, and the sequences and `public`'s
+equivalents), so every table and sequence the owner creates is granted as it is created — a
+migration cannot forget, because it does nothing. Default privileges are recorded against the role
+that creates the object, so they apply to the owner's objects alone: never run a migration as a
+superuser or as the runtime login, or its tables are not granted, and the API's first query of them
+fails with `permission denied`. When a migration adds a table the API must not write freely — another
+append-only table, say — its revoke is added to `scripts/sql/runtime-grants.sql`, beside
+`audit_log`'s, and the operator runs `new-deployment.sql` again after that migration.
 
--- What later migrations create, as the owner, gets the same.
-ALTER DEFAULT PRIVILEGES FOR ROLE heimdall_owner IN SCHEMA heimdall
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO heimdall_svc;
-ALTER DEFAULT PRIVILEGES FOR ROLE heimdall_owner IN SCHEMA heimdall
-    GRANT USAGE, SELECT ON SEQUENCES TO heimdall_svc;
-ALTER DEFAULT PRIVILEGES FOR ROLE heimdall_owner IN SCHEMA public
-    GRANT SELECT ON TABLES TO heimdall_svc;
+### The scripts
 
--- Part 2. The audit trail is never deleted from. Its triggers decide which updates it accepts.
-REVOKE DELETE ON heimdall.audit_log FROM heimdall_svc;
-```
+| Script | Run as | What it does |
+| --- | --- | --- |
+| `scripts/sql/new-deployment.sql` | A superuser | Creates the owner and the runtime login (both without a password), the database owned by the owner, the `heimdall` schema, and the grants. Refuses a database that already belongs to anybody but the owner |
+| `scripts/sql/separate-owner.sql` | A superuser | For a database the runtime login owns: creates the owner, gives it the database and everything the login owns in it, and the grants. One transaction, with a five-second `lock_timeout` |
+| `scripts/sql/runtime-grants.sql` | — | The grants, included by both: everything the login holds is revoked and then granted again, so the result does not depend on what it held. Refuses a login that is a superuser, may create roles, is a member of the owner, or still owns anything in the database |
+| `scripts/sql/check-runtime-login.sql` | The runtime login | Runs the statements the login must be refused — disabling, dropping or replacing a trigger or its function, `TRUNCATE` and `DELETE` on `audit_log`, `SET session_replication_role`, `CREATE` in either schema, and an `ALTER TABLE` on every table — and fails, listing them, if any is not refused for want of privilege. Everything it runs is rolled back |
 
-`public` holds nothing but the migrations history (`"__EFMigrationsHistory"`, kept there by the
-pinned `Search Path=public`), so the runtime role reads that table and nothing else of it. On
-PostgreSQL 15 and later nobody but the database owner may create in `public` anyway, and the
-`REVOKE CREATE` only restates it; `CONNECT` is granted to the runtime role by name, and whatever
-else `PUBLIC` may do on the database is left as it was. Default privileges are recorded against the
-owner, so they apply only to objects the owner creates: never run a migration as a superuser or as
-the runtime role, or its tables will not be granted. When a migration adds a table the API must not
-write freely — another append-only table, say — its revoke is added to part 2 of the grants here,
-and the operator runs it after that migration, as part 2 is run for `audit_log`.
+The names are psql variables, `owner`, `runtime` and `database`; the scripts hold no password, and
+the operator sets each one with `\password` afterwards. Both setup scripts can be run again: what
+exists is left alone and the grants are reset. Copy the whole `scripts/sql` directory to the host and
+run the scripts with `-f` from there, readable by `postgres`: the two setup scripts include
+`runtime-grants.sql` by a path relative to themselves.
 
 ### Checking the setup
 
-As a superuser, connected to the environment's database. Each query must return no rows, and every
-column of the last one must be `false`:
+As the runtime login, from the host (the loopback rule in `pg_hba.conf` covers it):
+
+```bash
+psql "host=127.0.0.1 dbname=heimdall user=heimdall_svc" -X -f scripts/sql/check-runtime-login.sql
+```
+
+It ends with `NOTICE:  heimdall_svc was refused all … statements`. A list instead names each
+statement the login was not refused, and the script exits with an error. Run as the owner or a
+superuser, it lists them all: that is the wrong session, not a broken setup, and nothing was changed.
+
+And as a superuser, connected to the environment's database: each query must return no rows, and
+every column of the last one must be `false`.
 
 ```sql
 -- 1. Nothing in this database, and no database, still belongs to the runtime login.
@@ -180,73 +198,89 @@ SELECT has_table_privilege(r.oid, 'heimdall.audit_log', 'DELETE') AS audit_delet
 FROM pg_roles r WHERE r.rolname = 'heimdall_svc';
 ```
 
-Then, connected as `heimdall_svc`, this must fail with "must be owner of table audit_log". It is
-wrapped in a transaction that is rolled back, so it changes nothing even if it is run by mistake as
-the owner — in which case it answers `ALTER TABLE`, and the session is the wrong one:
-
-```sql
-BEGIN; ALTER TABLE heimdall.audit_log DISABLE TRIGGER USER; ROLLBACK;
-```
-
 ### A new deployment
 
-1. Create the two logins and the database, owned by the owner:
+1. As a superuser, from the directory `scripts/sql` was copied to:
 
    ```bash
-   sudo -u postgres createuser --pwprompt heimdall_owner
-   sudo -u postgres createuser --pwprompt heimdall_svc
-   sudo -u postgres createdb --owner heimdall_owner heimdall
+   sudo -u postgres psql -X -v owner=heimdall_owner -v runtime=heimdall_svc -v database=heimdall \
+       -f new-deployment.sql
    ```
 
-   and give both a `pg_hba.conf` rule like the one in the
-   [deployment guide](../environments-and-deployment/) (`heimdall_owner` only needs it while the
+2. Set both passwords, which the env file will hold: `sudo -u postgres psql -c '\password
+   heimdall_owner'`, and the same for `heimdall_svc`. Give both a `pg_hba.conf` rule like the one in
+   the [deployment guide](../environments-and-deployment/) (`heimdall_owner` only needs it while the
    container migrates; a deployment that migrates out of band gives it a local rule instead).
-2. Run part 1 of the grants.
 3. In the env file, set `DB_USER`/`DB_PASSWORD` to the runtime login and
    `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` to the owner's whole connection string, with the same
-   `Search Path` as the API's:
+   `Search Path` and `DB_CONNECTION_EXTRA` as the API's:
    `Host=host.docker.internal;Port=5432;Database=heimdall;Username=heimdall_owner;Password=…;Search Path=public`.
-   Deploy. The entrypoint migrates as the owner, and the API starts as the runtime role, which part
-   1's default privileges have already granted the new tables.
-4. Run part 2 of the grants.
+   Deploy. The entrypoint migrates as the owner, and the API starts as the runtime login, which the
+   default privileges have already granted the new tables.
+4. Run step 1 again. The first migration has created `audit_log` by now, and the second run takes
+   away the `DELETE` on it that the default privileges gave the login. Until then its trigger refuses
+   every `DELETE` anyway.
 5. Run the checks above.
 
-### Switching an existing deployment over
+### Separating the migration owner from the runtime login
 
 A deployment created from the earlier guide has one login, `heimdall_svc`, owning the database and
-everything in it. The switch moves the ownership to a new owner and grants the login back what the
-API needs, in one transaction.
+everything in it, and the audit triggers do not hold against it. `separate-owner.sql` moves the
+ownership to a new owner and grants the login back what the API needs, in one transaction. The API
+keeps running throughout: it sees the old ownership or the new one with its grants, never a mix.
 
-1. **First deploy a release whose entrypoint reads `HEIMDALL_MIGRATIONS_CONNECTIONSTRING`** — this
-   one or later. On an older image the variable is ignored.
-2. Create the owner login: `sudo -u postgres createuser --pwprompt heimdall_owner`, and its
-   `pg_hba.conf` rule as above.
-3. Make sure no deploy runs between steps 4 and 5: once the ownership has moved, a container that
-   migrates as `heimdall_svc` fails. Hold the environment's deploys for those minutes, or set
-   `HEIMDALL_RUN_MIGRATIONS=false` in its env file until step 5.
-4. As a superuser, connected to the environment's database (`sudo -u postgres psql -d heimdall`):
+**Before you start.** The environment must run a release whose entrypoint reads
+`HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (1.6.0 or later); on an older image the variable is ignored.
+Take `scripts/sql` from this release or later. Once step 2 commits, a container start that migrates
+as `heimdall_svc` fails, because the login no longer owns what the migrations change: a deploy, or
+Docker restarting a crashed container. The running API is unaffected. So do steps 2 to 5 in one
+sitting and hold the environment's deploys meanwhile.
 
-   ```sql
-   BEGIN;
-   SET LOCAL lock_timeout = '5s';
-   ALTER DATABASE heimdall OWNER TO heimdall_owner;
-   REASSIGN OWNED BY heimdall_svc TO heimdall_owner;
-   -- Part 1 and part 2 of the grants, as above.
-   COMMIT;
+1. **Back up**, as a superuser. The custom format keeps ownership and grants, so a restore puts back
+   exactly what was there:
+
+   ```bash
+   sudo -u postgres pg_dump --format=custom --file=/var/backups/heimdall-$(date -u +%Y%m%dT%H%M%SZ).dump heimdall
+   sudo -u postgres pg_restore --list /var/backups/heimdall-<timestamp>.dump | head
    ```
 
-   `REASSIGN OWNED` moves everything the login owns in this database — the schema, the tables, their
-   sequences, the trigger functions and the migrations history — and any database the login owns.
-   It takes a lock on every table it changes and holds them until `COMMIT`, so requests wait for
-   that moment; with `lock_timeout` the transaction gives up after five seconds rather than queue
-   behind a long one, and rolls back whole. Run it again at a quieter moment if it does. Because it
-   is one transaction, the API sees either the old ownership or the new one with its grants.
-5. Add `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the owner's) to the env file, put
-   `HEIMDALL_RUN_MIGRATIONS` back if step 3 changed it, and redeploy. Leave `DB_USER` as it is.
-6. Run the checks above.
+2. **Run the script** as the database admin, from the directory `scripts/sql` was copied to:
 
-To undo it, reverse the ownership in one transaction, as a superuser connected to the environment's
-database, with the same `lock_timeout` and the same retry as step 4:
+   ```bash
+   sudo -u postgres psql -X -v owner=heimdall_owner -v runtime=heimdall_svc -v database=heimdall \
+       -f separate-owner.sql
+   ```
+
+   It takes a lock on every table it changes and holds them until `COMMIT`, so requests wait for that
+   moment. If a long transaction holds a table for more than five seconds it gives up and rolls back
+   whole, saying `canceling statement due to lock timeout`; run it again at a quieter moment. It
+   refuses, changing nothing, when the login also owns another database or a tablespace, which
+   `REASSIGN OWNED` would move as well: change their owner first. Running it again after it
+   succeeded is harmless.
+3. **Set the owner's password**: `sudo -u postgres psql -c '\password heimdall_owner'`. Add its
+   `pg_hba.conf` rule (`host heimdall heimdall_owner 172.16.0.0/12 scram-sha-256` on the VPS) and
+   `sudo systemctl reload postgresql`.
+4. **Store the owner's connection string** as `HEIMDALL_MIGRATIONS_CONNECTIONSTRING`, with the same
+   `Search Path` and `DB_CONNECTION_EXTRA` as the API's:
+   `Host=host.docker.internal;Port=5432;Database=heimdall;Username=heimdall_owner;Password=…;Search Path=public`.
+   Under yggdrasil, type it at the hidden prompt, or pipe it in, never on the command line:
+
+   ```bash
+   ygg vars set heimdall-api@production HEIMDALL_MIGRATIONS_CONNECTIONSTRING=-
+   ```
+
+   The name marks it a secret. A value cannot contain a single quote. Elsewhere, put it in the
+   environment's env file. Leave `DB_USER` and `DB_PASSWORD` as they are.
+5. **Redeploy** the environment as usual. The start-up log shows
+   `entrypoint: applying EF Core migrations with HEIMDALL_MIGRATIONS_CONNECTIONSTRING...`.
+6. **Verify**: the container reports healthy (`/healthcheck`); a sign-in works, and so does an
+   administrative change, which writes an audit entry; `check-runtime-login.sql` passes as
+   `heimdall_svc`, and the superuser queries above return what they should.
+
+**Rolling back.** If the deploy in step 5 fails because the owner cannot connect — a wrong password,
+or no `pg_hba.conf` rule — fix the connection string or the rule and redeploy; the database is fine
+as it is. To return to the single login, reverse the ownership first, as a superuser connected to the
+environment's database, with the same retry as step 2:
 
 ```sql
 BEGIN;
@@ -256,17 +290,22 @@ REASSIGN OWNED BY heimdall_owner TO heimdall_svc;
 COMMIT;
 ```
 
-Then remove `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` from the env file. The grants left behind then name
-the runtime login on objects it owns again, which changes nothing. On PostgreSQL 14 or earlier, where
-`PUBLIC` could create in `public` by default, `GRANT CREATE ON SCHEMA public TO PUBLIC` restores
-that too.
+then remove the variable (`ygg vars unset heimdall-api@production HEIMDALL_MIGRATIONS_CONNECTIONSTRING`)
+and redeploy. Removing the variable alone does not roll back: with the ownership left with the owner
+the API runs, but the entrypoint migrates as `heimdall_svc` and fails, so that combination needs
+`HEIMDALL_RUN_MIGRATIONS=false` and migrations applied out of band as the owner. The grants left
+behind by the reversal name the login on objects it owns again, which changes nothing. The backup
+from step 1 is the last resort: `pg_restore --clean --if-exists --dbname=heimdall` from it, as a
+superuser, with the API stopped.
 
 **Where the owner's password lives.** With `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` set, the owner's
 connection string is in the env file and the container's configuration, beside the other secrets
 there. The entrypoint hands it to the migration bundle through the bundle's own environment, never
 its command line, and removes it before the API starts, so the API process never holds it. A
 deployment that wants it off the container altogether sets `HEIMDALL_RUN_MIGRATIONS=false` and
-migrates out of band with `scripts/migrations.py`, from an environment file that names the owner.
+migrates out of band with `scripts/migrations.py`, from an environment file that sets
+`HEIMDALL_MIGRATIONS_CONNECTIONSTRING` — the script, like the entrypoint, migrates with it when it is
+set.
 
 ## Start-up sequence
 
@@ -1203,7 +1242,7 @@ no longer verify HS256.
 | `HEIMDALL_RETENTION_AUDIT_ACTOR_DAYS` | | `548` |
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
-| `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint only (see [Database roles](#database-roles--th-18)) |
+| `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint and `scripts/migrations.py` only, never by the API (see [Database roles](#database-roles--th-18)) |
 | `PUBLIC_HOST` / `UI_HOST` | | unset → these two name no public host (the verification and reset URLs and the CORS origins are read too; see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
 | `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → with a public host, EF Core's sensitive logging and detailed errors and the developer exception page are off |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |

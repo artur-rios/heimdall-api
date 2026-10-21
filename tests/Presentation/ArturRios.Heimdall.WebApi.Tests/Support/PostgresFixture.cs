@@ -4,10 +4,12 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
+using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace ArturRios.Heimdall.WebApi.Tests.Support;
@@ -19,6 +21,14 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 ///     <see cref="FunctionalCollection" /> so the container is created once, not per test class.
 ///     See docs/Testing Specification Document.md §7.2.
 /// </summary>
+/// <remarks>
+///     The database is set up the way the supported deployment sets it up (NFR-29, Threat Model
+///     TH-18): <c>scripts/sql/new-deployment.sql</c> creates an owner role and a runtime login, the
+///     migrations run as the owner, the script runs again, and the API under test connects as the
+///     runtime login. The whole functional suite is therefore also the proof that the runtime
+///     login's grants cover everything the API does. <see cref="ConnectionString" /> stays a
+///     superuser's, for tests that arrange state the API could not, or that inspect it.
+/// </remarks>
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private const string ConnectionStringVariable = "HEIMDALL_DATA_CONNECTIONSTRING";
@@ -27,6 +37,22 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
     private const string RetiredSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const string RetiredPreviousSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
+
+    /// <summary>Where <c>scripts/sql</c> is copied inside the container, for psql to read.</summary>
+    private const string ScriptDirectory = "/heimdall-sql";
+
+    /// <summary>The database the deployment scripts create, as production's is named.</summary>
+    public const string Database = "heimdall";
+
+    /// <summary>The role that owns the database and everything in it, and applies the migrations.</summary>
+    public const string OwnerRole = "heimdall_owner";
+
+    /// <summary>The login the API under test connects as: it owns nothing.</summary>
+    public const string RuntimeRole = "heimdall_svc";
+
+    // Set by the fixture after the script, as an operator would: the scripts never carry a password.
+    private const string OwnerPassword = "functional-tests-owner-password";
+    private const string RuntimePassword = "functional-tests-runtime-password";
 
     /// <summary>
     ///     The audience the host under test gives application tokens (UC-56). Published here for the
@@ -133,15 +159,47 @@ public sealed class PostgresFixture : IAsyncLifetime
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18-alpine")
         .Build();
 
-    /// <summary>The connection string of the running container's database.</summary>
-    public string ConnectionString => _container.GetConnectionString();
+    /// <summary>
+    ///     A superuser's connection to <see cref="Database" />, for arranging and inspecting state.
+    ///     The API under test never uses it.
+    /// </summary>
+    public string ConnectionString => ConnectionStringFor("postgres", "postgres", Database);
+
+    /// <summary>The owner's connection to <see cref="Database" />: what the migrations run as.</summary>
+    public string OwnerConnectionString => ConnectionStringFor(OwnerRole, OwnerPassword, Database);
+
+    /// <summary>The runtime login's connection to <see cref="Database" />: what the API under test uses.</summary>
+    public string RuntimeConnectionString => ConnectionStringFor(RuntimeRole, RuntimePassword, Database);
+
+    /// <summary>A connection string to the container for another login or database.</summary>
+    public string ConnectionStringFor(string username, string password, string database) =>
+        new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
+        {
+            Username = username, Password = password, Database = database
+        }.ConnectionString;
 
     public async ValueTask InitializeAsync()
     {
         await _container.StartAsync();
+        await CopyScriptsAsync();
 
-        // Point the API under test at the container instead of a developer's local database.
-        Environment.SetEnvironmentVariable(ConnectionStringVariable, ConnectionString);
+        // A new deployment, in the order the operations guide gives: the script, the passwords, the
+        // migrations as the owner, then the script again. The second run is what takes DELETE off
+        // audit_log, which the default privileges granted when the migration created the table.
+        await RunScriptOrThrowAsync("new-deployment.sql", NewDeploymentVariables());
+        await SetPasswordAsync(OwnerRole, OwnerPassword);
+        await SetPasswordAsync(RuntimeRole, RuntimePassword);
+
+        await using (var owner = CreateContext(OwnerConnectionString))
+        {
+            await owner.Database.MigrateAsync();
+        }
+
+        await RunScriptOrThrowAsync("new-deployment.sql", NewDeploymentVariables());
+
+        // Point the API under test at the container instead of a developer's local database, as the
+        // login that owns nothing.
+        Environment.SetEnvironmentVariable(ConnectionStringVariable, RuntimeConnectionString);
         Environment.SetEnvironmentVariable(DatabaseTypeVariable, "PostgreSql");
 
         // Startup refuses to boot without an ES256 signing key. The previous key is a rotation in
@@ -175,10 +233,9 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(MasterUserOptions.EmailVariable, MasterUserEmail);
         Environment.SetEnvironmentVariable(MasterUserOptions.PasswordVariable, MasterUserPassword);
 
-        // The API refuses to start against a schema with pending migrations, so apply them here.
+        // The API refuses to start against a schema with pending migrations, which are applied
+        // above, as the owner.
         await using var context = CreateContext();
-
-        await context.Database.MigrateAsync();
 
         // The application's own seeder, run here rather than waited for: it is what creates the ROLE
         // rows, and the stand-in persons below carry a role foreign key. The host under test runs it
@@ -254,10 +311,89 @@ public sealed class PostgresFixture : IAsyncLifetime
     ///     EF interceptors to add, for a test that needs to act at a precise point of a handler's
     ///     database conversation (see <c>ApplicationCredentialRaceTests</c>).
     /// </param>
-    public AppDbContext CreateContext(params IInterceptor[] interceptors) => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(ConnectionString).AddInterceptors(interceptors).Options,
+    public AppDbContext CreateContext(params IInterceptor[] interceptors) =>
+        CreateContext(ConnectionString, interceptors);
+
+    /// <summary>Creates a context bound to the container as the login the connection string names.</summary>
+    public static AppDbContext CreateContext(string connectionString, params IInterceptor[] interceptors) => new(
+        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connectionString).AddInterceptors(interceptors).Options,
         NullLoggerFactory.Instance,
         DbContextDiagnosticsOptions.Disabled);
+
+    /// <summary>
+    ///     Runs one of <c>scripts/sql</c> with psql inside the container, by default as the superuser
+    ///     and connected to the <c>postgres</c> database, as an operator would with
+    ///     <c>sudo -u postgres psql -v name=value … -f script</c>. Each variable is passed as
+    ///     <c>-v</c>. The container trusts local connections, so any login may be named.
+    /// </summary>
+    public async Task<ExecResult> RunScriptAsync(
+        string script, IReadOnlyDictionary<string, string> variables, string user = "postgres",
+        string database = "postgres")
+    {
+        var command = new List<string> { "psql", "-U", user, "-d", database, "-X", "-q" };
+
+        foreach (var (name, value) in variables)
+        {
+            command.Add("-v");
+            command.Add($"{name}={value}");
+        }
+
+        command.Add("-f");
+        command.Add($"{ScriptDirectory}/{script}");
+
+        return await _container.ExecAsync(command);
+    }
+
+    private async Task RunScriptOrThrowAsync(string script, IReadOnlyDictionary<string, string> variables)
+    {
+        var result = await RunScriptAsync(script, variables);
+
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"{script} exited with {result.ExitCode}: {result.Stderr}");
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> NewDeploymentVariables() => new Dictionary<string, string>
+    {
+        ["owner"] = OwnerRole, ["runtime"] = RuntimeRole, ["database"] = Database
+    };
+
+    /// <summary>Sets a login's password as a superuser, the step the scripts leave to the operator.</summary>
+    public async Task SetPasswordAsync(string role, string password)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionStringFor("postgres", "postgres", "postgres"));
+        await connection.OpenAsync();
+
+        // A role name cannot be a parameter. The names here are the fixture's and the tests' own.
+        await using var command = new NpgsqlCommand($"ALTER ROLE \"{role}\" PASSWORD '{password}'", connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task CopyScriptsAsync()
+    {
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(RepositoryRoot(), "scripts", "sql"), "*.sql"))
+        {
+            await _container.CopyAsync(
+                await File.ReadAllBytesAsync(file), $"{ScriptDirectory}/{Path.GetFileName(file)}");
+        }
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "src", "ArturRios.Heimdall.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName
+               ?? throw new InvalidOperationException(
+                   $"Could not locate the repository root from {AppContext.BaseDirectory}");
+    }
 
     public ValueTask DisposeAsync() => _container.DisposeAsync();
 }

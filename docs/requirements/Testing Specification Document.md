@@ -353,10 +353,15 @@ suite therefore:
 
 1. Starts a `PostgreSqlContainer` **once for the whole functional suite** (an xUnit
    `ICollectionFixture`, so the container isn't recreated per test class).
-2. Applies the schema/migrations to that container's database.
-3. Exports the container's connection string into `HEIMDALL_DATA_CONNECTIONSTRING` (and
+2. Sets the database up as the supported deployment does (NFR-29): `scripts/sql/new-deployment.sql`
+   creates an owner role and a runtime login, the migrations run as the owner, and the script runs
+   again.
+3. Exports the **runtime login's** connection string into `HEIMDALL_DATA_CONNECTIONSTRING` (and
    `HEIMDALL_DATA_DATABASETYPE=PostgreSql`) **before** the host is built, so
-   `WebApiTest<Program>` boots against the container.
+   `WebApiTest<Program>` boots against the container as a login that owns nothing, and every
+   functional test also proves the grants cover what it exercises. `PostgresFixture.ConnectionString`
+   stays a superuser's, for arranging and inspecting state; `DatabaseRoleTests` covers the two
+   scripts and what the runtime login is refused (Threat Model TH-18).
 4. **Keeps tests independent by making their data unique, not by resetting the database.** The
    container's database accumulates rows for the whole run; nothing is truncated between tests and
    no test runs in a rolled-back transaction. Independence comes from every test seeding its own

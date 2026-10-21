@@ -27,6 +27,7 @@ docs/                                           Hugo (Docsy) documentation site 
   openapi/                                      Generated OpenAPI document, published by the site
   themes/docsy/                                 The site theme, as a git submodule
 scripts/                                        Tooling (EF Core migrations, coverage, OpenAPI)
+  sql/                                          The database roles: setup, switch-over and check (psql)
 tools/ArturRios.Heimdall.OpenApiGen/            Writes docs/openapi/heimdall.json (not in the solution)
 src/
   Domain/ArturRios.Heimdall.Domain/      Domain entities & enums
@@ -126,10 +127,17 @@ startup, and refuses to start when migrations are pending. Use the interactive m
 python scripts/migrations.py
 ```
 
-It asks which environment file to load (for the connection string), then offers the migration
-actions. Creating a migration prompts for its name and adds it to
-`src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. Requires `dotnet tool restore` (above)
+It asks which environment file to load (for the connection string: the schema owner's
+`HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when the file sets it, `HEIMDALL_DATA_CONNECTIONSTRING`
+otherwise), then offers the migration actions. Creating a migration prompts for its name and adds it
+to `src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. Requires `dotnet tool restore` (above)
 to have been run once.
+
+A migration grants nothing. The API runs as a login that owns nothing (NFR-29), and the default
+privileges `scripts/sql/runtime-grants.sql` sets give it rows on every table the owner creates. A new
+table the API must not write freely — append-only, like `audit_log` — gets its revoke there, beside
+`audit_log`'s. The functional suite runs the API as that login, so a privilege the grants lack fails
+it.
 
 ## OpenAPI document
 

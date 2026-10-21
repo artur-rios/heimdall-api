@@ -5,7 +5,7 @@ Run from the repository root:  python -m unittest discover -s scripts -p "test_*
 
 import unittest
 
-from migrations import describe_connection, parse_env_file
+from migrations import describe_connection, migration_connection, parse_env_file
 
 
 class ParseEnvFileTests(unittest.TestCase):
@@ -50,6 +50,34 @@ class DescribeConnectionTests(unittest.TestCase):
         described = describe_connection("Host=localhost;")
 
         self.assertEqual("Host=localhost", described)
+
+
+class MigrationConnectionTests(unittest.TestCase):
+    def test_given_only_the_api_connection_when_chosen_then_it_is_used(self):
+        chosen = migration_connection({"HEIMDALL_DATA_CONNECTIONSTRING": "Username=svc"})
+
+        self.assertEqual(("HEIMDALL_DATA_CONNECTIONSTRING", "Username=svc"), chosen)
+
+    def test_given_an_owner_connection_when_chosen_then_it_wins(self):
+        chosen = migration_connection({
+            "HEIMDALL_DATA_CONNECTIONSTRING": "Username=svc",
+            "HEIMDALL_MIGRATIONS_CONNECTIONSTRING": "Username=owner",
+        })
+
+        self.assertEqual(("HEIMDALL_MIGRATIONS_CONNECTIONSTRING", "Username=owner"), chosen)
+
+    def test_given_a_blank_owner_connection_when_chosen_then_the_api_connection_is_used(self):
+        chosen = migration_connection({
+            "HEIMDALL_DATA_CONNECTIONSTRING": "Username=svc",
+            "HEIMDALL_MIGRATIONS_CONNECTIONSTRING": "  ",
+        })
+
+        self.assertEqual(("HEIMDALL_DATA_CONNECTIONSTRING", "Username=svc"), chosen)
+
+    def test_given_neither_connection_when_chosen_then_the_api_variable_is_named_with_nothing(self):
+        chosen = migration_connection({})
+
+        self.assertEqual(("HEIMDALL_DATA_CONNECTIONSTRING", ""), chosen)
 
 
 if __name__ == "__main__":
