@@ -1,6 +1,8 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Auditing;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Mediator.Command;
 using ArturRios.Mediator.Command.Interfaces;
@@ -241,5 +243,67 @@ public class AuditingCommandHandlerTests
 
         Assert.True(result.Success);
         writer.Verify(w => w.WriteAsync("LiftSomethingCommand", targetId, true, null), Times.Once);
+    }
+
+    private static AuditingCommandHandler<StubCommand, StubOutput> ThrowingHandler(
+        Exception exception, IAuditLogWriter writer)
+    {
+        var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutput>>();
+        inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>(), It.IsAny<CancellationToken>())).ThrowsAsync(exception);
+
+        return new AuditingCommandHandler<StubCommand, StubOutput>(inner.Object, writer, NullLogger());
+    }
+
+    [UnitFact]
+    public async Task GivenTheHashGateSheds_WhenHandling_ThenTheRefusalIsRecordedWithTheShedReasonAndRethrown()
+    {
+        // Given a login the saturated hash gate refused (TH-03). The exception used to propagate past
+        // the decorator, so the shed attempt left no entry and CREDENTIAL_VERIFICATION_SHEDDING,
+        // which counts entries carrying this reason, could never fire (#201).
+        var exception = new PasswordHashGateSaturatedException(TimeSpan.FromSeconds(10));
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = ThrowingHandler(exception, writer.Object);
+
+        // When / Then — the refusal still reaches the filter that answers 503
+        var thrown = await Assert.ThrowsAsync<PasswordHashGateSaturatedException>(
+            () => handler.HandleAsync(new StubCommand()));
+
+        Assert.Same(exception, thrown);
+        writer.Verify(
+            w => w.WriteAsync(
+                nameof(StubCommand), null, false, AuthMessages.AuthenticationTemporarilyUnavailable),
+            Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenAnyOtherException_WhenHandling_ThenAFailedEntryWithTheFixedReasonIsRecordedAndItPropagates()
+    {
+        // The exception's own text is never written: it may carry provider or caller-supplied detail
+        var exception = new InvalidOperationException("connection to db.internal:5432 refused");
+        var writer = new Mock<IAuditLogWriter>();
+        var handler = ThrowingHandler(exception, writer.Object);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(new StubCommand()));
+
+        Assert.Same(exception, thrown);
+        writer.Verify(
+            w => w.WriteAsync(nameof(StubCommand), null, false, AuditMessages.CommandFailed), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenTheRefusalEntryFailsToWrite_WhenHandling_ThenTheOriginalExceptionIsStillThrown()
+    {
+        // The audit write in the catch must not mask what actually went wrong
+        var exception = new InvalidOperationException("the command failed");
+        var writer = new Mock<IAuditLogWriter>();
+        writer.Setup(w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<bool>(), It.IsAny<string?>()))
+            .ThrowsAsync(new TimeoutException("audit db unavailable"));
+        var handler = ThrowingHandler(exception, writer.Object);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.HandleAsync(new StubCommand()));
+
+        Assert.Same(exception, thrown);
     }
 }

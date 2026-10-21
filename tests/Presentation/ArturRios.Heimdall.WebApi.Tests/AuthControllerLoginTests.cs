@@ -1,12 +1,16 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Handlers;
+using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
@@ -423,6 +427,78 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
 
         // Then — and the endpoint works again once the gate drains, so saturation is not a latch
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
+    }
+
+    [FunctionalFact]
+    public async Task GivenTheHashGateShedsLogins_WhenDetectingSecuritySignals_ThenSheddingIsRaisedFromTheTrail()
+    {
+        // #201, end to end and without hand-seeding: each shed login must leave an audit entry with the
+        // canonical reason, and the TH-03 signal counts exactly those. Before, the exception passed
+        // through the audit decorator, nothing was written, and the signal could never fire.
+        var email = UniqueEmail("shed-signal");
+        await SeedPersonAsync(Roles.SystemAdmin, email);
+        var since = DateTime.UtcNow.AddSeconds(-1);
+
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var original = PasswordHashGate.Shared;
+        var saturated = new PasswordHashGate(1, TimeSpan.FromMilliseconds(100));
+
+        PasswordHashGate.Shared = saturated;
+
+        var holder = saturated.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        const int sheds = 3;
+
+        try
+        {
+            await holding.Task;
+
+            for (var i = 0; i < sheds; i++)
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, (await LoginAsync(email)).StatusCode);
+            }
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+
+            PasswordHashGate.Shared = original;
+        }
+
+        await using var context = db.CreateContext();
+
+        var shedEntries = await context.AuditLogs.AsNoTracking()
+            .Where(x => x.CreatedAt >= since
+                        && x.Action == nameof(LoginCommand)
+                        && x.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable)
+            .ToListAsync();
+
+        Assert.Equal(sheds, shedEntries.Count);
+        Assert.All(shedEntries, entry => Assert.False(entry.Succeeded));
+
+        // When the detector reads the trail the API itself wrote, with the threshold at what was shed
+        var handler = new DetectSecuritySignalsQueryHandler(
+            new EfRepository<AuditLog, long>(context),
+            new EfRepository<Person, long>(context),
+            new DataRetentionOptions
+            {
+                MonitoringWindow = TimeSpan.FromMinutes(5), RefusalThreshold = sheds
+            });
+
+        var signals = await handler.HandleAsync(new DetectSecuritySignalsQuery());
+
+        // Then
+        Assert.Contains(
+            signals.Data!.Signals,
+            signal => signal.Kind == DetectSecuritySignalsQueryHandler.CredentialVerificationShedding);
     }
 
     [FunctionalFact]

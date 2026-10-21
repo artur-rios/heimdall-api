@@ -315,11 +315,15 @@ public class ReapplyErasuresCommandHandlerTests
         // When
         var thrown = await Record.ExceptionAsync(() => handler.HandleAsync(Command(person.PublicId)));
 
-        // Then
+        // Then — the void is audited, and the decorator records the command that threw as a refusal
+        // after it (#201)
         Assert.IsType<InvalidOperationException>(thrown);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
         Assert.Equal(
-            [(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)],
+            [
+                (ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true),
+                (nameof(ReapplyErasuresCommand), (Guid?)null, false)
+            ],
             auditLog.Entries);
     }
 }

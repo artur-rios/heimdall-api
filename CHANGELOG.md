@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
+  answering) now leaves a failed audit entry, and the exception still propagates: the gate's refusal records
+  `AuthenticationTemporarilyUnavailable`, anything else a fixed reason, never the exception's text. The
+  `CREDENTIAL_VERIFICATION_SHEDDING` signal counts that reason, so it can now fire; before, nothing wrote it
+  (#201).
 - A first-time Google sign-up whose ID token carries no email claim, as when it was issued without the `email`
   scope, is now answered with AF-25a's `401 Unauthorized` — "Google authentication failed." — and creates nothing,
   where it used to fail with a 500 (#208). Use case 25's AF-25a now names the case.

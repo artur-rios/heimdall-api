@@ -22,6 +22,9 @@ public static class AuditMessageMap
             // AF-48a (NFR-10) — the page is out of bounds or the action filter is longer than its column.
             [PaginationMessages.InvalidPageNumber] = HttpStatusCodes.BadRequest,
             [PaginationMessages.InvalidPageSize] = HttpStatusCodes.BadRequest,
-            [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest
+            [PaginationMessages.FilterTooLong] = HttpStatusCodes.BadRequest,
+            // NFR-09 — recorded in the trail for a command that threw; never returned to a caller by this
+            // map, whose endpoint does not run commands. Listed so every canonical message resolves.
+            [AuditMessages.CommandFailed] = HttpStatusCodes.InternalServerError
         });
 }

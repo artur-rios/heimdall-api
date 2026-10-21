@@ -40,11 +40,15 @@ sequenceDiagram
             W--xA: exception
             A->>A: log a warning — the request still succeeds
         end
-    else failure
-        Note over A: nothing written — only successful writes are audited
+    else refused
+        A->>W: WriteAsync(commandTypeName, targetId, false, first error)
+    else the handler throws
+        H--xA: exception
+        A->>W: WriteAsync(commandTypeName, null, false, fixed reason)
+        A--xM: the original exception, rethrown
     end
 
-    A-->>M: the unchanged DataOutput
+    A-->>M: the unchanged DataOutput (unless the handler threw)
 ```
 
 Registration is the whole mechanism:
@@ -89,6 +93,16 @@ once due (NFR-21).
 
 **The target is resolved reflectively**, from the output's `Id` or `PublicId` property. Commands
 whose output carries neither record a `null` target rather than failing.
+
+## Refusals and exceptions are recorded too
+
+A refused command writes an entry with `Succeeded = false` and the first error as its reason; a caller
+repeatedly denied something leaves no other trace. A command that **throws** is recorded the same way and
+the exception is rethrown unchanged. The hash gate's refusal (`PasswordHashGateSaturatedException`, a `503`
+answered outside the decorator) records `AuthenticationTemporarilyUnavailable`, the reason the
+`CREDENTIAL_VERIFICATION_SHEDDING` signal counts; any other exception records the fixed
+`AuditMessages.CommandFailed`, never the exception's own text, which can carry provider or caller input.
+If that entry cannot be written, the decorator logs a warning and the original exception still propagates.
 
 ## Failures never fail the request
 
