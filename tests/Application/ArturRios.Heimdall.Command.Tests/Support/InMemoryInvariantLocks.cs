@@ -14,6 +14,12 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
 
     private readonly List<IReadOnlyCollection<long>> _scopeLocks = [];
 
+    /// <summary>
+    ///     Runs as the locks are taken: what another request committed while this one waited for them, such
+    ///     as a promotion or a scope's deletion, so a test can show the handler decides on the state under the lock.
+    /// </summary>
+    public Func<Task>? OnLock { get; init; }
+
     /// <summary>How many <see cref="LockAsync" /> calls also locked the System Admin set.</summary>
     public int SystemAdminLocks { get; private set; }
 
@@ -29,7 +35,7 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
         }
     }
 
-    public Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false)
+    public async Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false)
     {
         lock (_scopeLocks)
         {
@@ -41,6 +47,9 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
             }
         }
 
-        return Task.CompletedTask;
+        if (OnLock is not null)
+        {
+            await OnLock();
+        }
     }
 }

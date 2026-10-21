@@ -24,16 +24,13 @@ namespace ArturRios.Heimdall.Command.Services;
 ///     </para>
 ///     <para>
 ///         <b>Asked under the System Admin lock.</b> Every caller asks inside its transaction, once
-///         <c>IInvariantLocks</c> holds the System Admin set, so two administrators removing each other at
-///         once run one after the other, and the second is refused.
+///         <c>IInvariantLocks</c> holds the System Admin set, and decides whether the guard applies from the
+///         person as read under it (<see cref="LockedPerson.IsLiveSystemAdmin" />), so two administrators
+///         removing each other at once run one after the other, and the second is refused.
 ///     </para>
 /// </remarks>
 public static class LastSystemAdminGuard
 {
-    /// <summary>Whether <paramref name="person" /> is a System Admin this guard protects: one not yet deleted.</summary>
-    public static bool Applies(Person person) =>
-        person.RoleId == (long)Roles.SystemAdmin && !person.IsDeleted;
-
     /// <summary>
     ///     Whether no System Admin but the person <paramref name="personId" /> is active, so taking them out
     ///     would leave the system without one.

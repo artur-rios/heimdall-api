@@ -136,8 +136,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Admin first." (AF-09f, AF-10d), where two administrators deleting each other at once both succeeded. The last
   one's erasure request (`POST /api/auth/erasure-request`) is recorded with its deadline but blocked, as a last
   scope owner's is (AF-42e), and the anonymisation pass releases it once another active System Admin exists. Each
-  decision holds one transaction-scoped advisory lock on the System Admin set, taken after the scope row locks. A
-  restriction on processing is never refused, and `PUT /api/persons/{id}` never demotes a System Admin (#203).
+  deletion and erasure holds one transaction-scoped advisory lock on the System Admin set, taken after the scope
+  row locks, and decides on the person's role and ownerships as read under the locks. A restriction on processing
+  is never refused, and `PUT /api/persons/{id}` never demotes a System Admin (#203).
 
 ### Changed
 

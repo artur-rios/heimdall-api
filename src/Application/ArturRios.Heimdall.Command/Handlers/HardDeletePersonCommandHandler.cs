@@ -38,11 +38,11 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         tombstone for a live row.
 ///     </para>
 ///     <para>
-///         <b>Under the locks of the person's scopes</b> (#202), and of the System Admin set when the
-///         person is a live one (#203). The transaction opens before the guards and first locks the rows of
-///         the scopes the person owns, then the System Admin set (<see cref="IInvariantLocks" />), as every
-///         writer that can take an owner or a System Admin out does, so the guards' answers still hold when
-///         the person is deleted.
+///         <b>Under the locks of the person's scopes and of the System Admin set</b> (#202, #203). The
+///         transaction opens before the guards and first locks the rows of the scopes the person owns, then
+///         the System Admin set (<see cref="IInvariantLocks" />), and reads the person again under them
+///         (<see cref="LockedPerson" />), as every writer that can take an owner or a System Admin out does,
+///         so the guards' answers still hold when the person is deleted.
 ///     </para>
 /// </remarks>
 public class HardDeletePersonCommandHandler(
@@ -85,23 +85,26 @@ public class HardDeletePersonCommandHandler(
         // exception before the commit rolls every one of them back.
         await using var transaction = await transactions.BeginAsync();
 
-        // The person's scopes, read and locked first (#202), so the guard below is still true when the
-        // person is deleted.
-        var systemAdmin = LastSystemAdminGuard.Applies(person);
-        var ownedScopeIds =
-            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
+        // The person's scopes and the System Admin set, locked first, and the person read again under them
+        // (#202, #203), so the guards below decide on what is still true when the person is deleted.
+        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
+
+        if (locked is null)
+        {
+            return output.WithError(PersonMessages.PersonNotFound);
+        }
 
         // UC-10 step 3 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
         // deletion state: NFR-12 names hard-deleting the last owning person explicitly, and the guard
         // keeps every scope row backed by at least one SCOPE_OWNER row.
-        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, locked.OwnedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
 
         // AF-10d (NFR-32): nor may it leave the system without an active System Admin. Only a live one is
         // guarded: a logically deleted administrator is no longer one of the set.
-        if (systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
+        if (locked.IsLiveSystemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
         {
             return output.WithError(PersonMessages.WouldRemoveLastSystemAdmin);
         }

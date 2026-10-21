@@ -506,6 +506,5 @@ public class HardDeletePersonCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.Equal(0, fakes.Locks.SystemAdminLocks);
     }
 }

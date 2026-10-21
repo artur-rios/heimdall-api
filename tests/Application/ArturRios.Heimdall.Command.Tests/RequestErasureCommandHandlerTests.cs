@@ -680,4 +680,29 @@ public class RequestErasureCommandHandlerTests
         Assert.False(output.Data!.Blocked);
         Assert.True(person.IsDeleted);
     }
+
+    // Fix round 1: the guards decide on the person as read under the locks, not on the copy read before.
+
+    [UnitFact]
+    public async Task GivenAnOwnedScopeHardDeletedWhileTheLockWasAwaited_WhenRequestingErasure_ThenItIsNotBlocked()
+    {
+        // The caller's only owned scope, owned by nobody else, is hard-deleted — taking the ownership row with
+        // it — while the request waits for the locks: no scope is left for NFR-12 to protect
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        var locks = new InMemoryInvariantLocks
+        {
+            OnLock = () =>
+            {
+                person.ScopeOwnerships.Clear();
+                return Task.CompletedTask;
+            }
+        };
+
+        var output = await Handler(persons, googleUsers, locks: locks).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Data!.Blocked);
+        Assert.True(person.IsDeleted);
+    }
 }

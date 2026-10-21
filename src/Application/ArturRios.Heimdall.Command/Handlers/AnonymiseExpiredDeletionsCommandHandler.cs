@@ -365,9 +365,10 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     </para>
     ///     <para>
     ///         <b>Each under the locks of the person's scopes (#202).</b> The guards and the suspension run in
-    ///         a transaction of their own per request, holding the rows of the scopes the person owns, and the
-    ///         System Admin set for an administrator (<see cref="IInvariantLocks" />), as every writer that can
-    ///         take an owner or a System Admin out does, so one removed or deleted at the same moment is seen.
+    ///         a transaction of their own per request, holding the rows of the scopes the person owns and the
+    ///         System Admin set (<see cref="IInvariantLocks" />, <see cref="LockedPerson" />), as every writer
+    ///         that can take an owner or a System Admin out does, so one removed or deleted at the same moment
+    ///         is seen.
     ///         A request still blocked commits that transaction too: nothing was written, and committing
     ///         keeps the run's other tracked requests tracked, which a rollback would clear.
     ///     </para>
@@ -409,16 +410,17 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                     {
                         await using var transaction = await transactions.BeginAsync();
 
-                        var systemAdmin = LastSystemAdminGuard.Applies(person);
-                        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(
-                            locks, personReader, person.Id, systemAdmin);
+                        // The person as they stand under the locks (#202, #203): the guards decide on this.
+                        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
 
                         // Released once neither NFR-12 nor NFR-32 blocks it, whichever blocked it first (#203).
                         // A targeted write (#237), made only while the request is still blocked and the record
                         // live and unrestricted, so a restriction or deletion that landed since stands.
-                        var stillBlocked =
-                            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader) ||
-                            (systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader));
+                        var stillBlocked = locked is null ||
+                            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(
+                                person.Id, locked.OwnedScopeIds, personReader) ||
+                            (locked.IsLiveSystemAdmin &&
+                             await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader));
 
                         if (!stillBlocked)
                         {

@@ -23,10 +23,10 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
-///     <b>Under the locks of the person's scopes</b> (#202), and of the System Admin set when the person is
-///     one (#203). The guards and the deletion run in one transaction holding the rows of the scopes the
-///     person owns, and then the System Admin set (<see cref="IInvariantLocks" />), as every writer that
-///     can take an owner or a System Admin out does. Deleting one of the last two while the other is
+///     <b>Under the locks of the person's scopes and of the System Admin set</b> (#202, #203). The guards
+///     and the deletion run in one transaction holding the rows of the scopes the person owns, and then
+///     the System Admin set (<see cref="IInvariantLocks" />), and decide on the person as read under them
+///     (<see cref="LockedPerson" />), as every writer that can take an owner or a System Admin out does. Deleting one of the last two while the other is
 ///     removed or deleted therefore runs one after the other, and the second is refused, where both used
 ///     to see the other still there.
 /// </remarks>
@@ -83,14 +83,28 @@ public class DeletePersonCommandHandler(
         // rolls back.
         await using var transaction = await transactions.BeginAsync();
 
-        var systemAdmin = LastSystemAdminGuard.Applies(person);
-        var ownedScopeIds =
-            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
+        // The person as they stand under the locks (#202, #203): the guards decide on this, not on the
+        // copy read above.
+        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
+
+        if (locked is null)
+        {
+            return output.WithError(PersonMessages.PersonNotFound);
+        }
+
+        // AF-09b again: a deletion that committed since the read above leaves nothing to do, and the
+        // guards below would only turn the idempotent answer into a conflict.
+        if (locked.IsDeleted)
+        {
+            return output
+                .WithData(new DeletePersonCommandOutput { Id = person.PublicId, AlreadyDeleted = true })
+                .WithMessage(PersonMessages.PersonDeletedSuccessfully);
+        }
 
         // AF-09e (NFR-12): a soft-deleted owner can no longer authenticate, so deleting the last one
         // would leave the scope effectively ownerless. Asked under the locks, so it is still true when
         // the deletion below is written.
-        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, locked.OwnedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
@@ -98,7 +112,7 @@ public class DeletePersonCommandHandler(
         // AF-09f (NFR-32): nor may it leave the system without an active System Admin. AF-09d already
         // keeps an administrator from deleting themselves; this is the other one, deleted by someone
         // who — restricted, or deleting them at the same moment — would leave none.
-        if (systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
+        if (locked.IsLiveSystemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader))
         {
             return output.WithError(PersonMessages.WouldRemoveLastSystemAdmin);
         }

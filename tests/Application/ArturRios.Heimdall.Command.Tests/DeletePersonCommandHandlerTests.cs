@@ -458,9 +458,10 @@ public class DeletePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAScopeAdmin_WhenHandlingDeletePerson_ThenTheSystemAdminSetIsNotLocked()
+    public async Task GivenAScopeAdmin_WhenHandlingDeletePerson_ThenTheSystemAdminSetIsLockedToo()
     {
-        // Given — only a System Admin's deletion can touch NFR-32, so no other waits on the set
+        // Given — whether the person is an administrator is only known under the lock, so every deletion
+        // takes it
         var target = ScopeAdmin(10, owned: Scope(1));
         var coOwner = ScopeAdmin(11, owned: Scope(1));
         var persons = await PersonsWith(target, coOwner);
@@ -472,6 +473,68 @@ public class DeletePersonCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.Equal(0, locks.SystemAdminLocks);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    // Fix round 1: the guards decide on the person as read under the locks, not on the copy read before.
+
+    [UnitFact]
+    public async Task GivenAScopeAdminPromotedWhileTheLockWasAwaited_WhenTheyAreTheLastSystemAdmin_ThenRefused()
+    {
+        // Given a Scope Admin read as one, and promoted to System Admin — the only one — by a request that
+        // committed while this one waited for the locks
+        var target = ScopeAdmin(10);
+        var persons = new AsyncFakeRepository<Person, long>(() => 10);
+        await persons.CreateAsync(target);
+        var locks = new InMemoryInvariantLocks { OnLock = () => PromoteStoredCopyAsync(persons, target) };
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — AF-09f, decided on the role under the lock
+        Assert.Equal([PersonMessages.WouldRemoveLastSystemAdmin], output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOwnedScopeHardDeletedWhileTheLockWasAwaited_WhenHandlingDeletePerson_ThenItIsNotCounted()
+    {
+        // Given an owner of two scopes, the second of which — owned by nobody else — is hard-deleted, taking
+        // the ownership row with it, while this request waits for the locks
+        var shared = Scope(1);
+        var gone = Scope(2);
+        var target = ScopeAdmin(10, owned: [shared, gone]);
+        var coOwner = ScopeAdmin(11, owned: shared);
+        var persons = await PersonsWith(target, coOwner);
+        var locks = new InMemoryInvariantLocks
+        {
+            OnLock = () =>
+            {
+                target.ScopeOwnerships.Remove(target.ScopeOwnerships.Single(x => x.ScopeId == gone.Id));
+                return Task.CompletedTask;
+            }
+        };
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — the scope that no longer exists does not refuse the deletion (AF-09e)
+        Assert.True(output.Success);
+        Assert.True(target.IsDeleted);
+    }
+
+    /// <summary>
+    ///     Replaces the stored person with a promoted copy under the same id, as a promotion committed by another
+    ///     request would: the handler's own copy, read before the lock, still says Scope Admin. The repository
+    ///     must hand out that id again.
+    /// </summary>
+    private static async Task PromoteStoredCopyAsync(AsyncFakeRepository<Person, long> persons, Person read)
+    {
+        var promoted = ScopeAdmin(read.Id);
+        promoted.PublicId = read.PublicId;
+        promoted.RoleId = (long)Roles.SystemAdmin;
+        await persons.DeleteAsync(read);
+        await persons.CreateAsync(promoted);
     }
 }

@@ -70,9 +70,9 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 ///     <para>
 ///         <b>Why the block is decided under a lock</b> (#202, #203). The guards and the write they decide
-///         run in one transaction holding the rows of the scopes the person owns, and the System Admin set
-///         when the person is one (<see cref="IInvariantLocks" />), as every writer that can take an owner
-///         or a System Admin out does. Otherwise two co-owners, or two administrators, asking at once would
+///         run in one transaction holding the rows of the scopes the person owns and the System Admin set
+///         (<see cref="IInvariantLocks" />), on the person as read under them (<see cref="LockedPerson" />),
+///         as every writer that can take an owner or a System Admin out does. Otherwise two co-owners, or two administrators, asking at once would
 ///         each see the other still there, and both be suspended. The password is checked before the
 ///         transaction opens, so no lock waits on Argon2.
 ///     </para>
@@ -165,17 +165,21 @@ public class RequestErasureCommandHandler(
         // before the commit rolls back.
         await using var transaction = await transactions.BeginAsync();
 
-        var systemAdmin = LastSystemAdminGuard.Applies(person);
-        var ownedScopeIds =
-            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id, systemAdmin);
+        // The person as they stand under the locks (#202, #203): the guards decide on this.
+        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
+
+        if (locked is null)
+        {
+            return output.WithError(ErasureMessages.NotEligible);
+        }
 
         // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
         // ownerless, so the suspension waits — but the request and its deadline do not. AF-42e
         // (NFR-32): likewise the last active System Admin.
         var blockedReason =
-            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader)
+            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, locked.OwnedScopeIds, personReader)
                 ? ErasureMessages.BlockedByLastScopeOwnership
-                : systemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader)
+                : locked.IsLiveSystemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader)
                     ? ErasureMessages.BlockedByLastSystemAdmin
                     : null;
         var blocked = blockedReason is not null;

@@ -1,6 +1,5 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
@@ -27,40 +26,13 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         <b>Asked under the scope locks (#202).</b> On its own the answer is stale the moment it is read:
 ///         two requests taking out the two owners of one scope each read the other still there, both
 ///         write, and nobody is left. Every caller therefore asks inside its transaction, once
-///         <see cref="IInvariantLocks" /> holds the scopes in question — <see cref="LockOwnedScopesAsync" />
+///         <c>IInvariantLocks</c> holds the scopes in question — <see cref="LockedPerson.LockAsync" />
 ///         for a person's — so a competing writer of the same scope waits until the answer has been acted
 ///         on, and then reads what was written.
 ///     </para>
 /// </remarks>
 public static class LastScopeOwnerGuard
 {
-    /// <summary>
-    ///     Reads the scopes the person <paramref name="personId" /> owns and locks them — and then, when
-    ///     <paramref name="systemAdmins" /> is set, the System Admin set (NFR-32), in the one call the lock order
-    ///     asks for — in the caller's transaction, so the guards asked next are still true when the caller
-    ///     writes. Returns the scopes.
-    /// </summary>
-    /// <remarks>
-    ///     Read inside the transaction, just before the lock, rather than taken from a copy the caller read
-    ///     earlier. An ownership the person gains between this read and the commit — a scope created
-    ///     naming them (UC-03), an owner added (UC-21, UC-23) — is neither locked nor checked: the writers
-    ///     that add owners take no lock, since adding one can never leave a scope ownerless on its own. The
-    ///     System Requirements record that residual.
-    /// </remarks>
-    public static async Task<IReadOnlyCollection<long>> LockOwnedScopesAsync(
-        IInvariantLocks locks, IAsyncReadOnlyRepository<Person, long> personReader, long personId,
-        bool systemAdmins = false)
-    {
-        var scopeIds = await personReader.Query()
-            .Where(person => person.Id == personId)
-            .SelectMany(person => person.ScopeOwnerships.Select(ownership => ownership.ScopeId))
-            .ToListAsync();
-
-        await locks.LockAsync(scopeIds, systemAdmins);
-
-        return scopeIds;
-    }
-
     /// <summary>
     ///     Whether any scope <paramref name="person" /> owns is owned by nobody else who is active.
     ///     Requires <c>ScopeOwnerships</c> to have been loaded.
