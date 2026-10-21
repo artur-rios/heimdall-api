@@ -678,6 +678,34 @@ public class GoogleSignInCommandHandlerTests
         Assert.True(stored.EmailVerified);
     }
 
+    // AF-25a: a first sign-up needs an email claim to create the account from.
+
+    [UnitTheory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GivenASignUpTokenWithoutAnEmailClaim_WhenHandlingGoogleSignIn_ThenAuthenticationFailedAndNothingIsCreated(
+        string? email)
+    {
+        // Given a first sign-in whose token carries no usable email, as when it was issued without the scope
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var (issuer, issuerMock) = TokenIssuer();
+        var handler = new GoogleSignInCommandHandler(
+            Verifier(Payload(email: email!)), scopes, new AsyncFakeRepository<Person, long>(),
+            googleUsers, googleUsers, issuer, InMemoryAtomicWrites.Instance);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId));
+
+        // Then AF-25a's answer, not an unhandled exception
+        Assert.False(output.Success);
+        Assert.Equal([AuthMessages.GoogleAuthenticationFailed], output.Errors);
+        Assert.Empty((await googleUsers.GetAllAsync()).Data!);
+        issuerMock.Verify(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()), Times.Never);
+    }
+
     // AF-25f (FR-GO-07): a sign-up needs an address Google vouches for.
 
     [UnitTheory]

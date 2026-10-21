@@ -209,6 +209,14 @@ public class GoogleSignInCommandHandler(
         SignUpAsync(
             GoogleIdTokenPayload payload, Scope scope, DataOutput<GoogleSignInCommandOutput?> output)
     {
+        // AF-25a: a token issued without the `email` scope carries no address to create the account
+        // from. Answered as an invalid token, before the address is read for anything, and first of
+        // all so that a token with no address cannot ask what AF-25f or AF-25c would say about one.
+        if (string.IsNullOrWhiteSpace(payload.Email))
+        {
+            return (null, output.WithError(AuthMessages.GoogleAuthenticationFailed));
+        }
+
         // AF-25f (FR-GO-07): only an address Google vouches for may take a place in the scope. An
         // absent claim proves nothing, so it is refused with a false one. First, so that a token for
         // an unproven address cannot ask whether the address is taken either.

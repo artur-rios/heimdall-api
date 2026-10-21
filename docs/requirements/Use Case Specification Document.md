@@ -1418,7 +1418,7 @@ sequenceDiagram
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification | Return `401 Unauthorized` |
+| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification; or, for a first sign-in that would create a Google User, the token carries a missing or blank `email` claim (as when it was issued without the `email` scope) | Return `401 Unauthorized` — "Google authentication failed.". Nothing is created |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
