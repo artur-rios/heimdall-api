@@ -208,18 +208,25 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
         errors.AddRange(await SaveAsync(googleUsers, googleUserWriter));
 
-        // The retry's errors ride along with the data rather than replacing it: the identities above
-        // were anonymised, and the caller has to be able to name them (the erasure ledger, NFR-25).
-        return errors.Count > 0
-            ? output.WithErrors(errors.Concat(retryErrors).ToList())
-            : WithRetryErrors(
-                Success(
-                    output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
-                    anonymisedPersons.Select(person => person.PublicId)
-                        .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
-                        .ToList(),
-                    caughtUp.Count + voided.Count),
-                retryErrors);
+        // The errors ride along with the data rather than replacing it: the persons above were
+        // anonymised before the Google Users were saved, and the caller has to be able to name them
+        // (the erasure ledger, NFR-25) or a restore could not re-apply their erasures. A Google User
+        // whose save failed is not named: it was not anonymised.
+        var failed = errors.Count > 0;
+        var ids = anonymisedPersons.Select(person => person.PublicId).ToList();
+
+        if (!failed)
+        {
+            ids.AddRange(googleUsers.Select(googleUser => googleUser.PublicId));
+        }
+
+        var result = Success(
+            output, anonymisedPersons.Count, failed ? 0 : googleUsers.Count, dependentsRemoved, ids,
+            caughtUp.Count + voided.Count);
+
+        return failed
+            ? result.WithErrors(errors.Concat(retryErrors).ToList())
+            : WithRetryErrors(result, retryErrors);
     }
 
     private static DataOutput<AnonymiseExpiredDeletionsCommandOutput?> WithRetryErrors(

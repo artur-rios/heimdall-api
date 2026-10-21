@@ -49,8 +49,9 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         public AnonymiseExpiredDeletionsCommandHandler Handler(
             DataRetentionOptions? retention = null, IAtomicWrites? atomicWrites = null,
-            IAsyncRepository<GoogleUser, long>? googleUserWriter = null, IAuditLogWriter? auditLog = null) =>
-            new(Persons, GoogleUsers, googleUserWriter ?? GoogleUsers,
+            IAsyncRepository<GoogleUser, long>? googleUserWriter = null, IAuditLogWriter? auditLog = null,
+            IAsyncReadOnlyRepository<Person, long>? personReader = null) =>
+            new(personReader ?? Persons, GoogleUsers, googleUserWriter ?? GoogleUsers,
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,
@@ -541,6 +542,73 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.True(oldest.IsDeleted);
         Assert.True(middle.IsDeleted);
         Assert.False(newest.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenTheGoogleUserSaveFails_WhenAnonymising_ThenTheAnonymisedPersonsAreStillNamed()
+    {
+        // The persons are anonymised before the Google Users are saved; their ids are the erasure ledger
+        // and must survive the failed save, while the unsaved Google User must not appear in it.
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var googleUser = await SeedGoogleUserAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
+        failingWriter
+            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IEnumerable<GoogleUser> users, CancellationToken token) =>
+                (await fakes.GoogleUsers.UpdateRangeAsync(users, token)).WithError("database unavailable"));
+
+        var output = await fakes.Handler(googleUserWriter: failingWriter.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(output.Success);
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+        Assert.Equal(0, output.Data.GoogleUsersAnonymised);
+        Assert.Equal([person.PublicId], output.Data.AnonymisedIds);
+        Assert.DoesNotContain(googleUser.PublicId, output.Data.AnonymisedIds);
+    }
+
+    [UnitFact]
+    public async Task GivenTheBlockedRequestsCannotBeLoaded_WhenAnonymising_ThenTheDueIdentityIsStillAnonymised()
+    {
+        var fakes = Fakes.New();
+        var due = await SeedDueScopeAdminAsync(fakes);
+        var calls = 0;
+        var reader = new Mock<IAsyncReadOnlyRepository<Person, long>>();
+        reader.Setup(r => r.Query()).Returns(() =>
+            ++calls == 1 ? throw new InvalidOperationException("query failed") : fakes.Persons.Query());
+
+        var output = await fakes.Handler(personReader: reader.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.NotNull(due.AnonymisedAt);
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenARetryFailureAndNothingDue_WhenAnonymising_ThenTheErrorIsStillReported()
+    {
+        var fakes = Fakes.New();
+        var failing = await SeedBlockedAsync(fakes, daysAgo: 5);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == failing)
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        var output = await fakes.Handler(atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+        Assert.Equal(0, output.Data!.TotalAnonymised);
     }
 
     private static Task<Person> SeedBlockedAsync(Fakes fakes, int daysAgo) =>
