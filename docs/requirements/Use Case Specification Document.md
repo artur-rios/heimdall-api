@@ -670,7 +670,7 @@ sequenceDiagram
 | AF-09b | Already logically deleted | Return `200 OK` (idempotent) |
 | AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
 | AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
-| AF-09e | Person is the only active owner of one or more scopes, whatever their role: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-09e | Person is the only active owner of one or more scopes, whatever their role: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
 | AF-09f | Person is the last active System Admin: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is written |
 
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
@@ -727,7 +727,7 @@ application and token, and no tombstone is left for a person who still exists.
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-10a | Person not found | Return `404 Not Found` |
-| AF-10b | Person is the only active owner of one or more scopes: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-10b | Person is the only active owner of one or more scopes: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
 | AF-10c | Actor is the person being deleted | Return `403 Forbidden` |
 | AF-10d | Person is a live System Admin and the last active one: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is removed. A logically deleted System Admin is no longer one of the set, so hard-deleting them is not refused |
 
@@ -1282,7 +1282,7 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-22a | Scope not found, or person is not an owner of it | Return `404 Not Found` |
-| AF-22b | No other active owner of the scope remains: every other owner, if any, is logically deleted, restricted or has requested erasure (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-22b | No other active owner of the scope remains: every other owner, if any, is logically deleted, restricted or has requested erasure (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
 | AF-22c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 
 > **On AF-22b under concurrency.** The check and the removal hold the scope's row (NFR-12, #202), as
