@@ -17,7 +17,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 
 /// <summary>
 ///     Handles <see cref="UpdatePersonCommand" /> (UC-08): validates the request, loads the person
-///     (AF-08a), enforces the per-actor rule, applies an optional role change (AF-08c, NFR-12), then
+///     (AF-08a), enforces the per-actor rule, applies an optional role change (AF-08c, AF-08f), then
 ///     the name and email — re-checking uniqueness per FR-PE-09 and clearing <c>EmailVerified</c>
 ///     when the address changes (AF-08b). All failures are returned as errors on the output rather
 ///     than thrown.
@@ -73,9 +73,10 @@ public class UpdatePersonCommandHandler(
             return output.WithErrors(validation.Errors.Select(failure => failure.ErrorMessage));
         }
 
-        // AF-08a: the person must exist and not be logically deleted. Both scope navigations are
-        // included because severing them is how the join rows get deleted (see the design doc), and
-        // each join row's Scope is included too because the response reports scope PublicIds.
+        // AF-08a: the person must exist and not be logically deleted. The membership is included
+        // because severing it is how its join row gets deleted (see the design doc), the ownerships
+        // because the response reports them, and each join row's Scope because the response reports
+        // scope PublicIds.
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
             .ThenInclude(membership => membership!.Scope)
@@ -98,7 +99,7 @@ public class UpdatePersonCommandHandler(
         // UC-08 step 5, decided but not yet applied: every refusal below has to leave the loaded
         // person untouched, so the role change is validated first and written further down, once
         // nothing else can reject the request.
-        var roleChange = await ValidateRoleChangeAsync(command, person);
+        var roleChange = ValidateRoleChange(command, person);
 
         if (roleChange.Error is not null)
         {
@@ -225,13 +226,15 @@ public class UpdatePersonCommandHandler(
                 person, newEmail, roleChange.TargetRoleId, now,
                 async () =>
                 {
-                    // FR-PE-10: a System Admin belongs to no scope, so the membership and ownership
-                    // rows are severed — which deletes them, since both relationships are required
-                    // and cascade. Only now, so a refused change leaves nothing staged.
+                    // FR-PE-10: a System Admin is a member of no scope, so the membership row is
+                    // severed — which deletes it, since the relationship is required and cascades.
+                    // Only now, so a refused change leaves nothing staged. The ownership rows stay
+                    // (#224): a System Admin may be a named owner (FR-SC-08), and dropping them would
+                    // leave a scope the person alone owned, and the applications they own, without
+                    // a valid owner.
                     if (roleChange.Applies)
                     {
                         person.ScopeMembership = null;
-                        person.ScopeOwnerships.Clear();
                     }
 
                     save = await personWriter.UpdateAsync(person);
@@ -461,7 +464,8 @@ public class UpdatePersonCommandHandler(
     /// <summary>
     ///     UC-08 step 5, as a decision rather than a mutation. Only a change to <c>SystemAdmin</c> is
     ///     supported: every other target role would need a scope the request does not carry
-    ///     (FR-PE-02, FR-PE-11).
+    ///     (FR-PE-02, FR-PE-11). So no change made here demotes a System Admin, and none can leave the
+    ///     system without one (#203).
     /// </summary>
     /// <remarks>
     ///     Nothing is written here, deliberately. The uniqueness check that follows it can still
@@ -469,7 +473,7 @@ public class UpdatePersonCommandHandler(
     ///     would be relying on the caller never saving — true today, since a refusal returns before
     ///     <c>UpdateAsync</c>, but true only by accident and invisible from here.
     /// </remarks>
-    private async Task<RoleChange> ValidateRoleChangeAsync(UpdatePersonCommand command, Person person)
+    private static RoleChange ValidateRoleChange(UpdatePersonCommand command, Person person)
     {
         if (command.RoleId is null || command.RoleId == (int)person.RoleId)
         {
@@ -487,26 +491,8 @@ public class UpdatePersonCommandHandler(
             return RoleChange.Refused(person.RoleId, PersonMessages.UnsupportedRoleTransition);
         }
 
-        // NFR-12: a scope must always retain at least one owner. Gather the scopes somebody *other*
-        // than this person owns; refuse if any scope this person owns is not among them. Persons
-        // already logically deleted are excluded, since they can no longer authenticate and so do
-        // not keep a scope owned — the same guard UC-09 and UC-10 apply.
-        if (person.RoleId == (long)Roles.ScopeAdmin && person.ScopeOwnerships.Count > 0)
-        {
-            var ownedScopeIds = person.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList();
-
-            var coOwnedScopeIds = await personReader.Query()
-                .Where(other => other.Id != person.Id && !other.IsDeleted)
-                .SelectMany(other => other.ScopeOwnerships.Select(ownership => ownership.ScopeId))
-                .Distinct()
-                .ToListAsync();
-
-            if (ownedScopeIds.Any(scopeId => !coOwnedScopeIds.Contains(scopeId)))
-            {
-                return RoleChange.Refused(person.RoleId, PersonMessages.ScopeWouldLoseLastOwner);
-            }
-        }
-
+        // NFR-12 is not at stake: the promotion keeps the person's ownerships (#224), and a System Admin
+        // owner counts as one like any other.
         return new RoleChange(true, (long)Roles.SystemAdmin, null);
     }
 

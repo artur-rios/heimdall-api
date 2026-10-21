@@ -278,9 +278,10 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     }
 
     [FunctionalFact]
-    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenConflict()
+    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenPromotedAndTheOwnershipKept()
     {
-        // Given a scope whose only owner is the target (NFR-12)
+        // Given a scope whose only owner is the target. A System Admin may be a named owner (FR-SC-08),
+        // so the promotion keeps the ownership and the scope stays owned (#224).
         var scope = await SeedScopeAsync();
         var owner = await SeedScopeAdminAsync(ownedScope: scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -290,11 +291,15 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
             $"/api/persons/{owner.PublicId}",
             Body("Admin", owner.Email, (int)Roles.SystemAdmin));
 
-        // Then — refused, and the ownership row survives
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        // Then — promoted, still the owner, and the response says so
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal((int)Roles.SystemAdmin, response.Body?.Data?.Role);
+        Assert.Equal([scope.PublicId], response.Body?.Data?.OwnedScopeIds);
 
         await using var context = db.CreateContext();
-        Assert.True(await context.ScopeOwners.AnyAsync(so => so.PersonId == owner.Id));
+        Assert.True(await context.ScopeOwners.AnyAsync(so => so.PersonId == owner.Id && so.ScopeId == scope.Id));
+        Assert.Equal((long)Roles.SystemAdmin,
+            (await context.Persons.AsNoTracking().FirstAsync(p => p.Id == owner.Id)).RoleId);
     }
 
     [FunctionalFact]

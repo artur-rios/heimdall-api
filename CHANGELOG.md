@@ -121,6 +121,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The detailed health check logs the exception behind "Database: Unhealthy" at Warning, so the cause is in the log
   and not only the status (#226).
+- Promoting a Scope Admin to System Admin (`PUT /api/persons/{id}` with `roleId` 1) keeps their scope ownerships,
+  as FR-SC-08 lets a System Admin be a named owner, and removes only a scope membership. The promotion used to
+  delete the ownership rows, so the applications the person owned were left with an owner who owned no scope, and
+  it was refused with `409` when the person was a scope's only owner (AF-08g); it is now accepted, and AF-08g is
+  retired. FR-PE-10 and UC-08 step 5 say a System Admin is a member of no scope but may own scopes (#224).
 
 ## [4.1.0] - 2026-10-21
 

@@ -73,6 +73,18 @@ public class UpdatePersonCommandHandlerTests
         ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList()
     };
 
+    private static Person SystemAdmin(long id, string email) => new()
+    {
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"system-admin-{id}",
+        Email = email,
+        PasswordHash = Credential.Value.Hash,
+        Salt = Credential.Value.Salt,
+        RoleId = (long)Roles.SystemAdmin,
+        EmailVerified = true
+    };
+
     private static IValidator<UpdatePersonCommand> PassingValidator()
     {
         var validator = new Mock<IValidator<UpdatePersonCommand>>();
@@ -900,9 +912,10 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenScopeWithAnotherOwner_WhenPromotingOwnerToSystemAdmin_ThenOwnershipsAreCleared()
+    public async Task GivenScopeWithAnotherOwner_WhenPromotingOwnerToSystemAdmin_ThenOwnershipsAreKept()
     {
-        // Given a scope with two owners, so losing one leaves it owned (NFR-12 satisfied)
+        // Given a Scope Admin co-owning a scope. FR-SC-08 lets a System Admin be a named owner, so the
+        // promotion takes no ownership away (#224).
         var scope = Scope(1);
         var target = ScopeAdmin(10, "first@test.local", scope);
         var coOwner = ScopeAdmin(11, "second@test.local", scope);
@@ -917,14 +930,15 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal((int)Roles.SystemAdmin, output.Data!.Role);
-        Assert.Empty(output.Data.OwnedScopeIds);
-        Assert.Empty(target.ScopeOwnerships);
+        Assert.Equal([scope.PublicId], output.Data.OwnedScopeIds);
+        Assert.Equal([scope.Id], target.ScopeOwnerships.Select(x => x.ScopeId));
     }
 
     [UnitFact]
-    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenReturnsScopeWouldLoseLastOwner()
+    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenPromotedAndStillTheOwner()
     {
-        // Given a scope whose only owner is the target (NFR-12)
+        // Given a scope whose only owner is the target. Keeping the ownership is what keeps the scope —
+        // and the applications whose owner the target is — owned (NFR-12, #224).
         var scope = Scope(1);
         var target = ScopeAdmin(10, "only@test.local", scope);
         var persons = await PersonsWith(target);
@@ -936,33 +950,29 @@ public class UpdatePersonCommandHandlerTests
         var output = await handler.HandleAsync(command);
 
         // Then
-        Assert.False(output.Success);
-        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.True(output.Success);
+        Assert.Equal((long)Roles.SystemAdmin, target.RoleId);
+        Assert.Equal([scope.PublicId], output.Data!.OwnedScopeIds);
+        Assert.Single(target.ScopeOwnerships);
     }
 
     [UnitFact]
-    public async Task GivenOnlyCoOwnerIsDeleted_WhenPromotingOwnerToSystemAdmin_ThenReturnsScopeWouldLoseLastOwner()
+    public async Task GivenTheOnlySystemAdmin_WhenChangingTheirOwnRoleToScopeAdmin_ThenUnsupportedAndStillSystemAdmin()
     {
-        // Given a scope owned by the target and one logically deleted co-owner. A soft-deleted owner
-        // can no longer authenticate, so the scope would be left effectively ownerless — the same
-        // reading UC-09 AF-09e and UC-10 AF-10b apply (NFR-12).
-        var scope = Scope(1);
-        var target = ScopeAdmin(10, "first@test.local", scope);
-        var deletedCoOwner = ScopeAdmin(11, "second@test.local", scope);
-        deletedCoOwner.IsDeleted = true;
-        var persons = await PersonsWith(target, deletedCoOwner);
+        // Given the only System Admin, demoting themselves. UC-08 changes a role only to SystemAdmin
+        // (AF-08f), so it can never leave the system without one (#203).
+        var target = SystemAdmin(10, "only-admin@test.local");
+        var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
-        command.RoleId = (int)Roles.SystemAdmin;
+        var command = CommandFor(target, (int)Roles.SystemAdmin, target.PublicId);
+        command.RoleId = (int)Roles.ScopeAdmin;
 
         // When
         var output = await handler.HandleAsync(command);
 
         // Then
-        Assert.False(output.Success);
-        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
-        Assert.Equal((long)Roles.ScopeAdmin, target.RoleId);
-        Assert.Single(target.ScopeOwnerships);
+        Assert.Equal([PersonMessages.UnsupportedRoleTransition], output.Errors);
+        Assert.Equal((long)Roles.SystemAdmin, target.RoleId);
     }
 
     [UnitFact]

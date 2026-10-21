@@ -599,8 +599,11 @@ sequenceDiagram
      and if that was not the person, they should contact an administrator. The notice names neither the
      new address nor any link. A failed delivery is logged and does not fail the update.
 5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
-   and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
-   association (FR-PE-10). Any other target role is refused: making someone a `ScopeAdmin` requires
+   and removes the person's `SCOPE_USER` row, since a System Admin is a member of no scope (FR-PE-10).
+   Their `SCOPE_OWNER` rows are kept: a System Admin may be a named owner (FR-SC-08), and keeping them
+   is what keeps a scope the person owned, and the applications they own, with a valid owner. So the
+   promotion never strips a scope of an owner and NFR-12 does not refuse it. Any other target role is
+   refused: making someone a `ScopeAdmin` requires
    naming the scope they will own (FR-PE-11) and making someone a `User` requires naming the scope
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
@@ -627,7 +630,7 @@ sequenceDiagram
 | AF-08d | Actor not authorized to update the person at all | Return `403 Forbidden` |
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
-| AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
+| AF-08g | *Retired (#224).* A role change used to remove the person's scope ownerships and was refused when that left a scope with no owner (NFR-12). The promotion now keeps them (step 5), so no role change can leave a scope without an owner | — |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
 | AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
@@ -670,7 +673,7 @@ sequenceDiagram
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
 > person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
 > longer authenticate, so a scope whose only owner is soft-deleted is effectively ownerless — the
-> state NFR-12 exists to prevent. UC-08 resolves the same tension the same way for its role change.
+> state NFR-12 exists to prevent.
 >
 > **On the order of AF-09b and AF-09e.** An already-deleted person is answered before the last-owner
 > check runs. Such an owner is already out of the scope, so re-checking would turn the idempotent

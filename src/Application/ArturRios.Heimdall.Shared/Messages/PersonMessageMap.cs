@@ -50,7 +50,7 @@ public static class PersonMessageMap
             // UC-08 — the transition needs a scope the request does not carry, or the role is unknown.
             [PersonMessages.UnsupportedRoleTransition] = HttpStatusCodes.BadRequest,
             [PersonMessages.UnknownRole] = HttpStatusCodes.BadRequest,
-            // NFR-12 — the change would strip a scope of its last owner (UC-08 role change, UC-09 AF-09e).
+            // NFR-12 — the change would strip a scope of its last owner (UC-09 AF-09e).
             [PersonMessages.ScopeWouldLoseLastOwner] = HttpStatusCodes.Conflict,
             // UC-09 main flow and AF-09b — person deleted, or already was.
             [PersonMessages.PersonDeletedSuccessfully] = HttpStatusCodes.Ok,

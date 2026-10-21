@@ -133,7 +133,7 @@ graph LR
 | FR-PE-07 | The system shall allow **hard deletion** of a person, permanently removing the record | High |
 | FR-PE-08 | Logically deleted persons shall not appear in default query results unless explicitly requested | Medium |
 | FR-PE-09 | A `User` person's email must be unique among the `User`s of their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique among all `ScopeAdmin` and `SystemAdmin` persons system-wide. The two namespaces are independent: an admin address and a scoped `User` address never collide with each other, because login resolves them by different lookups (FR-AU-01/02). Comparison is case-insensitive | High |
-| FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
+| FR-PE-10 | A person with the `SystemAdmin` role must not be a member of any scope (no `SCOPE_USER` row). They may be a named owner of scopes (FR-SC-08): a promotion to `SystemAdmin` removes the person's scope membership and keeps their scope ownerships, so a scope they owned, and the applications they own, keep a valid owner | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
 | FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
@@ -559,7 +559,7 @@ A person's relationship to scopes is derived from its role:
 
 - `User`: exactly one row in `SCOPE_USER`.
 - `ScopeAdmin`: one or more rows in `SCOPE_OWNER`.
-- `SystemAdmin`: no rows in either `SCOPE_OWNER` or `SCOPE_USER`.
+- `SystemAdmin`: no row in `SCOPE_USER`, and any number of rows in `SCOPE_OWNER` (FR-SC-08, FR-PE-10).
 
 The person row also carries a `ScopeId` column: a copy of a `User`'s `SCOPE_USER` scope, `null` for an
 admin, and not a second source of truth. It exists so that FR-PE-09's per-scope uniqueness of an
