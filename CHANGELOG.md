@@ -25,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Login, password recovery, registration and Google sign-in no longer read the whole `person` table to find an
+  address. They compare `LOWER(email)` without `is_deleted`, which neither the index on the raw column nor the
+  partial unique indexes could serve, so each lookup was a sequential scan before the password hash. A migration
+  builds `ix_person_lower_email` on `LOWER(email)` with `CREATE INDEX CONCURRENTLY`, so writes are not blocked,
+  and drops the unused `ix_person_email`. On 150,000 rows a lookup went from a sequential scan of about 29 ms to an
+  index scan of well under 1 ms (#207).
 - The token purge, the identity anonymisation and the audit pseudonymisation now drain a backlog: each repeats its
   batch while the batch comes back full, up to `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches (default 20) per
   table in one run, where one batch a run capped a table at 12,000 rows a day and a busy audit trail could fall

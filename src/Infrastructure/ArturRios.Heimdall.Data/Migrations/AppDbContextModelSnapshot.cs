@@ -785,9 +785,6 @@ namespace ArturRios.Heimdall.Data.Migrations
                         .HasDatabaseName("ix_person_deleted_at")
                         .HasFilter("is_deleted = true AND anonymised_at IS NULL");
 
-                    b.HasIndex("Email")
-                        .HasDatabaseName("ix_person_email");
-
                     b.HasIndex("ProcessingRestrictedAt")
                         .HasDatabaseName("ix_person_processing_restricted_at")
                         .HasFilter("processing_restricted_at IS NOT NULL");

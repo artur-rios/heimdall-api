@@ -237,6 +237,43 @@ public class SchemaTests(PostgresFixture fixture)
     }
 
     [FunctionalFact]
+    public async Task GivenMigrationsApplied_WhenPersonEmailIndexesInspected_ThenOnlyTheLowerCaseExpressionIndexIsValid()
+    {
+        // Given the migrated schema. Login, recovery, registration and Google sign-in compare LOWER(email)
+        // without is_deleted (#207): the expression index serves them, and the raw-column index is gone.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select i.indexname, i.indexdef, x.indisvalid
+            from pg_indexes i
+            join pg_class c on c.relname = i.indexname
+            join pg_namespace n on n.oid = c.relnamespace and n.nspname = i.schemaname
+            join pg_index x on x.indexrelid = c.oid
+            where i.schemaname = 'heimdall' and i.tablename = 'person'
+              and i.indexname in ('ix_person_lower_email', 'ix_person_email')
+            """,
+            connection);
+        var found = new Dictionary<string, (string Definition, bool Valid)>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                found[reader.GetString(0)] = (reader.GetString(1), reader.GetBoolean(2));
+            }
+        }
+
+        // Then
+        var index = Assert.Single(found);
+        Assert.Equal("ix_person_lower_email", index.Key);
+        Assert.EndsWith("(lower((email)::text))", index.Value.Definition);
+        Assert.DoesNotContain("WHERE", index.Value.Definition);
+        Assert.True(index.Value.Valid, "ix_person_lower_email is not valid");
+    }
+
+    [FunctionalFact]
     public async Task GivenMigrationsApplied_WhenCredentialIndexesInspected_ThenHashAndPublicIdAreUnique()
     {
         // Given the migrated schema. UC-56 finds a credential by its hash, and UC-55 by its public id.
