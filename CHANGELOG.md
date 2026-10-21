@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `docs/content/en/docs/operations.md` described the rolling log files as `<yyyy/MM>/log-<date>.json`, a folder per
   month. They are `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one per day, flat in the directory, as the
   retention section of the same page already said (#216).
+- Confirming two-factor setup (`POST /api/auth/2fa/confirm`) checks the email code before the authenticator code, so
+  a wrong email code no longer spends a right app code's 30-second step and the caller can retry with the same one
+  (#225). Use case 37 now says so.
 
 ### Changed
 

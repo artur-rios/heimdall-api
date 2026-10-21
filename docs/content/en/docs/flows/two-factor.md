@@ -71,8 +71,8 @@ sequenceDiagram
     AC->>CH: HandleAsync
     CH->>DB: SELECT pending row
     CH->>DB: charge the re-authentication budget (FR-AU-13)
-    CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>CH: check emailCode if EmailEnabled (AF-37c)
+    CH->>CH: check appCode if AppEnabled (AF-37b)
     CH->>DB: replace the person's security stamp
     CH->>DB: INSERT 10 recovery codes (SHA-256 digests only)
     CH->>DB: UPDATE IsActive = true
@@ -108,7 +108,9 @@ all.
 
 Confirmation requires proof of **every** method selected at setup: an `appCode` if `AppEnabled`, an
 `emailCode` if `EmailEnabled`, both if both. A missing or wrong code answers `401` "The password or
-code is incorrect.", whichever it was, and is charged to the re-authentication budget below.
+code is incorrect.", whichever it was, and is charged to the re-authentication budget below. The email
+code is checked first, because an accepted app code is spent: a wrong email code leaves the app code usable
+for the retry.
 
 ## Completing a gated login — UC-38
 

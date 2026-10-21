@@ -1789,8 +1789,8 @@ sequenceDiagram
 
     P->>API: POST /api/auth/2fa/confirm { appCode?, emailCode? }
     API->>DB: Load the pending TWO_FACTOR_AUTH row
-    API->>API: Verify appCode against the TOTP secret, if AppEnabled
     API->>API: Verify emailCode against the stored hash, if EmailEnabled
+    API->>API: Verify appCode against the TOTP secret, if AppEnabled
     API->>DB: Set IsActive = true
     API->>API: Generate 10 recovery codes, hashing each
     API->>DB: Store the 10 hashed recovery codes
@@ -1798,7 +1798,7 @@ sequenceDiagram
 ```
 
 1. Caller sends `POST /api/auth/2fa/confirm` with a code for every method they selected in UC-36 (an `appCode` if `AppEnabled`, an `emailCode` if `EmailEnabled` — both, if both).
-2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
+2. The system verifies each provided code against its method: the email code against its stored hash and expiry, then the TOTP code against the stored secret. The email code goes first because an accepted TOTP code is spent (FR-2F-14) and a wrong email code must not burn it: the caller retries with the same app code while its 30-second step lasts.
 3. Only once every required code checks out, the system replaces the person's security stamp, which
    revokes every token issued before the second factor was required, the caller's own included
    (FR-AU-11).

@@ -29,13 +29,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         inventing a second refusal UC-37 does not define.
 ///     </para>
 ///     <para>
-///         The App and Email checks both run, in that order, and a request that fails either one
+///         The Email and App checks both run, in that order, and a request that fails either one
 ///         activates nothing — the pending row stays pending and can be confirmed by a later attempt.
-///         One thing does change on the way through, though: an app code that verified is spent, so
-///         a request whose App check passed and whose Email check then failed has to be retried with
-///         a <em>fresh</em> app code. That is the single-use rule working as intended
-///         (<see cref="ITotpCodeVerifier" />), not an accident of ordering — a code presented to this
-///         endpoint has been presented, whatever the rest of the request went on to do.
+///         The email code goes first because checking it spends nothing, where an app code that
+///         verified is spent (<see cref="ITotpCodeVerifier" />): a wrong email code therefore leaves
+///         the app code usable for the retry. A request whose Email check passed and whose App check
+///         then failed leaves the email code unspent too, since it is consumed only once every check
+///         has passed.
 ///     </para>
 ///     <para>
 ///         <b>One refusal, one budget.</b> A missing or wrong code for either method answers the one
@@ -99,15 +99,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         // still has the codes compared, and refuses them whatever the result.
         var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
 
-        // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
-        // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
-        // ITwoFactorFactorVerifier.
-        if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
-        {
-            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
-        }
-
-        // AF-37c: the Email method's code, if the method was selected.
+        // AF-37c: the Email method's code, if the method was selected. Checked first, because looking
+        // an email code up spends nothing but its guess budget, where an app code that verifies is
+        // spent (FR-2F-14): the other order let a wrong email code burn a right app code.
         TwoFactorEmailCode? consumedEmailCode = null;
 
         if (twoFactorAuth.EmailEnabled)
@@ -118,6 +112,14 @@ public class ConfirmTwoFactorAuthCommandHandler(
             {
                 return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
             }
+        }
+
+        // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
+        // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
+        // ITwoFactorFactorVerifier.
+        if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
         // Only now is the pause decided, so that it answers as a wrong code does, and before the

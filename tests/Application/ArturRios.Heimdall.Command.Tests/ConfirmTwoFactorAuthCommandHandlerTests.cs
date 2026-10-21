@@ -361,6 +361,25 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAWrongEmailCode_WhenRetriedWithTheSameAppCode_ThenTheAppCodeWasNotSpent()
+    {
+        // Given — both methods pending, and a request whose app code is right but whose email code is not
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: true);
+        await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+        var appCode = CurrentTotpCode();
+
+        // When the wrong email code is refused, and the same app code is presented again with the right one
+        var refused = await fixture.Handler().HandleAsync(fixture.Command(appCode, "654321"));
+        var retried = await fixture.Handler().HandleAsync(fixture.Command(appCode, EmailCode));
+
+        // Then — the refusal did not burn the app code's time step (#225)
+        Assert.False(refused.Success);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, refused.Errors);
+        Assert.True(retried.Success);
+    }
+
+    [UnitFact]
     public async Task GivenEmailEnabledAndExpiredEmailCode_WhenHandlingConfirmTwoFactorAuth_ThenReturnsTheSharedRefusal()
     {
         // Given — AF-37c
