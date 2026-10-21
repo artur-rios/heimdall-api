@@ -26,9 +26,11 @@ public class HardDeleteScopeCommandHandlerTests
         AsyncFakeRepository<ScopePermission, long> ScopePermissions,
         InMemoryErasedSubjects ErasedSubjects)
     {
+        public InMemoryInvariantLocks Locks { get; } = new();
+
         public HardDeleteScopeCommandHandler Handler() => new(
             Scopes, Scopes, Persons, GoogleUsers, Applications, ScopePermissions, ErasedSubjects,
-            new InMemoryScopeCascades(Persons, GoogleUsers, Applications), InMemoryWriteTransactions.Instance);
+            new InMemoryScopeCascades(Persons, GoogleUsers, Applications), InMemoryWriteTransactions.Instance, Locks);
     }
 
     private static async Task<Fakes> EmptyFakes()
@@ -281,5 +283,22 @@ public class HardDeleteScopeCommandHandlerTests
         Assert.True(fakes.ErasedSubjects.Recorded.Single(x => x.Id == member.PublicId).CreatedAt > earlier.AddDays(1));
         Assert.Contains(fakes.ErasedSubjects.Recorded, x => x.Id == googleUser.PublicId);
         Assert.Empty((await fakes.Persons.GetAllAsync()).Data!);
+    }
+
+    // #202: the scope's row is locked inside the transaction, as every owner-removing writer locks it.
+
+    [UnitFact]
+    public async Task GivenAScope_WhenHandlingHardDeleteScopeCommand_ThenItsRowIsLocked()
+    {
+        // Given
+        var fakes = await EmptyFakes();
+        var scope = await SeedScopeAsync(fakes);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new HardDeleteScopeCommand { Id = scope.PublicId });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([scope.Id], Assert.Single(fakes.Locks.ScopeLocks));
     }
 }

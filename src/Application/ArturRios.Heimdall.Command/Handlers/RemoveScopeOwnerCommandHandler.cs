@@ -20,11 +20,20 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     A System Admin actor bypasses the ownership check. All failures are returned as errors on the
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
+/// <remarks>
+///     <b>Under the scope's lock</b> (#202). The guard and the removal run in one transaction that holds
+///     the scope's row (<see cref="IInvariantLocks" />), and so does every other writer that can take an
+///     owner out of it. Two requests removing the scope's last two owners therefore run one after the
+///     other: the second reads the first's removal and is refused, where both used to see the other
+///     owner still there and both remove.
+/// </remarks>
 public class RemoveScopeOwnerCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<RemoveScopeOwnerCommand, RemoveScopeOwnerCommandOutput>
 {
     public async Task<DataOutput<RemoveScopeOwnerCommandOutput?>> HandleAsync(RemoveScopeOwnerCommand command, CancellationToken cancellationToken = default)
@@ -48,6 +57,17 @@ public class RemoveScopeOwnerCommandHandler(
         if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
+        }
+
+        // UC-22 steps 2-4 under the scope's lock (#202): leaving this block before the commit rolls back.
+        await using var transaction = await transactions.BeginAsync();
+        await locks.LockAsync([scope.Id]);
+
+        // Read again under the lock: a deletion of the scope that committed since the read above answers
+        // AF-22a as it would have a moment earlier.
+        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id && !x.IsDeleted))
+        {
+            return output.WithError(PersonMessages.ScopeNotFound);
         }
 
         // AF-22a (UC-22 step 2): the person must hold an ownership row for this scope. Neither
@@ -77,8 +97,9 @@ public class RemoveScopeOwnerCommandHandler(
         // UC-22 step 4: delete the SCOPE_OWNER row, by a targeted write of that row alone (#237) rather
         // than a save of the person aggregate, which would write the person's profile back as read —
         // and this endpoint reads deleted persons too, whose name anonymisation may have replaced
-        // meanwhile. The write re-checks AF-22b itself, so a co-owner deleted since the check above is
-        // seen. FR-PE-11 is deliberately not guarded here: SRD §8 names UC-22 as an operation that may
+        // meanwhile. The write re-checks AF-22b itself; under the lock no owner-removing writer can have
+        // run since the check above, but a co-owner restricting their own processing (UC-44) takes no
+        // lock, and the write sees that too. FR-PE-11 is deliberately not guarded here: SRD §8 names UC-22 as an operation that may
         // leave a ScopeAdmin owning no scope.
         if (!await atomicWrites.TryRemoveScopeOwnerAsync(person, scope.Id))
         {
@@ -91,6 +112,8 @@ public class RemoveScopeOwnerCommandHandler(
                 ? PersonMessages.ScopeWouldLoseLastOwner
                 : PersonMessages.PersonNotScopeOwner);
         }
+
+        await transaction.CommitAsync();
 
         // UC-22 step 5.
         return output

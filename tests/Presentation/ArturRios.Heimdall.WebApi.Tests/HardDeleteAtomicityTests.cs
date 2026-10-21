@@ -117,7 +117,8 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
         new EfRepository<EmailVerificationToken, long>(context),
         new EfRepository<EmailVerificationToken, long>(context),
         new ErasedSubjects(context),
-        new WriteTransactions(context));
+        new WriteTransactions(context),
+        new InvariantLocks(context));
 
     private static HardDeleteScopeCommandHandler HardDeleteScopeHandler(AppDbContext context) => new(
         new EfRepository<Scope, long>(context),
@@ -128,7 +129,8 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
         new EfRepository<ScopePermission, long>(context),
         new ErasedSubjects(context),
         new ScopeCascades(context),
-        new WriteTransactions(context));
+        new WriteTransactions(context),
+        new InvariantLocks(context));
 
     /// <summary>The handler as the API runs it: inside the audit decorator, on the same context.</summary>
     private static AuditingCommandHandler<TCommand, TOutput> Audited<TCommand, TOutput>(

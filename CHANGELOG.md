@@ -123,6 +123,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   "This change would leave a scope without an owner." (AF-22b, AF-09e, AF-10b), and an erasure request waits as
   blocked (AF-42d), as when the co-owner is deleted. The rule is in one shared guard, and NFR-12 and the use cases
   name it (#211).
+- Two requests that each take out one of a scope's last two owners at the same moment can no longer both succeed
+  and leave the scope with no owner (NFR-12). Removing an owner, deleting or hard-deleting a person, an erasure
+  request and the anonymisation pass's retry of a blocked one now make the last-owner check and their write in
+  one transaction that first locks the rows of the scopes concerned (`SELECT … ORDER BY id FOR UPDATE`, in id
+  order), and deleting or hard-deleting a scope locks its row too, so a second such request waits for the first
+  and is then refused with `409` (AF-22b, AF-09e, AF-10b) or blocked (AF-42d). The runtime login needs no new
+  grant (#202).
 
 ### Changed
 

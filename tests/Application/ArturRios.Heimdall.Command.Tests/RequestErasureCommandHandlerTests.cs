@@ -44,10 +44,13 @@ public class RequestErasureCommandHandlerTests
         AsyncFakeRepository<Person, long> persons,
         AsyncFakeRepository<GoogleUser, long> googleUsers,
         GoogleIdTokenPayload? payload = null,
-        IAtomicWrites? atomicWrites = null) =>
+        IAtomicWrites? atomicWrites = null,
+        InMemoryWriteTransactions? transactions = null,
+        InMemoryInvariantLocks? locks = null) =>
         new(new RequestErasureCommandValidator(),
             persons, googleUsers, googleUsers,
-            Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance);
+            Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance,
+            transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons,
@@ -604,5 +607,41 @@ public class RequestErasureCommandHandlerTests
 
         Assert.Equal([ErasureMessages.CredentialNotAccepted], output.Errors);
         Assert.False(googleUser.IsDeleted);
+    }
+
+    // #202: the block is decided under the locks of the person's scopes, in the request's one transaction.
+
+    [UnitFact]
+    public async Task GivenAnOwner_WhenRequestingErasure_ThenTheirScopesAreLockedAndTheRequestCommitted()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: [7, 8]);
+        await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: [7, 8]);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+
+        var output = await Handler(persons, googleUsers, transactions: transactions, locks: locks)
+            .HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.False(output.Data!.Blocked);
+        Assert.Equivalent(new[] { 7L, 8L }, Assert.Single(locks.ScopeLocks), strict: true);
+        Assert.Equal(1, transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenTheWrongPassword_WhenRequestingErasure_ThenNoTransactionIsOpened()
+    {
+        // The password is checked before the transaction, so no lock waits on Argon2
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        var transactions = new InMemoryWriteTransactions();
+
+        await Handler(persons, googleUsers, transactions: transactions)
+            .HandleAsync(Command(person.PublicId, WrongPassword));
+
+        Assert.Equal(0, transactions.Begun);
     }
 }

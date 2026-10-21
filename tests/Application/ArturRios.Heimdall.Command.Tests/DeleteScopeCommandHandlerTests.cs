@@ -24,10 +24,11 @@ public class DeleteScopeCommandHandlerTests
         AsyncFakeRepository<Application, long> Applications)
     {
         public InMemoryWriteTransactions Transactions { get; } = new();
+        public InMemoryInvariantLocks Locks { get; } = new();
 
         public DeleteScopeCommandHandler Handler() => new(
             Scopes, Scopes, Persons, GoogleUsers, Applications,
-            new InMemoryScopeCascades(Persons, GoogleUsers, Applications), Transactions);
+            new InMemoryScopeCascades(Persons, GoogleUsers, Applications), Transactions, Locks);
     }
 
     private static async Task<Fakes> EmptyFakes()
@@ -201,5 +202,22 @@ public class DeleteScopeCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(Assert.Single((await fakes.Persons.GetAllAsync()).Data!).IsDeleted);
         Assert.True(Assert.Single((await fakes.GoogleUsers.GetAllAsync()).Data!).IsDeleted);
+    }
+
+    // #202: the scope's row is locked inside the transaction, as every owner-removing writer locks it.
+
+    [UnitFact]
+    public async Task GivenAScope_WhenHandlingDeleteScopeCommand_ThenItsRowIsLocked()
+    {
+        // Given
+        var fakes = await EmptyFakes();
+        var scope = await SeedScopeAsync(fakes);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(new DeleteScopeCommand { Id = scope.PublicId });
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([scope.Id], Assert.Single(fakes.Locks.ScopeLocks));
     }
 }

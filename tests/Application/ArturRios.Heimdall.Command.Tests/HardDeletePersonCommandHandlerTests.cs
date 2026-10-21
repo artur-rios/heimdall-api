@@ -29,12 +29,15 @@ public class HardDeletePersonCommandHandlerTests
         AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
         InMemoryErasedSubjects ErasedSubjects)
     {
+        public InMemoryWriteTransactions Transactions { get; } = new();
+        public InMemoryInvariantLocks Locks { get; } = new();
+
         public HardDeletePersonCommandHandler Handler() => new(
             Persons, Persons,
             Applications, Applications,
             PasswordResetTokens, PasswordResetTokens,
             EmailVerificationTokens, EmailVerificationTokens,
-            ErasedSubjects, InMemoryWriteTransactions.Instance);
+            ErasedSubjects, Transactions, Locks);
     }
 
     private static Fakes EmptyFakes() => new(
@@ -400,5 +403,44 @@ public class HardDeletePersonCommandHandlerTests
         Assert.Equal(target.PublicId, tombstone.Id);
         Assert.True(tombstone.CreatedAt > earlier.AddDays(1));
         Assert.Equal(bystander.PublicId, Assert.Single((await fakes.Persons.GetAllAsync()).Data!).PublicId);
+    }
+
+    // #202: the transaction opens before the guard, which runs under the locks of the person's scopes.
+
+    [UnitFact]
+    public async Task GivenTheSoleOwner_WhenHandlingHardDeletePerson_ThenTheirScopeIsLockedBeforeTheRefusal()
+    {
+        // Given
+        var fakes = EmptyFakes();
+        var target = await SeedScopeAdminAsync(fakes, owned: Scope(3));
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal([3L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Begun);
+        Assert.Equal(0, fakes.Transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenACoOwner_WhenHandlingHardDeletePerson_ThenTheirScopeIsLockedAndTheDeleteCommitted()
+    {
+        // Given
+        var fakes = EmptyFakes();
+        var scope = Scope(3);
+        var target = await SeedScopeAdminAsync(fakes, owned: scope);
+        await SeedScopeAdminAsync(fakes, owned: scope);
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([3L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Committed);
     }
 }

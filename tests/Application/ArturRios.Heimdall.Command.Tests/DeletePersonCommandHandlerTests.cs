@@ -72,8 +72,10 @@ public class DeletePersonCommandHandlerTests
     }
 
     private static DeletePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true, IAtomicWrites? atomicWrites = null) =>
-        new(persons, Ownership(ownershipAllowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
+        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true, IAtomicWrites? atomicWrites = null,
+        InMemoryWriteTransactions? transactions = null, InMemoryInvariantLocks? locks = null) =>
+        new(persons, Ownership(ownershipAllowed), atomicWrites ?? InMemoryAtomicWrites.Instance,
+            transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
     private static DeletePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -341,5 +343,48 @@ public class DeletePersonCommandHandlerTests
         // Then
         Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
         Assert.False(target.IsDeleted);
+    }
+
+    // #202: the guard and the deletion run under the locks of the person's scopes, in one transaction.
+
+    [UnitFact]
+    public async Task GivenACoOwner_WhenHandlingDeletePerson_ThenTheirScopesAreLockedAndTheDeletionCommitted()
+    {
+        // Given
+        var first = Scope(1);
+        var second = Scope(2);
+        var target = ScopeAdmin(10, owned: [first, second]);
+        var coOwner = ScopeAdmin(11, owned: [first, second]);
+        var persons = await PersonsWith(target, coOwner);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, transactions: transactions, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { 1L, 2L }, Assert.Single(locks.ScopeLocks), strict: true);
+        Assert.Equal(1, transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenTheSoleOwner_WhenHandlingDeletePerson_ThenRefusedUnderTheLockAndNothingCommitted()
+    {
+        // Given
+        var target = ScopeAdmin(10, owned: Scope(1));
+        var persons = await PersonsWith(target);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, transactions: transactions, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal([1L], Assert.Single(locks.ScopeLocks));
+        Assert.Equal(0, transactions.Committed);
     }
 }

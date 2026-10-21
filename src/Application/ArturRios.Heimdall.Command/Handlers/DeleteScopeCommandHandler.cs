@@ -38,6 +38,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         one conditional <c>UPDATE</c> per kind of member, and the totals are counts. A tenant of any
 ///         size costs the request the same memory.
 ///     </para>
+///     <para>
+///         <b>Under the scope's lock</b> (#202). The transaction first locks the scope's row
+///         (<see cref="IInvariantLocks" />), which every writer that can take an owner out of the scope
+///         also holds, and reads the scope again under it. So the deletion and an owner change of the same
+///         scope run one after the other: an owner removal that follows finds the scope gone (AF-22a),
+///         and the deletion never acts on a scope read before another request deleted it.
+///     </para>
 /// </remarks>
 public class DeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
@@ -46,7 +53,8 @@ public class DeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
     IScopeCascades scopeCascades,
-    IWriteTransactions transactions)
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>
 {
     public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -67,9 +75,22 @@ public class DeleteScopeCommandHandler(
         // Steps 3-4 land together or not at all (#204): leaving this block by any return or exception
         // before the commit rolls both back.
         await using var transaction = await transactions.BeginAsync();
+        await locks.LockAsync([scope.Id]);
+
+        // The scope's deletion state as it stands under the lock, not as read above: the tracked copy
+        // keeps the values it was read with. Gone altogether is AF-04a's answer.
+        var isDeleted = await scopeReader.Query()
+            .Where(x => x.Id == scope.Id)
+            .Select(x => (bool?)x.IsDeleted)
+            .FirstOrDefaultAsync();
+
+        if (isDeleted is null)
+        {
+            return output.WithError(ScopeMessages.ScopeNotFound);
+        }
 
         // Step 3: flip the scope itself. AF-04b: an already-deleted scope is left as it is.
-        if (!scope.IsDeleted)
+        if (isDeleted == false)
         {
             scope.IsDeleted = true;
             scope.UpdatedAt = now;

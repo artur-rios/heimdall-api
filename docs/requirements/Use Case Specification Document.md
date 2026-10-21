@@ -1275,6 +1275,12 @@ sequenceDiagram
 | AF-22b | No other active owner of the scope remains: every other owner, if any, is logically deleted, restricted or has requested erasure (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
 | AF-22c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
 
+> **On AF-22b under concurrency.** The check and the removal hold the scope's row (NFR-12, #202), as
+> does every other request that can take an owner out of the scope — a deletion of an owner (UC-09,
+> UC-10), an erasure request (UC-42), the scope's own deletion (UC-04, UC-05). Two requests taking out
+> the scope's last two owners at once therefore run one after the other: the second sees the first's
+> outcome and is refused with AF-22b, and the scope keeps an active owner.
+
 ---
 
 ### UC-23: Promote User to Scope Owner

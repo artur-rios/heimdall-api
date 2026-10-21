@@ -43,6 +43,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         inside the same transaction, so a large tenant neither fills the request's memory with whole
 ///         rows — password hashes included — nor sends one statement per member.
 ///     </para>
+///     <para>
+///         <b>Under the scope's lock</b> (#202). The transaction first locks the scope's row
+///         (<see cref="IInvariantLocks" />), which every writer that can take an owner out of the scope
+///         also holds, and reads the scope again under it. So the deletion and an owner change of the same
+///         scope run one after the other: an owner removal that follows finds the scope gone (AF-22a),
+///         and the deletion never acts on a scope another request removed after it was read.
+///     </para>
 /// </remarks>
 public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
@@ -53,7 +60,8 @@ public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader,
     IErasedSubjects erasedSubjects,
     IScopeCascades scopeCascades,
-    IWriteTransactions transactions)
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -72,6 +80,13 @@ public class HardDeleteScopeCommandHandler(
         // Steps 3-6 land together or not at all (#212): leaving this block by any return or exception
         // before the commit rolls every one of them back.
         await using var transaction = await transactions.BeginAsync();
+        await locks.LockAsync([scope.Id]);
+
+        // Read again under the lock: a hard delete that committed since the read above answers AF-05a.
+        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id))
+        {
+            return output.WithError(ScopeMessages.ScopeNotFound);
+        }
 
         // The scope's members, regardless of individual deletion state: the rows steps 3 and 4 act on,
         // and the totals step 7 reports. Only the ids are read (#204).

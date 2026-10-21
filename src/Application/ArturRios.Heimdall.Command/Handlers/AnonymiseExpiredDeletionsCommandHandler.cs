@@ -76,7 +76,9 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     IScopeOwnerInvitations invitations,
     IAsyncReadOnlyRepository<ScopeOwnerInvitation, long> invitationReader,
     IAuditLogWriter auditLog,
-    ILogger<AnonymiseExpiredDeletionsCommandHandler> logger)
+    ILogger<AnonymiseExpiredDeletionsCommandHandler> logger,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
     /// <summary>
@@ -356,6 +358,14 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///         batches are taken while they come back full, up to
     ///         <see cref="DataRetentionOptions.MaxBatchesPerTick" />. No request is tried twice in a run.
     ///     </para>
+    ///     <para>
+    ///         <b>Each under the locks of the person's scopes (#202).</b> The guard and the suspension run in
+    ///         a transaction of their own per request, holding the rows of the scopes the person owns
+    ///         (<see cref="IInvariantLocks" />) as every writer that can take an owner out of a scope does,
+    ///         so a co-owner removed or deleted at the same moment is seen. A request still blocked commits
+    ///         that transaction too: nothing was written, and committing keeps the run's other tracked
+    ///         requests tracked, which a rollback would clear.
+    ///     </para>
     /// </remarks>
     /// <returns>The errors to report: empty when every attempted retry went through.</returns>
     private async Task<IReadOnlyCollection<string>> RetryBlockedRequestsAsync(DateTime now)
@@ -370,7 +380,6 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
             {
                 var candidates = personReader.Query()
-                    .Include(person => person.ScopeOwnerships)
                     .Where(person => !person.IsDeleted
                                      && person.ErasureRequestedAt != null
                                      && person.ErasureBlockedReason != null
@@ -393,14 +402,19 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 {
                     try
                     {
-                        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
-                        {
-                            continue;
-                        }
+                        await using var transaction = await transactions.BeginAsync();
+
+                        var ownedScopeIds =
+                            await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
 
                         // A targeted write (#237), made only while the request is still blocked and the record
                         // live and unrestricted, so a restriction or deletion that landed since stands.
-                        await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+                        if (!await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
+                        {
+                            await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+                        }
+
+                        await transaction.CommitAsync();
                     }
                     catch (Exception exception)
                     {

@@ -548,12 +548,16 @@ Two residuals are recorded rather than closed:
   operator running `ReapplyErasures` after a restore, racing a name edit or another save that has the
   person tracked, within one request's duration. Writing the name by a targeted write that requires
   the person live and not anonymised would close it.
-- **Two removals of a scope's last two owners at the same moment can both succeed.** Removing an
-  owner (UC-22) deletes the `SCOPE_OWNER` row only while another live owner remains, checked in the
-  same statement, but under `READ COMMITTED` each of two simultaneous removals can still see the
-  other's row. The same check-then-act gap is in the other last-owner checks (UC-08's role change,
-  UC-09, UC-42's block decision). The scope is then left with no live owner until a System Admin adds
-  one (UC-21). Locking the scope row in one check that all four share would close it.
+- **An ownership gained while its holder is taken out is not guarded.** Every writer that can take an
+  owner out of a scope — removing an ownership (UC-22), deleting a person (UC-09, UC-10), suspending one
+  for erasure (UC-42 and the anonymisation pass's retry) — asks NFR-12's guard and writes in one
+  transaction that first locks the rows of the scopes in question (`SELECT … ORDER BY id FOR UPDATE`),
+  and the scope deletions (UC-04, UC-05) lock their scope too, so two of them on one scope run one after
+  the other and the second reads what the first wrote (#202). The writers that add an owner (UC-03,
+  UC-21, UC-23, an accepted invitation) take no lock, since adding one cannot leave a scope ownerless. A
+  scope created naming, or an ownership granted to, a person in the moment that person is deleted is
+  therefore not seen by the deletion's guard, and the scope can be left with only that deleted owner
+  until a System Admin adds one (UC-21).
 
 A person's relationship to scopes is derived from its role:
 
@@ -818,7 +822,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-09 | Logging | Every attempted write shall produce one audit entry, whether it succeeded, was refused or failed with an exception (the exception continues to the caller; its text is never recorded, and a refusal by the password-hash gate records its canonical message), recording the acting identity, the operation, the affected entity where one was resolved, the outcome, and — on a refusal — the reason. The reason is drawn from the application's own messages, never from caller-supplied input |
 | NFR-10 | Validation | All inputs shall be validated before processing. An input that cannot be bound — a body that is not JSON, or a value of the wrong type in the body or query string — is refused with `400 Bad Request` and the message "The request is malformed.", before the action runs. Authentication and role checks come first, so an unauthenticated caller still receives `401` and a caller of the wrong role `403`; refusals that depend on data, made in a handler, come after |
 | NFR-11 | Data Integrity | Hard deletion of a person must cascade to the applications they own |
-| NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected. Only an *active* owner keeps a scope owned: one not logically deleted, with no erasure requested and whose processing is not restricted — none of the others can administer the scope (#211). So removing an owner (UC-22), logically or permanently deleting a person (UC-09, UC-10) or suspending them for erasure (UC-42, whose request is then recorded but blocked) is refused when it would leave one of their scopes with no other active owner |
+| NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected. Only an *active* owner keeps a scope owned: one not logically deleted, with no erasure requested and whose processing is not restricted — none of the others can administer the scope (#211). So removing an owner (UC-22), logically or permanently deleting a person (UC-09, UC-10) or suspending them for erasure (UC-42, whose request is then recorded but blocked) is refused when it would leave one of their scopes with no other active owner. Each such decision is made, and written, holding the rows of the scopes it concerns, so two of them on one scope at the same moment cannot both pass (#202) |
 | NFR-13 | Security | Google ID tokens must be verified (signature, issuer `accounts.google.com`/`https://accounts.google.com`, audience matching the configured OAuth client ID, and expiration) before their claims are trusted |
 | NFR-14 | Data Integrity | Hard deletion of a scope must also cascade to its Google Users |
 | NFR-15 | Security | Internal `bigint` primary/foreign keys must never appear in API responses, API paths, or token claims; only `PublicId` (GUID) values may be exposed to callers |

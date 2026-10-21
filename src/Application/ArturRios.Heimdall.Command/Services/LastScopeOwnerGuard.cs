@@ -1,5 +1,6 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Services;
@@ -22,9 +23,41 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         erasure is requested is on the way out — none of them can administer the scope, so none
 ///         keeps it owned.
 ///     </para>
+///     <para>
+///         <b>Asked under the scope locks (#202).</b> On its own the answer is stale the moment it is read:
+///         two requests taking out the two owners of one scope each read the other still there, both
+///         write, and nobody is left. Every caller therefore asks inside its transaction, once
+///         <see cref="IInvariantLocks" /> holds the scopes in question — <see cref="LockOwnedScopesAsync" />
+///         for a person's — so a competing writer of the same scope waits until the answer has been acted
+///         on, and then reads what was written.
+///     </para>
 /// </remarks>
 public static class LastScopeOwnerGuard
 {
+    /// <summary>
+    ///     Reads the scopes the person <paramref name="personId" /> owns and locks them, in the caller's
+    ///     transaction, so the guard asked next is still true when the caller writes. Returns them.
+    /// </summary>
+    /// <remarks>
+    ///     Read inside the transaction, just before the lock, rather than taken from a copy the caller read
+    ///     earlier. An ownership the person gains between this read and the commit — a scope created
+    ///     naming them (UC-03), an owner added (UC-21, UC-23) — is neither locked nor checked: the writers
+    ///     that add owners take no lock, since adding one can never leave a scope ownerless on its own. The
+    ///     System Requirements record that residual.
+    /// </remarks>
+    public static async Task<IReadOnlyCollection<long>> LockOwnedScopesAsync(
+        IInvariantLocks locks, IAsyncReadOnlyRepository<Person, long> personReader, long personId)
+    {
+        var scopeIds = await personReader.Query()
+            .Where(person => person.Id == personId)
+            .SelectMany(person => person.ScopeOwnerships.Select(ownership => ownership.ScopeId))
+            .ToListAsync();
+
+        await locks.LockAsync(scopeIds);
+
+        return scopeIds;
+    }
+
     /// <summary>
     ///     Whether any scope <paramref name="person" /> owns is owned by nobody else who is active.
     ///     Requires <c>ScopeOwnerships</c> to have been loaded.

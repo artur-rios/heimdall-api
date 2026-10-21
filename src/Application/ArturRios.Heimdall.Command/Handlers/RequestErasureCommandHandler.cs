@@ -62,6 +62,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         request is made. Recomputing it from the current configuration on every read would let a
 ///         later change move an obligation that had already attached.
 ///     </para>
+///     <para>
+///         <b>Why the block is decided under a lock</b> (#202). The last-owner guard and the write it
+///         decides run in one transaction holding the rows of the scopes the person owns
+///         (<see cref="IInvariantLocks" />), as every writer that can take an owner out of a scope does.
+///         Otherwise two co-owners asking at once would each see the other still there, and both be
+///         suspended. The password is checked before the transaction opens, so no lock waits on Argon2.
+///     </para>
 /// </remarks>
 public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
@@ -70,7 +77,9 @@ public class RequestErasureCommandHandler(
     IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
     DataRetentionOptions retention,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>
 {
     public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command, CancellationToken cancellationToken = default)
@@ -94,7 +103,6 @@ public class RequestErasureCommandHandler(
         // generic AF-42b. The endpoint admits such a caller because it is a data subject right; any
         // other deleted identity is refused with AF-42b once AF-42c has been ruled out.
         var person = await personReader.Query()
-            .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
 
         if (person is not null)
@@ -146,9 +154,15 @@ public class RequestErasureCommandHandler(
 
         var restrictionLifted = person.ProcessingRestrictedAt is not null;
 
+        // The decision and the write under the locks of the person's scopes (#202): leaving this block
+        // before the commit rolls back.
+        await using var transaction = await transactions.BeginAsync();
+
+        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+
         // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
         // ownerless, so the suspension waits — but the request and its deadline do not.
-        var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader);
+        var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader);
         var blockedReason = blocked ? ErasureMessages.BlockedByLastScopeOwnership : null;
 
         // The request, the lifted restriction (see LiftRestriction), and the suspension or the
@@ -167,6 +181,8 @@ public class RequestErasureCommandHandler(
                 ? ErasureMessages.ErasureAlreadyRequested
                 : ErasureMessages.NotEligible);
         }
+
+        await transaction.CommitAsync();
 
         return Recorded(
             output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason,

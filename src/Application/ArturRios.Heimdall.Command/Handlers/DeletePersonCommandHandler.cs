@@ -21,10 +21,19 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     tokens, and owned applications are untouched. All failures are returned as errors on the
 ///     <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
+/// <remarks>
+///     <b>Under the locks of the person's scopes</b> (#202). The last-owner guard and the deletion run in
+///     one transaction holding the rows of the scopes the person owns (<see cref="IInvariantLocks" />), as
+///     every writer that can take an owner out of a scope does. Deleting one owner while the other is
+///     removed or deleted therefore runs one after the other, and the second is refused, where both used
+///     to see the other owner still there.
+/// </remarks>
 public class DeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IScopeOwnershipChecker scopeOwnership,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<DeletePersonCommand, DeletePersonCommandOutput>
 {
     public async Task<DataOutput<DeletePersonCommandOutput?>> HandleAsync(DeletePersonCommand command, CancellationToken cancellationToken = default)
@@ -32,12 +41,11 @@ public class DeletePersonCommandHandler(
         var output = DataOutput<DeletePersonCommandOutput?>.New;
 
         // AF-09a. The lookup deliberately omits an !IsDeleted filter (unlike UC-08) so an
-        // already-deleted person is found and served idempotently by AF-09b below. Both scope
-        // navigations are needed: ScopeMembership by the authorization rule, ScopeOwnerships by the
-        // last-owner guard.
+        // already-deleted person is found and served idempotently by AF-09b below. ScopeMembership is
+        // needed by the authorization rule; the ownerships the last-owner guard needs are read under its
+        // locks.
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
-            .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.Id);
 
         if (person is null)
@@ -69,9 +77,16 @@ public class DeletePersonCommandHandler(
                 .WithMessage(PersonMessages.PersonDeletedSuccessfully);
         }
 
+        // Steps 3-4 under the locks of the person's scopes (#202): leaving this block before the commit
+        // rolls back.
+        await using var transaction = await transactions.BeginAsync();
+
+        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+
         // AF-09e (NFR-12): a soft-deleted owner can no longer authenticate, so deleting the last one
-        // would leave the scope effectively ownerless.
-        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
+        // would leave the scope effectively ownerless. Asked under the locks, so it is still true when
+        // the deletion below is written.
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
@@ -95,6 +110,8 @@ public class DeletePersonCommandHandler(
                 .WithData(new DeletePersonCommandOutput { Id = person.PublicId, AlreadyDeleted = true })
                 .WithMessage(PersonMessages.PersonDeletedSuccessfully);
         }
+
+        await transaction.CommitAsync();
 
         // UC-09 step 4.
         return output

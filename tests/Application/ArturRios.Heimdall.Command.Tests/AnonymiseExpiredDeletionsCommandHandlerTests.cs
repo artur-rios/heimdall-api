@@ -50,6 +50,9 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     {
         public static Fakes New() => new(new(), new(), new(), new(), new(), new(), new());
 
+        public InMemoryWriteTransactions Transactions { get; } = new();
+        public InMemoryInvariantLocks Locks { get; } = new();
+
         public AnonymiseExpiredDeletionsCommandHandler Handler(
             DataRetentionOptions? retention = null, IAtomicWrites? atomicWrites = null,
             IAsyncRepository<GoogleUser, long>? googleUserWriter = null, IAuditLogWriter? auditLog = null,
@@ -63,7 +66,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
                 new InMemoryScopeOwnerInvitations(Invitations, Persons, new AsyncFakeRepository<Scope, long>()),
                 Invitations,
                 auditLog ?? AuditLog,
-                NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance);
+                NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance,
+                Transactions, Locks);
 
         /// <summary>The handler's own <c>ScopeOwnerInvitationVoided</c> entries.</summary>
         public List<(string Action, Guid? TargetId, bool Succeeded)> Voids() =>
@@ -1116,5 +1120,29 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(
             [(ScopeOwnerInvitationAuditActions.Voided, (Guid?)received.PublicId, true)],
             auditLog.Entries.Where(entry => entry.Action == ScopeOwnerInvitationAuditActions.Voided));
+    }
+
+    // #202: each blocked request is retried in a transaction of its own, under the locks of its scopes.
+
+    [UnitFact]
+    public async Task GivenABlockedRequest_WhenAnonymising_ThenItsScopesAreLockedAndTheRetryCommitted()
+    {
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Still blocked, and the transaction committed anyway: nothing was written, and a rollback would
+        // clear what the run tracks
+        Assert.Equal([7L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Committed);
+        Assert.Equal(0, fakes.Transactions.RolledBack);
     }
 }

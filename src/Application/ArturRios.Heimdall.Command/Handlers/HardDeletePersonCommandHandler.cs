@@ -34,7 +34,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         <b>All or nothing</b> (#212). The tombstone, the dependents and the person are removed in one
 ///         <see cref="IWriteTransactions" /> transaction, committed only once the person is gone, so a
 ///         failure at any step leaves the person with every application and token they had, and no
-///         tombstone for a live row. The guards run before it opens.
+///         tombstone for a live row.
+///     </para>
+///     <para>
+///         <b>Under the locks of the person's scopes</b> (#202). The transaction opens before the
+///         last-owner guard and first locks the rows of the scopes the person owns
+///         (<see cref="IInvariantLocks" />), as every writer that can take an owner out of a scope does, so
+///         the guard's answer still holds when the person is deleted.
 ///     </para>
 /// </remarks>
 public class HardDeletePersonCommandHandler(
@@ -47,7 +53,8 @@ public class HardDeletePersonCommandHandler(
     IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IErasedSubjects erasedSubjects,
-    IWriteTransactions transactions)
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>
 {
     public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command, CancellationToken cancellationToken = default)
@@ -55,10 +62,8 @@ public class HardDeletePersonCommandHandler(
         var output = DataOutput<HardDeletePersonCommandOutput?>.New;
 
         // AF-10a: the lookup omits an !IsDeleted filter — a logically deleted person is exactly what a
-        // cleanup pass starts from, so it must still be hard-deletable. ScopeOwnerships is needed by
-        // the last-owner guard below.
+        // cleanup pass starts from, so it must still be hard-deletable.
         var person = await personReader.Query()
-            .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.Id);
 
         if (person is null)
@@ -74,17 +79,21 @@ public class HardDeletePersonCommandHandler(
             return output.WithError(PersonMessages.CannotDeleteSelf);
         }
 
+        // UC-10 steps 3-8 land together or not at all (#212): leaving this block by any return or
+        // exception before the commit rolls every one of them back.
+        await using var transaction = await transactions.BeginAsync();
+
+        // The person's scopes, read and locked first (#202), so the guard below is still true when the
+        // person is deleted.
+        var ownedScopeIds = await LastScopeOwnerGuard.LockOwnedScopesAsync(locks, personReader, person.Id);
+
         // UC-10 step 3 (AF-10b, NFR-12). Unlike UC-09, this runs regardless of the person's own
         // deletion state: NFR-12 names hard-deleting the last owning person explicitly, and the guard
         // keeps every scope row backed by at least one SCOPE_OWNER row.
-        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
+        if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, ownedScopeIds, personReader))
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
-
-        // UC-10 steps 4-8 land together or not at all (#212): leaving this block by any return or
-        // exception before the commit rolls every one of them back.
-        await using var transaction = await transactions.BeginAsync();
 
         // UC-10 step 4 (NFR-21, #195): tombstone the id before anything irreversible happens, so the
         // trail's entries about this person can still be cleared once the row that said who they

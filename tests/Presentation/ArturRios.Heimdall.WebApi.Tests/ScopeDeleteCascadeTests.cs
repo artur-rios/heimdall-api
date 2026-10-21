@@ -154,7 +154,8 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
         new EfRepository<GoogleUser, long>(context),
         new EfRepository<Application, long>(context),
         new ScopeCascades(context),
-        new WriteTransactions(context));
+        new WriteTransactions(context),
+        new InvariantLocks(context));
 
     private static HardDeleteScopeCommandHandler HardDeleteScopeHandler(AppDbContext context) => new(
         new EfRepository<Scope, long>(context),
@@ -165,7 +166,8 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
         new EfRepository<ScopePermission, long>(context),
         new ErasedSubjects(context),
         new ScopeCascades(context),
-        new WriteTransactions(context));
+        new WriteTransactions(context),
+        new InvariantLocks(context));
 
     /// <summary>Whether a command succeeded, counting one that threw — as a failed write may — as failed.</summary>
     private static async Task<bool> SucceedsAsync<T>(Func<Task<DataOutput<T>>> run)

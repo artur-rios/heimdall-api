@@ -286,6 +286,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IWriteTransactions, WriteTransactions>();
         // #204: a scope's delete cascaded to its members as set-based statements, never member by member.
         Builder.Services.AddScoped<IScopeCascades, ScopeCascades>();
+        // #202: the scope row locks that make a last-owner guard and its write one step.
+        Builder.Services.AddScoped<IInvariantLocks, InvariantLocks>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();

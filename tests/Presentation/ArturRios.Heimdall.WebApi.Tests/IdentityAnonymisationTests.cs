@@ -63,7 +63,9 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
             new ScopeOwnerInvitations(context),
             new EfRepository<ScopeOwnerInvitation, long>(context),
             AuditLog(context),
-            NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance);
+            NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance,
+            new WriteTransactions(context),
+            new InvariantLocks(context));
     }
 
     /// <summary>The real audit writer, actorless as the scheduled pass is.</summary>
