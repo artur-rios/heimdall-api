@@ -106,6 +106,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   survived, with a tombstone for an identity that still existed. The steps now run in one transaction, and a
   failure removes nothing; the audit entry recording the failed attempt is still written. Use cases 5 and 10 and
   the Data Retention Schedule say so (#212).
+- Deleting a scope (`DELETE /api/scopes/{id}`) is now all or nothing, and repeating it finishes a cascade an
+  earlier attempt left unfinished. The scope was flagged deleted first and its Users, Google Users and
+  applications in separate saves after, so a failure part-way left a deleted scope with live members, and a retry,
+  finding the scope deleted, skipped the cascade and answered `200`: those members could not sign in, but still
+  showed in lists and counts, held their addresses, and never started the anonymisation window. The flag and the
+  cascade now run in one transaction, and an already-deleted scope has the cascade run again for any member not
+  yet deleted (AF-04b). The cascade is one `UPDATE … WHERE NOT is_deleted` per kind of member instead of loading
+  every member, password hash included; a hard delete of a scope reads only its members' ids and removes them
+  2,000 to a statement, inside its one transaction: the 5,000 Users of a scope are deleted in one statement, and
+  hard-deleted in three. Use cases 4 and 5 say so (#204).
 
 ### Changed
 

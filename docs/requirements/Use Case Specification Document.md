@@ -302,15 +302,17 @@ sequenceDiagram
 1. System Admin sends a delete request for a scope.
 2. The system locates the scope.
 3. The system sets `IsDeleted = true` on the scope.
-4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope. Scope Admins who own the scope are not modified.
+4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope that are not already deleted; one already deleted keeps the time and kind of its own deletion. Scope Admins who own the scope are not modified.
 5. The system returns success, including the scope's identifier and the total number of Users, Google Users, and applications belonging to the scope (counted regardless of their individual deletion state).
+
+Steps 3 and 4 are one transaction (#204): if either fails, the scope and every member are left as they were. Step 4 is one statement per kind of member, so no member is loaded, however large the scope.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-04a | Scope not found | Return `404 Not Found` |
-| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent); the scope and its Users/Google Users/applications are left unchanged, and the response still reports the scope's identifier and its User/Google User/application totals |
+| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent); the scope is left unchanged, and step 4 runs again, so any of its Users/Google Users/applications not yet deleted — left live by an earlier attempt that did not finish — are deleted, and those already deleted are left unchanged. The response still reports the scope's identifier and its User/Google User/application totals |
 
 ---
 
@@ -336,7 +338,8 @@ sequenceDiagram
 7. The system returns success, including the count of scope permissions removed.
 
 Steps 3 to 6 are one transaction (#212): if any of them fails, nothing is removed — the scope keeps every
-member, and no tombstone is left for an identity that still exists.
+member, and no tombstone is left for an identity that still exists. Only the members' ids are read, and they are removed
+2,000 to a statement (#204), so the request's memory does not grow with the scope.
 
 **Alternative Flows:**
 

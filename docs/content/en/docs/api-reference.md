@@ -80,7 +80,7 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /` | System Admin; Scope Admin (the scopes they own) | UC-02 — list scopes (paginated, filterable); a Scope Admin's page and total count their own scopes only |
 | `GET /{id}` | Any authenticated | UC-02 — read one scope |
 | `PUT /{id}` | System Admin | UC-03 — update name and description |
-| `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications) |
+| `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications, all or nothing; repeating it finishes a cascade left unfinished) |
 | `DELETE /{id}/hard` | System Admin | UC-05 — hard delete (also purges permissions and join rows), all or nothing |
 | `PUT /{id}/google-signin` | System Admin + Scope Admin | UC-24 — turn Google Sign-In on or off |
 | `GET /{id}/pending-registrations` | System Admin + Scope Admin | UC-49 — the self-registrations awaiting confirmation, newest first: name, address, expiry, guesses left; never the hash, salt or token |

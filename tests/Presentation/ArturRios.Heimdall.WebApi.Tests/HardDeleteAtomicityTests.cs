@@ -123,13 +123,11 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
         new EfRepository<Scope, long>(context),
         new EfRepository<Scope, long>(context),
         new EfRepository<Person, long>(context),
-        new EfRepository<Person, long>(context),
         new EfRepository<GoogleUser, long>(context),
-        new EfRepository<GoogleUser, long>(context),
-        new EfRepository<Application, long>(context),
         new EfRepository<Application, long>(context),
         new EfRepository<ScopePermission, long>(context),
         new ErasedSubjects(context),
+        new ScopeCascades(context),
         new WriteTransactions(context));
 
     /// <summary>The handler as the API runs it: inside the audit decorator, on the same context.</summary>

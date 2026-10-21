@@ -27,8 +27,8 @@ public class HardDeleteScopeCommandHandlerTests
         InMemoryErasedSubjects ErasedSubjects)
     {
         public HardDeleteScopeCommandHandler Handler() => new(
-            Scopes, Scopes, Persons, Persons, GoogleUsers, GoogleUsers, Applications, Applications,
-            ScopePermissions, ErasedSubjects, InMemoryWriteTransactions.Instance);
+            Scopes, Scopes, Persons, GoogleUsers, Applications, ScopePermissions, ErasedSubjects,
+            new InMemoryScopeCascades(Persons, GoogleUsers, Applications), InMemoryWriteTransactions.Instance);
     }
 
     private static async Task<Fakes> EmptyFakes()

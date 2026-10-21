@@ -11,8 +11,8 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         makes several of them used to stand on its write order alone: spend the token, then write;
 ///         tombstone, then delete. A failure in between left the first half — a token gone for a reset
 ///         that never happened, dependents removed from a person who survived. Inside a transaction
-///         opened here, the repositories, <see cref="IAtomicWrites" /> and <see cref="IErasedSubjects" />
-///         all write on the one connection, and nothing is kept until
+///         opened here, the repositories, <see cref="IAtomicWrites" />, <see cref="IErasedSubjects" />
+///         and <see cref="IScopeCascades" /> all write on the one connection, and nothing is kept until
 ///         <see cref="IWriteTransaction.CommitAsync" />.
 ///     </para>
 ///     <para>

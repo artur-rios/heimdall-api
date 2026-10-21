@@ -284,6 +284,8 @@ public class Startup : WebApiStartup
         Builder.Services.AddScoped<IScopeOwnerInvitations, ScopeOwnerInvitations>();
         // #209, #212, #204: the transaction a command opens around the writes that must land together.
         Builder.Services.AddScoped<IWriteTransactions, WriteTransactions>();
+        // #204: a scope's delete cascaded to its members as set-based statements, never member by member.
+        Builder.Services.AddScoped<IScopeCascades, ScopeCascades>();
 
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();

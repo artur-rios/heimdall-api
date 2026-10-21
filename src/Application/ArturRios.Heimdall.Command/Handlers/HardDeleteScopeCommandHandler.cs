@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -19,7 +18,8 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     <c>SCOPE_OWNER</c>/<c>SCOPE_USER</c> join rows and any remaining scope permissions. Owner
 ///     person records (<c>ScopeAdmin</c>s) are never removed. The response reports the totals of
 ///     the scope's members and permissions, counted regardless of their individual deletion state.
-///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
+///     A failure is returned as errors on the <see cref="DataOutput{T}" /> or, from a set-based
+///     statement, thrown; either way nothing is kept.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -36,18 +36,23 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         failure at any step leaves the scope with every member it had, and no tombstone for a live
 ///         row.
 ///     </para>
+///     <para>
+///         <b>Only the ids</b> (#204). The members are never loaded: their ids and public ids are
+///         projected, which is all the tombstones and the deletes need, and
+///         <see cref="IScopeCascades.DeleteMembersAsync" /> removes them by id a bounded batch per statement,
+///         inside the same transaction, so a large tenant neither fills the request's memory with whole
+///         rows — password hashes included — nor sends one statement per member.
+///     </para>
 /// </remarks>
 public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncRepository<Scope, long> scopeWriter,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
-    IAsyncRepository<Application, long> applicationWriter,
     IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader,
     IErasedSubjects erasedSubjects,
+    IScopeCascades scopeCascades,
     IWriteTransactions transactions)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
@@ -68,16 +73,19 @@ public class HardDeleteScopeCommandHandler(
         // before the commit rolls every one of them back.
         await using var transaction = await transactions.BeginAsync();
 
-        // The scope's members, counted regardless of individual deletion state: the rows steps 3
-        // and 4 act on, and the totals step 7 reports.
+        // The scope's members, regardless of individual deletion state: the rows steps 3 and 4 act on,
+        // and the totals step 7 reports. Only the ids are read (#204).
         var users = await personReader.Query()
             .Where(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id)
+            .Select(p => new { p.Id, p.PublicId })
             .ToListAsync();
         var googleUsers = await googleUserReader.Query()
             .Where(g => g.ScopeId == scope.Id)
+            .Select(g => new { g.Id, g.PublicId })
             .ToListAsync();
-        var applications = await applicationReader.Query()
+        var applicationIds = await applicationReader.Query()
             .Where(a => a.ScopeId == scope.Id)
+            .Select(a => a.Id)
             .ToListAsync();
         var scopePermissionCount = await scopePermissionReader.Query()
             .CountAsync(p => p.ScopeId == scope.Id);
@@ -102,16 +110,11 @@ public class HardDeleteScopeCommandHandler(
         }
 
         // Step 4: delete the members explicitly, in an order that never violates a foreign key
-        // (applications reference their owning person, so they go first).
-        var deleteErrors = (await DeleteAllAsync(applications, applicationWriter))
-            .Concat(await DeleteAllAsync(googleUsers, googleUserWriter))
-            .Concat(await DeleteAllAsync(users, personWriter))
-            .ToList();
-
-        if (deleteErrors.Count > 0)
-        {
-            return output.WithErrors(deleteErrors);
-        }
+        // (applications reference their owning person, so they go first), in batches.
+        await scopeCascades.DeleteMembersAsync(new ScopeMemberIds(
+            applicationIds,
+            googleUsers.Select(googleUser => googleUser.Id).ToList(),
+            users.Select(user => user.Id).ToList()));
 
         // Steps 5-6: delete the scope; its ON DELETE CASCADE foreign keys clear the SCOPE_OWNER and any
         // remaining SCOPE_USER join rows, as well as any remaining scope permissions. Owner person
@@ -132,28 +135,9 @@ public class HardDeleteScopeCommandHandler(
                 Id = scope.PublicId,
                 UserCount = users.Count,
                 GoogleUserCount = googleUsers.Count,
-                ApplicationCount = applications.Count,
+                ApplicationCount = applicationIds.Count,
                 ScopePermissionCount = scopePermissionCount
             })
             .WithMessage(ScopeMessages.ScopeHardDeletedSuccessfully);
-    }
-
-    /// <summary>
-    ///     Permanently removes every entity in <paramref name="members" /> by internal Id, or does
-    ///     nothing when the set is empty. Returns any persistence errors, or an empty sequence on
-    ///     success / no-op.
-    /// </summary>
-    private static async Task<IEnumerable<string>> DeleteAllAsync<T>(
-        IReadOnlyCollection<T> members,
-        IAsyncRepository<T, long> writer) where T : Entity<long>
-    {
-        if (members.Count == 0)
-        {
-            return [];
-        }
-
-        var result = await writer.DeleteRangeAsync(members.Select(member => member.Id));
-
-        return result.Success ? [] : result.Errors;
     }
 }
