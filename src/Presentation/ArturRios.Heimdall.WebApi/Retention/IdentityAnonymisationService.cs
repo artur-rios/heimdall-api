@@ -65,7 +65,8 @@ public class IdentityAnonymisationService(
                 $"Anonymised {anonymised.TotalAnonymised} identities past their retention window: " +
                 $"{anonymised.PersonsAnonymised} persons, {anonymised.GoogleUsersAnonymised} Google Users, " +
                 $"removing {anonymised.DependentsRemoved} dependent rows; " +
-                $"{anonymised.Backlog} still due after this run. " + Ledger(anonymised),
+                $"{anonymised.Backlog?.ToString() ?? "an unknown number"} still due after this run. " +
+                Ledger(anonymised),
                 false, anonymised.TotalAnonymised);
     }
 

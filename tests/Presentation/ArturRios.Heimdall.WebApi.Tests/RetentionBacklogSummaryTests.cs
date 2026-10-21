@@ -139,6 +139,19 @@ public class RetentionBacklogSummaryTests
     }
 
     [UnitFact]
+    public async Task GivenAnAnonymisationWhoseBacklogCouldNotBeCounted_WhenReported_ThenTheSummarySaysItIsUnknown()
+    {
+        var ids = new[] { Guid.NewGuid() };
+
+        var result = await RunIdentityPassAsync(DataOutput<AnonymiseExpiredDeletionsCommandOutput?>.New.WithData(
+            new AnonymiseExpiredDeletionsCommandOutput { PersonsAnonymised = 1, AnonymisedIds = ids, Backlog = null }));
+
+        Assert.False(result.Failed);
+        Assert.Contains("an unknown number still due after this run", result.Summary);
+        Assert.Contains($"Erasure ledger: {ids[0]}", result.Summary);
+    }
+
+    [UnitFact]
     public async Task GivenARunThatDrainedEverything_WhenReported_ThenTheSummarySaysNothingIsLeft()
     {
         var result = await RunAuditPassAsync(DataOutput<PseudonymiseAuditActorsCommandOutput?>.New.WithData(

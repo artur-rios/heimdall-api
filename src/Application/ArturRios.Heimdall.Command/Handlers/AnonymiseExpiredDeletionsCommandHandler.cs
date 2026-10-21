@@ -119,14 +119,16 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         var anonymisedIds = new List<Guid>();
         var errors = new List<string>();
 
+        // A batch at a time, repeated while a batch comes back full (#206): one batch a run left a large
+        // scope's deleted members waiting days past their deadline.
+        var personsFull = false;
+        var googleUsersFull = false;
+        var interrupted = false;
+
         // Thrown part-way, the run still reports what it did: the identities anonymised before the
         // failure are erased, and the ledger has to name them (NFR-25), from every batch of the run.
         try
         {
-            // A batch at a time, repeated while a batch comes back full (#206): one batch a run left a large
-            // scope's deleted members waiting days past their deadline.
-            var personsFull = false;
-
             for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
             {
                 var persons = await DuePersons(now, erasureCutoff, administrativeCutoff)
@@ -193,8 +195,6 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 }
             }
 
-            var googleUsersFull = false;
-
             // After a failed dependent removal nothing else is attempted this run, as before the drain.
             for (var batch = 0; errors.Count == 0 && batch < retention.MaxBatchesPerTick; batch++)
             {
@@ -234,21 +234,20 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                     break;
                 }
             }
-
-            // Counted only where the run stopped on a full batch: one that was not full took all that was due.
-            result.Backlog = (personsFull
-                                 ? await DuePersons(now, erasureCutoff, administrativeCutoff).CountAsync()
-                                 : 0)
-                             + (googleUsersFull
-                                 ? await DueGoogleUsers(now, erasureCutoff, administrativeCutoff).CountAsync()
-                                 : 0);
         }
         catch (Exception exception)
         {
+            interrupted = true;
             logger.LogError(
                 exception, "Anonymising the identities due failed part-way; those already anonymised are named");
             errors.Add(RetentionMessages.AnonymisationInterrupted);
         }
+
+        // Outside the catch above: the erasures are done by now, so a count that fails leaves the run as it was
+        // and only the backlog unknown. After an interrupted run nothing says where the batches stopped.
+        result.Backlog = interrupted
+            ? null
+            : await CountBacklogAsync(personsFull, googleUsersFull, now, erasureCutoff, administrativeCutoff);
 
         // The errors ride along with the data rather than replacing it: the identities anonymised before
         // the failure, in this batch or an earlier one, are erased, and the caller has to be able to name
@@ -262,6 +261,28 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         return errors.Count > 0
             ? success.WithErrors(errors.Concat(retryErrors).ToList())
             : WithRetryErrors(success, retryErrors);
+    }
+
+    /// <summary>
+    ///     The identities still due once the run stopped, counted only where it stopped on a full batch — one
+    ///     that was not full took all that was due — or <c>null</c> when the count itself failed.
+    /// </summary>
+    private async Task<int?> CountBacklogAsync(
+        bool personsFull, bool googleUsersFull, DateTime now, DateTime erasureCutoff, DateTime administrativeCutoff)
+    {
+        try
+        {
+            return (personsFull ? await DuePersons(now, erasureCutoff, administrativeCutoff).CountAsync() : 0)
+                   + (googleUsersFull
+                       ? await DueGoogleUsers(now, erasureCutoff, administrativeCutoff).CountAsync()
+                       : 0);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Counting the identities still due failed; this run's backlog is unknown");
+
+            return null;
+        }
     }
 
     /// <summary>

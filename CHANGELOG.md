@@ -31,7 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   behind for good. Each run's log line now ends with the rows still due after it, so a backlog that is not
   draining is visible. A run that fails part-way still counts the rows its earlier batches processed, and the
   anonymisation's erasure ledger still names every identity the run anonymised, from every batch, even when a
-  write throws. The retry of blocked erasure requests takes its batches the same way, each after the last
+  write throws; if only counting what is still due fails afterwards, the run stays a success and its line says an
+  unknown number is still due. The retry of blocked erasure requests takes its batches the same way, each after the last
   request of the one before, so requests still blocked can no longer keep newer ones from being retried. The
   variable is in the `docker/*.env.example` templates and `operations.md` (#206).
 - The audit pseudonymisation pass no longer reads the whole attribution window on every run. It evaluated up to

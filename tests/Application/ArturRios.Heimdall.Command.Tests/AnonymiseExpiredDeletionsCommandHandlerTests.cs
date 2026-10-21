@@ -500,6 +500,39 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenTheBacklogCountFailsAfterASuccessfulRun_WhenAnonymising_ThenTheRunSucceedsWithTheBacklogUnknown()
+    {
+        // Given two overdue persons, one batch of two allowed — so the run ends on a full batch and counts —
+        // and a person store that fails every query once the anonymising has begun
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 2; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var failing = false;
+        var reader = new Mock<IAsyncReadOnlyRepository<Person, long>>();
+        reader.Setup(r => r.Query()).Returns(() =>
+            failing ? throw new InvalidOperationException("the connection was lost") : fakes.Persons.Query());
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = _ => failing = true };
+
+        // When
+        var output = await fakes
+            .Handler(Retention(batchSize: 2, maxBatches: 1), atomicWrites: atomicWrites, personReader: reader.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the erasures went through and the run is a success; only the backlog is unknown
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.DoesNotContain(RetentionMessages.AnonymisationInterrupted, output.Errors);
+        Assert.Equal(2, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+        Assert.Null(output.Data.Backlog);
+    }
+
+    [UnitFact]
     public async Task GivenAWriteThrowsInALaterBatch_WhenAnonymising_ThenTheRunReportsItAndTheLedgerNamesThoseAlreadyAnonymised()
     {
         // Given four overdue persons, a batch of two, and a write that throws on the fourth
