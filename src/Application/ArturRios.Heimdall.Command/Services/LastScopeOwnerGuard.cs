@@ -34,15 +34,6 @@ namespace ArturRios.Heimdall.Command.Services;
 public static class LastScopeOwnerGuard
 {
     /// <summary>
-    ///     Whether any scope <paramref name="person" /> owns is owned by nobody else who is active.
-    ///     Requires <c>ScopeOwnerships</c> to have been loaded.
-    /// </summary>
-    public static Task<bool> WouldStripLastOwnerAsync(
-        Person person, IAsyncReadOnlyRepository<Person, long> personReader) =>
-        WouldStripLastOwnerAsync(
-            person.Id, person.ScopeOwnerships.Select(ownership => ownership.ScopeId).ToList(), personReader);
-
-    /// <summary>
     ///     Whether any of <paramref name="scopeIds" /> is owned by nobody active but the person
     ///     <paramref name="personId" />.
     /// </summary>

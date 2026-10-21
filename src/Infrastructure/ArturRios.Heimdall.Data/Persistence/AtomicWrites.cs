@@ -873,11 +873,13 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
     {
         var personId = person.Id;
 
+        // An active co-owner, by the one definition of active (Person.Active, #211).
+        var activeCoOwners = context.Persons
+            .Where(Person.Active)
+            .Where(other => other.Id != personId && other.ScopeOwnerships.Any(ownership => ownership.ScopeId == scopeId));
+
         var removed = await context.ScopeOwners
-            .Where(x => x.ScopeId == scopeId && x.PersonId == personId &&
-                        context.ScopeOwners.Any(other =>
-                            other.ScopeId == scopeId && other.PersonId != personId && !other.Person.IsDeleted &&
-                            other.Person.ErasureRequestedAt == null && other.Person.ProcessingRestrictedAt == null))
+            .Where(x => x.ScopeId == scopeId && x.PersonId == personId && activeCoOwners.Any())
             .ExecuteDeleteAsync() == 1;
 
         if (removed)
