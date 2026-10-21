@@ -14,6 +14,7 @@
            EntityFrameworkCore's async query operators directly, so it is a real dependency of
            this project rather than an implementation detail of another one. -->
       <PackageReference Include="Microsoft.EntityFrameworkCore" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
     <ItemGroup>

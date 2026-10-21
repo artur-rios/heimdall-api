@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `PUT /api/persons/{id}` refuses an email longer than 256 characters with the length message creation uses, where
   it used to reach the database and fail on the index's row-size limit with a generic error (#223).
 
+### Changed
+
+- The detailed health check logs the exception behind "Database: Unhealthy" at Warning, so the cause is in the log
+  and not only the status (#226).
+
 ## [4.1.0] - 2026-10-21
 
 ### Upgrading
