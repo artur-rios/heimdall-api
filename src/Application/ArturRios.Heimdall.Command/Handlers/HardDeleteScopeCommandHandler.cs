@@ -22,13 +22,20 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
-///     Before anything is removed, the <c>PublicId</c> of every member person and Google User about
-///     to go is tombstoned (<see cref="ErasedSubject" />, NFR-21, #195), one per row, in one write.
-///     Audit entries name their target by that bare id, so without the tombstone nothing would say,
-///     once the rows are gone, that those entries name people whose targets must be cleared. The
-///     scope's own id is not tombstoned: a scope is not a person, and its entries stay as recorded.
-///     Written first, a failure later leaves tombstones for live rows, which nothing acts on; and a
-///     retry writes them again without error.
+///     <para>
+///         Before anything is removed, the <c>PublicId</c> of every member person and Google User about
+///         to go is tombstoned (<see cref="ErasedSubject" />, NFR-21, #195), one per row, in one write.
+///         Audit entries name their target by that bare id, so without the tombstone nothing would say,
+///         once the rows are gone, that those entries name people whose targets must be cleared. The
+///         scope's own id is not tombstoned: a scope is not a person, and its entries stay as recorded.
+///         A retry writes them again without error.
+///     </para>
+///     <para>
+///         <b>All or nothing</b> (#212). The tombstones, the members and the scope are removed in one
+///         <see cref="IWriteTransactions" /> transaction, committed only once the scope is gone, so a
+///         failure at any step leaves the scope with every member it had, and no tombstone for a live
+///         row.
+///     </para>
 /// </remarks>
 public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
@@ -40,7 +47,8 @@ public class HardDeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Application, long> applicationReader,
     IAsyncRepository<Application, long> applicationWriter,
     IAsyncReadOnlyRepository<ScopePermission, long> scopePermissionReader,
-    IErasedSubjects erasedSubjects)
+    IErasedSubjects erasedSubjects,
+    IWriteTransactions transactions)
     : ICommandHandlerAsync<HardDeleteScopeCommand, HardDeleteScopeCommandOutput>
 {
     public async Task<DataOutput<HardDeleteScopeCommandOutput?>> HandleAsync(HardDeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -55,6 +63,10 @@ public class HardDeleteScopeCommandHandler(
         {
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
+
+        // Steps 3-6 land together or not at all (#212): leaving this block by any return or exception
+        // before the commit rolls every one of them back.
+        await using var transaction = await transactions.BeginAsync();
 
         // The scope's members, counted regardless of individual deletion state: the rows steps 3
         // and 4 act on, and the totals step 7 reports.
@@ -110,6 +122,8 @@ public class HardDeleteScopeCommandHandler(
         {
             return output.WithErrors(scopeDelete.Errors);
         }
+
+        await transaction.CommitAsync();
 
         // Step 7: return the scope id and the member/permission totals.
         return output

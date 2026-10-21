@@ -34,7 +34,7 @@ public class HardDeletePersonCommandHandlerTests
             Applications, Applications,
             PasswordResetTokens, PasswordResetTokens,
             EmailVerificationTokens, EmailVerificationTokens,
-            ErasedSubjects);
+            ErasedSubjects, InMemoryWriteTransactions.Instance);
     }
 
     private static Fakes EmptyFakes() => new(

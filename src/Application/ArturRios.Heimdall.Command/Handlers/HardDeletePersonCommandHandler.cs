@@ -22,12 +22,19 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 /// <remarks>
-///     Before anything is removed, the person's <c>PublicId</c> is tombstoned
-///     (<see cref="ErasedSubject" />, NFR-21, #195). Audit entries name their target by that bare id,
-///     so once the row is gone the tombstone is the only evidence the retention pass and the database
-///     have that those entries — this hard delete's own among them — name a person whose target must be
-///     cleared. Written first, a failure later leaves a tombstone for a live row, which nothing acts
-///     on; and a retry writes it again without error.
+///     <para>
+///         Before anything is removed, the person's <c>PublicId</c> is tombstoned
+///         (<see cref="ErasedSubject" />, NFR-21, #195). Audit entries name their target by that bare id,
+///         so once the row is gone the tombstone is the only evidence the retention pass and the database
+///         have that those entries — this hard delete's own among them — name a person whose target must
+///         be cleared. A retry writes it again without error.
+///     </para>
+///     <para>
+///         <b>All or nothing</b> (#212). The tombstone, the dependents and the person are removed in one
+///         <see cref="IWriteTransactions" /> transaction, committed only once the person is gone, so a
+///         failure at any step leaves the person with every application and token they had, and no
+///         tombstone for a live row. The guards run before it opens.
+///     </para>
 /// </remarks>
 public class HardDeletePersonCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
@@ -38,7 +45,8 @@ public class HardDeletePersonCommandHandler(
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> emailVerificationTokenReader,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
-    IErasedSubjects erasedSubjects)
+    IErasedSubjects erasedSubjects,
+    IWriteTransactions transactions)
     : ICommandHandlerAsync<HardDeletePersonCommand, HardDeletePersonCommandOutput>
 {
     public async Task<DataOutput<HardDeletePersonCommandOutput?>> HandleAsync(HardDeletePersonCommand command, CancellationToken cancellationToken = default)
@@ -72,6 +80,10 @@ public class HardDeletePersonCommandHandler(
         {
             return output.WithError(PersonMessages.ScopeWouldLoseLastOwner);
         }
+
+        // UC-10 steps 4-8 land together or not at all (#212): leaving this block by any return or
+        // exception before the commit rolls every one of them back.
+        await using var transaction = await transactions.BeginAsync();
 
         // UC-10 step 4 (NFR-21, #195): tombstone the id before anything irreversible happens, so the
         // trail's entries about this person can still be cleared once the row that said who they
@@ -117,6 +129,8 @@ public class HardDeletePersonCommandHandler(
         {
             return output.WithErrors(personDelete.Errors);
         }
+
+        await transaction.CommitAsync();
 
         // UC-10 step 9.
         return output

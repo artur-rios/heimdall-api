@@ -335,6 +335,9 @@ sequenceDiagram
 6. The system permanently deletes the scope record.
 7. The system returns success, including the count of scope permissions removed.
 
+Steps 3 to 6 are one transaction (#212): if any of them fails, nothing is removed — the scope keeps every
+member, and no tombstone is left for an identity that still exists.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
@@ -699,6 +702,9 @@ sequenceDiagram
 7. The system removes the person's `SCOPE_USER` row (if a `User`) or `SCOPE_OWNER` rows (if they own any scope).
 8. The system permanently deletes the person record.
 9. The system returns success, reporting how many applications and tokens went with the person.
+
+Steps 4 to 8 are one transaction (#212): if any of them fails, nothing is removed — the person keeps every
+application and token, and no tombstone is left for a person who still exists.
 
 **Alternative Flows:**
 

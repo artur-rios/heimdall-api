@@ -363,8 +363,10 @@ of the deletion, held for one purpose — to let §7.1 clear the targets that st
 it goes once that purpose is spent.
 
 **Written first.** UC-10, UC-29 and UC-05 (for each member person and Google User it removes) write
-the tombstone before they delete anything. If the delete then fails, the tombstone names a live row,
-which neither the pass nor the trigger acts on. The write is idempotent: a retried hard delete
+the tombstone before they delete anything. UC-10 and UC-05 write it in the same transaction as the
+deletes, so a delete that fails takes the tombstone with it (#212). UC-29's is a single row before a
+single delete; if that delete fails, the tombstone names a live row, which neither the pass nor the
+trigger acts on. The write is idempotent: a retried hard delete
 records the id again without error, keeping one row and moving its `created_at` to the retry. The
 table accepts a row only for a person or Google User that exists when it is written (#195, R1), so a
 tombstone cannot be planted for any other id to make its targets clearable; the Threat Model, §6.1,

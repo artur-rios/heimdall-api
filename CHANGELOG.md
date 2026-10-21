@@ -100,6 +100,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   registrations, still runs after the write, and a failure there is logged at Warning instead of turning a reset
   or verification that happened into an error. A reset or verification refused because the person changed
   meanwhile still spends the link (FR-PR-08). Use cases 13, 14 and 37 say so (#209).
+- Hard-deleting a person (`DELETE /api/persons/{id}/hard`) or a scope (`DELETE /api/scopes/{id}/hard`) is now all
+  or nothing. Each step — the tombstones, the applications, tokens, Google Users and Users, then the person or
+  scope — committed on its own, so a failure at the last step left the dependents gone while the person or scope
+  survived, with a tombstone for an identity that still existed. The steps now run in one transaction, and a
+  failure removes nothing; the audit entry recording the failed attempt is still written. Use cases 5 and 10 and
+  the Data Retention Schedule say so (#212).
 
 ### Changed
 
