@@ -7,7 +7,7 @@ namespace ArturRios.Heimdall.Data.Persistence;
 
 /// <summary>
 ///     <see cref="IInvariantLocks" /> on PostgreSQL: <c>SELECT 1 FROM heimdall.scope WHERE id = ANY(…)
-///     ORDER BY id FOR UPDATE</c> for the scopes, then <c>pg_advisory_xact_lock</c> on
+///     ORDER BY id FOR NO KEY UPDATE</c> for the scopes, then <c>pg_advisory_xact_lock</c> on
 ///     <see cref="SystemAdminSetKey" /> for the System Admin set, both released when the transaction ends.
 /// </summary>
 /// <remarks>
@@ -18,8 +18,16 @@ namespace ArturRios.Heimdall.Data.Persistence;
 ///         the whole set, since the rule is about the set (#203).
 ///     </para>
 ///     <para>
+///         <b>Why <c>FOR NO KEY UPDATE</c>, not <c>FOR UPDATE</c>.</b> It conflicts with itself, so the
+///         invariant writers serialise on a scope exactly as they would under <c>FOR UPDATE</c>, and with the
+///         scope's own update and delete (UC-04, UC-05). It does not conflict with the <c>FOR KEY SHARE</c> an
+///         insert of a row referencing the scope takes — an owner, a member, an application, a pending
+///         registration — so those inserts are not held up by a scope's invariant writers, and no cycle can form
+///         between such an insert, a writer holding the scope and a writer waiting on the inserted row.
+///     </para>
+///     <para>
 ///         The runtime login (NFR-29) holds <c>UPDATE</c> on <c>heimdall.scope</c>, which is what
-///         <c>FOR UPDATE</c> needs, and may call <c>pg_advisory_xact_lock</c>: PUBLIC keeps the
+///         <c>FOR NO KEY UPDATE</c> needs, and may call <c>pg_advisory_xact_lock</c>: PUBLIC keeps the
 ///         <c>EXECUTE</c> it has on <c>pg_catalog</c>'s functions, which <c>runtime-grants.sql</c> never
 ///         revokes. So neither lock needs a grant the login lacks.
 ///     </para>
@@ -49,7 +57,7 @@ public sealed class InvariantLocks(AppDbContext context) : IInvariantLocks
             var scopeTable = context.Model.FindEntityType(typeof(Scope))!.GetSchemaQualifiedTableName();
             var ids = scopeIds.Distinct().Order().ToArray();
 
-            var sql = $"SELECT 1 FROM {scopeTable} WHERE id = ANY({{0}}) ORDER BY id FOR UPDATE";
+            var sql = $"SELECT 1 FROM {scopeTable} WHERE id = ANY({{0}}) ORDER BY id FOR NO KEY UPDATE";
             await context.Database.ExecuteSqlRawAsync(sql, ids);
         }
 

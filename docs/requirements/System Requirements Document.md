@@ -549,15 +549,15 @@ Two residuals are recorded rather than closed:
   person tracked, within one request's duration. Writing the name by a targeted write that requires
   the person live and not anonymised would close it.
 - **An ownership gained while its holder is taken out is not guarded.** Every writer that can take an
-  owner out of a scope — removing an ownership (UC-22), deleting a person (UC-09, UC-10), suspending one
-  for erasure (UC-42 and the anonymisation pass's retry) — asks NFR-12's guard and writes in one
-  transaction that first locks the rows of the scopes in question (`SELECT … ORDER BY id FOR UPDATE`),
-  and the scope deletions (UC-04, UC-05) lock their scope too, so two of them on one scope run one after
-  the other and the second reads what the first wrote (#202). The writers that add an owner (UC-03,
-  UC-21, UC-23, an accepted invitation) take no lock, since adding one cannot leave a scope ownerless. A
-  scope created naming, or an ownership granted to, a person in the moment that person is deleted is
-  therefore not seen by the deletion's guard, and the scope can be left with only that deleted owner
-  until a System Admin adds one (UC-21).
+  owner out of a scope — removing an ownership (UC-22), deleting a person (UC-09, UC-10), suspending
+  one for erasure (UC-42 and the anonymisation pass's retry) — asks NFR-12's guard and writes in one
+  transaction that first locks the rows of the scopes in question (`SELECT … ORDER BY id FOR NO KEY
+  UPDATE`), and the scope deletions (UC-04, UC-05) lock their scope too, so two of them on one scope
+  run one after the other and the second reads what the first wrote (#202). The writers that add an
+  owner (UC-03, UC-21, UC-23, an accepted invitation) take no lock, since adding one cannot leave a
+  scope ownerless. A scope created naming, or an ownership granted to, a person in the moment that
+  person is deleted is therefore not seen by the deletion's guard, and the scope can be left with only
+  that deleted owner until a System Admin adds one (UC-21).
 
 A person's relationship to scopes is derived from its role:
 

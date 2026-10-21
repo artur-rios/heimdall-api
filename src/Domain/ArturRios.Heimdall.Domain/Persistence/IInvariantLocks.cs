@@ -23,7 +23,7 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 public interface IInvariantLocks
 {
     /// <summary>
-    ///     Locks the rows of <paramref name="scopeIds" /> (<c>SELECT … ORDER BY id FOR UPDATE</c>), then, when
+    ///     Locks the rows of <paramref name="scopeIds" /> (<c>SELECT … ORDER BY id FOR NO KEY UPDATE</c>), then, when
     ///     <paramref name="systemAdmins" /> is set, the System Admin set, waiting for any transaction holding
     ///     either.
     /// </summary>

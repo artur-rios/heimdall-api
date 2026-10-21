@@ -62,7 +62,7 @@ public class ScopeOwnerRaceTests(PostgresFixture db)
         Assert.Single(outputs, output => output.Success);
         Assert.Single(outputs, output => output.Errors.SequenceEqual([PersonMessages.ScopeWouldLoseLastOwner]));
         Assert.Equal(1, await ActiveOwnerCountAsync(scope));
-        Assert.Contains(log.Commands, command => command.StartsWith(ScopeLock) && command.EndsWith("FOR UPDATE"));
+        Assert.Contains(log.Commands, command => command.StartsWith(ScopeLock) && command.EndsWith("FOR NO KEY UPDATE"));
     }
 
     [FunctionalFact]

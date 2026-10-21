@@ -125,11 +125,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   name it (#211).
 - Two requests that each take out one of a scope's last two owners at the same moment can no longer both succeed
   and leave the scope with no owner (NFR-12). Removing an owner, deleting or hard-deleting a person, an erasure
-  request and the anonymisation pass's retry of a blocked one now make the last-owner check and their write in
-  one transaction that first locks the rows of the scopes concerned (`SELECT … ORDER BY id FOR UPDATE`, in id
-  order), and deleting or hard-deleting a scope locks its row too, so a second such request waits for the first
-  and is then refused with `409` (AF-22b, AF-09e, AF-10b) or blocked (AF-42d). The runtime login needs no new
-  grant (#202).
+  request and the anonymisation pass's retry of a blocked one now make the last-owner check and their write in one
+  transaction that first locks the rows of the scopes concerned (`SELECT … ORDER BY id FOR NO KEY UPDATE`, in id
+  order, which does not hold up inserts of owners, members or applications into the scope), and deleting or
+  hard-deleting a scope locks its row too, so a second such request waits for the first and is then refused with
+  `409` (AF-22b, AF-09e, AF-10b) or blocked (AF-42d). The runtime login needs no new grant (#202).
 - The system now always keeps an active System Admin (NFR-32): one not deleted, not restricted and not waiting on
   an erasure. Deleting or hard-deleting the last one (`DELETE /api/persons/{id}`, `DELETE /api/persons/{id}/hard`)
   is refused with `409` "This change would leave the system without an active System Admin. Add another System
