@@ -43,9 +43,10 @@ public class AuditRetentionService(
 
         return rows == 0
             ? ScheduledPassResult.Quiet
-            : new ScheduledPassResult($"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
-              $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
-              $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities",
+            : new ScheduledPassResult(
+                $"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
+                $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
+                $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities",
                 false, rows);
     }
 }
