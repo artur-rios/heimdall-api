@@ -493,6 +493,64 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenABlockedRequestThatCannotBeSaved_WhenAnonymising_ThenTheDueIdentityIsStillAnonymised()
+    {
+        // #210: one request the retry cannot save used to return before any due identity was selected,
+        // so every following run did nothing and statutory deadlines passed unmet.
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var failing = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership);
+        var due = await SeedDueScopeAdminAsync(fakes);
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == failing)
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        var output = await fakes.Handler(atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.NotNull(due.AnonymisedAt);
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+        Assert.Contains(due.PublicId, output.Data.AnonymisedIds);
+
+        // Reported, not swallowed: the run is not a success
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenMoreBlockedRequestsThanABatch_WhenAnonymising_ThenOnlyTheOldestBatchIsRetried()
+    {
+        var fakes = Fakes.New();
+        var oldest = await SeedBlockedAsync(fakes, daysAgo: 90);
+        var middle = await SeedBlockedAsync(fakes, daysAgo: 60);
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+
+        await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.True(oldest.IsDeleted);
+        Assert.True(middle.IsDeleted);
+        Assert.False(newest.IsDeleted);
+    }
+
+    private static Task<Person> SeedBlockedAsync(Fakes fakes, int daysAgo) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-daysAgo),
+            erasureDueAt: DateTime.UtcNow.AddDays(-daysAgo + 30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership);
+
+    [UnitFact]
     public async Task GivenNothingDue_WhenAnonymising_ThenTheRunSucceedsWithNoCounts()
     {
         var fakes = Fakes.New();

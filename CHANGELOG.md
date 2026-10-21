@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- One blocked erasure request that cannot be retried no longer stops every anonymisation. The retry now runs
+  best-effort: its failure is logged and reported with the run's errors, and the identities that are due are still
+  anonymised. The retry reads at most `PurgeBatchSize` blocked requests per run, oldest first, where it loaded them
+  all (#210).
+
 - A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
   answering) now leaves a failed audit entry, and the exception still propagates: the gate's refusal records
   `AuthenticationTemporarilyUnavailable`, anything else a fixed reason, never the exception's text. The

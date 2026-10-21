@@ -114,7 +114,10 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // transferred, a co-owner added (UC-21). Re-checked here rather than requiring an
         // administrator to resubmit anything: the subject asked once, and the deadline has been
         // running the whole time.
-        await RetryBlockedRequestsAsync(now);
+        //
+        // Best-effort (#210): a request the retry cannot save is reported with the run's errors and
+        // does not stop the due identities below, whose statutory deadlines are running regardless.
+        var retryErrors = await RetryBlockedRequestsAsync(now);
 
         // Before selecting anyone new: a person anonymised by an earlier run that failed before their
         // invitations were forgotten is never selected again, and would otherwise stay named for good.
@@ -154,7 +157,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
         if (persons.Count == 0 && googleUsers.Count == 0)
         {
-            return Success(output, 0, 0, 0, invitationsVoided: caughtUp.Count);
+            return WithRetryErrors(Success(output, 0, 0, 0, invitationsVoided: caughtUp.Count), retryErrors);
         }
 
         var errors = new List<string>();
@@ -174,7 +177,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // on records not yet anonymised.
         if (errors.Count > 0)
         {
-            return output.WithErrors(errors);
+            return output.WithErrors(errors.Concat(retryErrors).ToList());
         }
 
         // One targeted write per person (#237): the identifying values, the password, the factor and
@@ -205,15 +208,23 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
         errors.AddRange(await SaveAsync(googleUsers, googleUserWriter));
 
+        // The retry's errors ride along with the data rather than replacing it: the identities above
+        // were anonymised, and the caller has to be able to name them (the erasure ledger, NFR-25).
         return errors.Count > 0
-            ? output.WithErrors(errors)
-            : Success(
-                output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
-                anonymisedPersons.Select(person => person.PublicId)
-                    .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
-                    .ToList(),
-                caughtUp.Count + voided.Count);
+            ? output.WithErrors(errors.Concat(retryErrors).ToList())
+            : WithRetryErrors(
+                Success(
+                    output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
+                    anonymisedPersons.Select(person => person.PublicId)
+                        .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
+                        .ToList(),
+                    caughtUp.Count + voided.Count),
+                retryErrors);
     }
+
+    private static DataOutput<AnonymiseExpiredDeletionsCommandOutput?> WithRetryErrors(
+        DataOutput<AnonymiseExpiredDeletionsCommandOutput?> output, IReadOnlyCollection<string> retryErrors) =>
+        retryErrors.Count == 0 ? output : output.WithErrors(retryErrors.ToList());
 
     /// <summary>
     ///     Suspends the persons whose erasure request was blocked when it was made and is no longer
@@ -226,29 +237,60 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     get another month, which is exactly the breach the deadline exists to prevent. Dating it
     ///     from the request means a long-blocked record is due immediately, which is correct: it is
     ///     already late.
+    ///     <para>
+    ///         <b>Best-effort and bounded (#210).</b> A failure on one request is logged and counted, and
+    ///         the next is still tried; the caller carries the errors on without stopping. At most
+    ///         <see cref="DataRetentionOptions.PurgeBatchSize" /> requests are loaded per run, oldest
+    ///         first, so a backlog cannot turn one run into one unbounded read.
+    ///     </para>
     /// </remarks>
-    private async Task RetryBlockedRequestsAsync(DateTime now)
+    /// <returns>The errors to report: empty when every attempted retry went through.</returns>
+    private async Task<IReadOnlyCollection<string>> RetryBlockedRequestsAsync(DateTime now)
     {
-        var blocked = await personReader.Query()
-            .Include(person => person.ScopeOwnerships)
-            .Where(person => !person.IsDeleted
-                             && person.ErasureRequestedAt != null
-                             && person.ErasureBlockedReason != null
-                             // NFR-24, as above: a restricted record is not moved toward erasure.
-                             && person.ProcessingRestrictedAt == null)
-            .ToListAsync();
+        var failures = 0;
 
-        foreach (var person in blocked)
+        try
         {
-            if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
-            {
-                continue;
-            }
+            var blocked = await personReader.Query()
+                .Include(person => person.ScopeOwnerships)
+                .Where(person => !person.IsDeleted
+                                 && person.ErasureRequestedAt != null
+                                 && person.ErasureBlockedReason != null
+                                 // NFR-24, as above: a restricted record is not moved toward erasure.
+                                 && person.ProcessingRestrictedAt == null)
+                .OrderBy(person => person.ErasureRequestedAt)
+                .Take(retention.PurgeBatchSize)
+                .ToListAsync();
 
-            // A targeted write (#237), made only while the request is still blocked and the record
-            // live and unrestricted, so a restriction or deletion that landed since stands.
-            await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+            foreach (var person in blocked)
+            {
+                try
+                {
+                    if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
+                    {
+                        continue;
+                    }
+
+                    // A targeted write (#237), made only while the request is still blocked and the record
+                    // live and unrestricted, so a restriction or deletion that landed since stands.
+                    await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+                }
+                catch (Exception exception)
+                {
+                    failures++;
+                    logger.LogError(
+                        exception, "Retrying the blocked erasure request of person {PersonId} failed",
+                        person.PublicId);
+                }
+            }
         }
+        catch (Exception exception)
+        {
+            failures++;
+            logger.LogError(exception, "Loading the blocked erasure requests to retry failed");
+        }
+
+        return failures == 0 ? [] : [RetentionMessages.BlockedErasureRetryFailed];
     }
 
     /// <summary>

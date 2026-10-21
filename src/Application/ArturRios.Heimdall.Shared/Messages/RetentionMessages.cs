@@ -17,4 +17,10 @@ public static class RetentionMessages
 
     /// <summary>The audit pseudonymisation pass ran to completion.</summary>
     public const string AuditActorsPseudonymised = "Audit entries past their attribution period pseudonymised.";
+
+    /// <summary>
+    ///     Retrying a blocked erasure request failed (#210). Reported with the run's errors; the due
+    ///     identities are still anonymised, and the detail is in the log.
+    /// </summary>
+    public const string BlockedErasureRetryFailed = "Retrying a blocked erasure request failed.";
 }
