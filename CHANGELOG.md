@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   where it used to fail with a 500 (#208). Use case 25's AF-25a now names the case.
 - `PUT /api/persons/{id}` refuses an email longer than 256 characters with the length message creation uses, where
   it used to reach the database and fail on the index's row-size limit with a generic error (#223).
+- The master System Admin the API seeds on an empty database now has its legal basis recorded (NFR-23): contract
+  performance, the current privacy notice version and the time. A new migration records the same on System Admin
+  rows still at Unrecorded (`legal_basis = 0`). The migration cannot tell the seeded master from another System
+  Admin that predates NFR-23, so it records all of them; a row created since then is never at 0 (#213).
 
 ### Changed
 

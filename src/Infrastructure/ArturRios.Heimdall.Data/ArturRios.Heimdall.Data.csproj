@@ -20,6 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\Application\ArturRios.Heimdall.Command\ArturRios.Heimdall.Command.csproj" />
       <ProjectReference Include="..\..\Domain\ArturRios.Heimdall.Domain\ArturRios.Heimdall.Domain.csproj" />
     </ItemGroup>
 
