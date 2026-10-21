@@ -32,7 +32,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     </para>
 ///     <para>
 ///         <b>What is deliberately absent.</b> Audit entries whose attribution has been cleared
-///         under NFR-21 do not appear, and cannot: once cleared, nothing connects them to this
+///         under NFR-21 do not appear — those the subject made, or those made about them, and cannot: once cleared, nothing connects them to this
 ///         person. Saying so on the document would itself be a re-identification, so the export
 ///         reports what it can still find and the retention section explains why older entries stop
 ///         being findable.
@@ -224,16 +224,24 @@ public class ExportMyDataCommandHandler(
         };
     }
 
+    /// <summary>
+    ///     The entries the subject made and the entries made about them. The second kind is data about
+    ///     the subject whoever acted (Art. 15), so it is included; <see cref="AuditLog.ActorPersonId" />
+    ///     is left out of it, since the actor is somebody else.
+    /// </summary>
     private async Task<(List<DataExportAuditEntry> Entries, bool Truncated)> AuditEntriesAsync(Guid subjectId)
     {
         // One more than the cap, so reaching it is detectable without a second count query.
         var entries = await auditReader.Query()
-            .Where(entry => entry.ActorPersonId == subjectId)
+            .Where(entry => entry.ActorPersonId == subjectId || entry.TargetId == subjectId)
             .OrderByDescending(entry => entry.CreatedAt)
             .Take(DataExportDisclosure.MaximumAuditEntries + 1)
             .Select(entry => new DataExportAuditEntry
             {
                 Id = entry.PublicId,
+                Involvement = entry.ActorPersonId == subjectId
+                    ? DataExportAuditEntry.AsActor
+                    : DataExportAuditEntry.AsTarget,
                 Action = entry.Action,
                 TargetId = entry.TargetId,
                 Succeeded = entry.Succeeded,

@@ -33,9 +33,19 @@ public class TokenRetentionService(
             return $"Token retention purge failed: {string.Join("; ", result.Errors)}";
         }
 
-        var purged = result.Data!;
+        return Summarise(result.Data!);
+    }
 
-        return purged.TotalPurged == 0
+    /// <summary>
+    ///     The line logged for a run: <c>null</c> when nothing was removed, otherwise the total and
+    ///     every term of it.
+    /// </summary>
+    /// <remarks>
+    ///     A term left out makes the parts disagree with the total (#225): a run that purged only
+    ///     application credentials once logged "removed 3 rows" over a list of zeroes.
+    /// </remarks>
+    public static string? Summarise(PurgeExpiredTokensCommandOutput purged) =>
+        purged.TotalPurged == 0
             ? null
             : $"Token retention purge removed {purged.TotalPurged} rows: " +
               $"{purged.PasswordResetTokensPurged} password reset, " +
@@ -46,5 +56,4 @@ public class TokenRetentionService(
               $"{purged.AttemptNoticeBudgetsPurged} attempt-notice budget, " +
               $"{purged.GoogleIdTokenUsesPurged} used Google ID token, " +
               $"{purged.ScopeOwnerInvitationsPurged} scope owner invitation";
-    }
 }

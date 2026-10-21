@@ -28,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   is the same mailbox, as sign-in, recovery and uniqueness already treat it. It is still a change for everything
   else — it asks for the password, revokes the person's tokens and notifies the previous address (#225). Use case
   8 now says so.
+- The personal data export (`POST /api/auth/data-export`) now includes the audit entries where the caller is the
+  target as well as those they made, such as an administrator's update of their account (#225). Each entry gains an
+  `involvement` of `Actor` or `Target`; a `Target` entry does not name who acted.
 
 ### Changed
 

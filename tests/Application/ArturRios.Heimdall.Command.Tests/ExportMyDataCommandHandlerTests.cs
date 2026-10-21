@@ -1,6 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -176,6 +177,42 @@ public class ExportMyDataCommandHandlerTests
 
         Assert.Equal("Mine", Assert.Single(document.AuditEntries).Action);
         Assert.False(document.AuditEntriesTruncated);
+    }
+
+    [UnitFact]
+    public async Task GivenAnEntryWhereThePersonIsTheTarget_WhenExporting_ThenItAppearsMarkedAsTargeted()
+    {
+        // Given an entry another identity made about this person, one they made themselves, and one
+        // that concerns somebody else altogether (#225)
+        var fakes = Fakes.New();
+        var person = await SeedPersonAsync(fakes);
+        var administrator = Guid.NewGuid();
+
+        await fakes.AuditEntries.CreateAsync(new AuditLog
+        {
+            PublicId = Guid.NewGuid(), ActorPersonId = administrator, TargetId = person.PublicId,
+            Action = "UpdatePersonCommand", Succeeded = true, CreatedAt = DateTime.UtcNow
+        });
+        await fakes.AuditEntries.CreateAsync(new AuditLog
+        {
+            PublicId = Guid.NewGuid(), ActorPersonId = person.PublicId, TargetId = person.PublicId,
+            Action = "Own", Succeeded = true, CreatedAt = DateTime.UtcNow
+        });
+        await fakes.AuditEntries.CreateAsync(new AuditLog
+        {
+            PublicId = Guid.NewGuid(), ActorPersonId = administrator, TargetId = Guid.NewGuid(),
+            Action = "Unrelated", Succeeded = true, CreatedAt = DateTime.UtcNow
+        });
+
+        // When
+        var document = (await fakes.Handler().HandleAsync(Command(person.PublicId))).Data!;
+
+        // Then — both appear, told apart, and the other party's identity is not disclosed
+        var entries = document.AuditEntries.ToDictionary(entry => entry.Action);
+        Assert.Equal(2, entries.Count);
+        Assert.Equal(DataExportAuditEntry.AsActor, entries["Own"].Involvement);
+        Assert.Equal(DataExportAuditEntry.AsTarget, entries["UpdatePersonCommand"].Involvement);
+        Assert.DoesNotContain(administrator.ToString(), System.Text.Json.JsonSerializer.Serialize(document));
     }
 
     [UnitFact]

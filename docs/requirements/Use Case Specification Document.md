@@ -2111,7 +2111,7 @@ sequenceDiagram
 **Main flow**
 
 1. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
-2. The system assembles the identity, the security state — whether a password and second factor are set, and the counters and locks of the login lockout (FR-AU-09), the second-factor budget (FR-AU-12) and the re-authentication budget (FR-AU-13) — the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject.
+2. The system assembles the identity, the security state — whether a password and second factor are set, and the counters and locks of the login lockout (FR-AU-09), the second-factor budget (FR-AU-12) and the re-authentication budget (FR-AU-13) — the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject — those the subject made (`involvement` `Actor`) and those another identity made about them (`Target`), the second without naming who acted.
 3. The system adds the context Art. 15 requires alongside the data: who else receives it, how long each category is kept, and what is held but not reproduced.
 4. The system returns the document with `Cache-Control: no-store`.
 
@@ -2129,6 +2129,7 @@ sequenceDiagram
 - **Secret material is named, not reproduced.** Art. 15(4) says the right to a copy must not adversely affect others' rights, and reproducing a password hash or a TOTP secret would hand whoever holds the document the material to attack the account. Each is listed with the reason, so the subject learns what exists.
 - **A suspended identity can still export.** The lookups omit the `!IsDeleted` filter most handlers apply: somebody suspended pending erasure has more reason to want a copy than anyone, and Art. 15 is not conditional on the account being in good standing.
 - **So can a restricted one** (NFR-24: "remaining reachable by its own subject's export"). The liveness check that refuses a restricted or suspended identity's token everywhere else steps aside for this endpoint and for UC-42, UC-44 and UC-45; an anonymised identity is still refused.
+- **Entries about the subject are included.** Art. 15 covers data about them, whoever acted: an administrator's update of their account is one. Each entry says which it is, and a `Target` entry carries no identifier of the actor, whose data Art. 15(4) protects.
 - **Cleared audit attributions cannot appear.** Once NFR-21 clears an attribution, nothing connects the entry to the person; reporting it would itself be a re-identification.
 
 ---

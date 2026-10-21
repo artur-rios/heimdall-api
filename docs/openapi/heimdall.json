@@ -5857,6 +5857,10 @@
             "type": "string",
             "format": "uuid"
           },
+          "involvement": {
+            "type": "string",
+            "nullable": true
+          },
           "action": {
             "type": "string",
             "nullable": true
