@@ -51,7 +51,7 @@ One service, `api`, built from the repository's [`Dockerfile`](https://github.co
   schema's owner — and the API runs as a role that owns nothing; see
   [Database roles](../operations/#database-roles--th-18).
 - The container drops to a non-root user, writes logs to a named volume, and answers a health check
-  on `/healthcheck` — Compose reports the container healthy only once the API answers.
+  on `/healthcheck/ready` — Compose reports the container healthy only once the API answers.
 
 **PostgreSQL is deliberately not a service in the Compose file.** Every host already runs one
 instance shared by several services and environments, each owning a database of its own. So the
@@ -485,7 +485,7 @@ For a PostgreSQL on another machine, put its private address in `DB_HOST` and re
 | `docker compose ps` shows nothing (local) | `--env-file` omitted, so `COMPOSE_PROJECT_NAME` is unset | Pass the env file on every Compose command |
 | `docker compose ps` shows nothing (VPS) | The project is named after the environment | `docker compose -p heimdall-api-<environment> ps` |
 | `heimdall-api-dev.example.com` answers 404 | Development is stopped, so Traefik has no router for it | `scripts/ygg.sh env start development` |
-| Health check never leaves `starting` | The API is up but `/healthcheck` is not answering | `logs -f api`; the start period is 30 s, five retries at 15 s after that |
+| Health check never leaves `starting` | The API is up but `/healthcheck/ready` is not answering (the database is unreachable, or the API is not up) | `logs -f api`; the start period is 30 s, five retries at 15 s after that |
 
 ## Next
 

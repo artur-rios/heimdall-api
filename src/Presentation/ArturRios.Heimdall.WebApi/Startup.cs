@@ -474,7 +474,9 @@ public class Startup : WebApiStartup
 
         // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
         // handler resolves them all as IEnumerable, so new checks are added by registering another.
-        Builder.Services.AddScoped<IServiceHealthCheck, DatabaseHealthCheck>();
+        // The readiness probe (#215) asks the database check alone, so it is also resolvable as itself.
+        Builder.Services.AddScoped<DatabaseHealthCheck>();
+        Builder.Services.AddScoped<IServiceHealthCheck>(provider => provider.GetRequiredService<DatabaseHealthCheck>());
         Builder.Services
             .AddScoped<IQueryHandlerAsync<DetailedHealthQuery, HealthCheckOutput>, GetDetailedHealthQueryHandler>();
 
@@ -686,11 +688,11 @@ public class Startup : WebApiStartup
             app.UseHttpsRedirection();
 
             // The health check moved under api/ so the web UI can reach it through its own host; the
-            // container probe and yggdrasil's status catalog still call the root address. Rewritten
+            // container probes and yggdrasil's status catalog still call the root addresses. Rewritten
             // here, ahead of routing and authentication, so the alias runs the same endpoint with the
             // same authorization, and stays out of the OpenAPI document.
             app.UseRewriter(new RewriteOptions()
-                .AddRewrite("(?i)^healthcheck(/detailed)?/?$", "api/healthcheck$1", skipRemainingRules: true));
+                .AddRewrite("(?i)^healthcheck(/detailed|/ready)?/?$", "api/healthcheck$1", skipRemainingRules: true));
 
             next(app);
         };
@@ -1352,6 +1354,10 @@ public class Startup : WebApiStartup
             // filter because the condition is cross-cutting: every endpoint that derives a password
             // can meet it, and each has its own message map.
             options.Filters.Add<PasswordHashSaturationFilter>();
+
+            // A server-side line for every 5xx the pipeline produces as a result, which nothing else
+            // writes (#227); an unhandled exception is already logged by ExceptionMiddleware.
+            options.Filters.Add<ServerErrorLoggingFilter>();
 
             // NFR-10 (#186): a request MVC could not bind answers 400 instead of running the action with
             // a null or default argument. An action filter, so after the authorization filters above —

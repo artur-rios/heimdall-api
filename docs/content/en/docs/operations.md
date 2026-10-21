@@ -273,7 +273,7 @@ sitting and hold the environment's deploys meanwhile.
    environment's env file. Leave `DB_USER` and `DB_PASSWORD` as they are.
 5. **Redeploy** the environment as usual. The start-up log shows
    `entrypoint: applying EF Core migrations with HEIMDALL_MIGRATIONS_CONNECTIONSTRING...`.
-6. **Verify**: the container reports healthy (`/healthcheck`); a sign-in works, and so does an
+6. **Verify**: the container reports healthy (`/healthcheck/ready`); a sign-in works, and so does an
    administrative change, which writes an audit entry; `check-runtime-login.sql` passes as
    `heimdall_svc`, and the superuser queries above return what they should.
 
@@ -380,10 +380,11 @@ empty.
 | Endpoint | Who | What it does |
 | --- | --- | --- |
 | `GET /api/healthcheck` | Anonymous | Liveness. Confirms the process is up and responding. Reads no database. |
+| `GET /api/healthcheck/ready` | Anonymous | Readiness. `200` while the database answers, `503` when it does not. |
 | `GET /api/healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
 
-Both also answer at the root, `/healthcheck` and `/healthcheck/detailed`, which is what the container
-health check and yggdrasil's status page call. Use the `/api/` addresses through Traefik: on the web
+All three also answer at the root, `/healthcheck`, `/healthcheck/ready` and `/healthcheck/detailed`; the
+container health check calls `/healthcheck/ready` and yggdrasil's status page calls the others. Use the `/api/` addresses through Traefik: on the web
 UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 ```json
@@ -397,8 +398,19 @@ UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 The aggregate `status` is `Healthy` only when **every** entry is healthy (**FR-HC-05**).
 
-The liveness endpoint is anonymous because a load balancer cannot authenticate; the detailed one is
-System-Admin-only because "which of my dependencies is down" is operational intelligence.
+**Liveness and readiness answer different questions.** Liveness says the process is running; it reads no
+database, so an instance that has lost its database still passes it. Use it where failing means a restart.
+Readiness says the instance can serve requests: it asks `DatabaseHealthCheck` alone and answers `200`, or
+`503` when the database does not respond. Use it where failing means stop routing to the instance, which is
+how the Compose health check uses it, so Traefik stops sending traffic to a container that can only answer
+`500`. Its body is the same envelope as liveness's with only the bare status as data, `"Healthy"` or
+`"Unhealthy"`, never a service name or a cause (the cause is in the log, at Warning, from
+`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, and it makes one small read
+per call; a probe every 15 seconds is nothing, but do not point a public uptime monitor at it at a high rate.
+
+The liveness and readiness endpoints are anonymous because a load balancer cannot authenticate; the detailed
+one is System-Admin-only because "which of my dependencies is down" is operational intelligence, which a bare
+status is not.
 
 Each dependency is one `IServiceHealthCheck` registration. `DatabaseHealthCheck` issues a trivial
 read through the repository abstraction and catches everything — an unreachable database throws on
@@ -465,6 +477,16 @@ Serilog, configured before anything else so that even configuration failures are
 **EF Core diagnostics are enabled outside Production only.** `SensitiveDataLogging` and
 `DetailedErrors` print parameter and column values — password hashes, salts, email addresses — so
 they stay off where those logs are retained.
+
+### Server errors
+
+Every `5xx` the API answers leaves one line, so the trace id a caller holds leads to a cause. An unhandled
+exception is logged at **Error** with its stack trace by `ExceptionMiddleware`. A `5xx` a handler returns as
+a result, such as a persistence error mapped to `500`, is logged at **Error** by `ServerErrorLoggingFilter`
+as `Request to {Route} answered {StatusCode} (trace {TraceId})`: the route template (`api/person/{publicId}`,
+never the path with its ids), the status and the trace id, and nothing of the query string, body, headers or
+caller. A `503` is the exception, logged at **Warning**: here it is always a deliberate answer (a saturated
+password-hash gate, a readiness probe reporting the database down), not a fault.
 
 ### Retention and redaction — NFR-22
 

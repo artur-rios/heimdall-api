@@ -329,12 +329,14 @@ The detailed check is intentionally **extensible**: for now the only verified se
 | FR-HC-05 | The detailed health check shall report an **aggregate general status** of `Healthy` when all verified services are up, or `Unhealthy` when one or more verified services are down | High |
 | FR-HC-06 | The health check design shall be **extensible**, allowing new service verifications to be added without changing the response contract | Medium |
 | FR-HC-07 | The detailed health check endpoint should map the aggregate status to an appropriate HTTP status (e.g., `200 OK` when `Healthy`, `503 Service Unavailable` when `Unhealthy`) | Medium |
+| FR-HC-08 | The system shall expose a **public** readiness endpoint (`GET /api/healthcheck/ready`) that answers `200 OK` when the database responds and `503 Service Unavailable` when it does not, with only the bare status (`Healthy` / `Unhealthy`) in the body and no per-service detail | Medium |
 
 ### 3.3 Endpoints
 
 | Method | Endpoint | Description | Auth Required |
 | -------- | ---------- | ------------- | --------------- |
 | GET | `/api/healthcheck` | Basic liveness check — confirms the API is on ("hello world") | **No (Public)** |
+| GET | `/api/healthcheck/ready` | Readiness check — `200` while the database answers, `503` when it does not; bare status only | **No (Public)** |
 | GET | `/api/healthcheck/detailed` | Detailed health check — reports per-service status and an aggregate `Healthy` / `Unhealthy` general status | **SystemAdmin** |
 
 ### 3.4 Detailed Health Check — Response Contract
@@ -421,6 +423,7 @@ sequenceDiagram
 | Action | SystemAdmin | ScopeAdmin | User | Anonymous |
 | -------- | :-----------: | :----------: | :----: | :---------: |
 | Basic liveness (`GET /api/healthcheck`) | ✅ | ✅ | ✅ | ✅ |
+| Readiness (`GET /api/healthcheck/ready`) | ✅ | ✅ | ✅ | ✅ |
 | Detailed health check (`GET /api/healthcheck/detailed`) | ✅ | ❌ | ❌ | ❌ |
 
 ### 3.7 Extensibility
@@ -450,4 +453,4 @@ The endpoint is the first branch in the request pipeline, so authentication, aut
 | Capability | Requirements | Use Case | Issue |
 | ------------ | ------------- | ---------- | ------- |
 | Project scaffolding & initial infrastructure | IR-01 … IR-09 | — | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
-| Health & monitoring | FR-HC-01 … FR-HC-07 | UC-30 | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |
+| Health & monitoring | FR-HC-01 … FR-HC-08 | UC-30 | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |

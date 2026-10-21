@@ -186,8 +186,11 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
 
+    # Readiness, not liveness: 200 only while the database answers, so Compose (and Traefik, which routes
+    # only to healthy containers) stops sending traffic to an instance that has lost it. Liveness,
+    # /healthcheck, reads no database and stays for restart decisions and the status catalog.
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck/ready"]
       interval: 15s
       timeout: 5s
       retries: 5
