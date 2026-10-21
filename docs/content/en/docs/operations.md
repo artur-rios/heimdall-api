@@ -839,6 +839,42 @@ policy. An interval below a minute turns a purge into continuous delete pressure
 login path writes to; one above seven days is past what `PeriodicTimer` accepts, and the exception
 it would throw inside a hosted service stops the host by default.
 
+### When a scheduled pass fails
+
+Every scheduled pass (token retention, audit pseudonymisation, identity anonymisation and security
+detection) logs a failed run at **Error** level with the marker `SCHEDULED_PASS_FAILED` and the pass
+name. A run fails when its command returns errors, as when the database refuses a write, and when it
+throws. The loop carries on and retries on the next tick. **Match on the marker, not on the prose.**
+
+| `pass` | Runs |
+| --- | --- |
+| `token-retention` | The single-use token and invitation purge (NFR-19) |
+| `audit-retention` | Audit attribution pseudonymisation (NFR-21) |
+| `identity-anonymisation` | Anonymisation of deleted identities (NFR-20) |
+| `security-monitoring` | Security signal detection (NFR-26) |
+
+```bash
+docker logs heimdall-api 2>&1 | grep SCHEDULED_PASS_FAILED
+```
+
+The same passes publish two metrics on the [Prometheus endpoint](#metrics--prometheus), labelled by
+`pass`:
+
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `heimdall_scheduled_pass_rows_processed_total` | counter | Rows the pass has changed since the API started |
+| `heimdall_scheduled_pass_last_success_timestamp` | gauge | Unix time, in seconds, of the pass's last run that completed without failure |
+
+A pass that has not succeeded since the API started has no sample for the gauge. To alert on a
+retention obligation silently lapsing, alert on the age of the last success, for example
+`time() - heimdall_scheduled_pass_last_success_timestamp > 6 * 3600` for a pass that runs hourly, or on
+`absent(heimdall_scheduled_pass_last_success_timestamp{pass="identity-anonymisation"})`.
+
+An identity anonymisation run that retries a blocked erasure request and fails is reported the same
+way, but it does not stop the run anonymising the identities that are due: the failure is logged with
+the request's person and the run's errors, and the identities anonymised in that run are still named in
+the erasure ledger line.
+
 ## Security signal detection — NFR-26
 
 The API records strong signals and, until now, nothing read them. `SecurityMonitoringService` reads

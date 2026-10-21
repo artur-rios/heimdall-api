@@ -15,12 +15,14 @@ public class TokenRetentionService(
     ILogger<TokenRetentionService> logger)
     : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
+    public override string PassName => "token-retention";
+
     protected override string StartupDescription =>
         $"Token retention purge scheduled every {retention.PurgeInterval}, removing tokens more than " +
         $"{retention.SingleUseTokenGrace} past expiry and scope owner invitations " +
         $"{retention.ScopeInvitationRetention} after they ended or expired";
 
-    protected override async Task<string?> RunAsync(IServiceProvider scope)
+    protected override async Task<ScheduledPassResult> RunAsync(IServiceProvider scope)
     {
         var mediator = scope.GetRequiredService<CommandMediator>();
 
@@ -30,10 +32,12 @@ public class TokenRetentionService(
 
         if (!result.Success)
         {
-            return $"Token retention purge failed: {string.Join("; ", result.Errors)}";
+            return ScheduledPassResult.Failure("Token retention purge", result.Errors);
         }
 
-        return Summarise(result.Data!);
+        var purged = result.Data!;
+
+        return new ScheduledPassResult(Summarise(purged), false, purged.TotalPurged);
     }
 
     /// <summary>

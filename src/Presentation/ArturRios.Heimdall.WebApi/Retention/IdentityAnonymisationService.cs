@@ -19,12 +19,14 @@ public class IdentityAnonymisationService(
     ILogger<IdentityAnonymisationService> logger)
     : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
+    public override string PassName => "identity-anonymisation";
+
     protected override string StartupDescription =>
         $"Identity anonymisation scheduled every {retention.PurgeInterval}, anonymising records " +
         $"{retention.SubjectErasureDeadline} after a requested erasure and " +
         $"{retention.AdministrativeDeletionWindow} after an administrative deletion";
 
-    protected override async Task<string?> RunAsync(IServiceProvider scope)
+    protected override async Task<ScheduledPassResult> RunAsync(IServiceProvider scope)
     {
         var mediator = scope.GetRequiredService<CommandMediator>();
 
@@ -34,7 +36,15 @@ public class IdentityAnonymisationService(
 
         if (!result.Success)
         {
-            return $"Identity anonymisation failed: {string.Join("; ", result.Errors)}";
+            // A retry of a blocked request can fail after the due identities were anonymised (#210); the
+            // ledger still has to be written then, or those erasures would leave no trace outside the
+            // database.
+            return result.Data is { TotalAnonymised: > 0 } done
+                ? new ScheduledPassResult(
+                    $"Identity anonymisation failed: {string.Join("; ", result.Errors)}. " +
+                    $"Anonymised {done.TotalAnonymised} identities nonetheless. {Ledger(done)}",
+                    true, done.TotalAnonymised)
+                : ScheduledPassResult.Failure("Identity anonymisation", result.Errors);
         }
 
         var anonymised = result.Data!;
@@ -47,10 +57,14 @@ public class IdentityAnonymisationService(
         // Safe to write and to ship off the host precisely because these identities are now
         // anonymised: a PublicId that resolves to nobody is not personal data.
         return anonymised.TotalAnonymised == 0
-            ? null
-            : $"Anonymised {anonymised.TotalAnonymised} identities past their retention window: " +
-              $"{anonymised.PersonsAnonymised} persons, {anonymised.GoogleUsersAnonymised} Google Users, " +
-              $"removing {anonymised.DependentsRemoved} dependent rows. " +
-              $"Erasure ledger: {string.Join(",", anonymised.AnonymisedIds)}";
+            ? ScheduledPassResult.Quiet
+            : new ScheduledPassResult(
+                $"Anonymised {anonymised.TotalAnonymised} identities past their retention window: " +
+                $"{anonymised.PersonsAnonymised} persons, {anonymised.GoogleUsersAnonymised} Google Users, " +
+                $"removing {anonymised.DependentsRemoved} dependent rows. " + Ledger(anonymised),
+                false, anonymised.TotalAnonymised);
     }
+
+    private static string Ledger(AnonymiseExpiredDeletionsCommandOutput anonymised) =>
+        $"Erasure ledger: {string.Join(",", anonymised.AnonymisedIds)}";
 }

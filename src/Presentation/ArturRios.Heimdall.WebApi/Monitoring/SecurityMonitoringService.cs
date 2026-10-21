@@ -39,6 +39,8 @@ public class SecurityMonitoringService(
     /// </summary>
     public const string Marker = "SECURITY_SIGNAL";
 
+    public override string PassName => "security-monitoring";
+
     protected override string StartupDescription =>
         $"Security signal detection scheduled every {options.MonitoringWindow}, alerting at "
         + $"{options.RefusalThreshold} refusals by one identity or {options.LockoutThreshold} "
@@ -49,7 +51,7 @@ public class SecurityMonitoringService(
     ///     reads, and making it a command would put an audit entry on every tick saying "looked, saw
     ///     nothing", burying the writes NFR-09 exists to record.
     /// </remarks>
-    protected override async Task<string?> RunAsync(IServiceProvider scope)
+    protected override async Task<ScheduledPassResult> RunAsync(IServiceProvider scope)
     {
         var result = await scope.GetRequiredService<QueryMediator>()
             .ExecuteQueryAsync<DetectSecuritySignalsQuery, SecuritySignalsOutput>(
@@ -57,7 +59,7 @@ public class SecurityMonitoringService(
 
         if (!result.Success)
         {
-            return $"Security signal detection failed: {string.Join("; ", result.Errors)}";
+            return ScheduledPassResult.Failure("Security signal detection", result.Errors);
         }
 
         var signals = result.Data?.Signals.ToList() ?? [];
@@ -72,6 +74,6 @@ public class SecurityMonitoringService(
 
         // Nothing extra for the caller to log: each signal has already been written above, and a
         // run that found nothing is not news.
-        return null;
+        return ScheduledPassResult.Quiet;
     }
 }

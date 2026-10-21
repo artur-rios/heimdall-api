@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A scheduled pass that fails now logs at Error with the marker `SCHEDULED_PASS_FAILED` and the pass name, where
+  it was logged at Information and no alert on Warning or above could fire; a pass that throws carries the marker
+  too. Each pass also publishes `heimdall_scheduled_pass_rows_processed_total` and
+  `heimdall_scheduled_pass_last_success_timestamp` (unix seconds, set only by a run that completed without
+  failure), labelled by `pass`, so an operator can alert on "no successful run in N hours". Both are described in
+  `operations.md` (#214).
+
 ### Fixed
 
 - A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
