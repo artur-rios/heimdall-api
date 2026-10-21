@@ -33,20 +33,25 @@ public class AuditRetentionService(
 
         if (!result.Success)
         {
-            return ScheduledPassResult.Failure("Audit attribution pseudonymisation", result.Errors);
+            return ScheduledPassResult.Failure(
+                "Audit attribution pseudonymisation", result.Errors, result.Data is { } done ? Rows(done) : 0);
         }
 
         var pseudonymised = result.Data!;
+        var rows = Rows(pseudonymised);
 
-        var rows = (long)pseudonymised.EntriesPseudonymised + pseudonymised.TargetsCleared
-                   + pseudonymised.TombstonesRemoved;
-
-        return rows == 0
+        // The rows still due are what the run left at its batch cap (#206): a number that does not fall
+        // from run to run is a backlog that is not draining.
+        return rows == 0 && pseudonymised.Backlog == 0
             ? ScheduledPassResult.Quiet
             : new ScheduledPassResult(
                 $"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
                 $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
-                $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities",
+                $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities; " +
+                $"{pseudonymised.Backlog} still due after this run",
                 false, rows);
     }
+
+    private static long Rows(PseudonymiseAuditActorsCommandOutput pseudonymised) =>
+        (long)pseudonymised.EntriesPseudonymised + pseudonymised.TargetsCleared + pseudonymised.TombstonesRemoved;
 }

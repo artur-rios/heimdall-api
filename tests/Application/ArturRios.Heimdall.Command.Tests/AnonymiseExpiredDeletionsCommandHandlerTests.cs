@@ -10,6 +10,7 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -29,11 +30,13 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     private static readonly TimeSpan ErasureDeadline = TimeSpan.FromDays(30);
     private static readonly TimeSpan AdministrativeWindow = TimeSpan.FromDays(90);
 
-    private static DataRetentionOptions Retention(int batchSize = 500) => new()
+    private static DataRetentionOptions Retention(
+        int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
     {
         SubjectErasureDeadline = ErasureDeadline,
         AdministrativeDeletionWindow = AdministrativeWindow,
-        PurgeBatchSize = batchSize
+        PurgeBatchSize = batchSize,
+        MaxBatchesPerTick = maxBatches
     };
 
     private sealed record Fakes(
@@ -386,19 +389,148 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
                 fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative);
         }
 
-        var handler = fakes.Handler(Retention(batchSize: 2));
+        var handler = fakes.Handler(Retention(batchSize: 2, maxBatches: 1));
 
         var first = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.Equal(2, first.Data!.PersonsAnonymised);
+        Assert.Equal(3, first.Data.Backlog);
 
         await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
         var third = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.Equal(1, third.Data!.PersonsAnonymised);
+        Assert.Equal(0, third.Data.Backlog);
         Assert.All(
             (await fakes.Persons.GetAllAsync()).Data!,
             person => Assert.NotNull(person.AnonymisedAt));
+    }
+
+    // #206: a run repeats its batch while the batch comes back full, up to MaxBatchesPerTick.
+
+    [UnitFact]
+    public async Task GivenABacklogOfThreeFullBatches_WhenAnonymising_ThenItDrainsInOneRunAndTheLedgerNamesEveryone()
+    {
+        // Given six overdue persons and six overdue Google Users, and a batch of two
+        var fakes = Fakes.New();
+        var due = DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1);
+        var ids = new List<Guid>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            ids.Add((await SeedPersonAsync(fakes, due.AddDays(-i), (int)DeletionKinds.Administrative)).PublicId);
+            ids.Add((await SeedGoogleUserAsync(fakes, due.AddDays(-i), (int)DeletionKinds.Administrative)).PublicId);
+        }
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(6, output.Data!.PersonsAnonymised);
+        Assert.Equal(6, output.Data.GoogleUsersAnonymised);
+        Assert.Equal(0, output.Data.Backlog);
+        Assert.Equal(ids.Order(), output.Data.AnonymisedIds.Order());
+        Assert.All((await fakes.Persons.GetAllAsync()).Data!, person => Assert.NotNull(person.AnonymisedAt));
+        Assert.All((await fakes.GoogleUsers.GetAllAsync()).Data!, googleUser => Assert.NotNull(googleUser.AnonymisedAt));
+    }
+
+    [UnitFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenAnonymising_ThenTheRunStopsAtTheCapAndReportsWhatIsLeft()
+    {
+        // Given seven overdue persons, a batch of two and at most two batches a run
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 7; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var handler = fakes.Handler(Retention(batchSize: 2, maxBatches: 2));
+
+        // When
+        var first = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the four longest deleted go, and the three left are the backlog
+        Assert.Equal(4, first.Data!.PersonsAnonymised);
+        Assert.Equal(3, first.Data.Backlog);
+        Assert.All(persons.Take(4), person => Assert.NotNull(person.AnonymisedAt));
+        Assert.All(persons.Skip(4), person => Assert.Null(person.AnonymisedAt));
+
+        // And the next run finishes it
+        var second = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.Equal(3, second.Data!.PersonsAnonymised);
+        Assert.Equal(0, second.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenAWriteThrowsInALaterBatch_WhenAnonymising_ThenTheRunReportsItAndTheLedgerNamesThoseAlreadyAnonymised()
+    {
+        // Given four overdue persons, a batch of two, and a write that throws on the fourth
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == persons[3])
+                {
+                    throw new InvalidOperationException("the connection was lost");
+                }
+            }
+        };
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — reported rather than thrown, and the three erased before it are in the ledger
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.AnonymisationInterrupted, output.Errors);
+        Assert.Equal(3, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Take(3).Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+    }
+
+    [UnitFact]
+    public async Task GivenTheGoogleUserSaveFailsAfterSeveralBatchesOfPersons_WhenAnonymising_ThenTheLedgerNamesEveryPerson()
+    {
+        // Given five overdue persons — three batches of two — and an overdue Google User whose save fails
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 5; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var googleUser = await SeedGoogleUserAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
+        failingWriter
+            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataOutput<IEnumerable<GoogleUser>>.New.WithError("database unavailable"));
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), googleUserWriter: failingWriter.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — every person anonymised in the run is in the ledger, from every batch, and the Google User
+        // is not
+        Assert.False(output.Success);
+        Assert.Equal(5, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+        Assert.DoesNotContain(googleUser.PublicId, output.Data.AnonymisedIds);
     }
 
 
@@ -537,12 +669,73 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         var middle = await SeedBlockedAsync(fakes, daysAgo: 60);
         var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
 
-        await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+        await fakes.Handler(Retention(batchSize: 2, maxBatches: 1)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.True(oldest.IsDeleted);
         Assert.True(middle.IsDeleted);
         Assert.False(newest.IsDeleted);
     }
+
+    [UnitFact]
+    public async Task GivenAFullBatchOfRequestsStillBlocked_WhenAnonymising_ThenANewerRequestIsStillRetried()
+    {
+        // Given the two oldest requests still blocked — each the last owner of a scope — and a newer one
+        // whose block has cleared, with a batch of two
+        var fakes = Fakes.New();
+        var stillBlocked = new[]
+        {
+            await SeedStillBlockedAsync(fakes, daysAgo: 90, scopeId: 71),
+            await SeedStillBlockedAsync(fakes, daysAgo: 60, scopeId: 72)
+        };
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+
+        // When
+        await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the batch of blocked requests did not keep the newer one waiting
+        Assert.All(stillBlocked, person => Assert.False(person.IsDeleted));
+        Assert.True(newest.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAFullBatchOfRetriesThatKeepFailing_WhenAnonymising_ThenEachIsTriedOnceAndANewerOneIsRetried()
+    {
+        // Given the two oldest requests failing on every attempt, a newer one that can go, and a batch of two
+        var fakes = Fakes.New();
+        var failing = new[] { await SeedBlockedAsync(fakes, daysAgo: 90), await SeedBlockedAsync(fakes, daysAgo: 60) };
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+        var attempts = new Dictionary<Person, int>();
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                attempts[person] = attempts.GetValueOrDefault(person) + 1;
+
+                if (failing.Contains(person))
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — no spin on the failing pair, and the newer request was reached
+        Assert.All(failing, person => Assert.Equal(1, attempts[person]));
+        Assert.True(newest.IsDeleted);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    private static Task<Person> SeedStillBlockedAsync(Fakes fakes, int daysAgo, long scopeId) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-daysAgo),
+            erasureDueAt: DateTime.UtcNow.AddDays(-daysAgo + 30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: scopeId);
 
     [UnitFact]
     public async Task GivenTheGoogleUserSaveFails_WhenAnonymising_ThenTheAnonymisedPersonsAreStillNamed()

@@ -56,12 +56,16 @@ public class IdentityAnonymisationService(
         //
         // Safe to write and to ship off the host precisely because these identities are now
         // anonymised: a PublicId that resolves to nobody is not personal data.
-        return anonymised.TotalAnonymised == 0
+        //
+        // The identities still due are what the run left at its batch cap (#206): a number that does not
+        // fall from run to run is a backlog that is not draining, and deadlines passing.
+        return anonymised.TotalAnonymised == 0 && anonymised.Backlog == 0
             ? ScheduledPassResult.Quiet
             : new ScheduledPassResult(
                 $"Anonymised {anonymised.TotalAnonymised} identities past their retention window: " +
                 $"{anonymised.PersonsAnonymised} persons, {anonymised.GoogleUsersAnonymised} Google Users, " +
-                $"removing {anonymised.DependentsRemoved} dependent rows. " + Ledger(anonymised),
+                $"removing {anonymised.DependentsRemoved} dependent rows; " +
+                $"{anonymised.Backlog} still due after this run. " + Ledger(anonymised),
                 false, anonymised.TotalAnonymised);
     }
 

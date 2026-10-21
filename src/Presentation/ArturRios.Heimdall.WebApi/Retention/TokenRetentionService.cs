@@ -32,7 +32,7 @@ public class TokenRetentionService(
 
         if (!result.Success)
         {
-            return ScheduledPassResult.Failure("Token retention purge", result.Errors);
+            return ScheduledPassResult.Failure("Token retention purge", result.Errors, result.Data?.TotalPurged ?? 0);
         }
 
         var purged = result.Data!;
@@ -41,17 +41,20 @@ public class TokenRetentionService(
     }
 
     /// <summary>
-    ///     The line logged for a run: <c>null</c> when nothing was removed, otherwise the total and
-    ///     every term of it.
+    ///     The line logged for a run: <c>null</c> when nothing was removed and nothing is left, otherwise
+    ///     the total, the rows still due after the run, and every term of the total.
     /// </summary>
     /// <remarks>
     ///     A term left out makes the parts disagree with the total (#225): a run that purged only
-    ///     application credentials once logged "removed 3 rows" over a list of zeroes.
+    ///     application credentials once logged "removed 3 rows" over a list of zeroes. The rows still due
+    ///     are what a run left at its batch cap (#206); a number that does not fall from run to run is a
+    ///     backlog that is not draining.
     /// </remarks>
     public static string? Summarise(PurgeExpiredTokensCommandOutput purged) =>
-        purged.TotalPurged == 0
+        purged.TotalPurged == 0 && purged.Backlog == 0
             ? null
-            : $"Token retention purge removed {purged.TotalPurged} rows: " +
+            : $"Token retention purge removed {purged.TotalPurged} rows " +
+              $"({purged.Backlog} still due after this run): " +
               $"{purged.PasswordResetTokensPurged} password reset, " +
               $"{purged.EmailVerificationTokensPurged} email verification, " +
               $"{purged.TwoFactorEmailCodesPurged} two-factor email, " +

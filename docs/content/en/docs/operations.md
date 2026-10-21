@@ -764,10 +764,21 @@ default, removing password reset tokens, email verification tokens, and two-fact
 are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
 application credentials, self-registration attempt-notice budgets whose day has ended, and the
 records of used Google ID tokens past their expiry by the grace period. It also removes scope owner
-invitations 90 days after they end, or 90 days after they expire if never answered. Each run removes at most a bounded batch per table,
-oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
+invitations 90 days after they end, or 90 days after they expire if never answered. Each table is
+taken a bounded batch at a time, oldest first, and each batch is its own short delete — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).
+
+**Each pass drains its backlog, up to a cap per run.** The token purge, the identity anonymisation
+and the audit pseudonymisation each repeat their batch while it comes back full, up to
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches per table in one run. At the defaults (500 rows,
+20 batches, hourly) that is a ceiling of 10,000 rows per table an hour, 240,000 a day — where one
+batch per run capped a table at 12,000 a day, which a busy audit trail outgrows for good. A backlog
+larger than the cap is left for the next run, and the run's log line ends with how many rows are
+**still due after this run**: a number that does not fall from run to run is a backlog that is not
+draining, and the remedy is a larger batch or more batches per run. The anonymisation's retry of
+blocked erasure requests (below) takes its batches the same way, each starting after the last request
+of the one before, so requests that stay blocked cannot keep a newer one from being retried.
 
 The grace period is not zero, deliberately. UC-13 answers a presented token with `TokenInvalid`,
 `TokenExpired` or `TokenAlreadyUsed`, and purging the moment a token expires collapses the last two
@@ -819,7 +830,8 @@ has its older person targets cleared over the next runs, one batch at a time.
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
-| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Rows a pass takes from one table per batch |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | `20` | any positive integer | Most batches a pass takes from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
@@ -1271,6 +1283,7 @@ no longer verify HS256.
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | | `20` |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | | `true` |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | | `30` |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | | `90` |

@@ -1,9 +1,11 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 
@@ -22,11 +24,27 @@ public class PurgeExpiredTokensCommandHandlerTests
 {
     private static readonly TimeSpan Grace = TimeSpan.FromDays(7);
 
-    private static DataRetentionOptions Retention(int batchSize = 500) => new()
+    private static DataRetentionOptions Retention(
+        int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
     {
         SingleUseTokenGrace = Grace,
-        PurgeBatchSize = batchSize
+        PurgeBatchSize = batchSize,
+        MaxBatchesPerTick = maxBatches
     };
+
+    // A token store whose deletes start failing after the first few, as when the database goes away
+    // part-way through a run.
+    private sealed class FailingAfterTokenRepository(int succeeding)
+        : AsyncFakeRepository<PasswordResetToken, long>, IAsyncRepository<PasswordResetToken, long>
+    {
+        private int _deletes;
+
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<PasswordResetToken, long>.DeleteRangeAsync(
+            IEnumerable<long> ids, CancellationToken cancellationToken) =>
+            ++_deletes > succeeding
+                ? Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError("database unavailable"))
+                : DeleteRangeAsync(ids, cancellationToken);
+    }
 
     private static async Task<PasswordResetToken> SeedPasswordResetTokenAsync(
         AsyncFakeRepository<PasswordResetToken, long> tokens, DateTime expiresAt, bool used = false)
@@ -240,14 +258,16 @@ public class PurgeExpiredTokensCommandHandlerTests
         }
 
         var handler = Handler(
-            passwordResetTokens, emailVerificationTokens, twoFactorEmailCodes, Retention(batchSize: 2));
+            passwordResetTokens, emailVerificationTokens, twoFactorEmailCodes,
+            Retention(batchSize: 2, maxBatches: 1));
 
         // When
         var first = await handler.HandleAsync(new PurgeExpiredTokensCommand());
 
-        // Then — two rows this run, three left for the next
+        // Then — two rows this run, three left for the next, and the run says so
         Assert.Equal(2, first.Data!.PasswordResetTokensPurged);
         Assert.Equal(3, await CountAsync(passwordResetTokens));
+        Assert.Equal(3, first.Data.Backlog);
 
         // And the backlog drains across subsequent runs
         await handler.HandleAsync(new PurgeExpiredTokensCommand());
@@ -255,6 +275,95 @@ public class PurgeExpiredTokensCommandHandlerTests
 
         Assert.Equal(1, third.Data!.PasswordResetTokensPurged);
         Assert.Equal(0, await CountAsync(passwordResetTokens));
+        Assert.Equal(0, third.Data.Backlog);
+    }
+
+    // #206: a run repeats its batch while the batch comes back full, up to MaxBatchesPerTick.
+
+    [UnitFact]
+    public async Task GivenABacklogOfThreeFullBatches_WhenPurging_ThenItDrainsInOneRun()
+    {
+        // Given six purgeable rows in each of two tables and a batch of two
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
+        var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
+        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+
+        for (var i = 0; i < 6; i++)
+        {
+            await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired.AddMinutes(i));
+            await SeedEmailVerificationTokenAsync(emailVerificationTokens, longExpired.AddMinutes(i));
+        }
+
+        // When
+        var output = await Handler(
+                passwordResetTokens, emailVerificationTokens, twoFactorEmailCodes, Retention(batchSize: 2))
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — every row went in the one run, and nothing is left
+        Assert.True(output.Success);
+        Assert.Equal(6, output.Data!.PasswordResetTokensPurged);
+        Assert.Equal(6, output.Data.EmailVerificationTokensPurged);
+        Assert.Equal(12, output.Data.TotalPurged);
+        Assert.Equal(0, output.Data.Backlog);
+        Assert.Equal(0, await CountAsync(passwordResetTokens));
+        Assert.Equal(0, await CountAsync(emailVerificationTokens));
+    }
+
+    [UnitFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenPurging_ThenTheRunStopsAtTheCapAndReportsWhatIsLeft()
+    {
+        // Given seven purgeable rows, a batch of two and at most two batches a run
+        var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
+        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+
+        for (var i = 0; i < 7; i++)
+        {
+            await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired.AddMinutes(i));
+        }
+
+        var handler = Handler(
+            passwordResetTokens, new AsyncFakeRepository<EmailVerificationToken, long>(),
+            new AsyncFakeRepository<TwoFactorEmailCode, long>(), Retention(batchSize: 2, maxBatches: 2));
+
+        // When
+        var first = await handler.HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — two batches, and the three rows still due are the backlog
+        Assert.Equal(4, first.Data!.PasswordResetTokensPurged);
+        Assert.Equal(3, first.Data.Backlog);
+        Assert.Equal(3, await CountAsync(passwordResetTokens));
+
+        // And the next run finishes it
+        var second = await handler.HandleAsync(new PurgeExpiredTokensCommand());
+
+        Assert.Equal(3, second.Data!.PasswordResetTokensPurged);
+        Assert.Equal(0, second.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenADeleteFailsPartWayThroughARun_WhenPurging_ThenTheRowsAlreadyRemovedAreStillCounted()
+    {
+        // Given six purgeable rows, a batch of two, and a store that fails from its second delete on
+        var passwordResetTokens = new FailingAfterTokenRepository(succeeding: 1);
+        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+
+        for (var i = 0; i < 6; i++)
+        {
+            await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired.AddMinutes(i));
+        }
+
+        // When
+        var output = await Handler(
+                passwordResetTokens, new AsyncFakeRepository<EmailVerificationToken, long>(),
+                new AsyncFakeRepository<TwoFactorEmailCode, long>(), Retention(batchSize: 2))
+            .HandleAsync(new PurgeExpiredTokensCommand());
+
+        // Then — the run failed, and still says what it removed before it did
+        Assert.False(output.Success);
+        Assert.Contains("database unavailable", output.Errors);
+        Assert.Equal(2, output.Data!.PasswordResetTokensPurged);
+        Assert.Equal(4, await CountAsync(passwordResetTokens));
     }
 
     [UnitFact]

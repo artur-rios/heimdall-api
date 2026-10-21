@@ -14,6 +14,7 @@ public class DataRetentionOptionsTests
         DataRetentionOptions.SingleUseTokenGraceDaysVariable,
         DataRetentionOptions.PurgeIntervalMinutesVariable,
         DataRetentionOptions.PurgeBatchSizeVariable,
+        DataRetentionOptions.MaxBatchesPerTickVariable,
         DataRetentionOptions.PurgeEnabledVariable,
         DataRetentionOptions.SubjectErasureDeadlineDaysVariable,
         DataRetentionOptions.AdministrativeDeletionWindowDaysVariable,
@@ -45,6 +46,8 @@ public class DataRetentionOptionsTests
         Assert.Equal(DataRetentionOptions.DefaultSingleUseTokenGrace, options.SingleUseTokenGrace);
         Assert.Equal(DataRetentionOptions.DefaultPurgeInterval, options.PurgeInterval);
         Assert.Equal(DataRetentionOptions.DefaultPurgeBatchSize, options.PurgeBatchSize);
+        Assert.Equal(DataRetentionOptions.DefaultMaxBatchesPerTick, options.MaxBatchesPerTick);
+        Assert.Equal(20, options.MaxBatchesPerTick);
         Assert.Equal(DataRetentionOptions.DefaultSubjectErasureDeadline, options.SubjectErasureDeadline);
         Assert.Equal(
             DataRetentionOptions.DefaultAdministrativeDeletionWindow, options.AdministrativeDeletionWindow);
@@ -72,6 +75,7 @@ public class DataRetentionOptionsTests
         Environment.SetEnvironmentVariable(DataRetentionOptions.SingleUseTokenGraceDaysVariable, "3");
         Environment.SetEnvironmentVariable(DataRetentionOptions.PurgeIntervalMinutesVariable, "15");
         Environment.SetEnvironmentVariable(DataRetentionOptions.PurgeBatchSizeVariable, "50");
+        Environment.SetEnvironmentVariable(DataRetentionOptions.MaxBatchesPerTickVariable, "5");
         Environment.SetEnvironmentVariable(DataRetentionOptions.PurgeEnabledVariable, "false");
 
         var options = DataRetentionOptions.FromEnvironment();
@@ -79,6 +83,7 @@ public class DataRetentionOptionsTests
         Assert.Equal(TimeSpan.FromDays(3), options.SingleUseTokenGrace);
         Assert.Equal(TimeSpan.FromMinutes(15), options.PurgeInterval);
         Assert.Equal(50, options.PurgeBatchSize);
+        Assert.Equal(5, options.MaxBatchesPerTick);
         Assert.False(options.PurgeEnabled);
         Assert.Empty(options.InvalidVariables);
 
@@ -160,6 +165,31 @@ public class DataRetentionOptionsTests
         Assert.Equal(DataRetentionOptions.DefaultPurgeBatchSize, options.PurgeBatchSize);
 
         ClearAll();
+    }
+
+    [UnitTheory]
+    [InlineData("0")]
+    [InlineData("-3")]
+    [InlineData("many")]
+    public void GivenAnUnusableBatchesPerTick_WhenReadFromEnvironment_ThenTheDefaultApplies(string value)
+    {
+        // Zero batches would stop every pass draining at all, and the per-tick cap exists so a tick
+        // still ends: a value that removes either is refused like the batch size is (#206)
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.MaxBatchesPerTickVariable, value);
+
+        var options = DataRetentionOptions.FromEnvironment();
+
+        Assert.Equal(DataRetentionOptions.DefaultMaxBatchesPerTick, options.MaxBatchesPerTick);
+        Assert.Contains(DataRetentionOptions.MaxBatchesPerTickVariable, options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitFact]
+    public void GivenTheBatchesPerTickVariable_WhenNamed_ThenItIsTheDocumentedOne()
+    {
+        Assert.Equal("HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK", DataRetentionOptions.MaxBatchesPerTickVariable);
     }
 
     [UnitTheory]

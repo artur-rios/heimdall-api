@@ -18,10 +18,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The token purge, the identity anonymisation and the audit pseudonymisation now drain a backlog: each repeats its
+  batch while the batch comes back full, up to `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches (default 20) per
+  table in one run, where one batch a run capped a table at 12,000 rows a day and a busy audit trail could fall
+  behind for good. Each run's log line now ends with the rows still due after it, so a backlog that is not
+  draining is visible. A run that fails part-way still counts the rows its earlier batches processed, and the
+  anonymisation's erasure ledger still names every identity the run anonymised, from every batch, even when a
+  write throws. The retry of blocked erasure requests takes its batches the same way, each after the last
+  request of the one before, so requests still blocked can no longer keep newer ones from being retried. The
+  variable is in the `docker/*.env.example` templates and `operations.md` (#206).
 - One blocked erasure request that cannot be retried no longer stops every anonymisation. The retry now runs
   best-effort: its failure is logged and reported with the run's errors, and the identities that are due are still
-  anonymised. The retry reads at most `PurgeBatchSize` blocked requests per run, oldest first, where it loaded them
-  all (#210).
+  anonymised. The retry reads blocked requests `PurgeBatchSize` at a time, oldest first, where it loaded them all
+  (#210).
 
 - A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
   answering) now leaves a failed audit entry, and the exception still propagates: the gate's refusal records

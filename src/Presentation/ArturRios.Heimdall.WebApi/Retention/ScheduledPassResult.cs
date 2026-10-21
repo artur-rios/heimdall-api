@@ -15,7 +15,13 @@ public sealed record ScheduledPassResult(string? Summary, bool Failed = false, l
     /// <summary>A run that did nothing worth reporting.</summary>
     public static ScheduledPassResult Quiet => new(null, false);
 
-    /// <summary>A failed run, described by the command's errors.</summary>
-    public static ScheduledPassResult Failure(string summary, IEnumerable<string> errors) =>
-        new($"{summary} failed: {string.Join("; ", errors)}", true);
+    /// <summary>
+    ///     A failed run, described by the command's errors, with the rows it changed before it failed —
+    ///     a pass that drains in batches (#206) may have finished several before one failed.
+    /// </summary>
+    public static ScheduledPassResult Failure(string summary, IEnumerable<string> errors, long rowsProcessed = 0) =>
+        new(
+            $"{summary} failed: {string.Join("; ", errors)}" +
+            (rowsProcessed > 0 ? $". It had processed {rowsProcessed} rows before failing" : ""),
+            true, rowsProcessed);
 }

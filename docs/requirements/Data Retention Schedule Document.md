@@ -211,10 +211,15 @@ A hosted service (`TokenRetentionService`) dispatches `PurgeExpiredTokensCommand
 hourly by default. Three properties are worth stating, because each is a decision rather than an
 implementation detail.
 
-**It is bounded.** Each run removes at most `PurgeBatchSize` rows from any one table, oldest first.
-SRD §6.3.2 measured the write path degrading with the size of the table under sustained insert
-pressure, and a purge is sustained *delete* pressure on tables the login and recovery paths write
-to. A backlog drains over several runs instead of one long transaction competing with live traffic.
+**It is bounded.** Each run takes a table `PurgeBatchSize` rows at a time, oldest first, repeating
+the batch while it comes back full, for at most `MaxBatchesPerTick` batches (#206). SRD §6.3.2
+measured the write path degrading with the size of the table under sustained insert pressure, and a
+purge is sustained *delete* pressure on tables the login and recovery paths write to, so each batch is
+its own short delete rather than one long transaction competing with live traffic. One batch a run
+held a table to 12,000 rows a day at the defaults, which a backlog could outgrow for good; at 20
+batches the ceiling is 240,000. A backlog larger than a run's cap is left for the next, and the run
+reports how many rows are still due, so a backlog that is not draining is visible. The anonymisation
+and audit passes drain the same way.
 
 **It needs no coordination between instances.** NFR-06 requires that no instance assume it is alone,
 and every instance runs its own copy. Nothing is claimed or locked: a run selects a batch, and the
@@ -461,7 +466,8 @@ Backup encryption belongs to the same issue and is not restated here.
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
-| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Rows a pass takes from one table per batch |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | `20` | any positive integer | Most batches a pass takes from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |

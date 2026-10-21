@@ -25,4 +25,10 @@ public class PseudonymiseAuditActorsCommandOutput : CommandOutput
     ///     them any more (see <c>ErasedSubject</c>).
     /// </summary>
     public int TombstonesRemoved { get; set; }
+
+    /// <summary>
+    ///     Entries and tombstones still due once the run ended (#206): left because the run reached
+    ///     <c>MaxBatchesPerTick</c> full batches. Zero when it drained everything due.
+    /// </summary>
+    public int Backlog { get; set; }
 }

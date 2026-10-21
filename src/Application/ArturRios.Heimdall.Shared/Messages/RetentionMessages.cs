@@ -23,4 +23,11 @@ public static class RetentionMessages
     ///     identities are still anonymised, and the detail is in the log.
     /// </summary>
     public const string BlockedErasureRetryFailed = "Retrying a blocked erasure request failed.";
+
+    /// <summary>
+    ///     The anonymisation pass failed part-way through its batches (#206). Reported with the
+    ///     identities it had already anonymised, so the erasure ledger still names them; the detail is in
+    ///     the log.
+    /// </summary>
+    public const string AnonymisationInterrupted = "Anonymising the identities due was interrupted.";
 }

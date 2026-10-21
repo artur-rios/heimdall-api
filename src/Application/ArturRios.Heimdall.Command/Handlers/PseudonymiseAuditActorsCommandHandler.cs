@@ -106,16 +106,120 @@ public class PseudonymiseAuditActorsCommandHandler(
     {
         var output = DataOutput<PseudonymiseAuditActorsCommandOutput?>.New;
         var cutoff = DateTime.UtcNow - retention.AuditActorRetention;
+        var result = new PseudonymiseAuditActorsCommandOutput();
+
+        // A batch at a time, repeated while a batch comes back full (#206): one batch a run held the
+        // trail to 12,000 clearings a day at the defaults, which a busy deployment outgrows for good.
+        var entriesFull = false;
+
+        for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
+        {
+            var due = await SelectDueAsync(cutoff);
+
+            if (due.Count == 0)
+            {
+                entriesFull = false;
+                break;
+            }
+
+            foreach (var row in due)
+            {
+                if (row.ActorDue)
+                {
+                    row.Entry.ActorPersonId = null;
+                    row.Entry.ActorRole = null;
+                }
+
+                if (row.TargetDue)
+                {
+                    row.Entry.TargetId = null;
+                }
+            }
+
+            var update = await auditWriter.UpdateRangeAsync(due.Select(row => row.Entry).ToList());
+
+            if (!update.Success)
+            {
+                // What earlier batches cleared stays cleared, and is reported with the failure.
+                return output.WithData(result).WithErrors(update.Errors);
+            }
+
+            result.EntriesPseudonymised += due.Count(row => row.ActorDue);
+            result.TargetsCleared += due.Count(row => row.TargetDue);
+
+            entriesFull = due.Count == retention.PurgeBatchSize;
+
+            if (!entriesFull)
+            {
+                break;
+            }
+        }
+
+        // After the clearing, so a tombstone whose last entry this run cleared goes in the same run.
+        var settledBefore = DateTime.UtcNow - TombstoneGracePeriod;
+        var tombstonesFull = false;
+
+        for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
+        {
+            var settled = await Settled(settledBefore)
+                .OrderBy(tombstone => tombstone.CreatedAt)
+                .Select(tombstone => tombstone.Id)
+                .Take(retention.PurgeBatchSize)
+                .ToListAsync();
+
+            if (settled.Count == 0)
+            {
+                tombstonesFull = false;
+                break;
+            }
+
+            var removal = await erasedSubjectWriter.DeleteRangeAsync(settled);
+
+            if (!removal.Success)
+            {
+                return output.WithData(result).WithErrors(removal.Errors);
+            }
+
+            result.TombstonesRemoved += settled.Count;
+            tombstonesFull = settled.Count == retention.PurgeBatchSize;
+
+            if (!tombstonesFull)
+            {
+                break;
+            }
+        }
+
+        // Counted only where the run stopped on a full batch: one that was not full took all that was due.
+        result.Backlog = (entriesFull ? await CountDueAsync(cutoff) : 0)
+                         + (tombstonesFull ? await Settled(settledBefore).CountAsync() : 0);
+
+        return output
+            .WithData(result)
+            .WithMessage(RetentionMessages.AuditActorsPseudonymised);
+    }
+
+    /// <summary>One batch of the entries due, oldest first, each with the parts of it that are due.</summary>
+    private async Task<List<DueEntry>> SelectDueAsync(DateTime cutoff) =>
+        await Due(cutoff)
+            .OrderBy(row => row.Entry.CreatedAt)
+            .Take(retention.PurgeBatchSize)
+            .ToListAsync();
+
+    /// <summary>How many entries are still due: the backlog a run that stopped at its cap leaves.</summary>
+    private async Task<int> CountDueAsync(DateTime cutoff) => await Due(cutoff).CountAsync();
+
+    private IQueryable<DueEntry> Due(DateTime cutoff)
+    {
         var persons = personReader.Query();
         var googleUsers = googleUserReader.Query();
         var tombstones = erasedSubjectReader.Query();
 
         // One query over the union of both grounds, rather than one per part, so a single batch
         // bound covers the run, an entry needing both is selected once, and each row carries the
-        // reason it was selected. The flags are what the loop below acts on, so a row selected for
+        // reason it was selected. The flags are what the loop above acts on, so a row selected for
         // its target cannot have its actor cleared with it, nor the reverse.
-        var due = await auditReader.Query()
-            .Select(entry => new
+        return auditReader.Query()
+            .Select(entry => new DueEntry
             {
                 Entry = entry,
                 ActorDue = entry.ActorPersonId != null
@@ -135,63 +239,26 @@ public class PseudonymiseAuditActorsCommandHandler(
                                     && !persons.Any(person => person.PublicId == entry.TargetId)
                                     && !googleUsers.Any(googleUser => googleUser.PublicId == entry.TargetId)))
             })
-            .Where(row => row.ActorDue || row.TargetDue)
-            .OrderBy(row => row.Entry.CreatedAt)
-            .Take(retention.PurgeBatchSize)
-            .ToListAsync();
+            .Where(row => row.ActorDue || row.TargetDue);
+    }
 
-        if (due.Count > 0)
-        {
-            foreach (var row in due)
-            {
-                if (row.ActorDue)
-                {
-                    row.Entry.ActorPersonId = null;
-                    row.Entry.ActorRole = null;
-                }
-
-                if (row.TargetDue)
-                {
-                    row.Entry.TargetId = null;
-                }
-            }
-
-            var update = await auditWriter.UpdateRangeAsync(due.Select(row => row.Entry).ToList());
-
-            if (!update.Success)
-            {
-                return output.WithErrors(update.Errors);
-            }
-        }
-
-        // After the clearing, so a tombstone whose last entry this run cleared goes in the same run.
-        var settledBefore = DateTime.UtcNow - TombstoneGracePeriod;
+    /// <summary>The tombstones past their grace that no audit entry names as its target any more.</summary>
+    private IQueryable<ErasedSubject> Settled(DateTime settledBefore)
+    {
         var entries = auditReader.Query();
-        var settled = await tombstones
+
+        return erasedSubjectReader.Query()
             .Where(tombstone => tombstone.CreatedAt <= settledBefore
-                                && !entries.Any(entry => entry.TargetId == tombstone.Id))
-            .OrderBy(tombstone => tombstone.CreatedAt)
-            .Select(tombstone => tombstone.Id)
-            .Take(retention.PurgeBatchSize)
-            .ToListAsync();
+                                && !entries.Any(entry => entry.TargetId == tombstone.Id));
+    }
 
-        if (settled.Count > 0)
-        {
-            var removal = await erasedSubjectWriter.DeleteRangeAsync(settled);
+    /// <summary>An entry due for clearing, and which of its two parts are due.</summary>
+    private sealed class DueEntry
+    {
+        public AuditLog Entry { get; init; } = null!;
 
-            if (!removal.Success)
-            {
-                return output.WithErrors(removal.Errors);
-            }
-        }
+        public bool ActorDue { get; init; }
 
-        return output
-            .WithData(new PseudonymiseAuditActorsCommandOutput
-            {
-                EntriesPseudonymised = due.Count(row => row.ActorDue),
-                TargetsCleared = due.Count(row => row.TargetDue),
-                TombstonesRemoved = settled.Count
-            })
-            .WithMessage(RetentionMessages.AuditActorsPseudonymised);
+        public bool TargetDue { get; init; }
     }
 }
