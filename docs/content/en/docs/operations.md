@@ -459,8 +459,8 @@ it.
 Serilog, configured before anything else so that even configuration failures are recorded:
 
 - **Console** — JSON formatted.
-- **Rolling files** — `<HEIMDALL_LOG_DIRECTORY>/<yyyy/MM>/log-<date>.json`, a new file per day inside
-  a folder per month. `HEIMDALL_LOG_DIRECTORY` defaults to `logs`.
+- **Rolling files** — `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one file per day, flat in the
+  directory. `HEIMDALL_LOG_DIRECTORY` defaults to `logs`.
 
 **EF Core diagnostics are enabled outside Production only.** `SensitiveDataLogging` and
 `DetailedErrors` print parameter and column values — password hashes, salts, email addresses — so

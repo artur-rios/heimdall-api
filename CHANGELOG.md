@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   performance, the current privacy notice version and the time. A new migration records the same on System Admin
   rows still at Unrecorded (`legal_basis = 0`). The migration cannot tell the seeded master from another System
   Admin that predates NFR-23, so it records all of them; a row created since then is never at 0 (#213).
+- `docs/content/en/docs/operations.md` described the rolling log files as `<yyyy/MM>/log-<date>.json`, a folder per
+  month. They are `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one per day, flat in the directory, as the
+  retention section of the same page already said (#216).
 
 ### Changed
 
