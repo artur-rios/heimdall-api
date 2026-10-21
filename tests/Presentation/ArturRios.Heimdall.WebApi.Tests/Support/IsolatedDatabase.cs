@@ -33,6 +33,9 @@ public sealed class IsolatedDatabase : IAsyncDisposable
     /// <summary>A superuser's connection, for arranging and inspecting state.</summary>
     public string SuperuserConnectionString => _db.ConnectionStringFor("postgres", "postgres", Name);
 
+    /// <summary>The owner's connection: what the migrations run as.</summary>
+    private string OwnerConnectionString => On(_db.OwnerConnectionString);
+
     /// <summary>The runtime login's connection: what the API uses (NFR-29).</summary>
     public string RuntimeConnectionString => On(_db.RuntimeConnectionString);
 
@@ -44,18 +47,27 @@ public sealed class IsolatedDatabase : IAsyncDisposable
             ["owner"] = PostgresFixture.OwnerRole, ["runtime"] = PostgresFixture.RuntimeRole, ["database"] = isolated.Name
         };
 
-        await RunOrThrowAsync(db, variables);
-
-        await using (var owner = PostgresFixture.CreateContext(isolated.On(db.OwnerConnectionString)))
+        try
         {
-            await owner.Database.MigrateAsync();
+            await RunOrThrowAsync(db, variables);
+
+            await using (var owner = PostgresFixture.CreateContext(isolated.OwnerConnectionString))
+            {
+                await owner.Database.MigrateAsync();
+            }
+
+            await RunOrThrowAsync(db, variables);
+
+            await using var context = PostgresFixture.CreateContext(isolated.SuperuserConnectionString);
+            await new DatabaseSeeder(context, MasterUserOptions.FromEnvironment(), NullLogger<DatabaseSeeder>.Instance)
+                .SeedAsync();
         }
-
-        await RunOrThrowAsync(db, variables);
-
-        await using var context = PostgresFixture.CreateContext(isolated.SuperuserConnectionString);
-        await new DatabaseSeeder(context, MasterUserOptions.FromEnvironment(), NullLogger<DatabaseSeeder>.Instance)
-            .SeedAsync();
+        catch
+        {
+            // Whatever was created is dropped, so a failed set-up leaves no database behind.
+            await isolated.DisposeAsync();
+            throw;
+        }
 
         return isolated;
     }
@@ -65,7 +77,15 @@ public sealed class IsolatedDatabase : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        NpgsqlConnection.ClearAllPools();
+        // Only this database's pools: the shared database's connections, and every other test's, are left
+        // alone. The drop's FORCE ends any connection still open.
+        string[] connectionStrings = [SuperuserConnectionString, OwnerConnectionString, RuntimeConnectionString];
+
+        foreach (var connectionString in connectionStrings)
+        {
+            using var pooled = new NpgsqlConnection(connectionString);
+            NpgsqlConnection.ClearPool(pooled);
+        }
 
         await using var connection = new NpgsqlConnection(_db.ConnectionStringFor("postgres", "postgres", "postgres"));
         await connection.OpenAsync();
