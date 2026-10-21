@@ -128,8 +128,9 @@ as UC-10 for the cases that genuinely want the row gone.
 ### 4.4 How the anonymisation runs
 
 `IdentityAnonymisationService` dispatches `AnonymiseExpiredDeletionsCommand` on the same interval as
-the token purge, and the pass shares that one's properties: bounded to a batch per run, needing no
-coordination between instances, audited so each run leaves the evidence that erasure happened, and
+the token purge, and the pass shares that one's properties: taken a batch at a time, repeating the
+batch while it comes back full up to `MaxBatchesPerTick` batches a run and reporting what is still due
+when it stops at that cap (§6), needing no coordination between instances, audited so each run leaves the evidence that erasure happened, and
 treating a run with nothing due as a success.
 
 Three things are specific to it.

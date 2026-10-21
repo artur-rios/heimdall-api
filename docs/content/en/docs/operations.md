@@ -702,7 +702,9 @@ table, and the confirmation mail, grow with whatever arrives. A registration tur
 at **Warning** with the marker `REGISTRATION_CAP_REACHED` and the scope's public id — never the address. A
 scope that reaches it is either being flooded or has outgrown the cap: look at its pending registrations
 (UC-49) before raising `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`. Any positive integer is accepted; an
-unusable value falls back to 1000 with a start-up warning.
+unusable value falls back to 1000 with a start-up warning. The count is read and then written, so
+instances processing registrations for one scope at the same moment can each add one past the cap — a
+small overshoot, at most one per instance.
 
 ```bash
 docker logs heimdall-api 2>&1 | grep REGISTRATION_CAP_REACHED
@@ -836,7 +838,8 @@ to be set to null and nothing else: no deletion, no truncation, no change to any
 reassignment to a different value. A thirty-day floor stops somebody clearing their own attribution,
 or the person they acted on, for something they did this week; it is an anti-tamper backstop, not
 the retention period, which is eighteen months. A deployment upgrading to `AllowClearingAuditTarget`
-has its older person targets cleared over the next runs, one batch at a time.
+has its older person targets cleared as a backlog: a batch at a time, up to
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches a run, over as many runs as that takes.
 
 The pass finds what is due without reading the whole trail. Entries past the period are read through two
 partial indexes on `created_at` — over the entries that still have an actor, and over those that still have a
