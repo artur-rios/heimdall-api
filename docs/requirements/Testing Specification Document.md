@@ -345,7 +345,7 @@ public class HealthCheckTests(EnvironmentType environment = EnvironmentType.Loca
 Functional tests **must not** use an in-memory EF provider or a developer's local database. They run
 against a real PostgreSQL instance created by Testcontainers at test time, so the environment closely
 matches production (the app uses the PostgreSQL provider — see
-[`Startup.AddDependencies`](../src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs)).
+[`Startup.AddDatabase`](../src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs)).
 
 The app reads its connection from environment variables (`HEIMDALL_DATA_CONNECTIONSTRING`,
 `HEIMDALL_DATA_DATABASETYPE`) via `AddDataConfigFromEnvironment<AppDbContext>`. The functional
@@ -512,7 +512,7 @@ third party.**
 
 `WebApiTest<T>` keeps its `WebApplicationFactory` private and its `Gateway` protected-readonly, so a
 functional test cannot replace a DI registration — every substitution in this suite is chosen at
-start-up from the environment, as `Startup.AddEmailSenders` is. `PostgresFixture` therefore publishes
+start-up from the environment, as `EmailRegistrationExtensions.AddEmailSenders` is. `PostgresFixture` therefore publishes
 `HEIMDALL_GOOGLE_TEST_SIGNING_SECRET`, which makes the host under test resolve
 `LocalGoogleIdTokenVerifier`, and `TestGoogleTokens` mints ID tokens signed with the same secret.
 Without it only AF-25a and AF-25b would be reachable: the main flow, AF-25c, and AF-25d all sit
@@ -558,7 +558,7 @@ everything in it — and would be silent in a suite that only checked the delete
 The substitute is deliberately **not** a trust-anything stub — a token still needs a valid HS256
 signature, the expected issuer and audience, and an unexpired lifetime, so the suite exercises the
 same verification path a real deployment does and only the signing authority differs. Two guards keep
-it out of production: `Startup` never registers it in the Production environment, and never without
+it out of production: `GoogleSignInRegistrationExtensions.AddGoogleSignIn` never registers it in the Production environment, and never without
 that variable explicitly set. No `.env` file carries it.
 
 UC-19 added `DeleteApplicationCommandHandlerTests` to the Command.Tests project and

@@ -62,8 +62,9 @@ services.AddScoped<ICommandHandlerAsync<TCommand, TOutput>>(provider =>
         provider.GetRequiredService<ILogger<AuditingCommandHandler<TCommand, TOutput>>>()));
 ```
 
-Every write handler in `Startup.AddDependencies` is registered with `AddAuditedCommandHandler`, so
-adding a new command means adding one registration line and inheriting the audit trail.
+Every write handler is registered with `AddAuditedCommandHandler`, in `AddCommandHandlers` and
+`AddTwoFactorServices` (the Command project's `Registration/`) and in the WebApi's `Registration/`
+extensions, so adding a new command means adding one registration line and inheriting the audit trail.
 
 {{% alert title="Depend on the interface" color="warning" %}}
 The concrete `THandler` registration exists only so the decorator factory can resolve it. Resolving
