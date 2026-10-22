@@ -10,6 +10,7 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -29,11 +30,13 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     private static readonly TimeSpan ErasureDeadline = TimeSpan.FromDays(30);
     private static readonly TimeSpan AdministrativeWindow = TimeSpan.FromDays(90);
 
-    private static DataRetentionOptions Retention(int batchSize = 500) => new()
+    private static DataRetentionOptions Retention(
+        int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
     {
         SubjectErasureDeadline = ErasureDeadline,
         AdministrativeDeletionWindow = AdministrativeWindow,
-        PurgeBatchSize = batchSize
+        PurgeBatchSize = batchSize,
+        MaxBatchesPerTick = maxBatches
     };
 
     private sealed record Fakes(
@@ -47,10 +50,13 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     {
         public static Fakes New() => new(new(), new(), new(), new(), new(), new(), new());
 
+        public InMemoryWriteTransactions Transactions { get; } = new();
+        public InMemoryInvariantLocks Locks { get; } = new();
+
         public AnonymiseExpiredDeletionsCommandHandler Handler(
             DataRetentionOptions? retention = null, IAtomicWrites? atomicWrites = null,
-            IAsyncRepository<GoogleUser, long>? googleUserWriter = null, IAuditLogWriter? auditLog = null) =>
-            new(Persons, GoogleUsers, googleUserWriter ?? GoogleUsers,
+            IAuditLogWriter? auditLog = null, IAsyncReadOnlyRepository<Person, long>? personReader = null) =>
+            new(personReader ?? Persons, GoogleUsers,
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,
@@ -59,7 +65,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
                 new InMemoryScopeOwnerInvitations(Invitations, Persons, new AsyncFakeRepository<Scope, long>()),
                 Invitations,
                 auditLog ?? AuditLog,
-                NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance);
+                NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance,
+                Transactions, Locks);
 
         /// <summary>The handler's own <c>ScopeOwnerInvitationVoided</c> entries.</summary>
         public List<(string Action, Guid? TargetId, bool Succeeded)> Voids() =>
@@ -385,19 +392,209 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
                 fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative);
         }
 
-        var handler = fakes.Handler(Retention(batchSize: 2));
+        var handler = fakes.Handler(Retention(batchSize: 2, maxBatches: 1));
 
         var first = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.Equal(2, first.Data!.PersonsAnonymised);
+        Assert.Equal(3, first.Data.Backlog);
 
         await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
         var third = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.Equal(1, third.Data!.PersonsAnonymised);
+        Assert.Equal(0, third.Data.Backlog);
         Assert.All(
             (await fakes.Persons.GetAllAsync()).Data!,
             person => Assert.NotNull(person.AnonymisedAt));
+    }
+
+    // #206: a run repeats its batch while the batch comes back full, up to MaxBatchesPerTick.
+
+    [UnitFact]
+    public async Task GivenABacklogOfThreeFullBatches_WhenAnonymising_ThenItDrainsInOneRunAndTheLedgerNamesEveryone()
+    {
+        // Given six overdue persons and six overdue Google Users, and a batch of two
+        var fakes = Fakes.New();
+        var due = DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1);
+        var ids = new List<Guid>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            ids.Add((await SeedPersonAsync(fakes, due.AddDays(-i), (int)DeletionKinds.Administrative)).PublicId);
+            ids.Add((await SeedGoogleUserAsync(fakes, due.AddDays(-i), (int)DeletionKinds.Administrative)).PublicId);
+        }
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(6, output.Data!.PersonsAnonymised);
+        Assert.Equal(6, output.Data.GoogleUsersAnonymised);
+        Assert.Equal(0, output.Data.Backlog);
+        Assert.Equal(ids.Order(), output.Data.AnonymisedIds.Order());
+        Assert.All((await fakes.Persons.GetAllAsync()).Data!, person => Assert.NotNull(person.AnonymisedAt));
+        Assert.All((await fakes.GoogleUsers.GetAllAsync()).Data!, googleUser => Assert.NotNull(googleUser.AnonymisedAt));
+    }
+
+    [UnitFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenAnonymising_ThenTheRunStopsAtTheCapAndReportsWhatIsLeft()
+    {
+        // Given seven overdue persons, a batch of two and at most two batches a run
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 7; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var handler = fakes.Handler(Retention(batchSize: 2, maxBatches: 2));
+
+        // When
+        var first = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the four longest deleted go, and the three left are the backlog
+        Assert.Equal(4, first.Data!.PersonsAnonymised);
+        Assert.Equal(3, first.Data.Backlog);
+        Assert.All(persons.Take(4), person => Assert.NotNull(person.AnonymisedAt));
+        Assert.All(persons.Skip(4), person => Assert.Null(person.AnonymisedAt));
+
+        // And the next run finishes it
+        var second = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.Equal(3, second.Data!.PersonsAnonymised);
+        Assert.Equal(0, second.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenAFullBatchInWhichNobodyCanBeAnonymised_WhenAnonymising_ThenTheBatchIsNotTakenAgain()
+    {
+        // Given four overdue persons, a batch of two, and writes that refuse every one of them without
+        // changing the row — so each would be selected again
+        var fakes = Fakes.New();
+
+        for (var i = 0; i < 4; i++)
+        {
+            await SeedPersonAsync(fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative);
+        }
+
+        var atomicWrites = new Mock<IAtomicWrites>();
+        atomicWrites
+            .Setup(writes => writes.TryAnonymiseAsync(
+                It.IsAny<Person>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ReturnsAsync(false);
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — one batch of two attempts, not the cap's worth over the same two, and the four still due
+        // are the backlog
+        Assert.True(output.Success);
+        atomicWrites.Verify(
+            writes => writes.TryAnonymiseAsync(
+                It.IsAny<Person>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()),
+            Times.Exactly(2));
+        Assert.Equal(0, output.Data!.PersonsAnonymised);
+        Assert.Equal(4, output.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenTheBacklogCountFailsAfterASuccessfulRun_WhenAnonymising_ThenTheRunSucceedsWithTheBacklogUnknown()
+    {
+        // Given two overdue persons, one batch of two allowed — so the run ends on a full batch and counts —
+        // and a person store that fails every query once the anonymising has begun
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 2; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var failing = false;
+        var reader = new Mock<IAsyncReadOnlyRepository<Person, long>>();
+        reader.Setup(r => r.Query()).Returns(() =>
+            failing ? throw new InvalidOperationException("the connection was lost") : fakes.Persons.Query());
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = _ => failing = true };
+
+        // When
+        var output = await fakes
+            .Handler(Retention(batchSize: 2, maxBatches: 1), atomicWrites: atomicWrites, personReader: reader.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the erasures went through and the run is a success; only the backlog is unknown
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.DoesNotContain(RetentionMessages.AnonymisationInterrupted, output.Errors);
+        Assert.Equal(2, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+        Assert.Null(output.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenAWriteThrowsInALaterBatch_WhenAnonymising_ThenTheRunReportsItAndTheLedgerNamesThoseAlreadyAnonymised()
+    {
+        // Given four overdue persons, a batch of two, and a write that throws on the fourth
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == persons[3])
+                {
+                    throw new InvalidOperationException("the connection was lost");
+                }
+            }
+        };
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — reported rather than thrown, and the three erased before it are in the ledger
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.AnonymisationInterrupted, output.Errors);
+        Assert.Equal(3, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Take(3).Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+    }
+
+    [UnitFact]
+    public async Task GivenTheGoogleUserWriteFailsAfterSeveralBatchesOfPersons_WhenAnonymising_ThenTheLedgerNamesEveryPerson()
+    {
+        // Given five overdue persons — three batches of two — and an overdue Google User whose write fails
+        var fakes = Fakes.New();
+        var persons = new List<Person>();
+
+        for (var i = 0; i < 5; i++)
+        {
+            persons.Add(await SeedPersonAsync(
+                fakes, DateTime.UtcNow.AddDays(-200 + i), (int)DeletionKinds.Administrative));
+        }
+
+        var googleUser = await SeedGoogleUserAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: FailingGoogleUserWrites())
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — every person anonymised in the run is in the ledger, from every batch, and the Google User
+        // is not
+        Assert.False(output.Success);
+        Assert.Equal(5, output.Data!.PersonsAnonymised);
+        Assert.Equal(persons.Select(person => person.PublicId).Order(), output.Data.AnonymisedIds.Order());
+        Assert.DoesNotContain(googleUser.PublicId, output.Data.AnonymisedIds);
     }
 
 
@@ -491,6 +688,213 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(0, output.Data!.TotalAnonymised);
         Assert.Equal("Ada Lovelace", blocked.Name);
     }
+
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenABlockedRequestWhoseOnlyCoOwnerIsInactive_WhenAnonymising_ThenItIsLeftAlone(InactiveOwner how)
+    {
+        // The co-owner is restricted or waiting on their own erasure, and neither keeps the scope owned
+        // (NFR-12, #211), so the block has not cleared
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var blocked = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+        var coOwner = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false, role: Roles.ScopeAdmin, ownedScopeIds: 7);
+        InactiveOwners.Make(coOwner, how);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(blocked.IsDeleted);
+        Assert.Equal(ErasureMessages.BlockedByLastScopeOwnership, blocked.ErasureBlockedReason);
+    }
+
+    [UnitFact]
+    public async Task GivenABlockedRequestThatCannotBeSaved_WhenAnonymising_ThenTheDueIdentityIsStillAnonymised()
+    {
+        // #210: one request the retry cannot save used to return before any due identity was selected,
+        // so every following run did nothing and statutory deadlines passed unmet.
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        var failing = await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership);
+        var due = await SeedDueScopeAdminAsync(fakes);
+
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == failing)
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        var output = await fakes.Handler(atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.NotNull(due.AnonymisedAt);
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+        Assert.Contains(due.PublicId, output.Data.AnonymisedIds);
+
+        // Reported, not swallowed: the run is not a success
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenMoreBlockedRequestsThanABatch_WhenAnonymising_ThenOnlyTheOldestBatchIsRetried()
+    {
+        var fakes = Fakes.New();
+        var oldest = await SeedBlockedAsync(fakes, daysAgo: 90);
+        var middle = await SeedBlockedAsync(fakes, daysAgo: 60);
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+
+        await fakes.Handler(Retention(batchSize: 2, maxBatches: 1)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.True(oldest.IsDeleted);
+        Assert.True(middle.IsDeleted);
+        Assert.False(newest.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAFullBatchOfRequestsStillBlocked_WhenAnonymising_ThenANewerRequestIsStillRetried()
+    {
+        // Given the two oldest requests still blocked — each the last owner of a scope — and a newer one
+        // whose block has cleared, with a batch of two
+        var fakes = Fakes.New();
+        var stillBlocked = new[]
+        {
+            await SeedStillBlockedAsync(fakes, daysAgo: 90, scopeId: 71),
+            await SeedStillBlockedAsync(fakes, daysAgo: 60, scopeId: 72)
+        };
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+
+        // When
+        await fakes.Handler(Retention(batchSize: 2)).HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — the batch of blocked requests did not keep the newer one waiting
+        Assert.All(stillBlocked, person => Assert.False(person.IsDeleted));
+        Assert.True(newest.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAFullBatchOfRetriesThatKeepFailing_WhenAnonymising_ThenEachIsTriedOnceAndANewerOneIsRetried()
+    {
+        // Given the two oldest requests failing on every attempt, a newer one that can go, and a batch of two
+        var fakes = Fakes.New();
+        var failing = new[] { await SeedBlockedAsync(fakes, daysAgo: 90), await SeedBlockedAsync(fakes, daysAgo: 60) };
+        var newest = await SeedBlockedAsync(fakes, daysAgo: 30);
+        var attempts = new Dictionary<Person, int>();
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                attempts[person] = attempts.GetValueOrDefault(person) + 1;
+
+                if (failing.Contains(person))
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        // When
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — no spin on the failing pair, and the newer request was reached
+        Assert.All(failing, person => Assert.Equal(1, attempts[person]));
+        Assert.True(newest.IsDeleted);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    private static Task<Person> SeedStillBlockedAsync(Fakes fakes, int daysAgo, long scopeId) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-daysAgo),
+            erasureDueAt: DateTime.UtcNow.AddDays(-daysAgo + 30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: scopeId);
+
+    [UnitFact]
+    public async Task GivenTheGoogleUserWriteFails_WhenAnonymising_ThenTheAnonymisedPersonsAreStillNamed()
+    {
+        // The persons are anonymised before the Google Users are written; their ids are the erasure ledger
+        // and must survive the failed write, while the unwritten Google User must not appear in it.
+        var fakes = Fakes.New();
+        var person = await SeedDueScopeAdminAsync(fakes);
+        var googleUser = await SeedGoogleUserAsync(
+            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+
+        var output = await fakes.Handler(atomicWrites: FailingGoogleUserWrites())
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(output.Success);
+        Assert.Equal(1, output.Data!.PersonsAnonymised);
+        Assert.Equal(0, output.Data.GoogleUsersAnonymised);
+        Assert.Equal([person.PublicId], output.Data.AnonymisedIds);
+        Assert.DoesNotContain(googleUser.PublicId, output.Data.AnonymisedIds);
+    }
+
+    [UnitFact]
+    public async Task GivenTheBlockedRequestsCannotBeLoaded_WhenAnonymising_ThenTheDueIdentityIsStillAnonymised()
+    {
+        var fakes = Fakes.New();
+        var due = await SeedDueScopeAdminAsync(fakes);
+        var calls = 0;
+        var reader = new Mock<IAsyncReadOnlyRepository<Person, long>>();
+        reader.Setup(r => r.Query()).Returns(() =>
+            ++calls == 1 ? throw new InvalidOperationException("query failed") : fakes.Persons.Query());
+
+        var output = await fakes.Handler(personReader: reader.Object)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.NotNull(due.AnonymisedAt);
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenARetryFailureAndNothingDue_WhenAnonymising_ThenTheErrorIsStillReported()
+    {
+        var fakes = Fakes.New();
+        var failing = await SeedBlockedAsync(fakes, daysAgo: 5);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person =>
+            {
+                if (person == failing)
+                {
+                    throw new InvalidOperationException("a constraint rejects this row");
+                }
+            }
+        };
+
+        var output = await fakes.Handler(atomicWrites: atomicWrites)
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(output.Success);
+        Assert.Contains(RetentionMessages.BlockedErasureRetryFailed, output.Errors);
+        Assert.Equal(0, output.Data!.TotalAnonymised);
+    }
+
+    private static Task<Person> SeedBlockedAsync(Fakes fakes, int daysAgo) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: DateTime.UtcNow.AddDays(-daysAgo),
+            erasureDueAt: DateTime.UtcNow.AddDays(-daysAgo + 30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership);
 
     [UnitFact]
     public async Task GivenNothingDue_WhenAnonymising_ThenTheRunSucceedsWithNoCounts()
@@ -647,6 +1051,10 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(3, writer.Entries.Count);
     }
 
+    /// <summary>Atomic writes whose write of a Google User fails, as a statement the database refuses does.</summary>
+    private static InMemoryAtomicWrites FailingGoogleUserWrites() =>
+        new() { BeforeGoogleUserWrite = _ => throw new InvalidOperationException("database unavailable") };
+
     private static AuditingCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput> Audited(
         AnonymiseExpiredDeletionsCommandHandler handler, IAuditLogWriter auditLog) =>
         new(handler, auditLog,
@@ -656,20 +1064,15 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     [UnitFact]
     public async Task GivenALaterWriteFailsAfterAVoid_WhenTheAuditedPassRuns_ThenTheVoidIsStillAudited()
     {
-        // Given — the void commits on its own, so a Google User save failing after it must not take its
+        // Given — the void commits on its own, so a Google User write failing after it must not take its
         // audit entry with it: a retry finds the invitation already ended and returns no id to audit
         var fakes = Fakes.New();
         var person = await SeedDueScopeAdminAsync(fakes);
         var invitation = await SeedInvitationAsync(fakes, person.Id, null);
         await SeedGoogleUserAsync(
             fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
-        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
-        failingWriter
-            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
-            .Returns(async (IEnumerable<GoogleUser> users, CancellationToken token) =>
-                (await fakes.GoogleUsers.UpdateRangeAsync(users, token)).WithError("database unavailable"));
         var auditLog = fakes.AuditLog;
-        var handler = Audited(fakes.Handler(googleUserWriter: failingWriter.Object), auditLog);
+        var handler = Audited(fakes.Handler(atomicWrites: FailingGoogleUserWrites()), auditLog);
 
         // When
         var output = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
@@ -705,5 +1108,68 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(
             [(ScopeOwnerInvitationAuditActions.Voided, (Guid?)received.PublicId, true)],
             auditLog.Entries.Where(entry => entry.Action == ScopeOwnerInvitationAuditActions.Voided));
+    }
+
+    // #202: each blocked request is retried in a transaction of its own, under the locks of its scopes.
+
+    [UnitFact]
+    public async Task GivenABlockedRequest_WhenAnonymising_ThenItsScopesAreLockedAndTheRetryCommitted()
+    {
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-60);
+        await SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastScopeOwnership,
+            role: Roles.ScopeAdmin,
+            ownedScopeIds: 7);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Still blocked, and the transaction committed anyway: nothing was written, and a rollback would
+        // clear what the run tracks
+        Assert.Equal([7L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Committed);
+        Assert.Equal(0, fakes.Transactions.RolledBack);
+    }
+
+    // #203 (NFR-32): the last active System Admin's blocked request is released once another exists.
+
+    private static Task<Person> SeedBlockedSystemAdminAsync(Fakes fakes, DateTime requestedAt) =>
+        SeedPersonAsync(
+            fakes, deletedAt: null, kind: null, isDeleted: false,
+            erasureRequestedAt: requestedAt,
+            erasureDueAt: requestedAt.AddDays(30),
+            erasureBlockedReason: ErasureMessages.BlockedByLastSystemAdmin,
+            role: Roles.SystemAdmin);
+
+    [UnitFact]
+    public async Task GivenTheLastSystemAdminsBlockedRequest_WhenNoOtherIsActive_ThenItIsLeftAlone()
+    {
+        var fakes = Fakes.New();
+        var blocked = await SeedBlockedSystemAdminAsync(fakes, DateTime.UtcNow.AddDays(-5));
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        Assert.False(blocked.IsDeleted);
+        Assert.Equal(ErasureMessages.BlockedByLastSystemAdmin, blocked.ErasureBlockedReason);
+        Assert.Equal(1, fakes.Locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenTheLastSystemAdminsBlockedRequest_WhenAnotherIsActiveNow_ThenItIsReleased()
+    {
+        var fakes = Fakes.New();
+        var requestedAt = DateTime.UtcNow.AddDays(-5);
+        var blocked = await SeedBlockedSystemAdminAsync(fakes, requestedAt);
+        await SeedPersonAsync(fakes, deletedAt: null, kind: null, isDeleted: false, role: Roles.SystemAdmin);
+
+        await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Suspended from the request, as any released request is
+        Assert.True(blocked.IsDeleted);
+        Assert.Equal(requestedAt, blocked.DeletedAt);
+        Assert.Null(blocked.ErasureBlockedReason);
     }
 }

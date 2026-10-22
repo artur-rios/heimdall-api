@@ -56,7 +56,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         var query = new GetScopePermissionByIdQuery { ScopeId = scopeId, Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetScopePermissionByIdQuery, ScopePermissionOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }
@@ -77,7 +77,7 @@ public class ScopePermissionController(CommandMediator commandMediator, QueryMed
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopePermissionsQuery, ScopePermissionOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopePermissionsQuery, ScopePermissionOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopePermissionMessageMap.StatusCodes);
     }

@@ -37,6 +37,13 @@ public class AnonymiseExpiredDeletionsCommandOutput : CommandOutput
     /// </summary>
     public int ScopeOwnerInvitationsVoided { get; set; }
 
+    /// <summary>
+    ///     Persons and Google Users still due once the run ended (#206): left because the run reached
+    ///     <c>MaxBatchesPerTick</c> full batches. Zero when it took everyone due; <c>null</c> when it is
+    ///     unknown — the run was interrupted, or counting failed after it.
+    /// </summary>
+    public int? Backlog { get; set; }
+
     /// <summary>Identities anonymised across both tables.</summary>
     public int TotalAnonymised => PersonsAnonymised + GoogleUsersAnonymised;
 }

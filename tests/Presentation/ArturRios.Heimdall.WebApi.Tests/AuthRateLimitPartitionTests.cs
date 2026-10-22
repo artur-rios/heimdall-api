@@ -16,7 +16,7 @@ public class AuthRateLimitPartitionTests
     private const string KeyB = "caller-key-B-0123456789abcdefghijklmn";
     private const string Connection = "172.18.0.9";
 
-    private static readonly string ConnectionPartition = Startup.RateLimitPartitionKey(IPAddress.Parse(Connection));
+    private static readonly string ConnectionPartition = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse(Connection));
 
     private static DefaultHttpContext Context(string? key = null, string? clientAddress = null)
     {

@@ -37,9 +37,11 @@ internal static class PersonDbMap
         // needs already lives here. The condition matches the application's check term for term, so
         // the rule did not change — only who is able to enforce it under concurrency.
         //
-        // This non-unique index remains for lookup speed: UC-11 and UC-12 both resolve a person by
-        // address on every call.
-        person.HasIndex(x => x.Email);
+        // Lookup by address is served by ix_person_lower_email over LOWER(email), created by the
+        // AddPersonLowerEmailIndex migration (#207). Login, password recovery, registration and Google
+        // sign-in all compare LOWER(email) and deliberately leave out is_deleted, so neither a plain
+        // index on the column nor the partial unique indexes above (they require is_deleted = false)
+        // can serve them. Like those, it is raw SQL, which EF cannot express, so it is not mapped here.
 
         person.Property(x => x.PasswordHash).IsRequired();
         person.Property(x => x.Salt).IsRequired();

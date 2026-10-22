@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
-// Unit tests for Startup.ReplaceLibraryTokenValidator (Threat Model TB-5): the registration
+// Unit tests for TokenSecurityRegistrationExtensions.ReplaceLibraryTokenValidator (Threat Model TB-5): the registration
 // Util.WebApi's AddTokenAuthentication makes is the one PersonTokenValidator replaces, and a
 // registration of another shape stops start-up with a message that says so.
 public class TokenValidatorRegistrationTests
@@ -36,7 +36,7 @@ public class TokenValidatorRegistrationTests
         var services = LibraryRegistration();
 
         // When
-        Startup.ReplaceLibraryTokenValidator(services);
+        TokenSecurityRegistrationExtensions.ReplaceLibraryTokenValidator(services);
 
         // Then — one token validator, Heimdall's, and the library's kept only as the inner one
         var validators = services.Where(descriptor => descriptor.ServiceType == typeof(ITokenValidator)).ToList();
@@ -57,7 +57,7 @@ public class TokenValidatorRegistrationTests
         services.AddSingleton<ITokenValidator>(provider => provider.GetRequiredService<JwtTokenValidator>());
 
         // When
-        var refusal = Assert.Throws<InvalidOperationException>(() => Startup.ReplaceLibraryTokenValidator(services));
+        var refusal = Assert.Throws<InvalidOperationException>(() => TokenSecurityRegistrationExtensions.ReplaceLibraryTokenValidator(services));
 
         // Then
         Assert.Contains("JwtTokenValidator", refusal.Message);

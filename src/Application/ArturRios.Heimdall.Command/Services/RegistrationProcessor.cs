@@ -38,6 +38,15 @@ namespace ArturRios.Heimdall.Command.Services;
 ///         the dispatcher takes one request at a time, so that takes a second instance.
 ///     </para>
 ///     <para>
+///         The scope is bounded too (#206): at most <see cref="RegistrationOptions.MaxPendingPerScope" /> live
+///         registrations, whatever their addresses, since enough source addresses outpace both the per-IP
+///         limit and the purge. A request at the cap creates and mails nothing, like one beyond FR-SR-13, and
+///         is logged at Warning with <see cref="CapReachedMarker" /> and the scope's id, because a scope
+///         that reaches it is being flooded, or has outgrown the cap, and either needs an operator. It is
+///         read and then written, as the address count is, so concurrent instances can overshoot it by one
+///         each.
+///     </para>
+///     <para>
 ///         Every failure here is logged with a fixed message and no address (NFR-22), and none is thrown:
 ///         the caller already has the uniform answer.
 ///     </para>
@@ -52,8 +61,15 @@ public class RegistrationProcessor(
     IRegistrationAttemptSender attemptSender,
     IAttemptNoticeBudgets noticeBudgets,
     EmailVerificationOptions options,
+    RegistrationOptions registration,
     ILogger<RegistrationProcessor> logger)
 {
+    /// <summary>
+    ///     The marker of the Warning logged when a scope's cap on live pending registrations turns a request
+    ///     away. Stable and greppable: an alert should match on it rather than on the prose.
+    /// </summary>
+    public const string CapReachedMarker = "REGISTRATION_CAP_REACHED";
+
     public async Task ProcessAsync(RegistrationRequest request)
     {
         var scope = await scopeReader.Query().FirstOrDefaultAsync(x =>
@@ -110,6 +126,20 @@ public class RegistrationProcessor(
             // No address in the log (NFR-22).
             logger.LogInformation(
                 "A registration was not stored: its address already has {Live} live in the scope", live);
+
+            return;
+        }
+
+        // #206: the scope already holds as many live registrations as it may, whatever their addresses.
+        var liveInScope = await pendingReader.Query().CountAsync(pending =>
+            pending.ScopeId == scope.Id && pending.ExpiresAt > now);
+
+        if (liveInScope >= registration.MaxPendingPerScope)
+        {
+            // The scope's id, never the address (NFR-22).
+            logger.LogWarning(
+                "{Marker} A registration was not stored: scope {ScopeId} already has {Live} live pending " +
+                "registrations, its cap", CapReachedMarker, scope.PublicId, liveInScope);
 
             return;
         }

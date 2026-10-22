@@ -19,7 +19,7 @@ otherwise — see [Database roles](#database-roles--th-18)), then offers **list*
 **create (generate)**, and **apply**. It needs `dotnet tool restore` to have been run once, for the
 pinned EF Core CLI tool. Authoring a migration is covered in [Contributing](../contributing/#migrations).
 
-**The API never migrates on startup, and refuses to start when migrations are pending.** The seeder
+**The API process never migrates, and refuses to start when migrations are pending.** The seeder
 checks `GetPendingMigrationsAsync` first and throws with the missing migration names:
 
 ```
@@ -30,6 +30,59 @@ Apply them with scripts/migrations.py before starting the API.
 Automatic migration on startup is convenient exactly until two instances start at once, or until a
 deployment silently applies a migration nobody reviewed. An explicit step makes schema change a
 decision rather than a side effect.
+
+**The shipped container image does migrate, unless told not to.** `docker/entrypoint.sh` runs the
+migration bundle built into the image before it starts the API, so a container pointed at an empty
+database comes up working. That is the default: `HEIMDALL_RUN_MIGRATIONS` is `true` when unset, and
+`true` in all four `docker/*.env.example` templates; the entrypoint migrates only when it is unset, empty or exactly `true`, and any other value (`false`, `False`, `0`, `no`, `TRUE`) skips the migration, after which the API refuses to start while migrations are pending. The
+bundle connects with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the schema owner) when that is set and with
+`HEIMDALL_DATA_CONNECTIONSTRING` otherwise, and the entrypoint removes the owner's string before the API
+starts (see [Database roles](#database-roles--th-18)). Set `HEIMDALL_RUN_MIGRATIONS=false` and run
+`python scripts/migrations.py` as its own deploy step when a deployment runs more than one replica (two
+containers applying migrations at start-up race each other), when a migration needs review or timing
+first (see [Migrating big tables](#migrating-big-tables)), or when the owner's password should not be on
+the container at all. The argument above is against the API process migrating itself; the image's
+default is the same choice made at deployment, opt-out, and a deployment that wants the explicit step
+takes it with this one variable.
+
+### Migrating big tables
+
+Most tables are small. `audit_log` is not: nearly every command inserts a row and nothing deletes one, so
+it only grows, and `person` is read by every login. A migration that locks either one stalls the API for
+as long as it runs. When a migration touches a table that may hold millions of rows:
+
+- **Build indexes with `CREATE INDEX CONCURRENTLY`.** A plain `CREATE INDEX` takes a `SHARE` lock and
+  blocks every insert and update for the whole build. `CONCURRENTLY` cannot run inside a transaction, so
+  issue it as `migrationBuilder.Sql(..., suppressTransaction: true)`, with `IF NOT EXISTS` so an
+  interrupted run can be repeated, and `DROP INDEX CONCURRENTLY IF EXISTS` in `Down`. A concurrent build
+  that fails leaves an index marked `INVALID` (`\d heimdall.audit_log`); drop it before applying again.
+  `20261021183451_AddPersonLowerEmailIndex` is the example to copy (it also drops the superseded index
+  concurrently); `20261021161812_AddAuditRetentionIndexes` builds two partial indexes on `audit_log` the
+  same way. `20261014045512_AddAuditLogTargetIndex` predates the rule and builds its index with a plain
+  `CREATE INDEX`: apply nothing like it to a large trail.
+- **Add a column as nullable, or with a default.** `ADD COLUMN ... NOT NULL DEFAULT <constant>` is a
+  catalog change on PostgreSQL 11 and later, with no table rewrite. A `NOT NULL` column with no default,
+  or a default that is volatile, forces a rewrite under an `ACCESS EXCLUSIVE` lock. To tighten an existing
+  column, add it nullable, backfill in batches, then set `NOT NULL`.
+- **Backfill in batches, never in one `UPDATE`.** A single `UPDATE person SET ...` over the whole table
+  (as `20260909163322_AnonymiseDeletedIdentities` does, once, on a small table) holds its row locks until
+  it commits, writes every row's new version at once and bloats the table. Update a bounded slice at a
+  time (`WHERE id IN (SELECT id ... LIMIT 1000)`, or by id range), committing between slices, and
+  `suppressTransaction: true` is what allows that inside a migration.
+- **Mind the per-row triggers.** `person`, `google_user`, `scope` and the other tables named in
+  [Shared public ids](#shared-public-ids--before-protectidentitypublicids-199) carry two row-level
+  triggers each from `20261015035042_ProtectIdentityPublicIds` and `20261015041235_ProtectEntityPublicIds`:
+  `*_public_id_is_immutable` (`BEFORE UPDATE ... FOR EACH ROW`) fires on every updated row, whichever
+  column the update sets, and `*_public_id_is_unused` (`BEFORE INSERT`) looks the id up in the other
+  tables. A bulk backfill therefore pays a function call per row, plus those lookups on insert, on top of
+  the write itself; budget for it, keep the slices small, and expect a backfill to run several times
+  slower than the same update on a table without them.
+- **Take the lock timeout you can afford.** Statements that need a brief lock (`ALTER TABLE`, a trigger)
+  queue behind long transactions and block everything queued after them; `SET lock_timeout = '5s'` makes
+  them fail fast and retry rather than stall the API.
+- **Apply it as its own step.** Run it with `HEIMDALL_RUN_MIGRATIONS=false` and `scripts/migrations.py`,
+  off peak, rather than letting a container's start-up carry a long build. Authoring rules are in
+  [Contributing](../contributing/#migrations).
 
 ### Shared public ids — before `ProtectIdentityPublicIds` (#199)
 
@@ -379,12 +432,13 @@ empty.
 
 | Endpoint | Who | What it does |
 | --- | --- | --- |
-| `GET /api/healthcheck` | Anonymous | Liveness. Confirms the process is up and responding. Reads no database. |
+| `GET /api/healthcheck` | Anonymous | Liveness: the process is up and responding. Reads no database. |
+| `GET /api/healthcheck/ready` | Anonymous | Readiness. `200` while the database answers, `503` when not. |
 | `GET /api/healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
 
-Both also answer at the root, `/healthcheck` and `/healthcheck/detailed`, which is what the container
-health check and yggdrasil's status page call. Use the `/api/` addresses through Traefik: on the web
-UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
+All three also answer at the root, `/healthcheck`, `/healthcheck/ready` and `/healthcheck/detailed`; the
+container health check calls `/healthcheck` and yggdrasil's status page calls the others. Use the `/api/`
+addresses through Traefik: on the web UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 ```json
 {
@@ -397,8 +451,29 @@ UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 The aggregate `status` is `Healthy` only when **every** entry is healthy (**FR-HC-05**).
 
-The liveness endpoint is anonymous because a load balancer cannot authenticate; the detailed one is
-System-Admin-only because "which of my dependencies is down" is operational intelligence.
+**Liveness and readiness answer different questions.** Liveness says the process is running; it reads no
+database, so an instance that has lost its database still passes it. Use it where failing means a restart.
+Readiness says the instance can serve requests: it asks `DatabaseHealthCheck` alone and answers `200`, or
+`503` when the database does not respond. Use it where failing means stop routing to the instance, which is
+what an orchestrator or load balancer in front of **more than one** instance wants. Its body is the same envelope as liveness's with only the bare status as data, `"Healthy"` or
+`"Unhealthy"`, never a service name or a cause (the cause is in the log, at Warning, from
+`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, but it does not read the
+database per call: the answer, healthy or not, is held for **5 seconds** and shared by every caller in that window, so a flood of
+probes costs the database one small read per 5 seconds and, while it is down, writes one Warning per window
+rather than one per request. That is shorter than a typical 15-second probe interval, so the probe still sees a
+change at its next call.
+
+**Which probe Compose uses.** The container health check in `docker-compose.yml` calls **liveness**
+(`/healthcheck`), not readiness. Each environment runs one API instance, and Traefik routes only to healthy
+containers, so a readiness probe would take the only instance out of routing during a database outage: the
+web UI's same-origin `/api/*` calls could then fall through to heimdall-ui's catch-all (`200` with HTML), and
+the public host would answer Traefik `404`s instead of the API's JSON `503`. Switch the Compose probe to
+`/healthcheck/ready` only when more than one instance runs behind Traefik, so a healthy one can take the
+traffic.
+
+The liveness and readiness endpoints are anonymous because a load balancer cannot authenticate; the detailed
+one is System-Admin-only because "which of my dependencies is down" is operational intelligence, which a bare
+status is not.
 
 Each dependency is one `IServiceHealthCheck` registration. `DatabaseHealthCheck` issues a trivial
 read through the repository abstraction and catches everything — an unreachable database throws on
@@ -459,12 +534,23 @@ it.
 Serilog, configured before anything else so that even configuration failures are recorded:
 
 - **Console** — JSON formatted.
-- **Rolling files** — `<HEIMDALL_LOG_DIRECTORY>/<yyyy/MM>/log-<date>.json`, a new file per day inside
-  a folder per month. `HEIMDALL_LOG_DIRECTORY` defaults to `logs`.
+- **Rolling files** — `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one file per day, flat in the
+  directory. `HEIMDALL_LOG_DIRECTORY` defaults to `logs`.
 
 **EF Core diagnostics are enabled outside Production only.** `SensitiveDataLogging` and
 `DetailedErrors` print parameter and column values — password hashes, salts, email addresses — so
 they stay off where those logs are retained.
+
+### Server errors
+
+Every `5xx` the API answers leaves one line, so the trace id a caller holds leads to a cause. An unhandled
+exception is logged at **Error** with its stack trace by `ExceptionMiddleware`. A `5xx` a handler returns as
+a result, such as a persistence error mapped to `500`, is logged at **Error** by `ServerErrorLoggingFilter`
+as `Request to {Route} answered {StatusCode} (trace {TraceId})`: the route template (`api/person/{publicId}`,
+never the path with its ids), the status and the trace id, and nothing of the query string, body, headers or
+caller. A `503` is the exception, logged at **Warning**: here it is always a deliberate answer (a saturated
+password-hash gate), not a fault. A readiness probe's `503` gets no such line at all: the database check's own
+`The database health check failed` Warning, one per 5-second window, is the only record.
 
 ### Retention and redaction — NFR-22
 
@@ -690,11 +776,25 @@ powers over the accounts they manage are:
 | Scope owner invitation notice (UC-21) and the answer to its inviter (UC-60, UC-61) | One notice per new invitation; none for a repeat while one is open, none for a new invitation to someone invited within the cooldown, and none to a processing-restricted invitee; the endpoint shares the account-creation limit (thirty a minute per administrator and per address). One answer per invitation, to whoever invited, unless they are deleted, anonymised or processing-restricted |
 | Password recovery requested anonymously (UC-12) | One reset link per person per cooldown — never longer than the link's lifetime — whoever asks; further requests send nothing and are answered as before |
 | Two-factor sign-in code (UC-38, UC-46) | One per sign-in, plus at most three reissues per challenge (FR-2F-16), sent to the registered address; a person's own email change is refused while the email method is on (FR-PE-18) |
-| Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope; further requests store and mail nothing |
+| Self-registration confirmation (UC-47) | Three live pending registrations per address in a scope, and `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (1000) per scope whatever the addresses; further requests store and mail nothing |
 | "Someone tried to register your address" (UC-47) | Three a day per address, across every scope; further notices are not sent. Counted under a SHA-256 digest of the address in `attempt_notice_budget`, purged with the single-use tokens |
 
 The self-registration and recovery bounds are silent by design: the caller gets the same answer
 whatever happened, so the bound cannot be used to learn whether an address is registered.
+
+The per-scope cap on live pending registrations is there because the per-IP rate limit does not bound a
+caller with many source addresses, and the purge removes a registration only once it expires: without it the
+table, and the confirmation mail, grow with whatever arrives. A registration turned away by the cap is logged
+at **Warning** with the marker `REGISTRATION_CAP_REACHED` and the scope's public id — never the address. A
+scope that reaches it is either being flooded or has outgrown the cap: look at its pending registrations
+(UC-49) before raising `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`. Any positive integer is accepted; an
+unusable value falls back to 1000 with a start-up warning. The count is read and then written, so
+instances processing registrations for one scope at the same moment can each add one past the cap — a
+small overshoot, at most one per instance.
+
+```bash
+docker logs heimdall-api 2>&1 | grep REGISTRATION_CAP_REACHED
+```
 
 ### A client system calling for its users — `HEIMDALL_TRUSTED_CALLER_KEYS`
 
@@ -764,10 +864,21 @@ default, removing password reset tokens, email verification tokens, and two-fact
 are past their expiry by the grace period — and, with them, unconfirmed pending registrations, spent
 application credentials, self-registration attempt-notice budgets whose day has ended, and the
 records of used Google ID tokens past their expiry by the grace period. It also removes scope owner
-invitations 90 days after they end, or 90 days after they expire if never answered. Each run removes at most a bounded batch per table,
-oldest first, so a backlog drains over several runs rather than in one long transaction — a purge is
+invitations 90 days after they end, or 90 days after they expire if never answered. Each table is
+taken a bounded batch at a time, oldest first, and each batch is its own short delete — a purge is
 delete pressure on the same tables the login and recovery paths write to, and the write path
 degrades with table size (SRD §6.3.2).
+
+**Each pass drains its backlog, up to a cap per run.** The token purge, the identity anonymisation
+and the audit pseudonymisation each repeat their batch while it comes back full, up to
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches per table in one run. At the defaults (500 rows,
+20 batches, hourly) that is a ceiling of 10,000 rows per table an hour, 240,000 a day — where one
+batch per run capped a table at 12,000 a day, which a busy audit trail outgrows for good. A backlog
+larger than the cap is left for the next run, and the run's log line ends with how many rows are
+**still due after this run**: a number that does not fall from run to run is a backlog that is not
+draining, and the remedy is a larger batch or more batches per run. The anonymisation's retry of
+blocked erasure requests (below) takes its batches the same way, each starting after the last request
+of the one before, so requests that stay blocked cannot keep a newer one from being retried.
 
 The grace period is not zero, deliberately. UC-13 answers a presented token with `TokenInvalid`,
 `TokenExpired` or `TokenAlreadyUsed`, and purging the moment a token expires collapses the last two
@@ -791,9 +902,10 @@ existed carry no reason and take the longer one.
 
 A subject's request stores its own deadline when it is made, and that stored value wins over the
 configured window: a later change to the setting must not move an obligation already owed. Where
-NFR-12 blocked a request — the subject was a scope's last owner — the pass retries it once ownership
-has been transferred, dating the suspension from the request rather than from the moment the block
-cleared, so a long-blocked request is due immediately rather than handed a fresh deadline.
+NFR-12 blocked a request — the subject was a scope's last active owner — the pass retries it once
+ownership has been transferred, and where NFR-32 blocked one — the subject was the last active System
+Admin — once another System Admin exists. It dates the suspension from the request rather than from the
+moment the block cleared, so a long-blocked request is due immediately rather than handed a fresh deadline.
 `GET /api/auth/erasure-requests` is the queue that surfaces those before they are late.
 
 Anonymisation overwrites rather than removes, because NFR-07 requires every foreign key to keep
@@ -813,13 +925,25 @@ to be set to null and nothing else: no deletion, no truncation, no change to any
 reassignment to a different value. A thirty-day floor stops somebody clearing their own attribution,
 or the person they acted on, for something they did this week; it is an anti-tamper backstop, not
 the retention period, which is eighteen months. A deployment upgrading to `AllowClearingAuditTarget`
-has its older person targets cleared over the next runs, one batch at a time.
+has its older person targets cleared as a backlog: a batch at a time, up to
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches a run, over as many runs as that takes.
+
+The pass finds what is due without reading the whole trail. Entries past the period are read through two
+partial indexes on `created_at` — over the entries that still have an actor, and over those that still have a
+target — and entries naming an anonymised or hard-deleted identity are found from those identities, so a run
+with nothing due costs a few index probes rather than a scan of eighteen months of entries. The one part that
+still grows with the trail is the check of old targets: an entry past the period whose target is a scope,
+an application or anything else that is not a person keeps its target for good, and each run looks at those
+again. The `AddAuditRetentionIndexes` migration builds the two indexes with `CREATE INDEX CONCURRENTLY`, so
+audit writes carry on while it runs; on a large trail it takes a while. If it is interrupted, drop the index
+it leaves marked invalid (`\d heimdall.audit_log` shows `INVALID`) before applying it again.
 
 | Variable | Default | Accepted range | Meaning |
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
-| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Rows a pass takes from one table per batch |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | `20` | any positive integer | Most batches a pass takes from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |
@@ -838,6 +962,81 @@ Each bound is enforced for a reason. A grace period beyond ten years is a stray 
 policy. An interval below a minute turns a purge into continuous delete pressure on the tables the
 login path writes to; one above seven days is past what `PeriodicTimer` accepts, and the exception
 it would throw inside a hosted service stops the host by default.
+
+### How much a pass can clear, and how to see a backlog
+
+Each pass clears at most `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` rows per batch and at most
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches per table in one run, and runs every
+`HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES`. The ceiling for one table is therefore:
+
+```
+rows per day = batch size × max batches per tick × (1440 ÷ interval in minutes)
+```
+
+At the defaults (500 × 20 × 24) that is 10,000 rows per table per hour and **240,000 per day**. The cap
+applies to each table or kind of row on its own, not to the pass: the token purge allows it for each of
+its eight tables (password reset tokens, email verification tokens, two-factor email codes, pending
+registrations, application credentials, attempt-notice budgets, used Google ID tokens, scope owner
+invitations); identity anonymisation for persons and for Google Users separately; audit pseudonymisation
+for the entries and, separately, the tombstones. Recompute it with your settings: a 250-row batch, 10
+batches and a 30-minute interval give 250 × 10 × 48 = 120,000 per day. A table that is fed faster than its
+ceiling (a busy `audit_log` is the likely one) never drains, and the rows past the retention period pile
+up, which is a retention obligation silently lapsing; raise the batch size or the batches per tick before
+the interval, since a longer batch is cheaper than a more frequent run.
+
+**Seeing it.** Each run that removed anything, or left anything due, logs one line at Information with the
+rows still due after it:
+
+| Pass | Line (the part to read) |
+| --- | --- |
+| `token-retention` | `Token retention purge removed {n} rows ({backlog} still due after this run): ...` |
+| `audit-retention` | `Cleared the actor attribution from ... audit entries ...; {backlog} still due after this run` |
+| `identity-anonymisation` | `Anonymised {n} identities past their retention window: ...; {backlog} still due after this run.` |
+
+A run with nothing removed and nothing due logs nothing. **A "still due" number that does not fall from
+run to run is a backlog that is not draining.** Identity anonymisation prints `an unknown number` where
+counting the backlog itself failed (logged at Warning as `Counting the identities still due failed`).
+There is no backlog metric: `heimdall_scheduled_pass_rows_processed_total` per `pass` (see below) divided
+over time shows a pass working at its ceiling, which is `rate(...)` close to the figure above, and is the
+cue to read the log line.
+
+### When a scheduled pass fails
+
+Every scheduled pass (token retention, audit pseudonymisation, identity anonymisation and security
+detection) logs a failed run at **Error** level with the marker `SCHEDULED_PASS_FAILED` and the pass
+name. A run fails when its command returns errors, as when the database refuses a write, and when it
+throws. The loop carries on and retries on the next tick. **Match on the marker, not on the prose.**
+
+| `pass` | Runs |
+| --- | --- |
+| `token-retention` | The single-use token and invitation purge (NFR-19) |
+| `audit-retention` | Audit attribution pseudonymisation (NFR-21) |
+| `identity-anonymisation` | Anonymisation of deleted identities (NFR-20) |
+| `security-monitoring` | Security signal detection (NFR-26) |
+
+```bash
+docker logs heimdall-api 2>&1 | grep SCHEDULED_PASS_FAILED
+```
+
+The same passes publish two metrics on the [Prometheus endpoint](#metrics--prometheus), labelled by
+`pass`:
+
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| `heimdall_scheduled_pass_rows_processed_total` | counter | Rows the pass has changed since the API started |
+| `heimdall_scheduled_pass_last_success_timestamp` | gauge | Unix time, in seconds, of the pass's last run that completed without failure |
+
+A pass that has not succeeded since the API started has no sample for the gauge. To alert on a
+retention obligation silently lapsing, alert on the age of the last success, for example
+`time() - heimdall_scheduled_pass_last_success_timestamp > 6 * 3600` for a pass that runs hourly, or on
+`absent(heimdall_scheduled_pass_last_success_timestamp{pass="identity-anonymisation"})`. Give an `absent()`
+rule a `for:` of at least one pass interval plus a margin (for example `for: 75m` on an hourly pass), and
+expect it to fire for a pass that is disabled, because a disabled pass never sets the gauge.
+
+An identity anonymisation run that retries a blocked erasure request and fails is reported the same
+way, but it does not stop the run anonymising the identities that are due: the failure is logged with
+the request's person and the run's errors, and the identities anonymised in that run are still named in
+the erasure ledger line.
 
 ## Security signal detection — NFR-26
 
@@ -979,6 +1178,51 @@ to include addresses.**
 
 The alert also says, in its own body, that the moment you read it is when awareness happened — the
 timestamp that goes in the Art. 33(5) register, not the time the signal was raised.
+
+## What to alert on
+
+Everything below is a log line or a metric the API already writes; nothing needs new instrumentation.
+Match on the marker or the quoted text, not on the surrounding prose, and on the level shown. Logs are
+JSON on the console and in the log directory; see [Logging](#logging).
+
+| Alert on | Where it comes from | Means | Level |
+| --- | --- | --- | --- |
+| `SCHEDULED_PASS_FAILED` | Log, with the `pass` name | A retention or monitoring pass failed or threw; it retries next tick. See [When a scheduled pass fails](#when-a-scheduled-pass-fails) | Error |
+| `time() - heimdall_scheduled_pass_last_success_timestamp` large, or the series `absent` | Metric, per `pass` | A pass has not completed a run for longer than its interval allows | n/a |
+| `Failed to write audit log entry for {Action} (target {TargetId})` | Log | A command succeeded but its audit entry was not written, so the trail has a gap. Each one is a missing record of something the API did | Warning |
+| `Request to {Route} answered 503` (and `AuthenticationTemporarilyUnavailable` in the audit trail) | Log; `CREDENTIAL_VERIFICATION_SHEDDING` signal | The password-hash gate is saturated and shedding logins, usually a credential flood. A readiness probe failing does not log this line (see the next row) | Warning |
+| `Request to {Route} answered {StatusCode}` for any 5xx but 503 | Log, with the trace id | A request failed on the server. The line carries the route template and trace id only | Error |
+| `Mailgun refused the {Purpose} email`, `Could not deliver the {Purpose} email`, `Mailgun refused the restriction lift notification` or `Could not deliver the restriction lift notification` | Log | Verification, reset or two-factor mail is not leaving; users are waiting on mail the API reported as sent. See [Email delivery](#email-delivery-mailgun) | Error |
+| `REGISTRATION_CAP_REACHED` | Log, with the scope's public id | A scope holds its maximum of live pending self-registrations (`HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`) and is dropping new ones silently: an attack, or a cap set too low for a real sign-up campaign | Warning |
+| `GET /api/healthcheck/ready` answering `503` | Probe; log `The database health check failed` | The database does not answer; an orchestrator running several instances stops routing to this one (Compose probes liveness and does not). The log line is written once per 5-second window. See [Health checks](#health-checks--uc-30) | Warning |
+| `SECURITY_SIGNAL` | Log, with its `Kind` | See [Security signal detection](#security-signal-detection--nfr-26) | Warning |
+| `still due after this run` not falling | Log | A retention backlog is not draining; see [How much a pass can clear](#how-much-a-pass-can-clear-and-how-to-see-a-backlog) | Information |
+
+An alert on Warning or above catches all but the last. The prose around a marker will change; the
+markers and the pass names are stable.
+
+## Query costs to watch
+
+Three costs depend on how much data a deployment holds. None needs a change today; each says what to
+look at and when to act, so a slow screen is not a surprise.
+
+- **Name and email filters scan.** The list endpoints filter with `x.Name.ToLower().Contains(name)` (and
+  the same for email) in the scopes, persons, owners, admins, Google Users, System Admins, applications and
+  permissions listings. A match with
+  a leading wildcard cannot use a b-tree index. For a scope's own listings that is fine: the query is
+  limited to one scope's rows first. The one place it can matter is a System Admin listing across every
+  scope. Act only if those listings are slow with real data: add a `pg_trgm` GIN index on the lower-cased
+  column, built `CONCURRENTLY` as in [Migrating big tables](#migrating-big-tables).
+- **Every page of the audit listing counts the table.** `ListAuditLogQueryHandler` pages with
+  `PaginateAsync`, which issues a `COUNT(*)` with the same filters on each request (library behaviour).
+  Filtered by actor, target, action or date range that is cheap; on an unfiltered request it counts all of
+  `audit_log`, a table that only grows. Watch the listing's latency as the trail grows; if the unfiltered
+  count becomes slow, move the listing to keyset pagination on `(created_at, id)` or return an approximate
+  total, and tell the UI, which shows a total.
+- **Every authenticated request reads the actor.** `ActorLivenessFilter` makes one or two indexed queries
+  (by `public_id`) per authenticated request so that a deleted or restricted person's token stops working at
+  once. That is deliberate (see [Scaling](#scaling)); it is the price of immediate revocation. Do not
+  cache it to save the reads: a cache is exactly the window in which a deleted person's token still works.
 
 ## Cross-origin requests
 
@@ -1232,9 +1476,11 @@ no longer verify HS256.
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | | `3600` |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | | `300`; `0` → no cooldown; outside 0–86400 → `300` |
 | `HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS` | | `604800` (seven days); outside 3600–2592000 → `604800` |
+| `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` | | `1000`; not a positive integer → `1000` |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | | `7` |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | | `60` |
 | `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | | `500` |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | | `20` |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | | `true` |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | | `30` |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | | `90` |
@@ -1243,6 +1489,7 @@ no longer verify HS256.
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint and `scripts/migrations.py` only, never by the API (see [Database roles](#database-roles--th-18)) |
+| `HEIMDALL_RUN_MIGRATIONS` | | `true` → the container entrypoint applies pending migrations before starting the API; unset, empty or exactly `true` migrates; any other value (`false`, `0`, `TRUE`, ...) skips it, and the API then refuses to start until migrations are applied out of band. Read by the entrypoint only, never by the API (see [Migrations](#migrations)) |
 | `PUBLIC_HOST` / `UI_HOST` | | unset → these two name no public host (the verification and reset URLs and the CORS origins are read too; see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
 | `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → with a public host, EF Core's sensitive logging and detailed errors and the developer exception page are off |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |

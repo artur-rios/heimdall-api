@@ -29,21 +29,6 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
 
     private static string ByIdRoute(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/google-users/{id}";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync(
         Scope scope, string? name = null, string? email = null, bool isDeleted = false)
     {
@@ -67,31 +52,6 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
         return googleUser;
     }
 
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private Task<HttpOutput<PaginatedOutput<GoogleUserOutput>?>> ListAsync(Guid scopeId, string query = "") =>
         Gateway.GetAsync<PaginatedOutput<GoogleUserOutput>>(ListRoute(scopeId) + query);
 
@@ -105,7 +65,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenSystemAdmin_WhenGetGoogleUserById_ThenReturnsEveryRegisteredField()
     {
         // Given a System Admin, who may view any Google User (UC-27 step 2)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -129,9 +89,9 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenOwningScopeAdmin_WhenGetGoogleUserById_ThenReturnsIt()
     {
         // Given a Scope Admin who owns the Google User's scope
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
-        var admin = await SeedScopeAdminAsync(scope);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -147,7 +107,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given the Google User themselves — the actor a RoleRequirement on this endpoint would have
         // locked out, since their token carries the User role (FR-GO-04)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -164,7 +124,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given one Google User reading another in the same scope — the matrix grants a User this
         // read only as self (AF-27b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var target = await SeedGoogleUserAsync(scope);
         var caller = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User, scope.PublicId));
@@ -181,10 +141,10 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenNonOwningScopeAdmin_WhenGetGoogleUserById_ThenForbidden()
     {
         // Given a Scope Admin who owns some other scope (AF-27b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
-        var otherScope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(otherScope);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, otherScope.PublicId));
 
         // When
@@ -199,7 +159,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenUnknownId_WhenGetGoogleUserById_ThenNotFound()
     {
         // Given an identifier nobody holds (AF-27a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -215,8 +175,8 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given a Google User that exists, addressed through the wrong scope — not the resource this
         // path names, so AF-27a and not AF-27b, even for a System Admin who could read it elsewhere
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(otherScope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -232,7 +192,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenLogicallyDeletedGoogleUser_WhenGetGoogleUserById_ThenNotFound()
     {
         // Given a logically deleted record and a default read (FR-GO-17, AF-27a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -248,7 +208,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenLogicallyDeletedGoogleUserAndIncludeDeleted_WhenGetGoogleUserById_ThenReturnsIt()
     {
         // Given the same record, explicitly requested (FR-GO-17's escape hatch)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -264,7 +224,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenAnonymousCaller_WhenGetGoogleUserById_ThenUnauthorized()
     {
         // Given no bearer token — the matrix withholds every Google User read from anonymous callers
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
 
         // When
@@ -280,8 +240,8 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenSystemAdmin_WhenListingScopeGoogleUsers_ThenReturnsOnlyThatScopesActiveOnes()
     {
         // Given two scopes with Google Users, one of them logically deleted (FR-GO-06/17)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var alice = await SeedGoogleUserAsync(scope, "Alice");
         var bob = await SeedGoogleUserAsync(scope, "Bob");
         await SeedGoogleUserAsync(scope, "Deleted", isDeleted: true);
@@ -301,9 +261,9 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenOwningScopeAdmin_WhenListingScopeGoogleUsers_ThenReturnsThem()
     {
         // Given the owner of the scope
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedGoogleUserAsync(scope, "Alice");
-        var admin = await SeedScopeAdminAsync(scope);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -318,7 +278,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenIncludeDeleted_WhenListingScopeGoogleUsers_ThenReturnsDeletedOnesToo()
     {
         // Given FR-GO-17's escape hatch on the listing
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedGoogleUserAsync(scope, "Alice");
         await SeedGoogleUserAsync(scope, "Deleted", isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -335,7 +295,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenNameAndEmailFilters_WhenListingScopeGoogleUsers_ThenMatchesCaseInsensitively()
     {
         // Given FR-GO-14's filtering, translated to LOWER() … LIKE by the provider
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var alice = await SeedGoogleUserAsync(scope, "Alice Anderson", "alice@gmail.test");
         await SeedGoogleUserAsync(scope, "Bob Brown", "bob@outlook.test");
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -367,7 +327,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenLogicallyDeletedScope_WhenListingScopeGoogleUsers_ThenNotFound()
     {
         // Given a scope UC-04 logically deleted (AF-27a)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         await SeedGoogleUserAsync(scope, "Alice");
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -383,10 +343,10 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenNonOwningScopeAdmin_WhenListingScopeGoogleUsers_ThenForbidden()
     {
         // Given a Scope Admin who owns some other scope (AF-27b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedGoogleUserAsync(scope, "Alice");
-        var otherScope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(otherScope);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, otherScope.PublicId));
 
         // When
@@ -403,7 +363,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
         // Given a Google User of this very scope. This is the one asymmetry between the two
         // endpoints: they may read themselves by id, but the matrix grants them no listing, and the
         // RoleRequirement refuses them before the handler runs (AF-27b).
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope, "Alice");
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -418,7 +378,7 @@ public class GoogleUserControllerViewTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenAnonymousCaller_WhenListingScopeGoogleUsers_ThenUnauthorized()
     {
         // Given no bearer token
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await ListAsync(scope.PublicId);

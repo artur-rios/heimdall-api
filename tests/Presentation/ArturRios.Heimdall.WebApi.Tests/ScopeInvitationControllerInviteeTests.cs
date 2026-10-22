@@ -77,9 +77,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenAScopeAdminsInvitation_WhenTheInviteeAcceptsIt_ThenTheyOwnTheScopeAndSeeItListed()
     {
         // Given — an owner invites an existing Scope Admin (UC-21)
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
         var invite = await Gateway.PostAsync<DataOutput<AddScopeOwnerCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/owners/{invitee.PublicId}", new { });
@@ -118,10 +118,10 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenTheInviterOrAnOutsider_WhenAccepting_ThenNotFoundAndItStaysOpen()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitation = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), inviter);
-        var outsider = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitation = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), inviter);
+        var outsider = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
 
         // When
         Authorize(TestTokens.For(inviter.PublicId, (int)Roles.ScopeAdmin));
@@ -141,9 +141,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenAnOpenInvitation_WhenTheInviteeDeclines_ThenItEndsDeclinedWithNoOwnership()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
-        var invitation = await SeedInvitationAsync(scope, invitee, await SeedScopeAdminAsync(db, scope));
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var invitation = await SeedInvitationAsync(scope, invitee, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] }));
         Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -168,9 +168,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenAnInviteeWhoAlreadyOwnsTheScope_WhenAccepting_ThenAcceptedWithOneOwnership()
     {
         // Given — the ownership was granted meanwhile, outside the invitation (e.g. a System Admin's UC-21)
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
-        var invitation = await SeedInvitationAsync(scope, invitee, await SeedScopeAdminAsync(db, scope));
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var invitation = await SeedInvitationAsync(scope, invitee, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] }));
         Assert.Null(await RunAsync(
             $"INSERT INTO heimdall.scope_owner (scope_id, person_id) VALUES ({scope.Id}, {invitee.Id})"));
         Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));
@@ -190,9 +190,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     {
         // Given — the accept/withdraw race, made deterministic: the withdrawal commits just before the
         // accepting context's first UPDATE (the shared Support/BeforeFirstUpdate)
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
-        var invitation = await SeedInvitationAsync(scope, invitee, await SeedScopeAdminAsync(db, scope));
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var invitation = await SeedInvitationAsync(scope, invitee, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] }));
         await using var context = db.CreateContext(new BeforeFirstUpdate(() => WithdrawAsync(invitation)));
         var audit = new RecordingAudit();
         var handler = new AcceptScopeOwnerInvitationCommandHandler(
@@ -218,8 +218,8 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     {
         // Given — AF-60b landing between the handler's check and its write (G-F28): the invitee becomes a User
         // just before the accepting context's first UPDATE, which then refuses the acceptance
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var invitation = await SeedInvitationAsync(scope, invitee, null);
         await using var context = db.CreateContext(new BeforeFirstUpdate(async () =>
             Assert.Null(await RunAsync(
@@ -247,8 +247,8 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenTwoAcceptsAtOnce_WhenBothArrive_ThenExactlyOneSucceeds()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var invitation = await SeedInvitationAsync(scope, invitee, null);
         Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));
 
@@ -265,8 +265,8 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenAnInvitationToADeletedScope_WhenListingMine_ThenItIsHidden()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await SeedInvitationAsync(scope, invitee, null);
         Assert.Null(await RunAsync($"UPDATE heimdall.scope SET is_deleted = true WHERE id = {scope.Id}"));
         Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));
@@ -283,9 +283,9 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
     public async Task GivenTheInviterHardDeleted_WhenTheInviteeAccepts_ThenAccepted()
     {
         // Given — Review Focus 4
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var invitation = await SeedInvitationAsync(scope, invitee, inviter);
         Assert.Null(await RunAsync($"DELETE FROM heimdall.person WHERE id = {inviter.Id}"));
         Authorize(TestTokens.For(invitee.PublicId, (int)Roles.ScopeAdmin));

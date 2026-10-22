@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -5,11 +6,14 @@ using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Output;
 using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -34,7 +38,8 @@ public class ResetPasswordCommandHandlerTests
         Person Person)
     {
         public ResetPasswordCommandHandler Handler(IValidator<ResetPasswordCommand>? validator = null) =>
-            new(validator ?? PassingValidator(), Tokens, Tokens, InMemoryAtomicWrites.Instance);
+            new(validator ?? PassingValidator(), Tokens, Tokens, InMemoryAtomicWrites.Instance,
+                InMemoryWriteTransactions.Instance, NullLogger<ResetPasswordCommandHandler>.Instance);
     }
 
     private static IValidator<ResetPasswordCommand> PassingValidator()
@@ -178,6 +183,35 @@ public class ResetPasswordCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(sibling.Used);
         Assert.True(used.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOtherTokensCannotBeRetired_WhenHandlingResetPassword_ThenTheResetStillSucceeds()
+    {
+        // Given two live links, and a store that refuses to retire the one not clicked (#209)
+        var fixture = await FixtureAsync();
+        var tokens = new FailingUpdateTokens();
+        await TokenForAsync(tokens, fixture.Person, "first-token");
+        var clicked = await TokenForAsync(tokens, fixture.Person, "second-token");
+        var transactions = new InMemoryWriteTransactions();
+        var logger = new RecordingLogger<ResetPasswordCommandHandler>();
+        var handler = new ResetPasswordCommandHandler(PassingValidator(), tokens, tokens, InMemoryAtomicWrites.Instance,
+            transactions, logger);
+
+        // When
+        var output = await handler.HandleAsync(Command("second-token"));
+
+        // Then the password was reset with the clicked token, and the reset is reported as the success
+        // it is: retiring the other link is clean-up after the write, not part of it
+        Assert.True(output.Success);
+        Assert.Contains(AuthMessages.PasswordResetSuccessful, output.Messages);
+        Assert.True(clicked.Used);
+        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+
+        // Then — the reset's own transaction committed, the clean-up's did not, and the failure was logged
+        Assert.Equal(2, transactions.Begun);
+        Assert.Equal(1, transactions.Committed);
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
     [UnitFact]
@@ -465,7 +499,8 @@ public class ResetPasswordCommandHandlerTests
         var atomicWrites = new InMemoryAtomicWrites { OnPasswordWrite = person => beforeTheWrite = person.SecurityStamp };
 
         var handler = new ResetPasswordCommandHandler(
-            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites,
+            InMemoryWriteTransactions.Instance, NullLogger<ResetPasswordCommandHandler>.Instance);
 
         // When
         var output = await handler.HandleAsync(Command("race-token"));
@@ -495,7 +530,8 @@ public class ResetPasswordCommandHandlerTests
         };
 
         var handler = new ResetPasswordCommandHandler(
-            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites);
+            PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites,
+            InMemoryWriteTransactions.Instance, NullLogger<ResetPasswordCommandHandler>.Instance);
 
         // When
         var output = await handler.HandleAsync(Command("race-token"));
@@ -504,5 +540,15 @@ public class ResetPasswordCommandHandlerTests
         Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
         Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
+    }
+
+    // A token store whose updates fail as they do when the database is unavailable; reading, creating
+    // and the atomic consumption (InMemoryAtomicWrites) are unaffected.
+    private sealed class FailingUpdateTokens
+        : AsyncFakeRepository<PasswordResetToken, long>, IAsyncRepository<PasswordResetToken, long>
+    {
+        Task<DataOutput<PasswordResetToken>> IAsyncRepository<PasswordResetToken, long>.UpdateAsync(
+            PasswordResetToken entity, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<PasswordResetToken>.New.WithError("The update was refused."));
     }
 }

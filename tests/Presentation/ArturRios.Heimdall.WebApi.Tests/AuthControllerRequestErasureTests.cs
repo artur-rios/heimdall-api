@@ -9,7 +9,6 @@ using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
@@ -24,47 +23,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Erasure-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role = Roles.User, Scope? ownedScope = null, bool restricted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Ada",
-            Email = UniqueEmail("ada"),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restricted ? DateTime.UtcNow.AddDays(-3) : null,
-            RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
 
     private async Task<Person> ReloadAsync(Person person)
     {
@@ -75,7 +36,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenTheirPassword_WhenRequestingErasure_ThenTheRequestIsRecordedAndTheyAreSuspended()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -101,7 +62,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     public async Task GivenTheWrongPassword_WhenRequestingErasure_ThenNothingChanges()
     {
         // A valid session is not proof the person is present
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -128,8 +89,8 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenTheLastOwnerOfAScope_WhenRequestingErasure_ThenItIsRecordedButBlocked()
     {
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "ada", Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -154,7 +115,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     {
         // NFR-24 keeps a restricted record out of the anonymisation pass, so a request left behind
         // the restriction would wait unerased while its deadline ran out
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada", RestrictedAt = DateTime.UtcNow.AddDays(-3) });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -188,7 +149,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenAnUnrestrictedPerson_WhenRequestingErasure_ThenNoLiftIsReportedOrAudited()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -207,8 +168,8 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     public async Task GivenARestrictedLastOwnerOfAScope_WhenRequestingErasure_ThenTheRestrictionIsLiftedThoughBlocked()
     {
         // AF-42d: the suspension waits for an ownership transfer; the restriction does not
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, scope, restricted: true);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "ada", RestrictedAt = DateTime.UtcNow.AddDays(-3), Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -228,7 +189,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     public async Task GivenARestrictedPersonsRequestPastItsDeadline_WhenAnonymising_ThenTheRecordIsErased()
     {
         // The point of lifting: once the deadline arrives, the pass treats the record like any other
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada", RestrictedAt = DateTime.UtcNow.AddDays(-3) });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -261,7 +222,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenARequestAlreadyMade_WhenRequestingAgain_ThenConflict()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         await Gateway.PostAsync<DataOutput<RequestErasureCommandOutput?>>(
@@ -282,7 +243,7 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
     {
         // The request is seeded rather than made through the endpoint: one test authorizes as one
         // caller, and this one is about the queue rather than about how a row got into it.
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "ada" });
 
         await using (var context = db.CreateContext())
         {

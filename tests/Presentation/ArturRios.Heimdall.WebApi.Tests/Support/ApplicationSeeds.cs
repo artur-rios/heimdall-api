@@ -15,36 +15,6 @@ public static class ApplicationSeeds
     public static string Route(Guid scopeId, Guid applicationId) =>
         $"/api/scopes/{scopeId}/applications/{applicationId}/credentials";
 
-    public static async Task<Scope> SeedScopeAsync(PostgresFixture db)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    public static async Task<Person> SeedScopeAdminAsync(PostgresFixture db, Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     public static async Task<Application> SeedApplicationAsync(PostgresFixture db, Scope scope, Person owner)
     {
         await using var context = db.CreateContext();
@@ -61,15 +31,17 @@ public static class ApplicationSeeds
     /// <summary>A scope, its owning Scope Admin, and an application they own.</summary>
     public static async Task<(Scope Scope, Person Owner, Application Application)> SeedOwnedApplicationAsync(PostgresFixture db)
     {
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(
+            db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(db, scope, owner);
         return (scope, owner, application);
     }
 
     /// <summary>Stores a credential for <paramref name="application" /> and returns it with its secret.</summary>
     public static async Task<(ApplicationCredential Credential, string Secret)> SeedCredentialAsync(
-        PostgresFixture db, Application application, DateTime? expiresAt = null, DateTime? revokedAt = null)
+        PostgresFixture db, Application application, DateTime? expiresAt = null, DateTime? revokedAt = null,
+        DateTime? createdAt = null)
     {
         var secret = ApplicationCredentialSecret.New();
         await using var context = db.CreateContext();
@@ -77,7 +49,7 @@ public static class ApplicationSeeds
         {
             ApplicationId = application.Id,
             SecretHash = ApplicationCredentialSecret.HashOf(secret),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
             ExpiresAt = expiresAt,
             RevokedAt = revokedAt
         };

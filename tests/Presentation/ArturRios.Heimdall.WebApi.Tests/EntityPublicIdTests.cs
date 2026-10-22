@@ -78,19 +78,9 @@ public class EntityPublicIdTests(PostgresFixture fixture)
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.NewGuid():N}";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = fixture.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = Unique("entity-public-id") };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private async Task<Application> SeedApplicationAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
 
         await using var context = fixture.CreateContext();
         var owner = new Person
@@ -135,7 +125,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
 
     private async Task<ScopePermission> SeedPermissionAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
 
         await using var context = fixture.CreateContext();
         var permission = new ScopePermission
@@ -150,7 +140,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
 
     private async Task<PendingRegistration> SeedPendingRegistrationAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
 
         await using var context = fixture.CreateContext();
         var now = DateTime.UtcNow;
@@ -186,7 +176,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAScope_WhenItsPublicIdIsRewritten_ThenTheDatabaseRefuses()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
 
         // When / Then
         await AssertRewriteRefusedAsync("scope", scope.PublicId);
@@ -196,7 +186,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAScope_WhenAnotherColumnIsUpdated_ThenTheDatabasePermitsIt()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
 
         // When / Then
         await AssertOrdinaryUpdatePassesAsync("scope", scope.PublicId, $"name = '{Unique("renamed")}', is_deleted = true");
@@ -518,7 +508,7 @@ public class EntityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAScopeNamedInTheAuditTrail_WhenTheRenameThenReuseChainIsAttempted_ThenTheTargetIsStillTheScope()
     {
         // Given — a scope an audit entry names, past every floor; not personal data, so it must stay
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = Unique("entity-public-id") });
         var entry = Guid.NewGuid();
         Assert.Null(await RunAsync(
             $"""

@@ -119,9 +119,11 @@ the current numbers; figures quoted in prose go stale.
 
 ## Migrations
 
-The schema is managed with **EF Core migrations, applied explicitly** — the API never migrates on
-startup, and refuses to start when migrations are pending. Use the interactive migration menu to
-**list, create (generate), or apply** migrations:
+The schema is managed with **EF Core migrations, applied explicitly** — the API process never
+migrates, and refuses to start when migrations are pending. (The container image applies pending
+ones itself before starting the API unless `HEIMDALL_RUN_MIGRATIONS` is set to something other than
+`true`; see the operations guide.) Use the interactive migration menu to **list, create (generate),
+or apply** migrations:
 
 ```bash
 python scripts/migrations.py
@@ -132,6 +134,16 @@ It asks which environment file to load (for the connection string: the schema ow
 otherwise), then offers the migration actions. Creating a migration prompts for its name and adds it
 to `src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. Requires `dotnet tool restore` (above)
 to have been run once.
+
+**Migrations on large tables.** `audit_log` only grows and `person` is read by every login, so a
+migration that locks one of them stalls the API. For an index on a table that may be big, use
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS` through `migrationBuilder.Sql(..., suppressTransaction: true)`
+and `DROP INDEX CONCURRENTLY IF EXISTS` in `Down`; copy `20261021183451_AddPersonLowerEmailIndex`. Add a
+column nullable, or `NOT NULL` with a constant default; never `NOT NULL` without one. Backfill in bounded
+batches rather than one `UPDATE`, and remember that the public-id triggers on `person`, `google_user`,
+`scope` and the other tables fire for every updated row. Give the migration a `<remarks>` saying which of
+this it relies on. The operator's side of it, and `HEIMDALL_RUN_MIGRATIONS`, is in the
+[operations guide](https://artur-rios.github.io/heimdall-api/docs/operations/#migrating-big-tables).
 
 A migration grants nothing. The API runs as a login that owns nothing (NFR-29), and the default
 privileges `scripts/sql/runtime-grants.sql` sets give it rows on every table the owner creates. A new

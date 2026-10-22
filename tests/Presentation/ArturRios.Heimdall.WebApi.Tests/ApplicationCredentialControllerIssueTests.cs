@@ -168,7 +168,7 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
     {
         // Given
         var (_, _, application) = await SeedOwnedApplicationAsync(db);
-        var otherScope = await SeedScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -203,7 +203,7 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
     {
         // Given
         var (scope, _, application) = await SeedOwnedApplicationAsync(db);
-        var coOwner = await SeedScopeAdminAsync(db, scope);
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(coOwner.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When

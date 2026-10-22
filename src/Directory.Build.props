@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    The settings shared with tests/ come from Directory.Build.shared.props at the repository root.
+    The condition keeps them off the solution file: src/ArturRios.Heimdall.sln lives in this
+    directory, and a TargetFramework on the solution's generated project breaks restore.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.shared.props"
+          Condition="$(MSBuildProjectFullPath.EndsWith('.csproj'))" />
+
+</Project>

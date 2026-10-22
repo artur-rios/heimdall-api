@@ -30,7 +30,7 @@ public class ListScopesQueryHandler(
     public async Task<PaginatedOutput<ScopeOutput>> HandleAsync(ListScopesQuery query, CancellationToken cancellationToken = default)
     {
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -93,7 +93,7 @@ public class ListScopesQueryHandler(
         // through a list sees every row exactly once.
         var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
 
-        var output = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var output = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return output.WithMessage(ScopeMessages.ScopesRetrievedSuccessfully);
     }

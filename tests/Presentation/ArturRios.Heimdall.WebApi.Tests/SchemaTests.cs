@@ -205,6 +205,74 @@ public class SchemaTests(PostgresFixture fixture)
         Assert.Contains("(target_id)", definition);
     }
 
+    [FunctionalTheory]
+    [InlineData("ix_audit_log_created_at_attributed", "(actor_person_id IS NOT NULL)")]
+    [InlineData("ix_audit_log_created_at_targeted", "(target_id IS NOT NULL)")]
+    public async Task GivenMigrationsApplied_WhenAuditRetentionIndexesInspected_ThenEachIsAValidPartialIndexOnCreatedAt(
+        string index, string predicate)
+    {
+        // Given the migrated schema. NFR-21's pass reads the entries past the attribution period through
+        // these, oldest first, instead of the whole trail (#206); built concurrently, so check it is valid.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select i.indexdef, x.indisvalid
+            from pg_indexes i
+            join pg_class c on c.relname = i.indexname
+            join pg_namespace n on n.oid = c.relnamespace and n.nspname = i.schemaname
+            join pg_index x on x.indexrelid = c.oid
+            where i.schemaname = 'heimdall' and i.tablename = 'audit_log' and i.indexname = @index
+            """,
+            connection);
+        command.Parameters.AddWithValue("index", index);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        // Then
+        Assert.True(await reader.ReadAsync(), $"{index} is missing");
+        Assert.Contains("(created_at) WHERE " + predicate, reader.GetString(0));
+        Assert.True(reader.GetBoolean(1), $"{index} is not valid");
+    }
+
+    [FunctionalFact]
+    public async Task GivenMigrationsApplied_WhenPersonEmailIndexesInspected_ThenOnlyTheLowerCaseExpressionIndexIsValid()
+    {
+        // Given the migrated schema. Login, recovery, registration and Google sign-in compare LOWER(email)
+        // without is_deleted (#207): the expression index serves them, and the raw-column index is gone.
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+
+        // When
+        await using var command = new NpgsqlCommand(
+            """
+            select i.indexname, i.indexdef, x.indisvalid
+            from pg_indexes i
+            join pg_class c on c.relname = i.indexname
+            join pg_namespace n on n.oid = c.relnamespace and n.nspname = i.schemaname
+            join pg_index x on x.indexrelid = c.oid
+            where i.schemaname = 'heimdall' and i.tablename = 'person'
+              and i.indexname in ('ix_person_lower_email', 'ix_person_email')
+            """,
+            connection);
+        var found = new Dictionary<string, (string Definition, bool Valid)>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                found[reader.GetString(0)] = (reader.GetString(1), reader.GetBoolean(2));
+            }
+        }
+
+        // Then
+        var index = Assert.Single(found);
+        Assert.Equal("ix_person_lower_email", index.Key);
+        Assert.EndsWith("(lower((email)::text))", index.Value.Definition);
+        Assert.DoesNotContain("WHERE", index.Value.Definition);
+        Assert.True(index.Value.Valid, "ix_person_lower_email is not valid");
+    }
+
     [FunctionalFact]
     public async Task GivenMigrationsApplied_WhenCredentialIndexesInspected_ThenHashAndPublicIdAreUnique()
     {

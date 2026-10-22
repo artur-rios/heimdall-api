@@ -28,15 +28,6 @@ public class ScopeControllerSetEmailLinksTests(PostgresFixture db) : WebApiTest<
         Gateway.PutAsync<DataOutput<SetScopeEmailLinksCommandOutput?>>(
             Route(scopeId), new { emailVerificationUrl = verificationUrl, passwordResetUrl });
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
     private async Task<Scope> PersistedAsync(Scope scope)
     {
         await using var context = db.CreateContext();
@@ -46,7 +37,7 @@ public class ScopeControllerSetEmailLinksTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPutEmailLinks_ThenOkAndBothLinksAreStored()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await SetAsync(scope.PublicId, VerifyUrl, ResetUrl);
@@ -64,7 +55,7 @@ public class ScopeControllerSetEmailLinksTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPutNullLinks_ThenTheStoredLinksAreCleared()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         await SetAsync(scope.PublicId, VerifyUrl, ResetUrl);
 
@@ -79,7 +70,7 @@ public class ScopeControllerSetEmailLinksTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenARelativeLink_WhenPutEmailLinks_ThenBadRequestAndNothingIsStored()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await SetAsync(scope.PublicId, "/verify-email", ResetUrl);
@@ -92,7 +83,7 @@ public class ScopeControllerSetEmailLinksTests(PostgresFixture db) : WebApiTest<
     [FunctionalFact]
     public async Task GivenAUser_WhenPutEmailLinks_ThenForbiddenAndNothingIsStored()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         var response = await SetAsync(scope.PublicId, VerifyUrl, ResetUrl);

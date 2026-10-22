@@ -46,7 +46,7 @@ public class ListScopeAdminsQueryHandler(
         var output = PaginatedOutput<PersonSummaryOutput>.New;
 
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -59,7 +59,7 @@ public class ListScopeAdminsQueryHandler(
         {
             // AF-07a: the named scope must exist and not be logically deleted.
             var scope = await scopeReader.Query()
-                .FirstOrDefaultAsync(x => x.PublicId == query.ExcludeOwnersOfScopeId.Value && !x.IsDeleted);
+                .FirstOrDefaultAsync(x => x.PublicId == query.ExcludeOwnersOfScopeId.Value && !x.IsDeleted, cancellationToken);
 
             if (scope is null)
             {
@@ -68,7 +68,7 @@ public class ListScopeAdminsQueryHandler(
 
             // AF-07b: only an owner of the named scope (or a System Admin) may subtract its owners,
             // since a with/without diff would otherwise reveal them.
-            if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id))
+            if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id, cancellationToken))
             {
                 return output.WithError(PersonMessages.NotScopeOwner);
             }
@@ -122,7 +122,7 @@ public class ListScopeAdminsQueryHandler(
         // a page boundary and appear on both pages while a third appeared on neither.
         var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
 
-        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(PersonMessages.PersonsRetrievedSuccessfully);
     }

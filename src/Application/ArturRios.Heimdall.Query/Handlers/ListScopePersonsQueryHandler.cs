@@ -30,7 +30,7 @@ public class ListScopePersonsQueryHandler(
         var output = PaginatedOutput<PersonOutput>.New;
 
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -39,7 +39,7 @@ public class ListScopePersonsQueryHandler(
 
         // AF-07a: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == query.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == query.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -47,7 +47,8 @@ public class ListScopePersonsQueryHandler(
         }
 
         // AF-07b: a Scope Admin may only read a scope they own; a System Admin bypasses.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(
+                query.ActingRole, query.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
         }
@@ -83,7 +84,7 @@ public class ListScopePersonsQueryHandler(
         // too, a System Admin all of them. A User owns no scope (FR-SC-08), so this normally trims
         // nothing; it is applied so the projection cannot say more than the rule allows.
         var visibleScopeIds = await OwnedScopeVisibility.ScopesVisibleToAsync(
-            personReader, query.ActingRole, query.ActingPersonId);
+            personReader, query.ActingRole, query.ActingPersonId, cancellationToken);
         var seesEveryOwnership = visibleScopeIds is null;
         var visible = visibleScopeIds ?? [];
 
@@ -115,7 +116,7 @@ public class ListScopePersonsQueryHandler(
         // through a list sees every row exactly once.
         var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
 
-        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(PersonMessages.PersonsRetrievedSuccessfully);
     }

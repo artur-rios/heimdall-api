@@ -51,7 +51,8 @@ public class ListScopeOwnerInvitationsQueryHandler(
         }
 
         // AF-58b.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(
+                query.ActingRole, query.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.NotScopeOwner);
         }
@@ -81,6 +82,6 @@ public class ListScopeOwnerInvitationsQueryHandler(
                 ExpiresAt = x.ExpiresAt
             });
 
-        return await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        return await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
     }
 }

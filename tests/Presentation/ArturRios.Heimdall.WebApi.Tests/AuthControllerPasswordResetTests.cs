@@ -27,54 +27,12 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string OldPassword = "0ld-Reset-Pass!";
+    private const string OldPassword = Seeds.Password;
     private const string NewPassword = "Str0ng-Reset-Pass!";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string UniqueToken() => $"token-{Guid.NewGuid():N}";
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(OldPassword, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email)
-    {
-        var person = await SeedPersonAsync(Roles.User, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     Writes a reset token directly rather than going through UC-12's endpoint: these tests are
@@ -127,7 +85,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     {
         // Given an admin holding a reset token
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -151,9 +109,9 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a User, whose login needs a scope id but whose reset does not — the token identifies
         // them on its own, which is the whole reason UC-12 made it long and random
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(scope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -171,7 +129,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     {
         // Given — UC-13 step 3 asks for a new random salt, not a re-use of the stored one, so the new
         // hash shares nothing with the one it replaces (FR-RO-04, NFR-02)
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         var originalHash = person.PasswordHash;
         var originalSalt = person.Salt;
         var token = await SeedTokenAsync(person);
@@ -193,7 +151,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Given someone who clicked "forgot password" twice, so UC-12 issued two working links.
         // UC-12's own tests leave both live and say UC-13 decides; this is that decision.
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
         var first = await SeedTokenAsync(person);
         var second = await SeedTokenAsync(person);
 
@@ -215,8 +173,8 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenAnotherPersonHoldsALiveToken_WhenPostPasswordReset_ThenTheirTokenSurvives()
     {
         // Given the boundary of the rule above: invalidation reaches the person's own tokens and stops
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
-        var other = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("other"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
+        var other = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("other") });
         var theirToken = await SeedTokenAsync(other);
 
         // When
@@ -233,7 +191,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     {
         // Given — AF-13a (FR-PR-04)
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
         var token = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
 
         // When
@@ -253,7 +211,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     {
         // Given — AF-13b
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
         var token = await SeedTokenAsync(person, used: true);
 
         // When
@@ -283,7 +241,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Given — AF-13c. The lookup is case-sensitive, unlike every email comparison in this system:
         // the token is a random secret, and folding its case would throw away part of its alphabet.
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
         var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
 
         // When
@@ -340,7 +298,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // and ResetPasswordCommandHandlerTests seeds through the same helper and spends it — so both
         // halves go through SingleUseTokenHash and would fail together if it changed.
         var email = UniqueEmail("admin");
-        await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var recovery = await Gateway.PostAsync<DataOutput<PasswordRecoveryCommandOutput?>>(
@@ -350,26 +308,21 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         Assert.Equal(HttpStatusCode.OK, recovery.StatusCode);
 
         // The token is issued after the answer, by the recovery dispatcher (AF-12a), so wait for it
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        PasswordResetToken? issued;
+        PasswordResetToken? issued = null;
 
-        while (true)
-        {
-            await using var context = db.CreateContext();
-            issued = await context.PasswordResetTokens
-                .Include(token => token.Person)
-                .SingleOrDefaultAsync(token => token.Person.Email == email);
-
-            if (issued is not null)
+        await Poll.UntilAsync(
+            async () =>
             {
-                break;
-            }
+                await using var context = db.CreateContext();
+                issued = await context.PasswordResetTokens
+                    .Include(token => token.Person)
+                    .SingleOrDefaultAsync(token => token.Person.Email == email);
 
-            Assert.True(DateTime.UtcNow < deadline, "No reset token was issued in time.");
-            await Task.Delay(50);
-        }
+                return issued is not null;
+            },
+            "No reset token was issued in time.");
 
-        Assert.False(issued.Used);
+        Assert.False(issued!.Used);
         Assert.True(issued.ExpiresAt > DateTime.UtcNow);
         Assert.Equal(SingleUseTokenHash.Length, issued.TokenHash.Length);
     }
@@ -391,7 +344,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenAPersonRestrictedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidTokenAndTheRecordIsKept()
     {
         // Given
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("restricted") });
         var token = await SeedTokenAsync(person);
 
         await using (var context = db.CreateContext())
@@ -416,7 +369,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenAPersonDeletedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidTokenAndTheRecordIsKept()
     {
         // Given
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("deleted"), isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("deleted"), IsDeleted = true });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -432,8 +385,8 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenAUserWhoseScopeWasDeletedSinceTheLinkWasMailed_WhenPostPasswordReset_ThenInvalidToken()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, UniqueEmail("scope-gone"));
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("scope-gone"), MemberOf = scope });
         var token = await SeedTokenAsync(person);
 
         await using (var context = db.CreateContext())
@@ -455,7 +408,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenTheAddressChangedAfterThePersonWasRead_WhenThePasswordIsWritten_ThenNothingIsWritten()
     {
         // Given a person read, as UC-13 reads them with the token, and an address change saved after
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("raced") });
 
         await using var reading = db.CreateContext();
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
@@ -482,7 +435,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenThePersonUnchangedSinceTheyWereRead_WhenThePasswordIsWritten_ThenThePasswordColumnsAndTheStampChange()
     {
         // Given the control for the test above
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("unraced"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("unraced") });
 
         await using var reading = db.CreateContext();
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
@@ -510,7 +463,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Given one request holding the person as it was — an administrator's edit, say — while the
         // person completes a reset
         var email = UniqueEmail("whole-row");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         await using var stale = db.CreateContext();
         var staleCopy = await stale.Persons.SingleAsync(x => x.Id == person.Id);
@@ -539,7 +492,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         string state)
     {
         // Given a person read, as UC-13 reads them with the token, and then restricted or deleted
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail($"raced-{state}"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail($"raced-{state}") });
 
         await using var reading = db.CreateContext();
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);

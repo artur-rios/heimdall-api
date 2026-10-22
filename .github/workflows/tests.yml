@@ -19,6 +19,11 @@ on:
       - main
       - develop
 
+# Least privilege for every job: the test and docker jobs only read the repository. The docs job
+# declares what it needs for itself below.
+permissions:
+  contents: read
+
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
@@ -26,6 +31,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A hung Testcontainers pull or a deadlocked test must not hold the runner, and the concurrency
+    # group with it, for the six-hour default. 60, not 30: recent runs took 24 to 45 minutes.
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which no test touches.
@@ -34,7 +42,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Run the Python helper tests
         # scripts/test_migrations.py covers migrations.py's pure helpers — the .env parser, and the
@@ -66,6 +74,24 @@ jobs:
       - name: Build solution
         # Built once here so both test steps can run with --no-build and neither pays for it.
         run: dotnet build src/ArturRios.Heimdall.sln --configuration Release --no-restore
+
+      - name: Check the model has no pending migration
+        # A change to an entity or its map that was committed without `dotnet ef migrations add` builds,
+        # passes every test that runs against the migrated schema only by luck, and fails on the first
+        # deployment that needs the column. `has-pending-model-changes` compares the compiled model with
+        # the latest snapshot and exits non-zero on a difference.
+        #
+        # The command reads no database, but the design-time factory insists on a connection string, so
+        # a placeholder is passed: nothing connects to it. The tool is the version .config/dotnet-tools.json
+        # pins.
+        env:
+          HEIMDALL_DATA_CONNECTIONSTRING: Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            --project src/Infrastructure/ArturRios.Heimdall.Data \
+            --startup-project src/Infrastructure/ArturRios.Heimdall.Data \
+            --configuration Release --no-build
 
       - name: Check every test has a category
         # The two test steps below select by Category trait, so a test without one would run in
@@ -183,6 +209,7 @@ jobs:
   # inside it is already covered by the suites above.
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

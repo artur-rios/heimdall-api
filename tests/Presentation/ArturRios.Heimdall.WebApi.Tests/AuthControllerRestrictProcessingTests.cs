@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -21,30 +20,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Restrict-Pass!";
-
-    private async Task<Person> SeedPersonAsync(DateTime? restrictedAt = null, Roles role = Roles.User)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Ada",
-            Email = $"restrict-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restrictedAt,
-            RestrictionGround = restrictedAt is null ? null : (int)RestrictionGrounds.AccuracyContested
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
+    private const string Password = Seeds.Password;
 
     private async Task<Person> ReloadAsync(Person person)
     {
@@ -55,7 +31,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenAPerson_WhenRestrictingProcessing_ThenNothingIsDeleted()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RestrictProcessingCommandOutput?>>(
@@ -78,7 +54,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenAnUnknownGround_WhenRestricting_ThenBadRequest()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<RestrictProcessingCommandOutput?>>(
@@ -94,7 +70,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
         // The restriction takes effect immediately: ActorLivenessFilter re-reads the record on every
         // request, so a token issued before it does not keep working — outside the subject-rights
         // endpoints SubjectRightsLivenessTests covers, the subject lifting their own included.
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.GetAsync<DataOutput<object>>($"/api/persons/{person.PublicId}");
@@ -107,7 +83,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     {
         // Given a person restricted long enough ago that every token they held has expired (#145) —
         // a System Admin, who signs in system-wide, where a User would need a scope
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow.AddDays(-30), role: Roles.SystemAdmin);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow.AddDays(-30) });
 
         // When they sign in — UC-11 AF-11i: a subject-rights-only token, not a refusal
         var login = await LoginAsync(person.Email, Password);
@@ -148,7 +124,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     {
         // The restriction is only revealed to somebody holding the credential: a wrong password is
         // answered exactly like any other refusal, so the endpoint does not disclose a dispute
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow, role: Roles.SystemAdmin);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow });
 
         var response = await LoginAsync(person.Email, "Wr0ng-Restrict-Pass!");
 
@@ -162,7 +138,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     {
         // A suspended (not yet anonymised) subject keeps their rights over the record, so the
         // deletion check AF-11c makes does not apply to a restricted one
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow, role: Roles.SystemAdmin);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow });
 
         await using (var context = db.CreateContext())
         {
@@ -187,8 +163,8 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     public async Task GivenARestrictedSystemAdminsSubjectRightsToken_WhenLiftingSomebodyElses_ThenForbidden()
     {
         // The token acts for its subject alone (AF-45c), even though it carries the admin role
-        var admin = await SeedPersonAsync(restrictedAt: DateTime.UtcNow, role: Roles.SystemAdmin);
-        var other = await SeedPersonAsync(restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow });
+        var other = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow.AddDays(-1) });
 
         var login = await LoginAsync(admin.Email, Password);
         Assert.True(login.Body!.Data!.ProcessingRestricted);
@@ -207,7 +183,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenASystemAdmin_WhenLiftingSomebodyElses_ThenTheSubjectIsInformedFirst()
     {
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow.AddDays(-1) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<LiftProcessingRestrictionCommandOutput?>>(
@@ -225,7 +201,7 @@ public class AuthControllerRestrictProcessingTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenAScopeAdmin_WhenLiftingSomebodyElses_ThenForbidden()
     {
-        var person = await SeedPersonAsync(restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada", EmailPrefix = "restrict", RestrictedAt = DateTime.UtcNow.AddDays(-1) });
         Authorize(TestTokens.ForRole((int)Roles.ScopeAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<LiftProcessingRestrictionCommandOutput?>>(

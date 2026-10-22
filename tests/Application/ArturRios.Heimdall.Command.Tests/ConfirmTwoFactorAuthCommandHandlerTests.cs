@@ -41,7 +41,8 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
                 InMemoryAtomicWrites.Instance,
                 RecoveryCodes,
                 RecoveryCodes,
-                TotpVerifier());
+                TotpVerifier(),
+                InMemoryWriteTransactions.Instance);
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
         // it enforces (a code cannot be presented twice) is part of what these tests exercise.
@@ -122,6 +123,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         var fixture = await FixtureAsync();
         var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: false);
         var recoveryCodes = new FailingRecoveryCodeRepository();
+        var transactions = new InMemoryWriteTransactions();
 
         var handler = new ConfirmTwoFactorAuthCommandHandler(
             fixture.Persons,
@@ -131,15 +133,19 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
             InMemoryAtomicWrites.Instance,
             recoveryCodes,
             recoveryCodes,
-            fixture.TotpVerifier());
+            fixture.TotpVerifier(),
+            transactions);
 
         // When
         var output = await handler.HandleAsync(fixture.Command(CurrentTotpCode()));
 
-        // Then — the request fails, and the configuration is left exactly as it was
+        // Then — the request fails, the configuration is left exactly as it was, and nothing written on
+        // the way, the security stamp included, is committed (#209)
         Assert.False(output.Success);
         Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
         Assert.False(twoFactorAuth.IsActive);
+        Assert.Equal(1, transactions.Begun);
+        Assert.Equal(0, transactions.Committed);
     }
 
     [UnitFact]
@@ -358,6 +364,25 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAWrongEmailCode_WhenRetriedWithTheSameAppCode_ThenTheAppCodeWasNotSpent()
+    {
+        // Given — both methods pending, and a request whose app code is right but whose email code is not
+        var fixture = await FixtureAsync();
+        var twoFactorAuth = await SeedPendingAsync(fixture, appEnabled: true, emailEnabled: true);
+        await SeedEmailCodeAsync(fixture, twoFactorAuth.Id);
+        var appCode = CurrentTotpCode();
+
+        // When the wrong email code is refused, and the same app code is presented again with the right one
+        var refused = await fixture.Handler().HandleAsync(fixture.Command(appCode, "654321"));
+        var retried = await fixture.Handler().HandleAsync(fixture.Command(appCode, EmailCode));
+
+        // Then — the refusal did not burn the app code's time step (#225)
+        Assert.False(refused.Success);
+        Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, refused.Errors);
+        Assert.True(retried.Success);
     }
 
     [UnitFact]

@@ -11,7 +11,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -33,54 +32,11 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class AuthControllerResendVerificationTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Resend-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string UniqueToken() => $"token-{Guid.NewGuid():N}";
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role, string email, bool isDeleted = false, bool emailVerified = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = emailVerified,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email)
-    {
-        var person = await SeedPersonAsync(Roles.User, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     Writes a verification token directly rather than through person creation: only a direct
@@ -147,7 +103,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenAuthenticatedSystemAdmin_WhenPostResendVerification_ThenNewTokenIsIssued()
     {
         // Given an unverified System Admin holding no live link
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -169,7 +125,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenAuthenticatedScopeAdmin_WhenPostResendVerification_ThenNewTokenIsIssued()
     {
         // Given the authorization matrix grants email verification to all three roles
-        var person = await SeedPersonAsync(Roles.ScopeAdmin, UniqueEmail("scope-admin"));
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = UniqueEmail("scope-admin"), EmailVerified = false });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -185,8 +141,8 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     {
         // Given a User, whose login needs a scope id but whose resend does not — the endpoint reads
         // them from their own token and nothing else
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, UniqueEmail("user"));
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("user"), EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User, scope.PublicId));
 
         // When
@@ -201,7 +157,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenOutstandingLiveToken_WhenPostResendVerification_ThenItIsRetiredAndOnlyTheNewOneIsLive()
     {
         // Given — UC-15 step 3. After a resend only the newest link works.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var outstanding = await SeedTokenAsync(person);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -232,7 +188,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     {
         // Given a token already dead by AF-14a. Rewriting it would only make it report a different
         // reason for being dead — the same boundary UC-14 draws.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var expired = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -250,8 +206,8 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenAnotherPersonHoldsALiveToken_WhenPostResendVerification_ThenTheirTokenSurvives()
     {
         // Given the boundary of the retirement rule: it reaches the caller's own tokens and stops
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
-        var other = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("other"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
+        var other = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("other"), EmailVerified = false });
         await SeedTokenAsync(other);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -266,7 +222,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenAlreadyVerifiedPerson_WhenPostResendVerification_ThenBadRequestAndNoTokenIsIssued()
     {
         // Given — AF-15a: a link mailed to a verified address could do nothing when clicked
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"), emailVerified: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         var outstanding = await SeedTokenAsync(person);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -317,7 +273,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     {
         // Given a deletion that landed after the caller's bearer token was issued
         var email = UniqueEmail("deleted");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, EmailVerified = false, IsDeleted = true });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -398,7 +354,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     public async Task GivenALinkWasJustMailed_WhenPostResendVerificationAgain_ThenTooManyRequestsAndTheLinkIsKept()
     {
         // Given — AF-15b: a resend a moment ago
-        var person = await SeedPersonAsync(Roles.User, UniqueEmail("cooldown"));
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("cooldown"), EmailVerified = false });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         Assert.Equal(HttpStatusCode.OK, (await ResendAsync()).StatusCode);
@@ -419,7 +375,7 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
         // Given ten requests from one client address. The first sends; the cooldown answers the rest,
         // so the limiter is what this test reaches. A trusted caller's named address gives the test a
         // bucket of its own.
-        var person = await SeedPersonAsync(Roles.User, UniqueEmail("limited"));
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("limited"), EmailVerified = false });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         for (var attempt = 1; attempt <= 10; attempt++)

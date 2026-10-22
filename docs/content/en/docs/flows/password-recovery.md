@@ -111,6 +111,12 @@ token of any other kind.
 Spending a reset token retires every other live reset token the person holds. A second "forgot
 password" click cannot be replayed after the first has already changed the password.
 
+**A link is spent only with the password it sets** (#209). Marking the token used and writing the
+password are one transaction, so a database failure in between leaves the link working and the
+person can follow it again. Retiring the other links comes after the password is written; a failure
+there is logged, and the reset is still answered as done. Email verification and the confirmation of a
+pending registration work the same way: a failed write leaves the link, or the registration, usable.
+
 **The account is checked again when the link is followed** (**FR-PR-08**). A link lives for an hour,
 and the person may be restricted, deleted or anonymised, or lose the scope they sign in through,
 while it waits in a mailbox. UC-12's rule is run again, and a person it no longer admits gets exactly

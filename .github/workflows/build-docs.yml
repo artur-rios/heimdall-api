@@ -55,6 +55,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Called from Tests, github.ref is the caller's. Tests only calls this on a push to main, and
     # the github-pages environment refuses any other branch; this check makes the build job stop
     # there too rather than build a site the deploy job would refuse.
@@ -175,6 +176,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

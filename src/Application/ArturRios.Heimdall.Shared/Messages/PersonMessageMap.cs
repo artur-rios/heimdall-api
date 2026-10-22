@@ -50,13 +50,15 @@ public static class PersonMessageMap
             // UC-08 — the transition needs a scope the request does not carry, or the role is unknown.
             [PersonMessages.UnsupportedRoleTransition] = HttpStatusCodes.BadRequest,
             [PersonMessages.UnknownRole] = HttpStatusCodes.BadRequest,
-            // NFR-12 — the change would strip a scope of its last owner (UC-08 role change, UC-09 AF-09e).
+            // NFR-12 — the change would strip a scope of its last active owner (AF-09e, AF-10b, AF-22b).
             [PersonMessages.ScopeWouldLoseLastOwner] = HttpStatusCodes.Conflict,
             // UC-09 main flow and AF-09b — person deleted, or already was.
             [PersonMessages.PersonDeletedSuccessfully] = HttpStatusCodes.Ok,
             // AF-09c — caller may not delete the person; AF-09d / AF-10c — caller targeted themselves.
             [PersonMessages.NotAuthorizedToDeletePerson] = HttpStatusCodes.Forbidden,
             [PersonMessages.CannotDeleteSelf] = HttpStatusCodes.Forbidden,
+            // NFR-32 (AF-09f, AF-10d) — the person is the last active System Admin.
+            [PersonMessages.WouldRemoveLastSystemAdmin] = HttpStatusCodes.Conflict,
             // UC-10 main flow — person hard deleted. AF-10a reuses PersonNotFound (404), AF-10b reuses
             // ScopeWouldLoseLastOwner (409), and AF-10c reuses CannotDeleteSelf (403).
             [PersonMessages.PersonHardDeletedSuccessfully] = HttpStatusCodes.Ok,

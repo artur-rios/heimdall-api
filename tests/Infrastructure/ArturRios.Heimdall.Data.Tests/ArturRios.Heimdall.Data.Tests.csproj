@@ -1,12 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <IsPackable>false</IsPackable>
-    </PropertyGroup>
-
     <ItemGroup>
         <PackageReference Include="ArturRios.Util.Test" />
         <PackageReference Include="coverlet.collector">
@@ -14,6 +7,7 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Testcontainers.PostgreSql" />
         <PackageReference Include="xunit.v3.mtp-off" />
         <PackageReference Include="xunit.runner.visualstudio">
           <PrivateAssets>all</PrivateAssets>

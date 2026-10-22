@@ -28,31 +28,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-2fa-Pass!";
+    private const string Password = Seeds.Password;
     private const string EmailCode = "123456";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string CurrentTotpCode(string base32Secret) =>
         new Totp(Base32Encoding.ToBytes(base32Secret)).ComputeTotp();
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email, bool emailVerified = true)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = emailVerified
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedActiveAsync(Person person, bool appEnabled, bool emailEnabled,
         byte[]? totpSecretEncrypted = null)
@@ -146,7 +128,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     {
         // Given a person who has enabled and confirmed App-based 2FA, and has already completed one
         // 2FA-gated login with the current app code
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("totp-replay"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("totp-replay") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppAsync("App");
         Assert.Equal(HttpStatusCode.OK, (await ConfirmAsync(CurrentTotpCode(secret))).StatusCode);
@@ -178,7 +160,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         // FR-2F-10: "shall reject an expired or already-redeemed challenge token". Whoever holds a
         // challenge that has already been traded for a full token — from a log, a proxy, a shared
         // screen — must not be able to trade it again with any further factor, without the password.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("redeemed-challenge"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("redeemed-challenge") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var firstRecoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -207,7 +189,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenACurrentRecoveryCode_WhenTypedInLowerCaseWithSpaces_ThenTheLoginCompletes()
     {
         // Given a code of the current shape, stored as UC-37 and UC-40 store it (FR-2F-20)
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("typed-recovery"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("typed-recovery") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var issued = ArturRios.Heimdall.Command.Services.RecoveryCodes.Issue()[0];
@@ -236,7 +218,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenALegacyRecoveryCode_WhenTypedInLowerCaseWithoutTheHyphen_ThenTheLoginCompletes()
     {
         // Given a code of the shape issued before, which keeps working until used or regenerated
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("legacy-recovery"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("legacy-recovery") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -255,7 +237,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenAChallengeSupersededByANewerLogin_WhenPostVerify_ThenUnauthorized()
     {
         // Only the latest challenge is outstanding: a second login replaces the first one's.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("superseded-challenge"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("superseded-challenge") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -279,7 +261,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         // NFR-24 / UC-44 step 4: a restricted identity authenticates for its own rights only. A
         // restriction applied between UC-11 and UC-38 ends the login the way UC-11's AF-11i would
         // have — never with the full token the challenge was issued towards.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted-challenge"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("restricted-challenge") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -311,7 +293,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     {
         // AF-11g still applies to a restricted person: the second factor guards the rights the token
         // admits, so the password alone yields a challenge, not the subject-rights-only token
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted-login"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("restricted-login") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -340,7 +322,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenFullTwoFactorFlow_WhenEnablingConfirmingLoggingInAndVerifying_ThenFullTokenIsIssued()
     {
         // Given a person who enables and confirms App-based 2FA through the real endpoints
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("full-flow"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("full-flow") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppAsync("App");
         var confirm = await ConfirmAsync(CurrentTotpCode(secret));
@@ -391,8 +373,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     {
         // Given a 2FA-gated person whose address is unverified: login gave them a challenge that
         // deliberately said nothing about the account, so this is where they learn it (FR-EV-05)
-        var person = await SeedPersonAsync(
-            Roles.SystemAdmin, UniqueEmail("gated-unverified"), emailVerified: false);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("gated-unverified"), EmailVerified = false });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppAsync("App");
         var confirm = await ConfirmAsync(CurrentTotpCode(secret));
@@ -420,7 +401,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenValidEmailCode_WhenPostVerify_ThenFullTokenIsIssued()
     {
         // Given an active email-only configuration and a challenge token for that person
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("email-2fa"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("email-2fa") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
@@ -437,7 +418,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenValidRecoveryCode_WhenPostVerify_ThenFullTokenIsIssuedAndCodeIsMarkedUsed()
     {
         // Given an active configuration and one of the person's recovery codes
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("recovery"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("recovery") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
@@ -460,7 +441,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenAlreadyUsedRecoveryCode_WhenPostVerify_ThenUnauthorizedWithSameMessageAsWrongCode()
     {
         // Given — AF-38c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("used-recovery"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("used-recovery") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id, used: true);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
@@ -477,7 +458,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenWrongAppCode_WhenPostVerify_ThenUnauthorized()
     {
         // Given — AF-38b
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("wrong-code"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("wrong-code") });
         await SeedActiveAsync(person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
 
@@ -504,7 +485,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         // would have been dead for four and a half minutes at this point.
         var remaining = TimeSpan.FromSeconds(30);
 
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("far-end"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("far-end") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode, remainingLife: remaining);
 
@@ -522,7 +503,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
     public async Task GivenAChallengeTokenJustInsideItsWindow_WhenPostVerify_ThenAccepted()
     {
         // The inside half of the boundary. A few seconds of life left is still life.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("inside-window"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("inside-window") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
 
@@ -546,7 +527,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         //
         // The code is deliberately left live: the only thing that has run out is the challenge, and
         // that alone must be enough to refuse.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("outside-window"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("outside-window") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
 
@@ -608,7 +589,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         // Given no Authorization header whatsoever (this test method never calls Authorize) —
         // MfaPendingGuardFilter must be a no-op here, not an accidental authentication requirement of
         // its own
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("anon-ok"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("anon-ok") });
 
         // When
         var response = await LoginAsync(person.Email);

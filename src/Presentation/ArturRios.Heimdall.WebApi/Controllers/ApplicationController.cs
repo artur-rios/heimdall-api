@@ -53,7 +53,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         var query = new GetApplicationByIdQuery { ScopeId = scopeId, Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetApplicationByIdQuery, ApplicationOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetApplicationByIdQuery, ApplicationOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }
@@ -72,7 +72,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeApplicationsQuery, ApplicationOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeApplicationsQuery, ApplicationOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ApplicationMessageMap.StatusCodes);
     }

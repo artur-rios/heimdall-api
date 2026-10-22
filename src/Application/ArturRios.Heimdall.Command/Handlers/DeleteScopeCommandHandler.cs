@@ -1,9 +1,7 @@
-using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
@@ -16,19 +14,52 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     Handles <see cref="DeleteScopeCommand" /> (UC-04): locates the scope (AF-04a), then logically
 ///     deletes it and cascades <c>IsDeleted = true</c> to its Users (via <c>SCOPE_USER</c>), Google
 ///     Users, and applications. Owners (<c>SCOPE_OWNER</c>) are never modified. An already-deleted
-///     scope is an idempotent no-op (AF-04b). The response reports the totals of the scope's members,
-///     counted regardless of their individual deletion state. All failures are returned as errors on
-///     the <see cref="DataOutput{T}" /> rather than thrown.
+///     scope is answered as deleted (AF-04b), its cascade re-run for any member still live. The
+///     response reports the totals of the scope's members, counted regardless of their individual
+///     deletion state. All failures are returned as errors on the <see cref="DataOutput{T}" /> or
+///     thrown, and none of them keeps a partial cascade.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>All or nothing</b> (#204). The scope's flag and the cascade are written in one
+///         <see cref="IWriteTransactions" /> transaction, so a failure part-way leaves the scope and every
+///         member as they were, and the next attempt starts from the beginning. They used to be separate
+///         saves: a failure after the flag left a deleted scope with live members, and the retry, finding
+///         the scope deleted, skipped the cascade and answered <c>200</c>.
+///     </para>
+///     <para>
+///         <b>A retry finishes the cascade.</b> AF-04b leaves the scope as it is but runs the cascade
+///         again, which touches only members not yet deleted, so a scope left half-cascaded — by a
+///         version before the transaction — is repaired by deleting it again, and an intact one costs
+///         three statements that change nothing.
+///     </para>
+///     <para>
+///         <b>Set-based</b> (<see cref="IScopeCascades" />). The members are never loaded: the cascade is
+///         one conditional <c>UPDATE</c> per kind of member, and the totals are counts. A tenant of any
+///         size costs the request the same memory.
+///     </para>
+///     <para>
+///         <b>Under the scope's lock</b> (#202). The transaction first locks the scope's row
+///         (<see cref="IInvariantLocks" />), which every writer that can take an owner out of the scope
+///         also holds, and reads the scope again under it. So the deletion and an owner change of the same
+///         scope run one after the other: an owner removal that follows finds the scope gone (AF-22a),
+///         and the deletion never acts on a scope read before another request deleted it.
+///     </para>
+///     <para>
+///         <b>The flag alone</b> (#205). The scope is written by a targeted write of <c>IsDeleted</c> and
+///         <c>UpdatedAt</c>, not a save of the copy read before the lock, which would write the scope's
+///         name, description and settings back as they were read, over a change made in between.
+///     </para>
+/// </remarks>
 public class DeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
-    IAsyncRepository<Scope, long> scopeWriter,
+    IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
-    IAsyncRepository<Application, long> applicationWriter,
-    IAtomicWrites atomicWrites)
+    IScopeCascades scopeCascades,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<DeleteScopeCommand, DeleteScopeCommandOutput>
 {
     public async Task<DataOutput<DeleteScopeCommandOutput?>> HandleAsync(DeleteScopeCommand command, CancellationToken cancellationToken = default)
@@ -44,96 +75,55 @@ public class DeleteScopeCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 3: the scope's members, counted regardless of individual deletion state (both flows).
-        var users = await personReader.Query()
-            .Where(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id)
-            .ToListAsync();
-        var googleUsers = await googleUserReader.Query()
-            .Where(g => g.ScopeId == scope.Id)
-            .ToListAsync();
-        var applications = await applicationReader.Query()
-            .Where(a => a.ScopeId == scope.Id)
-            .ToListAsync();
+        var now = DateTime.UtcNow;
 
-        // AF-04b: an already-deleted scope is left untouched; the totals are still reported below.
-        if (!scope.IsDeleted)
+        // Steps 3-4 land together or not at all (#204): leaving this block by any return or exception
+        // before the commit rolls both back.
+        await using var transaction = await transactions.BeginAsync();
+        await locks.LockAsync([scope.Id]);
+
+        // The scope's deletion state as it stands under the lock, not as read above: the tracked copy
+        // keeps the values it was read with. Gone altogether is AF-04a's answer.
+        var isDeleted = await scopeReader.Query()
+            .Where(x => x.Id == scope.Id)
+            .Select(x => (bool?)x.IsDeleted)
+            .FirstOrDefaultAsync();
+
+        if (isDeleted is null)
         {
-            var now = DateTime.UtcNow;
-
-            // Step 4: flip the scope itself.
-            // The cascade is an administrative deletion like any other (NFR-20): nobody asked to be
-            // erased, so the identities it sweeps up get the reversal window rather than the
-            // statutory deadline.
-            const int administrative = (int)DeletionKinds.Administrative;
-
-            scope.IsDeleted = true;
-            scope.UpdatedAt = now;
-
-            var scopeUpdate = await scopeWriter.UpdateAsync(scope);
-
-            if (!scopeUpdate.Success)
-            {
-                return output.WithErrors(scopeUpdate.Errors);
-            }
-
-            // Step 5: cascade to the members that are not already deleted. A User's deletion is a
-            // targeted write of the deletion's columns alone (#237), made only while they are live,
-            // so one deleted meanwhile keeps the time and kind of its own deletion.
-            foreach (var user in users.Where(p => !p.IsDeleted))
-            {
-                await atomicWrites.TryMarkDeletedAsync(user, DeletionKinds.Administrative, now);
-            }
-
-            var cascadeErrors = (await CascadeAsync(googleUsers, g => g.IsDeleted,
-                    g => { g.IsDeleted = true; g.DeletedAt = now; g.DeletionKind = administrative; g.UpdatedAt = now; },
-                    googleUserWriter))
-                .Concat(await CascadeAsync(applications, a => a.IsDeleted,
-                    a => { a.IsDeleted = true; a.UpdatedAt = now; }, applicationWriter))
-                .ToList();
-
-            if (cascadeErrors.Count > 0)
-            {
-                return output.WithErrors(cascadeErrors);
-            }
+            return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 6: return the scope id and the member totals.
+        // Step 3: flip the scope itself, and nothing else of it. AF-04b: an already-deleted scope is left
+        // as it is. Under the lock nothing else writes the row, so the write cannot find it deleted.
+        if (isDeleted == false)
+        {
+            await atomicWrites.TryMarkScopeDeletedAsync(scope, now);
+        }
+
+        // Step 4, for a new deletion and for AF-04b alike: every member not yet deleted. It is an
+        // administrative deletion like any other (NFR-20): nobody asked to be erased, so the identities
+        // it sweeps up get the reversal window rather than the statutory deadline. Members already
+        // deleted keep the time and kind of their own deletion (#237).
+        await scopeCascades.MarkMembersDeletedAsync(scope.Id, now);
+
+        // Step 5's totals, counted regardless of individual deletion state.
+        var userCount = await personReader.Query()
+            .CountAsync(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id);
+        var googleUserCount = await googleUserReader.Query().CountAsync(g => g.ScopeId == scope.Id);
+        var applicationCount = await applicationReader.Query().CountAsync(a => a.ScopeId == scope.Id);
+
+        await transaction.CommitAsync();
+
+        // Step 5: return the scope id and the member totals.
         return output
             .WithData(new DeleteScopeCommandOutput
             {
                 Id = scope.PublicId,
-                UserCount = users.Count,
-                GoogleUserCount = googleUsers.Count,
-                ApplicationCount = applications.Count
+                UserCount = userCount,
+                GoogleUserCount = googleUserCount,
+                ApplicationCount = applicationCount
             })
             .WithMessage(ScopeMessages.ScopeDeletedSuccessfully);
-    }
-
-    /// <summary>
-    ///     Flips <c>IsDeleted</c> (and <c>UpdatedAt</c>, via <paramref name="markDeleted" />) on the
-    ///     members that are not already deleted, then persists them. Returns any persistence errors,
-    ///     or an empty sequence when there is nothing to update.
-    /// </summary>
-    private static async Task<IEnumerable<string>> CascadeAsync<T>(
-        IEnumerable<T> members,
-        Func<T, bool> isDeleted,
-        Action<T> markDeleted,
-        IAsyncRepository<T, long> writer) where T : Entity<long>
-    {
-        var pending = members.Where(member => !isDeleted(member)).ToList();
-
-        if (pending.Count == 0)
-        {
-            return [];
-        }
-
-        foreach (var member in pending)
-        {
-            markDeleted(member);
-        }
-
-        var result = await writer.UpdateRangeAsync(pending);
-
-        return result.Success ? [] : result.Errors;
     }
 }

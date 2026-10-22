@@ -12,8 +12,8 @@ public class RateLimitPartitionKeyTests
     public void GivenTwoAddressesInOneIPv6Slash64_WhenPartitioned_ThenTheyShareAPartition()
     {
         // Given / When
-        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:aaaa::1"));
-        var second = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:ffff:1:2:3"));
+        var first = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:aaaa::1"));
+        var second = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2:ffff:1:2:3"));
 
         // Then
         Assert.Equal(first, second);
@@ -24,8 +24,8 @@ public class RateLimitPartitionKeyTests
     {
         // Given the first and the last /64 of one /56 — 256 partitions to one subscriber, if the
         // limiter counted per /64
-        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:200::1"));
-        var last = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff:ffff:ffff:ffff:ffff"));
+        var first = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:200::1"));
+        var last = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff:ffff:ffff:ffff:ffff"));
 
         // Then
         Assert.Equal(first, last);
@@ -35,7 +35,7 @@ public class RateLimitPartitionKeyTests
     public void GivenAnIPv6Address_WhenPartitioned_ThenTheKeyNamesItsSlash56()
     {
         // Given / When
-        var key = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ab:cd::1"));
+        var key = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ab:cd::1"));
 
         // Then
         Assert.Equal("2001:db8:1:200::/56", key);
@@ -45,8 +45,8 @@ public class RateLimitPartitionKeyTests
     public void GivenAddressesInDifferentIPv6Slash56s_WhenPartitioned_ThenTheyDoNot()
     {
         // Given neighbouring /56s, which are two subscribers
-        var first = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff::1"));
-        var second = Startup.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:300::1"));
+        var first = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:2ff::1"));
+        var second = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("2001:db8:1:300::1"));
 
         // Then
         Assert.NotEqual(first, second);
@@ -55,23 +55,23 @@ public class RateLimitPartitionKeyTests
     [UnitFact]
     public void GivenIPv4Addresses_WhenPartitioned_ThenEachAddressIsItsOwnPartition()
     {
-        Assert.Equal("203.0.113.7", Startup.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")));
+        Assert.Equal("203.0.113.7", RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")));
         Assert.NotEqual(
-            Startup.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")),
-            Startup.RateLimitPartitionKey(IPAddress.Parse("203.0.113.8")));
+            RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")),
+            RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("203.0.113.8")));
     }
 
     [UnitFact]
     public void GivenAnIPv4MappedAddress_WhenPartitioned_ThenItCountsAsTheIPv4Caller()
     {
         Assert.Equal(
-            Startup.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")),
-            Startup.RateLimitPartitionKey(IPAddress.Parse("::ffff:203.0.113.7")));
+            RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("203.0.113.7")),
+            RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse("::ffff:203.0.113.7")));
     }
 
     [UnitFact]
     public void GivenNoAddress_WhenPartitioned_ThenAllSuchCallersShareOne()
     {
-        Assert.Equal("unknown", Startup.RateLimitPartitionKey(null));
+        Assert.Equal("unknown", RateLimitingConfiguration.RateLimitPartitionKey(null));
     }
 }

@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -23,7 +24,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class SetGoogleSignInCommandHandler(
     IValidator<SetGoogleSignInCommand> validator,
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
-    IAsyncRepository<Scope, long> scopeWriter,
+    IAtomicWrites atomicWrites,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<SetGoogleSignInCommand, SetGoogleSignInCommandOutput>
 {
@@ -67,15 +68,13 @@ public class SetGoogleSignInCommandHandler(
 
         // UC-24 step 5: write the flag and stamp UpdatedAt (no DB trigger maintains it). Written
         // unconditionally: PUT is idempotent by contract and UC-24 defines no alternative flow for a
-        // request that asks for the value the scope already holds.
-        scope.GoogleSignInEnabled = command.Enabled!.Value;
-        scope.UpdatedAt = DateTime.UtcNow;
-
-        var update = await scopeWriter.UpdateAsync(scope);
-
-        if (!update.Success)
+        // request that asks for the value the scope already holds. The flag alone, and only while the
+        // scope is not deleted (#205): a save of the copy read above would write the scope's other
+        // columns back as read — its name, the other settings, and the deletion flag, reviving a scope
+        // deleted since. One deleted since is answered as AF-24a.
+        if (!await atomicWrites.TrySetGoogleSignInAsync(scope, command.Enabled!.Value, DateTime.UtcNow))
         {
-            return output.WithErrors(update.Errors);
+            return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
         // UC-24 step 6: return the updated scope.

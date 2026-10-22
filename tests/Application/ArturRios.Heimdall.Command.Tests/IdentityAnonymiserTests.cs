@@ -122,13 +122,13 @@ public class IdentityAnonymiserTests
     }
 
     [UnitFact]
-    public void GivenADeletedGoogleUser_WhenAnonymised_ThenNoIdentifyingValueRemains()
+    public async Task GivenADeletedGoogleUser_WhenAnonymised_ThenNoIdentifyingValueRemains()
     {
         var googleUser = LiveGoogleUser();
         var at = DateTime.UtcNow;
         var googleId = googleUser.GoogleId;
 
-        IdentityAnonymiser.Anonymise(googleUser, at);
+        Assert.True(await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, googleUser, at));
 
         Assert.NotEqual(RealName, googleUser.Name);
         Assert.NotEqual(RealEmail, googleUser.Email);
@@ -145,12 +145,13 @@ public class IdentityAnonymiserTests
     }
 
     [UnitFact]
-    public void GivenADeletedGoogleUser_WhenAnonymised_ThenStructuralValuesSurvive()
+    public async Task GivenADeletedGoogleUser_WhenAnonymised_ThenStructuralValuesSurvive()
     {
         var googleUser = LiveGoogleUser();
         var publicId = googleUser.PublicId;
 
-        IdentityAnonymiser.Anonymise(googleUser, DateTime.UtcNow);
+        Assert.True(
+            await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, googleUser, DateTime.UtcNow));
 
         Assert.Equal(publicId, googleUser.PublicId);
         Assert.Equal(7, googleUser.ScopeId);
@@ -158,7 +159,7 @@ public class IdentityAnonymiserTests
     }
 
     [UnitFact]
-    public void GivenTwoIdentitiesInOneScope_WhenAnonymised_ThenTheirPlaceholdersDiffer()
+    public async Task GivenTwoIdentitiesInOneScope_WhenAnonymised_ThenTheirPlaceholdersDiffer()
     {
         // GOOGLE_USER carries unconditional unique indexes on (scope_id, google_id) and
         // (scope_id, LOWER(email)). A constant placeholder would collide the moment a second Google
@@ -166,8 +167,8 @@ public class IdentityAnonymiserTests
         var first = LiveGoogleUser();
         var second = LiveGoogleUser();
 
-        IdentityAnonymiser.Anonymise(first, DateTime.UtcNow);
-        IdentityAnonymiser.Anonymise(second, DateTime.UtcNow);
+        await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, first, DateTime.UtcNow);
+        await IdentityAnonymiser.AnonymiseAsync(InMemoryAtomicWrites.Instance, second, DateTime.UtcNow);
 
         Assert.NotEqual(first.Email, second.Email);
         Assert.NotEqual(first.GoogleId, second.GoogleId);

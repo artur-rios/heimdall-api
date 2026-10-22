@@ -11,5 +11,7 @@ public interface IScopeOwnershipChecker
     /// <param name="actingPersonId">The acting caller's person <c>PublicId</c>.</param>
     /// <param name="scopeId">The target scope's internal id.</param>
     /// <returns><c>true</c> when the actor is a System Admin or owns the scope; otherwise <c>false</c>.</returns>
-    Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId);
+    /// <param name="cancellationToken">Stops the ownership lookup; a command passes none, by design.</param>
+    Task<bool> ActorMayManageScopeAsync(
+        int actingRole, Guid actingPersonId, long scopeId, CancellationToken cancellationToken = default);
 }

@@ -44,10 +44,13 @@ public class RequestErasureCommandHandlerTests
         AsyncFakeRepository<Person, long> persons,
         AsyncFakeRepository<GoogleUser, long> googleUsers,
         GoogleIdTokenPayload? payload = null,
-        IAtomicWrites? atomicWrites = null) =>
+        IAtomicWrites? atomicWrites = null,
+        InMemoryWriteTransactions? transactions = null,
+        InMemoryInvariantLocks? locks = null) =>
         new(new RequestErasureCommandValidator(),
-            persons, googleUsers, googleUsers,
-            Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance);
+            persons, googleUsers,
+            Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance,
+            transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons,
@@ -394,6 +397,26 @@ public class RequestErasureCommandHandlerTests
         Assert.True(person.IsDeleted);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenTheOnlyOtherOwnerIsInactive_WhenRequestingErasure_ThenItIsRecordedButBlocked(InactiveOwner how)
+    {
+        // The other owner is restricted or waiting on their own erasure: neither can administer the
+        // scope, so suspending this one would leave it with no active owner (NFR-12, #211)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        InactiveOwners.Make(await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7), how);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.True(output.Data!.Blocked);
+        Assert.Equal(ErasureMessages.BlockedByLastScopeOwnership, person.ErasureBlockedReason);
+        Assert.False(person.IsDeleted);
+    }
+
     [UnitFact]
     public async Task GivenAGoogleUserWithAFreshToken_WhenRequestingErasure_ThenItIsRecorded()
     {
@@ -411,6 +434,32 @@ public class RequestErasureCommandHandlerTests
         Assert.True(googleUser.IsDeleted);
         Assert.Equal((int)DeletionKinds.SubjectRequested, googleUser.DeletionKind);
         Assert.False(output.Data.RestrictionLifted);
+    }
+
+    [UnitFact]
+    public async Task GivenAGoogleUserDeletedSinceTheRead_WhenRequestingErasure_ThenNotEligibleAndTheDeletionStands()
+    {
+        // Given UC-28 deleting the Google User between this request's checks and its write (#205)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeGoogleUserWrite = row =>
+            {
+                row.IsDeleted = true;
+                row.DeletionKind = (int)DeletionKinds.Administrative;
+            }
+        };
+
+        // When
+        var output = await Handler(persons, googleUsers, Payload(), atomicWrites)
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: "a-fresh-token"));
+
+        // Then AF-42b answers, and the administrative deletion keeps its kind
+        Assert.Equal([ErasureMessages.NotEligible], output.Errors);
+        Assert.Null(googleUser.ErasureRequestedAt);
+        Assert.Equal((int)DeletionKinds.Administrative, googleUser.DeletionKind);
     }
 
     [UnitFact]
@@ -584,5 +633,102 @@ public class RequestErasureCommandHandlerTests
 
         Assert.Equal([ErasureMessages.CredentialNotAccepted], output.Errors);
         Assert.False(googleUser.IsDeleted);
+    }
+
+    // #202: the block is decided under the locks of the person's scopes, in the request's one transaction.
+
+    [UnitFact]
+    public async Task GivenAnOwner_WhenRequestingErasure_ThenTheirScopesAreLockedAndTheRequestCommitted()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: [7, 8]);
+        await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: [7, 8]);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+
+        var output = await Handler(persons, googleUsers, transactions: transactions, locks: locks)
+            .HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.False(output.Data!.Blocked);
+        Assert.Equivalent(new[] { 7L, 8L }, Assert.Single(locks.ScopeLocks), strict: true);
+        Assert.Equal(1, transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenTheWrongPassword_WhenRequestingErasure_ThenNoTransactionIsOpened()
+    {
+        // The password is checked before the transaction, so no lock waits on Argon2
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        var transactions = new InMemoryWriteTransactions();
+
+        await Handler(persons, googleUsers, transactions: transactions)
+            .HandleAsync(Command(person.PublicId, WrongPassword));
+
+        Assert.Equal(0, transactions.Begun);
+    }
+
+    // #203 (NFR-32): the last active System Admin's request is recorded but blocked (AF-42e).
+
+    [UnitFact]
+    public async Task GivenTheLastActiveSystemAdmin_WhenRequestingErasure_ThenItIsRecordedButBlocked()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.SystemAdmin);
+        InactiveOwners.Make(await SeedPersonAsync(persons, Roles.SystemAdmin), InactiveOwner.Restricted);
+        var locks = new InMemoryInvariantLocks();
+
+        var output = await Handler(persons, googleUsers, locks: locks).HandleAsync(Command(person.PublicId));
+
+        Assert.True(output.Success);
+        Assert.Equal(ErasureMessages.ErasureRequestedButBlocked, output.Messages.First());
+        Assert.True(output.Data!.Blocked);
+        Assert.Equal(ErasureMessages.BlockedByLastSystemAdmin, output.Data.BlockedReason);
+        Assert.NotNull(person.ErasureRequestedAt);
+        Assert.False(person.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherActiveSystemAdmin_WhenASystemAdminRequestsErasure_ThenTheyAreSuspended()
+    {
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.SystemAdmin);
+        await SeedPersonAsync(persons, Roles.SystemAdmin);
+
+        var output = await Handler(persons, googleUsers).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Data!.Blocked);
+        Assert.True(person.IsDeleted);
+    }
+
+    // Fix round 1: the guards decide on the person as read under the locks, not on the copy read before.
+
+    [UnitFact]
+    public async Task GivenAnOwnedScopeHardDeletedWhileTheLockWasAwaited_WhenRequestingErasure_ThenItIsNotBlocked()
+    {
+        // The caller's only owned scope, owned by nobody else, is hard-deleted — taking the ownership row with
+        // it — while the request waits for the locks: no scope is left for NFR-12 to protect
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var person = await SeedPersonAsync(persons, Roles.ScopeAdmin, ownedScopeIds: 7);
+        var locks = new InMemoryInvariantLocks
+        {
+            OnLock = () =>
+            {
+                person.ScopeOwnerships.Clear();
+                return Task.CompletedTask;
+            }
+        };
+
+        var output = await Handler(persons, googleUsers, locks: locks).HandleAsync(Command(person.PublicId));
+
+        Assert.False(output.Data!.Blocked);
+        Assert.True(person.IsDeleted);
     }
 }

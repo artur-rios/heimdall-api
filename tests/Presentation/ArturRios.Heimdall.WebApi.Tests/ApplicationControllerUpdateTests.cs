@@ -31,58 +31,6 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
         Name = name ?? $"app-{Guid.NewGuid():N}", OwnerId = ownerId
     };
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<Application> SeedApplicationAsync(Scope scope, Person owner, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -110,8 +58,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenSystemAdmin_WhenPutApplication_ThenOkAndRowIsUpdated()
     {
         // Given an application a System Admin does not own
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var body = Body(owner.PublicId, "Renamed");
@@ -138,8 +86,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwningScopeAdmin_WhenPutApplication_ThenOkAndRowIsUpdated()
     {
         // Given the Scope Admin who owns the application (UC-18 step 3)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -157,9 +105,9 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given the owning Scope Admin naming a co-owner of the scope: UC-18 defines no equivalent of
         // UC-16's AF-16c, so giving away an application one owns is allowed
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var coOwner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -181,9 +129,9 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a co-owner of the scope: owning the scope is not grounds to modify another owner's
         // application (AF-18c)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var coOwner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.For(coOwner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -205,10 +153,10 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a caller holding the User role: FR-AP-03 lets them own no application, so the
         // endpoint's [RoleRequirement] refuses them
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
-        var caller = await SeedUserAsync(scope);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -224,8 +172,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenUnknownApplication_WhenPutApplication_ThenNotFound()
     {
         // Given an application id nobody holds (AF-18a)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -240,9 +188,9 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenApplicationOfAnotherScope_WhenPutApplication_ThenNotFound()
     {
         // Given the application exists, but under a different scope than the path addresses (AF-18a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         var application = await SeedApplicationAsync(otherScope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -259,8 +207,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenLogicallyDeletedApplication_WhenPutApplication_ThenNotFound()
     {
         // Given a logically deleted application: the precondition excludes it (AF-18a)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -278,9 +226,9 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a User of the scope as the proposed new owner: FR-AP-03 restricts ownership to a
         // ScopeAdmin who owns the scope (AF-18b)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var newOwner = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var newOwner = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -297,10 +245,10 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenNewOwnerOfADifferentScope_WhenPutApplication_ThenBadRequest()
     {
         // Given a ScopeAdmin who owns another scope entirely (AF-18b)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var stranger = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -317,8 +265,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenUnknownNewOwner_WhenPutApplication_ThenBadRequest()
     {
         // Given an owner id nobody holds (AF-18b)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -334,8 +282,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenEmptyName_WhenPutApplication_ThenBadRequest()
     {
         // Given a body with no name (UC-18 step 2)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -355,9 +303,9 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
         // so they are not deserialized at all, and ApplyActor sets them from the token — the AF-18c
         // refusal still stands. The body is an anonymous object, not an UpdateApplicationCommand,
         // precisely because the typed command can no longer carry the forged fields onto the wire.
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var coOwner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.For(coOwner.PublicId, (int)Roles.ScopeAdmin));
         var body = new
@@ -383,7 +331,7 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenNoToken_WhenPutApplication_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.PutAsync<DataOutput<UpdateApplicationCommandOutput?>>(

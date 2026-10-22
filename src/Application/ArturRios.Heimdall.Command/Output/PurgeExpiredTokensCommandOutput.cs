@@ -38,6 +38,17 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     /// <summary>Scope owner invitations that ended or expired more than 90 days ago, removed (FR-SC-18).</summary>
     public int ScopeOwnerInvitationsPurged { get; set; }
 
+    /// <summary>
+    ///     Rows across all eight tables still due once the run ended (#206): left because a table reached
+    ///     <c>MaxBatchesPerTick</c> full batches. Zero when every table drained.
+    /// </summary>
+    /// <remarks>
+    ///     Counted only for a table whose last batch came back full, since a batch that was not full took
+    ///     everything that was due: a run that keeps up costs no count at all, and a backlog that is not
+    ///     draining shows here run after run.
+    /// </remarks>
+    public int Backlog { get; set; }
+
     /// <summary>Rows removed across all eight tables.</summary>
     public int TotalPurged =>
         PasswordResetTokensPurged + EmailVerificationTokensPurged + TwoFactorEmailCodesPurged +

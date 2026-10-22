@@ -17,7 +17,7 @@ public class ReauthenticationRateLimitTests
         var limiting = action.GetCustomAttribute<EnableRateLimitingAttribute>();
 
         Assert.NotNull(limiting);
-        Assert.Equal(Startup.AuthEndpointRateLimitPolicy, limiting.PolicyName);
+        Assert.Equal(RateLimitingConfiguration.AuthEndpointRateLimitPolicy, limiting.PolicyName);
     }
 
     [UnitFact]

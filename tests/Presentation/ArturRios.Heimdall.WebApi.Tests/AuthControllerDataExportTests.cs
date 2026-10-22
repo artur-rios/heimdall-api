@@ -5,7 +5,6 @@ using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 
@@ -17,34 +16,10 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerDataExportTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Person> SeedPersonAsync()
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Ada Lovelace",
-            Email = $"export-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = Hash.EncodeWithRandomSalt("Str0ng-Export-Pass!", out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.User,
-            EmailVerified = true,
-            LegalBasis = (int)LegalBases.ContractPerformance,
-            PrivacyNoticeVersion = "1.0",
-            BasisRecordedAt = DateTime.UtcNow
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenAPerson_WhenExporting_ThenTheirOwnCopyIsReturned()
     {
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "export", Configure = p => { p.LegalBasis = (int)LegalBases.ContractPerformance; p.PrivacyNoticeVersion = "1.0"; p.BasisRecordedAt = DateTime.UtcNow; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<DataExportCommandOutput?>>(
@@ -70,7 +45,7 @@ public class AuthControllerDataExportTests(PostgresFixture db) : WebApiTest<Prog
     {
         // A document containing everything about a person must never sit in a proxy or browser
         // cache. It is why the endpoint is a POST at all.
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "export", Configure = p => { p.LegalBasis = (int)LegalBases.ContractPerformance; p.PrivacyNoticeVersion = "1.0"; p.BasisRecordedAt = DateTime.UtcNow; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<DataExportCommandOutput?>>(
@@ -94,7 +69,7 @@ public class AuthControllerDataExportTests(PostgresFixture db) : WebApiTest<Prog
     {
         // There is no shape of this request that names another identity, so the strongest role in
         // the system gets exactly what every other caller gets: their own copy.
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "export", Configure = p => { p.LegalBasis = (int)LegalBases.ContractPerformance; p.PrivacyNoticeVersion = "1.0"; p.BasisRecordedAt = DateTime.UtcNow; } });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<DataExportCommandOutput?>>(

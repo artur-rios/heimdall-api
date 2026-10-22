@@ -37,7 +37,7 @@ public class ScopeInvitationController(CommandMediator commandMediator, QueryMed
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeOwnerInvitationsQuery, ScopeOwnerInvitationOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeOwnerInvitationsQuery, ScopeOwnerInvitationOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes);
     }
@@ -77,7 +77,7 @@ public class ScopeInvitationController(CommandMediator commandMediator, QueryMed
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListMyScopeInvitationsQuery, MyScopeInvitationOutput>(query);
+            .ExecutePaginatedQueryAsync<ListMyScopeInvitationsQuery, MyScopeInvitationOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopeInvitationMessageMap.StatusCodes);
     }

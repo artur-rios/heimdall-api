@@ -28,31 +28,6 @@ public class AuditControllerListTests(PostgresFixture db) : WebApiTest<Program>(
 {
     private const string Route = "/api/audit-log";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = $"audit-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
     /// <summary>Writes an entry directly — the only way to have one whose actor is already cleared.</summary>
     private async Task<AuditLog> SeedEntryAsync(Guid targetId, DateTime createdAt, Guid? actor = null)
     {
@@ -89,8 +64,8 @@ public class AuditControllerListTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenAnEarlierWriteInTheSameTest_WhenListingByTarget_ThenTheEntryNamesActorActionAndTarget()
     {
         // Given a System Admin who has just turned Google Sign-In on for a scope
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
-        var scope = await SeedScopeAsync();
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audit" });
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
         var write = await Gateway.PutAsync<DataOutput<SetGoogleSignInCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/google-signin", new { enabled = true });
@@ -115,8 +90,8 @@ public class AuditControllerListTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenARefusedWrite_WhenListingRefusalsByActor_ThenItCarriesTheReason()
     {
         // Given a Scope Admin refused a scope they do not own
-        var scopeAdmin = await SeedPersonAsync(Roles.ScopeAdmin);
-        var scope = await SeedScopeAsync();
+        var scopeAdmin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "audit" });
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.For(scopeAdmin.PublicId, (int)Roles.ScopeAdmin));
         var refused = await Gateway.PutAsync<DataOutput<SetGoogleSignInCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/google-signin", new { enabled = true });
@@ -226,7 +201,7 @@ public class AuditControllerListTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenAListing_WhenRead_ThenNoAuditEntryIsWritten()
     {
         // Given a System Admin who has done nothing yet
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audit" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When

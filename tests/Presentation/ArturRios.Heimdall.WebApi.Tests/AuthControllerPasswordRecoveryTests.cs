@@ -8,7 +8,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -26,66 +25,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Recovery-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email, bool isDeleted = false)
-    {
-        var person = await SeedPersonAsync(Roles.User, email, isDeleted);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(string email, params Scope[] owned)
-    {
-        var person = await SeedPersonAsync(Roles.ScopeAdmin, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeOwners.AddRange(
-            owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id }));
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private Task<HttpOutput<DataOutput<PasswordRecoveryCommandOutput?>?>> RecoverAsync(
         string email, Guid? scopeId = null) =>
@@ -101,17 +43,13 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     /// </summary>
     private async Task SettleAsync()
     {
-        var sentinel = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("sentinel"));
+        var sentinel = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("sentinel") });
 
         await RecoverAsync(sentinel.Email);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-
-        while ((await TokensForAsync(sentinel)).Count == 0)
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The recovery queue did not settle in time.");
-            await Task.Delay(50);
-        }
+        await Poll.UntilAsync(
+            async () => (await TokensForAsync(sentinel)).Count > 0,
+            "The recovery queue did not settle in time.");
     }
 
     private async Task<List<PasswordResetToken>> TokensForAsync(Person person)
@@ -139,9 +77,9 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenUserWithScopeId_WhenPostPasswordRecovery_ThenTokenIsStoredForThem()
     {
         // Given a User of a live scope
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(scope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await RecoverAsync(email, scope.PublicId);
@@ -161,9 +99,9 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenScopeAdminWithoutScopeId_WhenPostPasswordRecovery_ThenTokenIsStoredForThem()
     {
         // Given a ScopeAdmin owning a live scope, recovering without naming one
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("admin");
-        var person = await SeedScopeAdminAsync(email, scope);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [scope] });
 
         // When
         var response = await RecoverAsync(email);
@@ -179,7 +117,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     {
         // Given a stored email in mixed case
         var email = UniqueEmail("MiXeD").ToUpper();
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When recovering with the lower-case form
         var response = await RecoverAsync(email.ToLower());
@@ -196,7 +134,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // Given someone who asks twice — a lost first email, an impatient second click — or someone
         // else asking again and again for the same address
         var email = UniqueEmail("admin");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var first = await RecoverAsync(email);
@@ -232,10 +170,10 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenUserAndWrongScopeId_WhenPostPasswordRecovery_ThenNoTokenIsStored()
     {
         // Given — AF-12a: the User exists, but in another scope
-        var theirScope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var theirScope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(theirScope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = theirScope });
 
         // When
         var response = await RecoverAsync(email, otherScope.PublicId);
@@ -250,9 +188,9 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenUserEmailWithoutScopeId_WhenPostPasswordRecovery_ThenNoTokenIsStored()
     {
         // Given — AF-12a: without a scope id the admin lookup runs, which must not reach a User
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(scope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await RecoverAsync(email);
@@ -269,7 +207,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // Given an account UC-11 refuses to authenticate: a reset link would produce a password that
         // cannot be used, and answering differently would confirm the account exists
         var email = UniqueEmail("deleted");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, IsDeleted = true });
 
         // When
         var response = await RecoverAsync(email);
@@ -284,9 +222,9 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenUserWhoseScopeIsDeleted_WhenPostPasswordRecovery_ThenNoTokenIsStored()
     {
         // Given a live User of a deleted scope — refused at login by AF-11d
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(scope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await RecoverAsync(email, scope.PublicId);
@@ -302,8 +240,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     {
         // Given a ScopeAdmin with nothing left to administer — refused at login by AF-11e
         var email = UniqueEmail("admin");
-        var person = await SeedScopeAdminAsync(
-            email, await SeedScopeAsync(isDeleted: true), await SeedScopeAsync(isDeleted: true));
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true }), await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true })] });
 
         // When
         var response = await RecoverAsync(email);
@@ -321,7 +258,7 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // path; this one puts the two responses side by side, which is the property AF-12a actually
         // states — a caller comparing them must find nothing to tell them apart.
         var email = UniqueEmail("admin");
-        await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var known = await RecoverAsync(email);
@@ -366,8 +303,8 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
         // A deleted admin awaiting anonymisation still holds the address its live successor now
         // holds (FR-PE-09 is unique among live persons only). The recovery goes to the live one.
         var email = UniqueEmail("reused-admin");
-        var deleted = await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
-        var current = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var deleted = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, IsDeleted = true });
+        var current = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var response = await RecoverAsync(email);

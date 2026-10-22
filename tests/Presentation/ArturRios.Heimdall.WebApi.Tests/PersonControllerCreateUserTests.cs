@@ -21,41 +21,11 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         Name = "User", Email = $"user-{Guid.NewGuid():N}@test.local", Password = "Str0ngPass!"
     };
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPostScopePersons_ThenUserIsCreated()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command();
 
@@ -87,7 +57,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         // ux_person_scope_user_email is what serialises them now. The losers are refused by the
         // index, and the handler reports that as AF-06a, so a caller cannot tell a lost race from
         // an address that was already taken when they asked.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var email = $"contended-{Guid.NewGuid():N}@test.local";
@@ -123,8 +93,8 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenOwnerScopeAdmin_WhenPostScopePersons_ThenUserIsCreated()
     {
         // Given a ScopeAdmin who owns the scope, authenticated with their own person id
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
         var command = Command();
 
@@ -151,8 +121,8 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenScopeAdminNotOwner_WhenPostScopePersons_ThenForbidden()
     {
         // Given a ScopeAdmin who does NOT own the scope (AF-06e)
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -178,7 +148,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenDuplicateEmailInScope_WhenPostScopePersons_ThenConflict()
     {
         // Given a scope where the email is already taken by a User
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command();
         var first = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -197,7 +167,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenDuplicateEmailInScopeDifferentCase_WhenPostScopePersons_ThenConflict()
     {
         // Given a scope where the email is already taken by a User (AF-06a is case-insensitive)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command();
         var first = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -219,7 +189,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     [FunctionalFact]
     public async Task GivenPlainUserCaller_WhenPostScopePersons_ThenForbidden()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -231,7 +201,7 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
     [FunctionalFact]
     public async Task GivenNoToken_WhenPostScopePersons_ThenUnauthorized()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/persons", Command());

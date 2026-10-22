@@ -30,59 +30,19 @@ public class AuditLoggingTests(PostgresFixture db) : WebApiTest<Program>(Environ
 
     private static string ApplicationsRoute(Guid scopeId) => $"/api/scopes/{scopeId}/applications";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedSystemAdminAsync()
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Root",
-            Email = $"root-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.SystemAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
     // A System Admin may name any owner (FR-AP-03), but the owner still has to be a real,
     // non-deleted ScopeAdmin who owns the target scope (AF-16b) — CreateApplicationCommandHandler
     // rejects any other OwnerId with OwnerNotValidForScope. The audit-log assertions below are about
     // who *acted* (the System Admin from the bearer token), not who ends up as the application owner,
     // so this seeds a valid owner separately from the actor.
-    private async Task<Person> SeedScopeOwnerAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Owner",
-            Email = $"owner-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeOwners.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     [FunctionalFact]
     public async Task GivenAuthenticatedSystemAdmin_WhenCreatingApplication_ThenAuditLogRowCarriesActor()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var admin = await SeedSystemAdminAsync();
-        var owner = await SeedScopeOwnerAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "root" });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "owner", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
         var command = Command(owner.PublicId);
 
@@ -104,7 +64,7 @@ public class AuditLoggingTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenRejectedCommand_WhenPostingWithNoScope_ThenTheRefusalIsRecorded()
     {
         // Given a scope id nobody holds — the write is rejected before anything is created
-        var admin = await SeedSystemAdminAsync();
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "root" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -128,9 +88,9 @@ public class AuditLoggingTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenASuccessfulWrite_WhenAudited_ThenItIsRecordedAsSucceededWithNoReason()
     {
         // The other side of the same row: an allowed write is marked as such, and carries no reason.
-        var scope = await SeedScopeAsync();
-        var admin = await SeedSystemAdminAsync();
-        var owner = await SeedScopeOwnerAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "root" });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "owner", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When

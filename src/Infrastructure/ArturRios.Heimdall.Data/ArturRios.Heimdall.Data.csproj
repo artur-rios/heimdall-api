@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
         <!-- Lets `dotnet ef` use this class library as its own startup project. -->
         <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     </PropertyGroup>
@@ -20,6 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\Application\ArturRios.Heimdall.Command\ArturRios.Heimdall.Command.csproj" />
       <ProjectReference Include="..\..\Domain\ArturRios.Heimdall.Domain\ArturRios.Heimdall.Domain.csproj" />
     </ItemGroup>
 

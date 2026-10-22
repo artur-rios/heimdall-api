@@ -26,18 +26,6 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
 {
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/google-users/{id}/hard";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync(Scope scope, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -59,31 +47,6 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
         return googleUser;
     }
 
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private Task<HttpOutput<DataOutput<HardDeleteGoogleUserCommandOutput?>?>> HardDeleteAsync(
         Guid scopeId, Guid id) =>
         Gateway.DeleteAsync<DataOutput<HardDeleteGoogleUserCommandOutput?>>(Route(scopeId, id));
@@ -99,7 +62,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     public async Task GivenSystemAdmin_WhenHardDelete_ThenRecordIsGone()
     {
         // Given a System Admin, UC-29's only actor (main flow)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -126,7 +89,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
         // Given a Google User removed from a scope. The foreign key points from the Google User to
         // the scope, so nothing should travel the other way — a cascade in that direction would take
         // the scope and everything else in it.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var survivor = await SeedGoogleUserAsync(scope);
         var doomed = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -144,7 +107,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     public async Task GivenLogicallyDeletedGoogleUser_WhenHardDelete_ThenRecordIsGone()
     {
         // Given a Google User UC-28 already soft-deleted — what a cleanup pass starts from
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -160,7 +123,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     public async Task GivenUnknownId_WhenHardDelete_ThenNotFound()
     {
         // Given an identifier nobody holds (AF-29a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -175,8 +138,8 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     public async Task GivenGoogleUserOfAnotherScope_WhenHardDelete_ThenNotFoundAndRecordSurvives()
     {
         // Given a Google User addressed through the wrong scope (AF-29a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(otherScope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -193,7 +156,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     {
         // Given a repeat of a call that already succeeded. UC-29 defines no idempotent path, unlike
         // UC-28's AF-28b, so the second call is AF-29a.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         Assert.Equal(HttpStatusCode.OK, (await HardDeleteAsync(scope.PublicId, googleUser.PublicId)).StatusCode);
@@ -211,9 +174,9 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     {
         // Given a Scope Admin who owns the very scope. This is the whole difference between UC-28 and
         // UC-29: the matrix grants them the logical deletion and withholds the hard one.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
-        var admin = await SeedScopeAdminAsync(scope);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -229,7 +192,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     {
         // Given the Google User themselves — always User-equivalent (FR-GO-04), so never a System
         // Admin, which is also why UC-29 needs no self-deletion refusal
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -245,7 +208,7 @@ public class GoogleUserControllerHardDeleteTests(PostgresFixture db) : WebApiTes
     public async Task GivenAnonymousCaller_WhenHardDelete_ThenUnauthorized()
     {
         // Given no bearer token
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var googleUser = await SeedGoogleUserAsync(scope);
 
         // When

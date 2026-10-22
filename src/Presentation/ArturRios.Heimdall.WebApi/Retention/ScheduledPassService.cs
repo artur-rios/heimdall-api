@@ -13,7 +13,8 @@ namespace ArturRios.Heimdall.WebApi.Retention;
 ///         never turns start-up into write pressure on the tables the login path uses.
 ///     </para>
 ///     <para>
-///         A failed run is logged and the loop continues. These are background tasks, not part of
+///         A failed run — one that returns a failure or throws — is logged at Error with
+///         <see cref="FailureMarker" /> and the loop continues. These are background tasks, not part of
 ///         serving a request — a database blip must not take the service down, and the next tick
 ///         retries whatever was missed, because a row past its retention period stays past it.
 ///     </para>
@@ -28,19 +29,32 @@ public abstract class ScheduledPassService(
     TimeSpan interval,
     ILogger logger) : BackgroundService
 {
+    /// <summary>
+    ///     The marker a failed pass's log line carries, at Error level. Stable and greppable: an alert
+    ///     should match on it rather than on the prose, which is written for a human and will change.
+    /// </summary>
+    public const string FailureMarker = "SCHEDULED_PASS_FAILED";
+
     /// <summary>What the service writes at start-up to say what it will do and how often.</summary>
     protected abstract string StartupDescription { get; }
 
     /// <summary>
-    ///     Dispatches the pass and returns what it did, for the log — or <c>null</c> when there is
-    ///     nothing worth saying, so an hourly no-op does not bury the runs that matter.
+    ///     The pass's stable name: the <c>pass</c> label on its metrics and the name beside the failure
+    ///     marker. Lower-case and hyphenated, and not to be changed once an alert depends on it.
+    /// </summary>
+    public abstract string PassName { get; }
+
+    /// <summary>
+    ///     Dispatches the pass and returns what it did — a summary for the log (or <c>null</c> when
+    ///     there is nothing worth saying, so an hourly no-op does not bury the runs that matter), whether
+    ///     it failed, and how many rows it processed.
     /// </summary>
     /// <param name="scope">
     ///     A fresh dependency-injection scope. The pass resolves what it needs from it — most
     ///     resolve <see cref="CommandMediator" />, the security detector a <c>QueryMediator</c>,
     ///     because it reads rather than writes.
     /// </param>
-    protected abstract Task<string?> RunAsync(IServiceProvider scope);
+    protected abstract Task<ScheduledPassResult> RunAsync(IServiceProvider scope);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -78,16 +92,28 @@ public abstract class ScheduledPassService(
             // its own — this service is a singleton and has none.
             using var scope = scopeFactory.CreateScope();
 
-            var summary = await RunAsync(scope.ServiceProvider);
+            var result = await RunAsync(scope.ServiceProvider);
 
-            if (summary is not null)
+            ScheduledPassMetrics.RowsProcessed(PassName, result.RowsProcessed);
+
+            if (result.Failed)
             {
-                logger.LogInformation("{Summary}", summary);
+                // Error, not Information: an alert on Warning or above has to fire when a retention
+                // obligation (NFR-19..21) stops being met, and the metric below deliberately stays put.
+                logger.LogError("{Marker} {Pass}: {Summary}", FailureMarker, PassName, result.Summary);
+                return;
+            }
+
+            ScheduledPassMetrics.Succeeded(PassName);
+
+            if (result.Summary is not null)
+            {
+                logger.LogInformation("{Summary}", result.Summary);
             }
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "A scheduled pass threw");
+            logger.LogError(exception, "{Marker} {Pass}: the pass threw", FailureMarker, PassName);
         }
     }
 }

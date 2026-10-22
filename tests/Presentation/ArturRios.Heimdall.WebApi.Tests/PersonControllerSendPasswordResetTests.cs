@@ -25,50 +25,6 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
 {
     private static string Route(Guid personId) => $"/api/persons/{personId}/password-reset";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role, Scope? memberOf = null, Scope? ownerOf = null, bool isDeleted = false, bool restricted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = $"reset-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true,
-            IsDeleted = isDeleted,
-            ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null,
-            RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        person.ScopeId = memberOf?.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (memberOf is not null)
-        {
-            context.ScopeUsers.Add(new ScopeUser { ScopeId = memberOf.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        if (ownerOf is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownerOf.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private async Task<int> LiveTokenCountAsync(Person person)
     {
         await using var context = db.CreateContext();
@@ -84,7 +40,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenSystemAdmin_WhenSending_ThenALiveResetTokenIsIssuedForThePerson()
     {
         // Given a User of a live scope
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -101,7 +57,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenSystemAdmin_WhenSending_ThenTheResponseCarriesNoToken()
     {
         // Given a System Admin as target — any person may be reset by a System Admin
-        var target = await SeedPersonAsync(Roles.SystemAdmin);
+        var target = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reset" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -118,8 +74,8 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenASuccessfulSend_WhenAudited_ThenTheEntryNamesTheAdminAndThePerson()
     {
         // Given a seeded System Admin
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reset" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -137,9 +93,9 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenOwningScopeAdmin_WhenSendingToAUserOfTheirScope_ThenItIsSent()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: scope);
-        var target = await SeedPersonAsync(Roles.User, memberOf: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reset", Owns = [scope] });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = scope });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -154,8 +110,8 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenScopeAdmin_WhenSendingToAUserOfAnotherScope_ThenReturnsForbidden()
     {
         // Given AF-52b
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: await SeedScopeAsync());
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reset", Owns = [await Seeds.ScopeAsync(db)] });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -185,7 +141,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenALogicallyDeletedPerson_WhenSending_ThenReturnsConflict()
     {
         // Given AF-52c
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(), isDeleted: true);
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", IsDeleted = true, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -200,7 +156,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenARestrictedPerson_WhenSending_ThenReturnsConflict()
     {
         // Given AF-52c (NFR-24)
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(), restricted: true);
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", RestrictedAt = DateTime.UtcNow, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -215,7 +171,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenAUserWhoseScopeIsDeleted_WhenSending_ThenReturnsConflict()
     {
         // Given AF-52d — a live User of a logically deleted scope could not sign in
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(isDeleted: true));
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true }) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -231,7 +187,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenASecondRequestInsideTheCooldown_WhenSending_ThenReturnsTooManyRequests()
     {
         // Given AF-52e — a first send has just succeeded
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(target.PublicId)).StatusCode);
 
@@ -248,7 +204,7 @@ public class PersonControllerSendPasswordResetTests(PostgresFixture db) : WebApi
     public async Task GivenAUser_WhenSending_ThenReturnsForbidden()
     {
         // Given the role gate
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "reset", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When

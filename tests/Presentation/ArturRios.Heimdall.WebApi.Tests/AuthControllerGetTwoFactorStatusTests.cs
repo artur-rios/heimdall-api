@@ -19,22 +19,6 @@ public class AuthControllerGetTwoFactorStatusTests(PostgresFixture db) : WebApiT
 {
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
-    private async Task<Person> SeedPersonAsync()
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Ana",
-            Email = UniqueEmail("ana"),
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync()
     {
         await using var context = db.CreateContext();
@@ -89,7 +73,7 @@ public class AuthControllerGetTwoFactorStatusTests(PostgresFixture db) : WebApiT
     public async Task GivenNoConfiguration_WhenGetTwoFactorStatus_ThenReturnsOkWithAllFalse()
     {
         // Given a person who never enabled two-factor authentication
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "ana" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -107,7 +91,7 @@ public class AuthControllerGetTwoFactorStatusTests(PostgresFixture db) : WebApiT
     public async Task GivenPendingSetup_WhenGetTwoFactorStatus_ThenReportsMethodsButNotActive()
     {
         // Given UC-36 initiated an app-method setup that UC-37 has not confirmed
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "ana" });
         await SeedTwoFactorAsync(person, isActive: false, appEnabled: true, emailEnabled: false,
             unusedCodes: 0, usedCodes: 0);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.ScopeAdmin));
@@ -125,7 +109,7 @@ public class AuthControllerGetTwoFactorStatusTests(PostgresFixture db) : WebApiT
     public async Task GivenActiveConfiguration_WhenGetTwoFactorStatus_ThenCountsOnlyUnusedRecoveryCodes()
     {
         // Given an active configuration with ten codes, three of them already spent
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "ana" });
         await SeedTwoFactorAsync(person, isActive: true, appEnabled: true, emailEnabled: true,
             unusedCodes: 7, usedCodes: 3);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.ScopeAdmin));

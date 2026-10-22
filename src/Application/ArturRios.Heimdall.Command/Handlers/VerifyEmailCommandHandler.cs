@@ -9,6 +9,7 @@ using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Command.Handlers;
 
@@ -48,13 +49,22 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         checks and requires the address the person was read with, so a change that lands in
 ///         between wins, and a save of the stale copy cannot put an old address back.
 ///     </para>
+///     <para>
+///         <b>The token is spent only with the write it unlocks</b> (#209), as in
+///         <see cref="ResetPasswordCommandHandler" />: spending it and setting the flag share one
+///         transaction, so a failed write leaves the link usable, while a write refused because the
+///         person changed leaves the token spent. Retiring the person's other links runs once that has
+///         committed, and a failure there is logged, not reported.
+///     </para>
 /// </remarks>
 public class VerifyEmailCommandHandler(
     IValidator<VerifyEmailCommand> validator,
     IAsyncReadOnlyRepository<EmailVerificationToken, long> tokenReader,
     IAsyncRepository<EmailVerificationToken, long> tokenWriter,
     IAtomicWrites atomicWrites,
-    IPendingRegistrationConfirmer pendingRegistrations)
+    IPendingRegistrationConfirmer pendingRegistrations,
+    IWriteTransactions transactions,
+    ILogger<VerifyEmailCommandHandler> logger)
     : ICommandHandlerAsync<VerifyEmailCommand, VerifyEmailCommandOutput>
 {
     public async Task<DataOutput<VerifyEmailCommandOutput?>> HandleAsync(VerifyEmailCommand command, CancellationToken cancellationToken = default)
@@ -125,29 +135,33 @@ public class VerifyEmailCommandHandler(
             return output.WithError(AuthMessages.TokenAlreadyUsed);
         }
 
-        // UC-14 step 4, for the presented token, brought forward and made atomic: of two requests
-        // carrying the same token, only the one that spends it verifies the address (AF-14b for the
-        // other).
-        if (!await atomicWrites.TryConsumeEmailVerificationTokenAsync(token, now))
+        // The token and the flag it unlocks land together or not at all (#209).
+        await using (var transaction = await transactions.BeginAsync())
         {
-            return output.WithError(AuthMessages.TokenAlreadyUsed);
-        }
+            // UC-14 step 4, for the presented token, brought forward and made atomic: of two requests
+            // carrying the same token, only the one that spends it verifies the address (AF-14b for
+            // the other).
+            if (!await atomicWrites.TryConsumeEmailVerificationTokenAsync(token, now))
+            {
+                return output.WithError(AuthMessages.TokenAlreadyUsed);
+            }
 
-        // UC-14 step 3 (FR-EV-03), written only while the person is still as found above
-        // (FR-EV-08, FR-PE-17). Otherwise the link is answered as AF-14d would now answer it; the
-        // token stays spent.
-        if (!await atomicWrites.TryMarkEmailVerifiedAsync(token.Person, now))
-        {
-            return output.WithError(AuthMessages.TokenInvalid);
+            // UC-14 step 3 (FR-EV-03), written only while the person is still as found above
+            // (FR-EV-08, FR-PE-17). Otherwise the link is answered as AF-14d would now answer it.
+            var written = await atomicWrites.TryMarkEmailVerifiedAsync(token.Person, now);
+
+            // Committed either way: a refused write is an answer, and the token stays spent. Only a
+            // write that fails leaves the transaction to roll back.
+            await transaction.CommitAsync();
+
+            if (!written)
+            {
+                return output.WithError(AuthMessages.TokenInvalid);
+            }
         }
 
         // UC-14 step 4, for every other token the person still holds.
-        var consumption = await ConsumeTokensAsync(token, now);
-
-        if (consumption is not null)
-        {
-            return output.WithErrors(consumption);
-        }
+        await RetireOtherTokensAsync(token, now);
 
         // UC-14 step 5.
         return output
@@ -169,25 +183,42 @@ public class VerifyEmailCommandHandler(
     ///         Already-expired tokens are left alone. They are refused by AF-14a either way, and
     ///         rewriting them would only make a dead token report a different reason for being dead.
     ///     </para>
+    ///     <para>
+    ///         Best effort (#209): the address is already verified, so a failure here is logged and not
+    ///         reported. It runs in a transaction of its own so that a failure retires none of them and
+    ///         leaves nothing pending for the next save, the audit entry's.
+    ///     </para>
     /// </remarks>
-    private async Task<IEnumerable<string>?> ConsumeTokensAsync(EmailVerificationToken token, DateTime now)
+    private async Task RetireOtherTokensAsync(EmailVerificationToken token, DateTime now)
     {
-        var live = await tokenReader.Query()
-            .Where(x => x.PersonId == token.PersonId && !x.Used && x.ExpiresAt > now)
-            .ToListAsync();
-
-        foreach (var outstanding in live)
+        try
         {
-            outstanding.Used = true;
+            await using var transaction = await transactions.BeginAsync();
 
-            var update = await tokenWriter.UpdateAsync(outstanding);
+            var live = await tokenReader.Query()
+                .Where(x => x.PersonId == token.PersonId && !x.Used && x.ExpiresAt > now)
+                .ToListAsync();
 
-            if (!update.Success)
+            foreach (var outstanding in live)
             {
-                return update.Errors;
-            }
-        }
+                outstanding.Used = true;
 
-        return null;
+                var update = await tokenWriter.UpdateAsync(outstanding);
+
+                if (!update.Success)
+                {
+                    logger.LogWarning("The other verification links of a verified address could not be retired: {Errors}",
+                        string.Join(" | ", update.Errors));
+
+                    return;
+                }
+            }
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "The other verification links of a verified address could not be retired");
+        }
     }
 }

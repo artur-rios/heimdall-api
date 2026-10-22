@@ -13,7 +13,6 @@ using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Jwt;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -31,34 +30,11 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Origin-Pass!";
+    private const string Password = Seeds.Password;
     private const string ForeignIssuer = "another-service";
     private const string ForeignAudience = "another-service";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(string prefix, DateTime? restrictedAt = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Origin",
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restrictedAt,
-            RestrictionGround = restrictedAt is null ? null : (int)RestrictionGrounds.AccuracyContested
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     An active configuration with an outstanding challenge and one recovery code to redeem it with.
@@ -174,7 +150,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenAFullTokenUnderHeimdallsIssuerAndPersonAudience_WhenReadingAPerson_ThenOk()
     {
         // Given
-        var person = await SeedPersonAsync("origin-person-ok");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-person-ok" });
         ActAs(TestTokens.WithOrigin(FullIdentity(person), TestTokens.Issuer, TestTokens.Audiences.Person));
 
         // When
@@ -192,7 +168,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
         bool foreignIssuer, bool foreignAudience)
     {
         // Given a correctly signed token naming another issuer, another audience, or both
-        var person = await SeedPersonAsync("origin-person-foreign");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-person-foreign" });
         ActAs(TestTokens.WithOrigin(
             FullIdentity(person),
             foreignIssuer ? ForeignIssuer : TestTokens.Issuer,
@@ -210,7 +186,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenAFullTokenUnderTheApplicationAudience_WhenReadingAPerson_ThenUnauthorized()
     {
         // Given a person's claims under the audience only application tokens carry
-        var person = await SeedPersonAsync("origin-person-application");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-person-application" });
         ActAs(TestTokens.WithOrigin(FullIdentity(person), TestTokens.Issuer, PostgresFixture.ApplicationTokenAudience));
 
         // When
@@ -224,7 +200,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenAFullTokenWithASecondAudience_WhenReadingAPerson_ThenUnauthorized()
     {
         // Given Heimdall's person audience and another beside it
-        var person = await SeedPersonAsync("origin-person-two-audiences");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-person-two-audiences" });
         ActAs(TwoAudienceToken(person));
 
         // When
@@ -240,7 +216,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenASubjectRightsTokenUnderHeimdallsIssuerAndItsAudience_WhenExporting_ThenOk()
     {
         // Given a restricted identity's token, as its issuer writes it
-        var person = await SeedPersonAsync("origin-rights-ok", restrictedAt: DateTime.UtcNow.AddDays(-30));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-rights-ok", RestrictedAt = DateTime.UtcNow.AddDays(-30) });
         ActAs(TestTokens.WithOrigin(
             SubjectRightsIdentity(person), TestTokens.Issuer, TestTokens.Audiences.SubjectRights));
 
@@ -258,7 +234,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
         bool foreignIssuer, bool foreignAudience)
     {
         // Given
-        var person = await SeedPersonAsync("origin-rights-foreign", restrictedAt: DateTime.UtcNow.AddDays(-30));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-rights-foreign", RestrictedAt = DateTime.UtcNow.AddDays(-30) });
         ActAs(TestTokens.WithOrigin(
             SubjectRightsIdentity(person),
             foreignIssuer ? ForeignIssuer : TestTokens.Issuer,
@@ -280,7 +256,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
         bool foreignIssuer, bool foreignAudience)
     {
         // Given an outstanding challenge, and a token naming it from elsewhere
-        var person = await SeedPersonAsync("origin-challenge");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "origin-challenge" });
         var recoveryCode = await SeedTwoFactorWithRecoveryCodeAsync(person);
         var foreign = TestTokens.WithOrigin(
             ChallengeIdentity(person),

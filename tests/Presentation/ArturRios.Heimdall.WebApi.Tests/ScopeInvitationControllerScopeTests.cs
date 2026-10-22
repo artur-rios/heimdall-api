@@ -66,11 +66,11 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAnOwner_WhenListing_ThenOnlyOpenInvitationsAreReturned()
     {
         // Given one open, one ended and one expired invitation
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var open = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), owner);
-        await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), owner, endedAt: DateTime.UtcNow);
-        await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), owner, expiresAt: DateTime.UtcNow.AddMinutes(-1));
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var open = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), owner);
+        await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), owner, endedAt: DateTime.UtcNow);
+        await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), owner, expiresAt: DateTime.UtcNow.AddMinutes(-1));
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -87,13 +87,13 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenARestrictedInviteeAndARestrictedInviter_WhenListing_ThenTheirIdentitiesAreWithheld()
     {
         // Given NFR-24 — one invitation to a restricted invitee, one from a restricted inviter
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var restrictedInvitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var restrictedInvitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await SeedInvitationAsync(scope, restrictedInvitee, owner);
         await RestrictAsync(restrictedInvitee);
-        var restrictedInviter = await SeedScopeAdminAsync(db, scope);
-        var listed = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), restrictedInviter);
+        var restrictedInviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var listed = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), restrictedInviter);
         await RestrictAsync(restrictedInviter);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -112,9 +112,9 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAnOwner_WhenWithdrawing_ThenNoContentAndItEndsWithdrawnAndIsAudited()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var invitation = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), owner);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitation = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), owner);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -134,9 +134,9 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAWithdrawnInvitation_WhenWithdrawnAgain_ThenNotFoundWithTheMessage()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var invitation = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), owner);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitation = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), owner);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
         await WithdrawAsync(scope.PublicId, invitation.PublicId);
 
@@ -152,10 +152,10 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAnotherScopesInvitation_WhenWithdrawnThroughAScopeYouOwn_ThenNotFoundAndItStaysOpen()
     {
         // Given — Review Focus 3
-        var scope = await SeedScopeAsync(db);
-        var owner = await SeedScopeAdminAsync(db, scope);
-        var otherScope = await SeedScopeAsync(db);
-        var foreign = await SeedInvitationAsync(otherScope, await SeedScopeAdminAsync(db), null);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var otherScope = await Seeds.ScopeAsync(db);
+        var foreign = await SeedInvitationAsync(otherScope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), null);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -170,9 +170,10 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAScopeAdminWhoDoesNotOwnTheScope_WhenListingOrWithdrawing_ThenForbidden()
     {
         // Given AF-58b
-        var scope = await SeedScopeAsync(db);
-        var stranger = await SeedScopeAdminAsync(db, await SeedScopeAsync(db));
-        var invitation = await SeedInvitationAsync(scope, await SeedScopeAdminAsync(db), null);
+        var scope = await Seeds.ScopeAsync(db);
+        var stranger = await Seeds.PersonAsync(
+            db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [await Seeds.ScopeAsync(db)] });
+        var invitation = await SeedInvitationAsync(scope, await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" }), null);
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -189,7 +190,7 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenAUser_WhenListing_ThenForbiddenByTheAttribute()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -203,7 +204,7 @@ public class ScopeInvitationControllerScopeTests(PostgresFixture db) : WebApiTes
     public async Task GivenNoToken_WhenListing_ThenUnauthorized()
     {
         // Given no bearer token
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await ListAsync(scope.PublicId);

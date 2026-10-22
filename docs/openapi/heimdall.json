@@ -2294,6 +2294,39 @@
         "security": [ ]
       }
     },
+    "/api/healthcheck/ready": {
+      "get": {
+        "tags": [
+          "HealthCheck"
+        ],
+        "summary": "Readiness check (#215): `200 OK` when the database answers, `503 Service Unavailable`\nwhen it does not. Public — no authentication required.",
+        "description": "Liveness above reads no database, so an instance that has lost it stays \"healthy\" and keeps\nreceiving traffic it can only fail. This is the probe for that: an orchestrator or load\nbalancer stops routing to the instance without restarting it. It asks\n`DatabaseHealthCheck` alone and answers with the bare status, never a service\nbreakdown or a cause, which is why it can be anonymous where `detailed` cannot. The\ncause is in the log, where `DatabaseHealthCheck` writes it.\nThe answer is held for five seconds (`ReadinessCache`), so an anonymous caller\ncannot make the probe a database read per request.\n\n**Anonymous** — no bearer token required.",
+        "operationId": "HealthCheck_Ready",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [ ]
+      }
+    },
     "/api/healthcheck/detailed": {
       "get": {
         "tags": [
@@ -3063,7 +3096,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\ntherefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner\n(AF-09e) refusals.",
+        "summary": "Logically deletes a person by setting `IsDeleted = true` (UC-09, FR-PE-06). The\nattribute keeps a plain `User` out; the owner rule (AF-09c) is data-dependent and is\ntherefore enforced by the handler, as are the self-deletion (AF-09d), last-owner (AF-09e)\nand last-System-Admin (AF-09f) refusals.",
         "description": "**Requires role:** System Admin or Scope Admin.",
         "operationId": "Person_Delete",
         "parameters": [
@@ -3174,7 +3207,7 @@
         "tags": [
           "Person"
         ],
-        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the\nlast-owner guard (AF-10b) are enforced by the handler.",
+        "summary": "Permanently (hard) deletes a person, removing the applications they own, their password\nreset and email verification tokens, and their scope membership/ownership rows (UC-10,\nFR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c), the\nlast-owner guard (AF-10b) and the last-System-Admin guard (AF-10d) are enforced by the\nhandler.",
         "description": "**Requires role:** System Admin.",
         "operationId": "Person_HardDelete",
         "parameters": [
@@ -5856,6 +5889,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "involvement": {
+            "type": "string",
+            "nullable": true
           },
           "action": {
             "type": "string",

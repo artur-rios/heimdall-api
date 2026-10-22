@@ -32,8 +32,8 @@ public class ApplicationCredentialControllerListTests(PostgresFixture db) : WebA
     {
         // Given — a revoked credential, then a live one
         var (scope, _, application) = await SeedOwnedApplicationAsync(db);
-        var (revoked, revokedSecret) = await SeedCredentialAsync(db, application, revokedAt: DateTime.UtcNow.AddDays(-1));
-        await Task.Delay(20);
+        var (revoked, revokedSecret) = await SeedCredentialAsync(
+            db, application, revokedAt: DateTime.UtcNow.AddDays(-1), createdAt: DateTime.UtcNow.AddMinutes(-1));
         var (live, liveSecret) = await SeedCredentialAsync(db, application);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -88,7 +88,7 @@ public class ApplicationCredentialControllerListTests(PostgresFixture db) : WebA
     {
         // Given
         var (_, _, application) = await SeedOwnedApplicationAsync(db);
-        var otherScope = await SeedScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -104,7 +104,7 @@ public class ApplicationCredentialControllerListTests(PostgresFixture db) : WebA
     {
         // Given
         var (scope, _, application) = await SeedOwnedApplicationAsync(db);
-        var coOwner = await SeedScopeAdminAsync(db, scope);
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(coOwner.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When

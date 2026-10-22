@@ -40,8 +40,8 @@ public static class Program
         // pointed at it explicitly. Controllers are only reflected over, never constructed, so none
         // of their dependencies (the mediators, the DbContext) need to be registered.
         //
-        // ModelBindingConfiguration.Configure is also applied by Startup.ConfigureWebApi for the
-        // running API. This generator builds its own AddControllers() and never runs Startup, so the
+        // ModelBindingConfiguration.Configure is also applied by
+        // WebApiServiceCollectionExtensions.AddHeimdallControllers for the running API. This generator builds its own AddControllers() and never runs Startup, so the
         // two call sites are independent — drop this one and the published document regains the
         // server-populated query parameters Startup still keeps unbindable at runtime (caught by
         // OpenApiContractTests and scripts/openapi.py --check, unlike dropping the Startup site).

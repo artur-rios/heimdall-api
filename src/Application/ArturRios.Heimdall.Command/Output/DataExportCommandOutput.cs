@@ -37,7 +37,7 @@ public class DataExportCommandOutput : CommandOutput
     /// <summary>Applications the subject owns.</summary>
     public IEnumerable<DataExportApplication> Applications { get; set; } = [];
 
-    /// <summary>Every audit entry still attributed to the subject.</summary>
+    /// <summary>Every audit entry still attributed to the subject, as its actor or as its target.</summary>
     /// <remarks>
     ///     Entries whose attribution has been cleared under NFR-21 are absent, and necessarily so:
     ///     once cleared, nothing connects them to this person, which is the whole point of clearing
@@ -199,10 +199,26 @@ public class DataExportApplication
     public bool IsDeleted { get; set; }
 }
 
-/// <summary>One audit entry attributed to the subject.</summary>
+/// <summary>One audit entry the subject acted in, or was the target of.</summary>
 public class DataExportAuditEntry
 {
+    /// <summary><see cref="Involvement" /> of an entry the subject made.</summary>
+    public const string AsActor = "Actor";
+
+    /// <summary><see cref="Involvement" /> of an entry someone else made about the subject.</summary>
+    public const string AsTarget = "Target";
+
     public Guid Id { get; set; }
+
+    /// <summary>
+    ///     <see cref="AsActor" /> when the subject made the request, <see cref="AsTarget" /> when it
+    ///     was made about them by another identity.
+    /// </summary>
+    /// <remarks>
+    ///     The other identity is never named in a <see cref="AsTarget" /> entry: it is data about the
+    ///     subject, which Art. 15 covers, and the actor's identity is not, which Art. 15(4) protects.
+    /// </remarks>
+    public string Involvement { get; set; } = AsActor;
     public string Action { get; set; } = string.Empty;
     public Guid? TargetId { get; set; }
     public bool Succeeded { get; set; }

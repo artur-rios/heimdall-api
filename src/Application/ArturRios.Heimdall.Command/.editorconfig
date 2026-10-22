@@ -1,0 +1,8 @@
+# Commands are uncancellable by design (#219): the controllers dispatch them without a token, because
+# a write that has begun must run to completion or roll back as one unit rather than be abandoned
+# halfway when a client disconnects. The handlers still declare the CancellationToken parameter the
+# mediator's ICommandHandlerAsync contract requires, and they deliberately do not forward it to
+# EF Core. CA2016 would ask them to, so it is switched off for this project alone; queries (the Query
+# project) are held to it.
+[*.cs]
+dotnet_diagnostic.CA2016.severity = none

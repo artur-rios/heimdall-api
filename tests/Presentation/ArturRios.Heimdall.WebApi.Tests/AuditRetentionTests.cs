@@ -50,7 +50,8 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 {
     private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
 
-    private static PseudonymiseAuditActorsCommandHandler Handler(AppDbContext context)
+    private static PseudonymiseAuditActorsCommandHandler Handler(
+        AppDbContext context, int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick)
     {
         var entries = new EfRepository<AuditLog, long>(context);
         var tombstones = new EfRepository<ErasedSubject, Guid>(context);
@@ -60,7 +61,10 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
             new EfRepository<Person, long>(context),
             new EfRepository<GoogleUser, long>(context),
             tombstones, tombstones,
-            new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = 500 });
+            new DataRetentionOptions
+            {
+                AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+            });
     }
 
     /// <summary>
@@ -93,26 +97,6 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
     private Task<HttpOutput<PaginatedOutput<AuditLogEntryOutput>?>> ListAsync(string filters) =>
         Gateway.GetAsync<PaginatedOutput<AuditLogEntryOutput>>($"/api/audit-log?pageNumber=1&pageSize=20&{filters}");
 
-    private async Task<Person> SeedPersonAsync(AppDbContext context, DateTime? anonymisedAt)
-    {
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = anonymisedAt is null ? "Ada Lovelace" : "Anonymised",
-            Email = $"audit-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1],
-            Salt = [2],
-            RoleId = (long)Roles.User,
-            IsDeleted = anonymisedAt is not null,
-            AnonymisedAt = anonymisedAt
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private static async Task<AuditLog> SeedEntryAsync(
         AppDbContext context, Guid? actorId, DateTime createdAt, Guid? targetId = null,
         string action = "AuditRetentionTestCommand")
@@ -139,7 +123,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
     {
         await using var context = fixture.CreateContext();
 
-        var actor = await SeedPersonAsync(context, anonymisedAt: null);
+        var actor = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
         var due = await SeedEntryAsync(
             context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)));
         var recent = await SeedEntryAsync(context, actor.PublicId, DateTime.UtcNow.AddDays(-1));
@@ -169,13 +153,91 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
     }
 
     [FunctionalFact]
+    public async Task GivenABacklogOfThreeFullBatchesOnEveryGround_WhenThePassRunsOnce_ThenTheDatabaseAcceptsEveryWrite()
+    {
+        // Given nothing else due, then — with a batch of two — six entries due on each ground: past the
+        // period by and about a live person, by and about an erased one, and about a hard-deleted one (#206)
+        await DrainAsync();
+        await using var context = fixture.CreateContext();
+
+        var live = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
+        var erased = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Anonymised", EmailPrefix = "audit", IsDeleted = true, Configure = p => p.AnonymisedAt = DateTime.UtcNow.AddHours(-1) });
+        var removed = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
+        context.ErasedSubjects.Add(new ErasedSubject
+        {
+            Id = removed.PublicId, Kind = (int)ErasedSubjectKinds.Person, CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        await context.Persons.Where(x => x.Id == removed.Id).ExecuteDeleteAsync();
+
+        var entries = new List<AuditLog>();
+
+        for (var i = 0; i < 6; i++)
+        {
+            entries.Add(await SeedEntryAsync(
+                context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)), live.PublicId));
+            entries.Add(await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3 - i), erased.PublicId));
+            entries.Add(await SeedEntryAsync(context, actorId: null, DateTime.UtcNow.AddDays(-3 - i), removed.PublicId));
+        }
+
+        // When — one run
+        await using var runContext = fixture.CreateContext();
+        var output = await Handler(runContext, batchSize: 2).HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — every part due is cleared, in nine batches of two, and nothing is left
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(12, output.Data!.EntriesPseudonymised);
+        Assert.Equal(18, output.Data.TargetsCleared);
+        Assert.Equal(0, output.Data.Backlog);
+
+        await using var verification = fixture.CreateContext();
+        var ids = entries.Select(entry => entry.Id).ToList();
+        var stored = await verification.AuditLogs.Where(x => ids.Contains(x.Id)).ToListAsync();
+
+        Assert.All(stored, entry => Assert.Null(entry.ActorPersonId));
+        Assert.All(stored, entry => Assert.Null(entry.TargetId));
+    }
+
+    [FunctionalFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenThePassRuns_ThenPostgreSqlCountsTheEntriesStillDue()
+    {
+        // Given nothing else due, then seven entries due — four past the period by a live person, three by
+        // an erased one about a live person, so the count spans the grounds — a batch of two, two batches
+        await DrainAsync();
+        await using var context = fixture.CreateContext();
+
+        var live = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
+        var erased = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Anonymised", EmailPrefix = "audit", IsDeleted = true, Configure = p => p.AnonymisedAt = DateTime.UtcNow.AddHours(-1) });
+
+        for (var i = 0; i < 4; i++)
+        {
+            await SeedEntryAsync(context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)));
+        }
+
+        for (var i = 0; i < 3; i++)
+        {
+            await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3 - i), live.PublicId);
+        }
+
+        // When — one run, stopped at its cap
+        await using var runContext = fixture.CreateContext();
+        var output = await Handler(runContext, batchSize: 2, maxBatches: 2)
+            .HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — four cleared, and the database counted the three still due
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(4, output.Data!.EntriesPseudonymised);
+        Assert.Equal(3, output.Data.Backlog);
+    }
+
+    [FunctionalFact]
     public async Task GivenAnErasedIdentity_WhenThePassRuns_ThenTheTrailStopsNamingThem()
     {
         // This is the closing half of the erasure story: #92 anonymises the record, and until this
         // pass runs the audit trail still names the person who asked to be forgotten.
         await using var context = fixture.CreateContext();
 
-        var erased = await SeedPersonAsync(context, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var erased = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Anonymised", EmailPrefix = "audit", IsDeleted = true, Configure = p => p.AnonymisedAt = DateTime.UtcNow.AddHours(-1) });
         var entry = await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3));
 
         var output = await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
@@ -196,7 +258,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
     {
         await using var context = fixture.CreateContext();
 
-        var actor = await SeedPersonAsync(context, anonymisedAt: null);
+        var actor = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
         var entry = await SeedEntryAsync(
             context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)));
 
@@ -221,8 +283,8 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         // actor is not
         await using var context = fixture.CreateContext();
 
-        var actor = await SeedPersonAsync(context, anonymisedAt: null);
-        var erased = await SeedPersonAsync(context, anonymisedAt: DateTime.UtcNow.AddHours(-1));
+        var actor = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
+        var erased = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Anonymised", EmailPrefix = "audit", IsDeleted = true, Configure = p => p.AnonymisedAt = DateTime.UtcNow.AddHours(-1) });
         var scopeId = Guid.NewGuid();
         var aboutScope = await SeedEntryAsync(
             context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)), scopeId);
@@ -259,7 +321,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         await using (var context = fixture.CreateContext())
         {
-            var person = await SeedPersonAsync(context, anonymisedAt: null);
+            var person = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
             var entry = await SeedEntryAsync(
                 context, actorId: null, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)),
                 person.PublicId, action);
@@ -305,8 +367,8 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         await using (var context = fixture.CreateContext())
         {
-            person = await SeedPersonAsync(context, anonymisedAt: null);
-            administrator = await SeedPersonAsync(context, anonymisedAt: null);
+            person = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
+            administrator = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
             await SeedEntryAsync(context, administrator.PublicId, DateTime.UtcNow.AddHours(-1), person.PublicId, action);
         }
 

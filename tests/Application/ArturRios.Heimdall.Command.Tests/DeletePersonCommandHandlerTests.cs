@@ -72,8 +72,10 @@ public class DeletePersonCommandHandlerTests
     }
 
     private static DeletePersonCommandHandler HandlerFor(
-        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true, IAtomicWrites? atomicWrites = null) =>
-        new(persons, Ownership(ownershipAllowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
+        AsyncFakeRepository<Person, long> persons, bool ownershipAllowed = true, IAtomicWrites? atomicWrites = null,
+        InMemoryWriteTransactions? transactions = null, InMemoryInvariantLocks? locks = null) =>
+        new(persons, Ownership(ownershipAllowed), atomicWrites ?? InMemoryAtomicWrites.Instance,
+            transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
     private static DeletePersonCommand CommandFor(Person target, int actingRole, Guid actingPersonId) => new()
     {
@@ -319,5 +321,220 @@ public class DeletePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
         Assert.False(target.IsDeleted);
+    }
+
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError(
+        InactiveOwner how)
+    {
+        // Given — AF-09e: the scope's other owner is restricted or waiting on their erasure, and neither
+        // keeps the scope owned (#211)
+        var scope = Scope(1);
+        var target = ScopeAdmin(10, owned: scope);
+        var coOwner = InactiveOwners.Make(ScopeAdmin(11, owned: scope), how);
+        var persons = await PersonsWith(target, coOwner);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.False(target.IsDeleted);
+    }
+
+    // #202: the guard and the deletion run under the locks of the person's scopes, in one transaction.
+
+    [UnitFact]
+    public async Task GivenACoOwner_WhenHandlingDeletePerson_ThenTheirScopesAreLockedAndTheDeletionCommitted()
+    {
+        // Given
+        var first = Scope(1);
+        var second = Scope(2);
+        var target = ScopeAdmin(10, owned: [first, second]);
+        var coOwner = ScopeAdmin(11, owned: [first, second]);
+        var persons = await PersonsWith(target, coOwner);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, transactions: transactions, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equivalent(new[] { 1L, 2L }, Assert.Single(locks.ScopeLocks), strict: true);
+        Assert.Equal(1, transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenTheSoleOwner_WhenHandlingDeletePerson_ThenRefusedUnderTheLockAndNothingCommitted()
+    {
+        // Given
+        var target = ScopeAdmin(10, owned: Scope(1));
+        var persons = await PersonsWith(target);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, transactions: transactions, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal([1L], Assert.Single(locks.ScopeLocks));
+        Assert.Equal(0, transactions.Committed);
+    }
+
+    // #203 (NFR-32): no deletion may leave the system without an active System Admin.
+
+    private static Person SystemAdmin(long id) => new()
+    {
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"system-admin-{id}",
+        Email = $"system-admin-{id}@test.local",
+        RoleId = (long)Roles.SystemAdmin,
+        UpdatedAt = Stamp
+    };
+
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenTheOnlyOtherSystemAdminIsInactive_WhenDeletingTheActiveOne_ThenReturnsWouldRemoveLastSystemAdmin(
+        InactiveOwner how)
+    {
+        // Given — AF-09f: the actor is the other administrator, restricted or waiting on their erasure
+        var target = SystemAdmin(10);
+        var actor = InactiveOwners.Make(SystemAdmin(11), how);
+        var persons = await PersonsWith(target, actor);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: actor.PublicId);
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — refused under the System Admin lock, and the administrator stays
+        Assert.Equal([PersonMessages.WouldRemoveLastSystemAdmin], output.Errors);
+        Assert.False(target.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherActiveSystemAdmin_WhenDeletingASystemAdmin_ThenDeletedUnderTheSystemAdminLock()
+    {
+        // Given
+        var target = SystemAdmin(10);
+        var actor = SystemAdmin(11);
+        var persons = await PersonsWith(target, actor);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: actor.PublicId);
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.True(target.IsDeleted);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOnlySystemAdmin_WhenDeletingThemselves_ThenReturnsCannotDeleteSelf()
+    {
+        // Given the last System Admin (AF-09d answers before anything is locked)
+        var target = SystemAdmin(10);
+        var persons = await PersonsWith(target);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: target.PublicId);
+
+        // When
+        var output = await HandlerFor(persons).HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.CannotDeleteSelf], output.Errors);
+        Assert.False(target.IsDeleted);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeAdmin_WhenHandlingDeletePerson_ThenTheSystemAdminSetIsLockedToo()
+    {
+        // Given — whether the person is an administrator is only known under the lock, so every deletion
+        // takes it
+        var target = ScopeAdmin(10, owned: Scope(1));
+        var coOwner = ScopeAdmin(11, owned: Scope(1));
+        var persons = await PersonsWith(target, coOwner);
+        var locks = new InMemoryInvariantLocks();
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(1, locks.SystemAdminLocks);
+    }
+
+    // Fix round 1: the guards decide on the person as read under the locks, not on the copy read before.
+
+    [UnitFact]
+    public async Task GivenAScopeAdminPromotedWhileTheLockWasAwaited_WhenTheyAreTheLastSystemAdmin_ThenRefused()
+    {
+        // Given a Scope Admin read as one, and promoted to System Admin — the only one — by a request that
+        // committed while this one waited for the locks
+        var target = ScopeAdmin(10);
+        var persons = new AsyncFakeRepository<Person, long>(() => 10);
+        await persons.CreateAsync(target);
+        var locks = new InMemoryInvariantLocks { OnLock = () => PromoteStoredCopyAsync(persons, target) };
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — AF-09f, decided on the role under the lock
+        Assert.Equal([PersonMessages.WouldRemoveLastSystemAdmin], output.Errors);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOwnedScopeHardDeletedWhileTheLockWasAwaited_WhenHandlingDeletePerson_ThenItIsNotCounted()
+    {
+        // Given an owner of two scopes, the second of which — owned by nobody else — is hard-deleted, taking
+        // the ownership row with it, while this request waits for the locks
+        var shared = Scope(1);
+        var gone = Scope(2);
+        var target = ScopeAdmin(10, owned: [shared, gone]);
+        var coOwner = ScopeAdmin(11, owned: shared);
+        var persons = await PersonsWith(target, coOwner);
+        var locks = new InMemoryInvariantLocks
+        {
+            OnLock = () =>
+            {
+                target.ScopeOwnerships.Remove(target.ScopeOwnerships.Single(x => x.ScopeId == gone.Id));
+                return Task.CompletedTask;
+            }
+        };
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+
+        // When
+        var output = await HandlerFor(persons, locks: locks).HandleAsync(command);
+
+        // Then — the scope that no longer exists does not refuse the deletion (AF-09e)
+        Assert.True(output.Success);
+        Assert.True(target.IsDeleted);
+    }
+
+    /// <summary>
+    ///     Replaces the stored person with a promoted copy under the same id, as a promotion committed by another
+    ///     request would: the handler's own copy, read before the lock, still says Scope Admin. The repository
+    ///     must hand out that id again.
+    /// </summary>
+    private static async Task PromoteStoredCopyAsync(AsyncFakeRepository<Person, long> persons, Person read)
+    {
+        var promoted = ScopeAdmin(read.Id);
+        promoted.PublicId = read.PublicId;
+        promoted.RoleId = (long)Roles.SystemAdmin;
+        await persons.DeleteAsync(read);
+        await persons.CreateAsync(promoted);
     }
 }

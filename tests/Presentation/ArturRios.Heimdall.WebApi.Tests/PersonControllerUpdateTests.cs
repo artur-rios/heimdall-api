@@ -23,62 +23,6 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
 {
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string? email = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Member",
-            Email = email ?? UniqueEmail("user"),
-            RoleId = (long)Roles.User,
-            EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, string? email = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Admin",
-            Email = email ?? UniqueEmail("admin"),
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private static UpdatePersonCommand Body(string name, string email, int? roleId = null) =>
         new() { Name = name, Email = email, RoleId = roleId };
 
@@ -86,8 +30,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenSystemAdmin_WhenPutPerson_ThenNameAndEmailAreUpdated()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var email = UniqueEmail("renamed");
 
@@ -113,8 +57,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a User holding a live verification token, mailed to the address they have now
         const string token = "token-mailed-to-the-old-address-0123456789abcdef";
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
 
         await using (var seed = db.CreateContext())
         {
@@ -152,8 +96,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenUserUpdatingSelf_WhenPutPerson_ThenPersonIsUpdated()
     {
         // Given a User authenticated as themselves
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -169,9 +113,9 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenOwnerScopeAdmin_WhenPutScopeUser_ThenPersonIsUpdated()
     {
         // Given a ScopeAdmin who owns the User's scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -187,9 +131,9 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenNonOwningScopeAdmin_WhenPutScopeUser_ThenForbidden()
     {
         // Given a ScopeAdmin who does not own the User's scope
-        var scope = await SeedScopeAsync();
-        var outsider = await SeedScopeAdminAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var outsider = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(outsider.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -204,9 +148,9 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenUserUpdatingAnotherPerson_WhenPutPerson_ThenForbidden()
     {
         // Given two Users of the same scope
-        var scope = await SeedScopeAsync();
-        var actor = await SeedUserAsync(scope);
-        var target = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var actor = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.User));
 
         // When
@@ -221,9 +165,9 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenScopeAdminChangingRole_WhenPutPerson_ThenForbidden()
     {
         // Given an owning ScopeAdmin attempting a role change (AF-08c)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -239,8 +183,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenSystemAdminPromotingUserToSystemAdmin_WhenPutPerson_ThenScopeUserRowIsRemoved()
     {
         // Given a User in a scope (FR-PE-10: a System Admin belongs to no scope)
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -264,8 +208,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenSystemAdminPromotingUserToScopeAdmin_WhenPutPerson_ThenBadRequest()
     {
         // Given a transition that would need a target scope the request does not carry
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -278,11 +222,12 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     }
 
     [FunctionalFact]
-    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenConflict()
+    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenPromotedAndTheOwnershipKept()
     {
-        // Given a scope whose only owner is the target (NFR-12)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        // Given a scope whose only owner is the target. A System Admin may be a named owner (FR-SC-08),
+        // so the promotion keeps the ownership and the scope stays owned (#224).
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -290,20 +235,24 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
             $"/api/persons/{owner.PublicId}",
             Body("Admin", owner.Email, (int)Roles.SystemAdmin));
 
-        // Then — refused, and the ownership row survives
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        // Then — promoted, still the owner, and the response says so
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal((int)Roles.SystemAdmin, response.Body?.Data?.Role);
+        Assert.Equal([scope.PublicId], response.Body?.Data?.OwnedScopeIds);
 
         await using var context = db.CreateContext();
-        Assert.True(await context.ScopeOwners.AnyAsync(so => so.PersonId == owner.Id));
+        Assert.True(await context.ScopeOwners.AnyAsync(so => so.PersonId == owner.Id && so.ScopeId == scope.Id));
+        Assert.Equal((long)Roles.SystemAdmin,
+            (await context.Persons.AsNoTracking().FirstAsync(p => p.Id == owner.Id)).RoleId);
     }
 
     [FunctionalFact]
     public async Task GivenEmailTakenInScope_WhenPutPerson_ThenConflict()
     {
         // Given two Users in one scope (AF-08b)
-        var scope = await SeedScopeAsync();
-        var first = await SeedUserAsync(scope);
-        var second = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var first = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
+        var second = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When the second takes the first's email
@@ -332,8 +281,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenInvalidPayload_WhenPutPerson_ThenBadRequest()
     {
         // Given an empty name
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -348,8 +297,8 @@ public class PersonControllerUpdateTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenNoToken_WhenPutPerson_ThenUnauthorized()
     {
         // Given a person but no bearer token on the gateway
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Member", EmailPrefix = "user", MemberOf = scope });
 
         // When
         var response = await Gateway.PutAsync<DataOutput<UpdatePersonCommandOutput?>>(

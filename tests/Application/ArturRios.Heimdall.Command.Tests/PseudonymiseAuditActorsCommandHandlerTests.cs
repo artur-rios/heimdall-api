@@ -1,11 +1,14 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
+using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
 
@@ -29,9 +32,14 @@ public class PseudonymiseAuditActorsCommandHandlerTests
     {
         public static Fakes New() => new(new(), new(), new(), new());
 
-        public PseudonymiseAuditActorsCommandHandler Handler(int batchSize = 500) =>
-            new(Entries, Entries, Persons, GoogleUsers, Tombstones, Tombstones,
-                new DataRetentionOptions { AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize });
+        public PseudonymiseAuditActorsCommandHandler Handler(
+            int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick,
+            IAsyncRepository<AuditLog, long>? entryWriter = null) =>
+            new(Entries, entryWriter ?? Entries, Persons, GoogleUsers, Tombstones, Tombstones,
+                new DataRetentionOptions
+                {
+                    AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+                });
     }
 
     private static async Task<AuditLog> SeedEntryAsync(
@@ -365,13 +373,104 @@ public class PseudonymiseAuditActorsCommandHandlerTests
                 fakes, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(10 + i)));
         }
 
-        var handler = fakes.Handler(batchSize: 2);
+        var handler = fakes.Handler(batchSize: 2, maxBatches: 1);
 
         Assert.Equal(2, (await handler.HandleAsync(new PseudonymiseAuditActorsCommand())).Data!.EntriesPseudonymised);
         await handler.HandleAsync(new PseudonymiseAuditActorsCommand());
         Assert.Equal(1, (await handler.HandleAsync(new PseudonymiseAuditActorsCommand())).Data!.EntriesPseudonymised);
 
         Assert.All((await fakes.Entries.GetAllAsync()).Data!, entry => Assert.Null(entry.ActorPersonId));
+    }
+
+    // #206: a run repeats its batch while the batch comes back full, up to MaxBatchesPerTick.
+
+    [UnitFact]
+    public async Task GivenABacklogOfThreeFullBatches_WhenPseudonymising_ThenItDrainsInOneRun()
+    {
+        // Given six entries past the period by a live actor, and two old tombstones nothing names
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+
+        for (var i = 0; i < 6; i++)
+        {
+            await SeedEntryAsync(fakes, actor.PublicId, PastThePeriod.AddDays(-i));
+        }
+
+        await SeedTombstoneAsync(fakes, Guid.NewGuid(), TimeSpan.FromDays(2));
+        await SeedTombstoneAsync(fakes, Guid.NewGuid(), TimeSpan.FromDays(3));
+
+        // When — a batch of two
+        var output = await fakes.Handler(batchSize: 2).HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal(6, output.Data!.EntriesPseudonymised);
+        Assert.Equal(2, output.Data.TombstonesRemoved);
+        Assert.Equal(0, output.Data.Backlog);
+        Assert.All((await fakes.Entries.GetAllAsync()).Data!, entry => Assert.Null(entry.ActorPersonId));
+        Assert.Empty((await fakes.Tombstones.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenPseudonymising_ThenTheRunStopsAtTheCapAndReportsWhatIsLeft()
+    {
+        // Given seven entries past the period, a batch of two and at most two batches a run
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+        var entries = new List<AuditLog>();
+
+        for (var i = 0; i < 7; i++)
+        {
+            entries.Add(await SeedEntryAsync(fakes, actor.PublicId, PastThePeriod.AddDays(-10 + i)));
+        }
+
+        var handler = fakes.Handler(batchSize: 2, maxBatches: 2);
+
+        // When
+        var first = await handler.HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — the four oldest are cleared, and the three left are the backlog
+        Assert.Equal(4, first.Data!.EntriesPseudonymised);
+        Assert.Equal(3, first.Data.Backlog);
+        Assert.All(entries.Take(4), entry => Assert.Null(entry.ActorPersonId));
+        Assert.All(entries.Skip(4), entry => Assert.Equal(actor.PublicId, entry.ActorPersonId));
+
+        // And the next run finishes it
+        var second = await handler.HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        Assert.Equal(3, second.Data!.EntriesPseudonymised);
+        Assert.Equal(0, second.Data.Backlog);
+    }
+
+    [UnitFact]
+    public async Task GivenAWriteFailsPartWayThroughARun_WhenPseudonymising_ThenTheEntriesAlreadyClearedAreStillCounted()
+    {
+        // Given six entries past the period, a batch of two, and a store that fails its second write
+        var fakes = Fakes.New();
+        var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
+
+        for (var i = 0; i < 6; i++)
+        {
+            await SeedEntryAsync(fakes, actor.PublicId, PastThePeriod.AddDays(-i));
+        }
+
+        var writes = 0;
+        var writer = new Mock<IAsyncRepository<AuditLog, long>>();
+        writer
+            .Setup(w => w.UpdateRangeAsync(It.IsAny<IEnumerable<AuditLog>>(), It.IsAny<CancellationToken>()))
+            .Returns((IEnumerable<AuditLog> entries, CancellationToken token) =>
+                ++writes == 1
+                    ? fakes.Entries.UpdateRangeAsync(entries, token)
+                    : Task.FromResult(DataOutput<IEnumerable<AuditLog>>.New.WithError("database unavailable")));
+
+        // When
+        var output = await fakes.Handler(batchSize: 2, entryWriter: writer.Object)
+            .HandleAsync(new PseudonymiseAuditActorsCommand());
+
+        // Then — the run failed, and still says what its first batch cleared
+        Assert.False(output.Success);
+        Assert.Contains("database unavailable", output.Errors);
+        Assert.Equal(2, output.Data!.EntriesPseudonymised);
     }
 
     [UnitFact]
@@ -386,6 +485,7 @@ public class PseudonymiseAuditActorsCommandHandlerTests
         Assert.Equal(0, output.Data!.EntriesPseudonymised);
         Assert.Equal(0, output.Data.TargetsCleared);
         Assert.Equal(0, output.Data.TombstonesRemoved);
+        Assert.Equal(0, output.Data.Backlog);
     }
 
     [UnitFact]
@@ -530,7 +630,7 @@ public class PseudonymiseAuditActorsCommandHandlerTests
             entries.Add(await SeedEntryAsync(fakes, actorId: null, DateTime.UtcNow.AddDays(-3 + i), removed));
         }
 
-        var handler = fakes.Handler(batchSize: 2);
+        var handler = fakes.Handler(batchSize: 2, maxBatches: 1);
 
         // When
         var first = await handler.HandleAsync(new PseudonymiseAuditActorsCommand());

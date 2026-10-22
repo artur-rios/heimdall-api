@@ -28,7 +28,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("persons")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateAdmin(
         [FromBody] CreateAdminCommand command)
@@ -49,7 +49,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/persons")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateUser(
         Guid scopeId, [FromBody] CreateUserCommand command)
@@ -74,7 +74,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
@@ -102,7 +102,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners/{personId:guid}")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status200OK)]
     [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status201Created)]
@@ -183,7 +183,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     any recovery or email code presented is spent. Read the person again before retrying.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status200OK)]
     [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(
@@ -201,8 +201,8 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Logically deletes a person by setting <c>IsDeleted = true</c> (UC-09, FR-PE-06). The
     ///     attribute keeps a plain <c>User</c> out; the owner rule (AF-09c) is data-dependent and is
-    ///     therefore enforced by the handler, as are the self-deletion (AF-09d) and last-owner
-    ///     (AF-09e) refusals.
+    ///     therefore enforced by the handler, as are the self-deletion (AF-09d), last-owner (AF-09e)
+    ///     and last-System-Admin (AF-09f) refusals.
     /// </summary>
     [HttpDelete("persons/{id:guid}")]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
@@ -220,8 +220,9 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     /// <summary>
     ///     Permanently (hard) deletes a person, removing the applications they own, their password
     ///     reset and email verification tokens, and their scope membership/ownership rows (UC-10,
-    ///     FR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c) and the
-    ///     last-owner guard (AF-10b) are enforced by the handler.
+    ///     FR-PE-07). Restricted to System Admins; the self-deletion refusal (AF-10c), the
+    ///     last-owner guard (AF-10b) and the last-System-Admin guard (AF-10d) are enforced by the
+    ///     handler.
     /// </summary>
     [HttpDelete("persons/{id:guid}/hard")]
     [RoleRequirement((int)Roles.SystemAdmin)]
@@ -271,7 +272,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var query = new GetPersonByIdQuery { Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -291,7 +292,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -311,7 +312,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -331,7 +332,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -354,7 +355,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query);
+            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }

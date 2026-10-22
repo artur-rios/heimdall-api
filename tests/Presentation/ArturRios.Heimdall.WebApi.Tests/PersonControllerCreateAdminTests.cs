@@ -22,19 +22,6 @@ public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<P
         Name = "Admin", Email = email, Password = "Str0ngPass!", Role = role
     };
 
-    private async Task<Person> SeedAdminAsync(string email, Roles role)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Existing", Email = email,
-            RoleId = (long)role, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdminAndValidScopeAdmin_WhenPostPersons_ThenCreated()
     {
@@ -65,7 +52,7 @@ public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<P
     [FunctionalFact]
     public async Task GivenDuplicateAdminEmail_WhenPostPersons_ThenConflict()
     {
-        var existing = await SeedAdminAsync(UniqueEmail(), Roles.ScopeAdmin);
+        var existing = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = UniqueEmail() });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -78,7 +65,7 @@ public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenDuplicateAdminEmailDifferentCase_WhenPostPersons_ThenConflict()
     {
         // AF-06a is case-insensitive: an admin email differing only by case is a duplicate.
-        var existing = await SeedAdminAsync(UniqueEmail(), Roles.ScopeAdmin);
+        var existing = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = UniqueEmail() });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
