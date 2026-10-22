@@ -28,7 +28,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("persons")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateAdmin(
         [FromBody] CreateAdminCommand command)
@@ -49,7 +49,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/persons")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateUser(
         Guid scopeId, [FromBody] CreateUserCommand command)
@@ -74,7 +74,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     public async Task<ActionResult<DataOutput<CreatePersonCommandOutput?>>> CreateScopeOwner(
         Guid scopeId, [FromBody] CreateScopeOwnerCommand command)
@@ -102,7 +102,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("scopes/{scopeId:guid}/owners/{personId:guid}")]
-    [EnableRateLimiting(Startup.AccountCreationRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AccountCreationRateLimitPolicy)]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
     [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status200OK)]
     [ProducesResponseType<DataOutput<AddScopeOwnerCommandOutput>>(StatusCodes.Status201Created)]
@@ -183,7 +183,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
     ///     any recovery or email code presented is spent. Read the person again before retrying.
     /// </remarks>
     [HttpPut("persons/{id:guid}")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status200OK)]
     [ProducesResponseType<DataOutput<UpdatePersonCommandOutput>>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DataOutput<UpdatePersonCommandOutput?>>> Update(

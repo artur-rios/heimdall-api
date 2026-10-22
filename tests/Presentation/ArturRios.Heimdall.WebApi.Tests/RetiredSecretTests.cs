@@ -172,7 +172,7 @@ public class RetiredSecretValueTests
     public void GivenARetiredVariableUnsetEmptyOrBlank_WhenStartUpLooks_ThenItIsNotSet(string? value)
     {
         // Given / When — both variables hold the same value
-        var set = Startup.SetRetiredTokenSecretVariables(_ => value);
+        var set = TokenSecurityRegistrationExtensions.SetRetiredTokenSecretVariables(_ => value);
 
         // Then
         Assert.Empty(set);
@@ -185,7 +185,7 @@ public class RetiredSecretValueTests
         var values = new Dictionary<string, string?> { [SecretVariable] = " ", [PreviousSecretVariable] = " x " };
 
         // When
-        var set = Startup.SetRetiredTokenSecretVariables(variable => values[variable]);
+        var set = TokenSecurityRegistrationExtensions.SetRetiredTokenSecretVariables(variable => values[variable]);
 
         // Then
         Assert.Equal([PreviousSecretVariable], set);

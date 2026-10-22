@@ -32,7 +32,7 @@ public class ApplicationTokenController(CommandMediator commandMediator, QueryMe
     /// </summary>
     [HttpPost("token")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<IssueApplicationTokenCommandOutput?>>> IssueToken(
         [FromBody] IssueApplicationTokenCommand command)
     {

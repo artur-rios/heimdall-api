@@ -82,7 +82,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given an actor who spent thirty from one address
         var actor = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
-        await SpendAsync(actor, "203.0.113.70", Startup.AccountCreationPermitLimit);
+        await SpendAsync(actor, "203.0.113.70", RateLimitingConfiguration.AccountCreationPermitLimit);
 
         // When they move to an address of their own
         using var limited = await CreateAsync(actor, "203.0.113.71");
@@ -99,7 +99,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
         // Given — the address is bounded too: one actor spends thirty from an address
         var first = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
         var second = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
-        await SpendAsync(first, "203.0.113.72", Startup.AccountCreationPermitLimit);
+        await SpendAsync(first, "203.0.113.72", RateLimitingConfiguration.AccountCreationPermitLimit);
 
         // When a fresh actor creates from the same address, and from another
         using var sameAddress = await CreateAsync(second, "203.0.113.72");
@@ -116,7 +116,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given thirty requests without a token from one address
         var actor = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
-        await SpendAsync(null, "203.0.113.74", Startup.AccountCreationPermitLimit);
+        await SpendAsync(null, "203.0.113.74", RateLimitingConfiguration.AccountCreationPermitLimit);
 
         // When an administrator creates from the same address
         using var response = await CreateAsync(actor, "203.0.113.74");
@@ -143,7 +143,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
             _ => ("203.0.113.77", await SubjectRightsTokenAsync())
         };
 
-        for (var attempt = 1; attempt <= Startup.AccountCreationPermitLimit; attempt++)
+        for (var attempt = 1; attempt <= RateLimitingConfiguration.AccountCreationPermitLimit; attempt++)
         {
             using var refused = await CreateWithTokenAsync(token, address);
             Assert.NotEqual(HttpStatusCode.TooManyRequests, refused.StatusCode);

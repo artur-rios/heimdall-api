@@ -28,7 +28,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<LoginCommandOutput?>>> Login(
         [FromBody] LoginCommand command)
     {
@@ -51,7 +51,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("password-recovery")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<PasswordRecoveryCommandOutput?>>> PasswordRecovery(
         [FromBody] PasswordRecoveryCommand command)
     {
@@ -75,7 +75,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("register")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<RegisterCommandOutput?>>> Register(
         [FromBody] RegisterCommand command)
     {
@@ -102,7 +102,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("password-reset")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResetPasswordCommandOutput?>>> ResetPassword(
         [FromBody] ResetPasswordCommand command)
     {
@@ -137,7 +137,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("verify-email")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<VerifyEmailCommandOutput?>>> VerifyEmail(
         [FromBody] VerifyEmailCommand command)
     {
@@ -172,7 +172,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     requests." with a <c>Retry-After</c> header.
     /// </remarks>
     [HttpPost("resend-verification")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResendVerificationEmailCommandOutput?>>> ResendVerification()
     {
         var command = new ResendVerificationEmailCommand();
@@ -210,7 +210,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("google")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<GoogleSignInCommandOutput?>>> GoogleSignIn(
         [FromBody] GoogleSignInCommand command)
     {
@@ -272,7 +272,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     the check for fifteen minutes, with the same answer.
     /// </remarks>
     [HttpPost("2fa/enable")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<EnableTwoFactorAuthCommandOutput?>>> EnableTwoFactorAuth(
         [FromBody] EnableTwoFactorAuthCommand command)
     {
@@ -305,7 +305,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     answers the same.
     /// </remarks>
     [HttpPost("2fa/confirm")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ConfirmTwoFactorAuthCommandOutput?>>> ConfirmTwoFactorAuth(
         [FromBody] ConfirmTwoFactorAuthCommand command)
     {
@@ -337,7 +337,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("2fa/verify")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<VerifyTwoFactorAuthCommandOutput?>>> VerifyTwoFactorAuth(
         [FromBody] VerifyTwoFactorAuthCommand command)
     {
@@ -380,7 +380,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("2fa/challenge/resend")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<ResendTwoFactorChallengeCodeCommandOutput?>>>
         ResendTwoFactorChallengeCode([FromBody] ResendTwoFactorChallengeCodeCommand command)
     {
@@ -410,7 +410,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     the shorter <c>XXXX-XXXX</c> codes issued before still accepted (FR-2F-20).
     /// </remarks>
     [HttpPost("2fa/disable")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<DisableTwoFactorAuthCommandOutput?>>> DisableTwoFactorAuth(
         [FromBody] DisableTwoFactorAuthCommand command)
     {
@@ -442,7 +442,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     ///     incorrect.", as every re-authentication does.
     /// </remarks>
     [HttpPost("2fa/recovery-codes/regenerate")]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<RegenerateRecoveryCodesCommandOutput?>>> RegenerateRecoveryCodes(
         [FromBody] RegenerateRecoveryCodesCommand command)
     {
@@ -526,7 +526,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     /// </remarks>
     [HttpPost("erasure-request")]
     [DataSubjectRight]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     public async Task<ActionResult<DataOutput<RequestErasureCommandOutput?>>> RequestErasure(
         [FromBody] RequestErasureCommand command)
     {

@@ -16,7 +16,7 @@ public class AccountCreationRateLimitPolicyTests
         var limiting = action.GetCustomAttribute<EnableRateLimitingAttribute>();
 
         Assert.NotNull(limiting);
-        Assert.Equal(Startup.AccountCreationRateLimitPolicy, limiting.PolicyName);
+        Assert.Equal(RateLimitingConfiguration.AccountCreationRateLimitPolicy, limiting.PolicyName);
     }
 
     [UnitFact]

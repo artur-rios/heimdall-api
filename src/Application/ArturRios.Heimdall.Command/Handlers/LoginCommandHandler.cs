@@ -196,8 +196,8 @@ public class LoginCommandHandler(
 
     // FR-AU-09, how the count is kept.
     //
-    // The per-IP limiter in Startup bounds how fast one source can guess; the count bounds how many
-    // guesses an account will accept in total, which is the half a distributed attacker defeats by
+    // The per-IP limiter in RateLimitingConfiguration bounds how fast one source can guess; the count bounds
+    // how many guesses an account will accept in total, which is the half a distributed attacker defeats by
     // spreading requests across addresses. The lockout is a window rather than a latch an
     // administrator has to clear: a permanent lock would hand any anonymous caller a denial of
     // service against any account whose address they know. Fifteen minutes cuts a sustained guessing

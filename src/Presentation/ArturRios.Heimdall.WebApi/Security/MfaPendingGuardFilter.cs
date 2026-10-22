@@ -13,8 +13,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Registered globally (<c>Startup.ConfigureWebApi</c>), so it runs on every controller
-///         action, including <c>POST /api/auth/2fa/verify</c> itself — that endpoint never actually
+///         Registered globally (<c>WebApiServiceCollectionExtensions.AddHeimdallControllers</c>), so it runs
+///         on every controller action, including <c>POST /api/auth/2fa/verify</c> itself — that endpoint never actually
 ///         trips it, though, because it is <c>[AllowAnonymous]</c> and reads the challenge token as a
 ///         request body field (<c>VerifyTwoFactorAuthCommand.ChallengeToken</c>), never as a bearer
 ///         credential, so <c>AuthenticationMiddleware</c> never attaches an <see cref="IdentityUser" />

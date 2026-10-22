@@ -38,10 +38,10 @@ public static class AuthRateLimitPartition
         {
             // Its own namespace: a named address is counted apart from a direct connection from the
             // same address, so a key holder cannot spend a real caller's budget by naming them.
-            return NamedAddressPrefix + Startup.RateLimitPartitionKey(clientAddress);
+            return NamedAddressPrefix + RateLimitingConfiguration.RateLimitPartitionKey(clientAddress);
         }
 
-        return Startup.RateLimitPartitionKey(context.Connection.RemoteIpAddress);
+        return RateLimitingConfiguration.RateLimitPartitionKey(context.Connection.RemoteIpAddress);
     }
 
     // A header sent twice is ambiguous, and the safe reading of an ambiguous credential is none.
