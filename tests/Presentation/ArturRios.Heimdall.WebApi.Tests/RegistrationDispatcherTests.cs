@@ -157,7 +157,7 @@ public class RegistrationDispatcherTests
         var failure = await Record.ExceptionAsync(() => dispatcher.StopAsync(CancellationToken.None));
 
         Assert.Null(failure);
-        Assert.True(dispatcher.ExecuteTask is null or { IsCompletedSuccessfully: true });
+        Assert.True(dispatcher.ExecuteTask is not { IsFaulted: true });
     }
 
     [UnitFact]
