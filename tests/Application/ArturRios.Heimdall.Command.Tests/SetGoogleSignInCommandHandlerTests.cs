@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -81,7 +82,7 @@ public class SetGoogleSignInCommandHandlerTests
         AsyncFakeRepository<Scope, long> scopes,
         bool allowed = true,
         Mock<IValidator<SetGoogleSignInCommand>>? validator = null) =>
-        new((validator ?? ValidValidator()).Object, scopes, scopes, OwnershipChecker(allowed));
+        new((validator ?? ValidValidator()).Object, scopes, InMemoryAtomicWrites.Instance, OwnershipChecker(allowed));
 
     private static async Task<Scope> StoredAsync(AsyncFakeRepository<Scope, long> scopes, Scope scope) =>
         (await scopes.GetAllAsync()).Data!.Single(x => x.PublicId == scope.PublicId);

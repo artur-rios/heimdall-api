@@ -35,6 +35,12 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     public Action<Scope>? BeforeScopeWrite { get; init; }
 
     /// <summary>
+    ///     Called with the Google User before a write to their row evaluates its condition, as
+    ///     <see cref="BeforeConditionalWrite" /> is for a person's.
+    /// </summary>
+    public Action<GoogleUser>? BeforeGoogleUserWrite { get; init; }
+
+    /// <summary>
     ///     The Google ID token keys recorded as used (FR-GO-21), or <c>null</c> — as on
     ///     <see cref="Instance" />, which every test shares — to accept every use without keeping one,
     ///     so tests that present the same placeholder token do not refuse each other.
@@ -437,9 +443,11 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
 
     public Task<bool> TryRenameAsync(Person person, string name, DateTime now)
     {
+        var readRoleId = person.RoleId;
+
         BeforeConditionalWrite?.Invoke(person);
 
-        if (person.IsDeleted)
+        if (person.IsDeleted || person.RoleId != readRoleId)
         {
             return Task.FromResult(false);
         }
@@ -471,6 +479,170 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         scope.UpdatedAt = now;
 
         return Task.FromResult(ScopeUpdateOutcome.Updated);
+    }
+
+    public Task<bool> TrySetGoogleSignInAsync(Scope scope, bool enabled, DateTime now) =>
+        SetScopeAsync(scope, now, () => scope.GoogleSignInEnabled = enabled);
+
+    public Task<bool> TrySetSelfRegistrationAsync(Scope scope, bool enabled, DateTime now) =>
+        SetScopeAsync(scope, now, () => scope.SelfRegistrationEnabled = enabled);
+
+    public Task<bool> TrySetEmailLinksAsync(
+        Scope scope, string? emailVerificationUrl, string? passwordResetUrl, DateTime now) =>
+        SetScopeAsync(scope, now, () =>
+        {
+            scope.EmailVerificationUrl = emailVerificationUrl;
+            scope.PasswordResetUrl = passwordResetUrl;
+        });
+
+    private Task<bool> SetScopeAsync(Scope scope, DateTime now, Action set)
+    {
+        BeforeScopeWrite?.Invoke(scope);
+
+        if (scope.IsDeleted)
+        {
+            return Task.FromResult(false);
+        }
+
+        set();
+        scope.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryMarkDeletedAsync(GoogleUser googleUser, DeletionKinds kind, DateTime at)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (googleUser.IsDeleted)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.IsDeleted = true;
+        googleUser.DeletedAt = at;
+        googleUser.DeletionKind = (int)kind;
+        googleUser.UpdatedAt = at;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRestrictProcessingAsync(GoogleUser googleUser, int ground, DateTime at)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (googleUser.ProcessingRestrictedAt is not null || googleUser.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.ProcessingRestrictedAt = at;
+        googleUser.RestrictionGround = ground;
+        googleUser.RestrictionLiftNotifiedAt = null;
+        googleUser.UpdatedAt = at;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryLiftRestrictionAsync(GoogleUser googleUser, DateTime? notifiedAt, DateTime now)
+    {
+        var readRestrictedAt = googleUser.ProcessingRestrictedAt;
+
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (readRestrictedAt is null || googleUser.ProcessingRestrictedAt != readRestrictedAt)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.ProcessingRestrictedAt = null;
+        googleUser.RestrictionGround = null;
+        googleUser.RestrictionLiftNotifiedAt = notifiedAt;
+        googleUser.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRecordErasureRequestAsync(GoogleUser googleUser, DateTime requestedAt, DateTime dueAt)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (googleUser.ErasureRequestedAt is not null || googleUser.IsDeleted || googleUser.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.ErasureRequestedAt = requestedAt;
+        googleUser.ErasureDueAt = dueAt;
+        googleUser.ProcessingRestrictedAt = null;
+        googleUser.RestrictionGround = null;
+        googleUser.RestrictionLiftNotifiedAt = null;
+        googleUser.IsDeleted = true;
+        googleUser.DeletedAt = requestedAt;
+        googleUser.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        googleUser.UpdatedAt = requestedAt;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryRefreshEmailVerifiedAsync(GoogleUser googleUser, bool emailVerified, DateTime now)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (googleUser.IsDeleted || googleUser.ProcessingRestrictedAt is not null ||
+            googleUser.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.EmailVerified = emailVerified;
+        googleUser.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryAnonymiseAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (!googleUser.IsDeleted || googleUser.AnonymisedAt is not null ||
+            googleUser.ProcessingRestrictedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        Anonymise(googleUser, name, email, googleId, at);
+
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> TryReapplyErasureAsync(
+        GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        BeforeGoogleUserWrite?.Invoke(googleUser);
+
+        if (googleUser.AnonymisedAt is not null)
+        {
+            return Task.FromResult(false);
+        }
+
+        googleUser.IsDeleted = true;
+        googleUser.DeletedAt ??= at;
+        googleUser.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        Anonymise(googleUser, name, email, googleId, at);
+
+        return Task.FromResult(true);
+    }
+
+    private static void Anonymise(GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        googleUser.Name = name;
+        googleUser.Email = email;
+        googleUser.GoogleId = googleId;
+        googleUser.ProfilePictureUrl = null;
+        googleUser.EmailVerified = false;
+        googleUser.AnonymisedAt = at;
+        googleUser.UpdatedAt = at;
     }
 
     public Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at)

@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Input;
@@ -67,7 +66,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
@@ -211,27 +209,27 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                     break;
                 }
 
+                // One targeted write per Google User (#205), as for a person: only while the record is still
+                // deleted, unanonymised and unrestricted. One restricted since it was selected is preserved
+                // as it stands (NFR-24), and is not counted.
+                var anonymisedGoogleUsers = 0;
+
                 foreach (var googleUser in googleUsers)
                 {
-                    IdentityAnonymiser.Anonymise(googleUser, now);
+                    if (await IdentityAnonymiser.AnonymiseAsync(atomicWrites, googleUser, now))
+                    {
+                        // Counted and named as soon as it is written, so a failure on the next one cannot
+                        // drop it from the ledger.
+                        anonymisedGoogleUsers++;
+                        result.GoogleUsersAnonymised++;
+                        anonymisedIds.Add(googleUser.PublicId);
+                    }
                 }
-
-                var saveErrors = (await SaveAsync(googleUsers, googleUserWriter)).ToList();
-
-                // A Google User whose save failed is not counted or named: it was not anonymised.
-                if (saveErrors.Count > 0)
-                {
-                    errors.AddRange(saveErrors);
-                    googleUsersFull = false;
-                    break;
-                }
-
-                result.GoogleUsersAnonymised += googleUsers.Count;
-                anonymisedIds.AddRange(googleUsers.Select(googleUser => googleUser.PublicId));
 
                 googleUsersFull = googleUsers.Count == retention.PurgeBatchSize;
 
-                if (!googleUsersFull)
+                // As for persons: a full batch in which nobody could be anonymised made no progress.
+                if (!googleUsersFull || anonymisedGoogleUsers == 0)
                 {
                     break;
                 }
@@ -495,17 +493,4 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             passwordResetTokenWriter,
             emailVerificationTokenWriter,
             twoFactorAuthWriter);
-
-    private static async Task<IEnumerable<string>> SaveAsync<T>(
-        IReadOnlyCollection<T> records, IAsyncRepository<T, long> writer) where T : Entity<long>
-    {
-        if (records.Count == 0)
-        {
-            return [];
-        }
-
-        var update = await writer.UpdateRangeAsync(records);
-
-        return update.Success ? [] : update.Errors;
-    }
 }

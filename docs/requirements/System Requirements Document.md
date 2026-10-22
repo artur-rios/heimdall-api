@@ -542,9 +542,10 @@ could still write is the plain profile, `Name` and the recorded basis among it, 
 UC-08 and UC-23, the last writers that saved a person row whole, no longer do: UC-08 writes the name and
 `UpdatedAt` by a targeted write that requires the person not to be logically deleted, and a role change
 (UC-08, UC-23) removes the `SCOPE_USER` row beside the role rather than through a save of the person
-(#205). A scope's details (UC-03) and its deletion flag (UC-04) are written the same way, so neither
-writes back the settings that have endpoints of their own — Google sign-in, self-registration, the email
-links — and UC-03 cannot revive a scope deleted meanwhile.
+(#205). A scope's details (UC-03), its deletion flag (UC-04) and each of its settings with an endpoint
+of its own — Google sign-in (UC-24), self-registration (FR-SR-02), the email links — are written the same
+way, each by a targeted write of its own columns and `UpdatedAt` that requires the scope not to be
+logically deleted, so none of them writes back another's, and none can revive a scope deleted meanwhile.
 
 One residual is recorded rather than closed:
 
@@ -641,6 +642,13 @@ At most one row per `(ScopeId, InviteePersonId)` has a null `EndedAt` (a partial
 | ScopeId | BigInt | Foreign key to Scope.Id (internal), required |
 | CreatedAt | DateTime | Auto-set on creation |
 | UpdatedAt | DateTime | Auto-set on update |
+
+A Google User's lifecycle columns — the deletion, erasure-request, restriction and anonymisation columns
+— are written as a person's are: only by targeted, conditional writes of the columns each change
+concerns (UC-28, UC-42, UC-44, UC-45, the anonymisation and re-erasure passes), never by a whole-row
+save, so a write of a copy read before one of those changes cannot put the earlier state back. UC-25's
+refresh of `EmailVerified` (FR-GO-19) is targeted too, and is made only while the account may still sign
+in as it was found (#205).
 
 `GOOGLE_USER` is a separate table from `PERSON`. Unlike `PERSON`, it has a direct `ScopeId` column rather than going through `SCOPE_USER`, because a Google User always represents the `User` role and single-scope membership — it never needs the ownership/multi-scope semantics that `SCOPE_OWNER` exists for. It has no `PasswordHash`, `Salt`, or `RoleId`: authentication is delegated to Google, and the role is implicitly `User`.
 

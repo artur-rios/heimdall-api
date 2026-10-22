@@ -516,11 +516,11 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         var email = UniqueEmail("restricted");
         var googleUser = await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
 
+        // A targeted write, as UC-44's own: the mapping keeps a whole-row save off the restriction (#205)
         await using (var context = db.CreateContext())
         {
-            var stored = await context.GoogleUsers.FirstAsync(x => x.Id == googleUser.Id);
-            stored.ProcessingRestrictedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            await context.GoogleUsers.Where(x => x.Id == googleUser.Id)
+                .ExecuteUpdateAsync(set => set.SetProperty(x => x.ProcessingRestrictedAt, DateTime.UtcNow));
         }
 
         // When — with a token that would otherwise refresh the verification flag

@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -40,7 +41,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 /// </remarks>
 public class DeleteGoogleUserCommandHandler(
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
+    IAtomicWrites atomicWrites,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<DeleteGoogleUserCommand, DeleteGoogleUserCommandOutput>
 {
@@ -85,18 +86,15 @@ public class DeleteGoogleUserCommandHandler(
         // DeletedAt and DeletionKind are stamped for NFR-20, for the reasons given in
         // DeletePersonCommandHandler: the anonymisation window is measured from the deletion, and
         // UpdatedAt would restart it on any later write.
-        var deletedAt = DateTime.UtcNow;
-
-        googleUser.IsDeleted = true;
-        googleUser.DeletedAt = deletedAt;
-        googleUser.DeletionKind = (int)DeletionKinds.Administrative;
-        googleUser.UpdatedAt = deletedAt;
-
-        var update = await googleUserWriter.UpdateAsync(googleUser);
-
-        if (!update.Success)
+        //
+        // A targeted write of those four columns alone (#205), and only while the Google User is live:
+        // a restriction made since the read stands beside the deletion, and a deletion made since — the
+        // subject's own erasure request, say — stands as it was, answered as AF-28b.
+        if (!await atomicWrites.TryMarkDeletedAsync(googleUser, DeletionKinds.Administrative, DateTime.UtcNow))
         {
-            return output.WithErrors(update.Errors);
+            return output
+                .WithData(new DeleteGoogleUserCommandOutput { Id = googleUser.PublicId, AlreadyDeleted = true })
+                .WithMessage(GoogleUserMessages.GoogleUserDeletedSuccessfully);
         }
 
         // UC-28 step 4.

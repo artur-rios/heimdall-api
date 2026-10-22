@@ -207,9 +207,9 @@ public class UpdatePersonCommandHandler(
         }
 
         // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it). The name is written by a
-        // targeted write of its own, and only while the person is not deleted (#205): a whole-row save
-        // of the copy read above would write every other column back as it was read, and AF-08a, asked
-        // at the read, would not be asked again.
+        // targeted write of its own, and only while the person is not deleted and holds the role read
+        // (#205): a whole-row save of the copy read above would write every other column back as it was
+        // read, and AF-08a and step 3's authorisation, decided at the read, would not be asked again.
         var now = DateTime.UtcNow;
 
         if (emailChanged || roleChange.Applies)
@@ -240,8 +240,17 @@ public class UpdatePersonCommandHandler(
         }
         else if (!await atomicWrites.TryRenameAsync(person, command.Name, now))
         {
-            // AF-08a: deleted — suspended for erasure, say — since the read above.
-            return output.WithError(PersonMessages.PersonNotFound);
+            // Deleted — suspended for erasure, say — since the read above is AF-08a; still live but no
+            // longer holding the role read, which decided who may rename them, is AF-08l. The row is
+            // read again, past the tracked copy, to tell which.
+            var deleted = await personReader.Query()
+                .Where(x => x.Id == person.Id)
+                .Select(x => (bool?)x.IsDeleted)
+                .FirstOrDefaultAsync();
+
+            return output.WithError(deleted == false
+                ? RelationalErrors.ConcurrencyMessage
+                : PersonMessages.PersonNotFound);
         }
 
         // FR-AU-11 again, once the new address is saved: a sign-in between the first rotation and

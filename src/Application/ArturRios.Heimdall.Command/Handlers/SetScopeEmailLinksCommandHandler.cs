@@ -2,6 +2,7 @@ using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
@@ -20,7 +21,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class SetScopeEmailLinksCommandHandler(
     IValidator<SetScopeEmailLinksCommand> validator,
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
-    IAsyncRepository<Scope, long> scopeWriter,
+    IAtomicWrites atomicWrites,
     IScopeOwnershipChecker scopeOwnership)
     : ICommandHandlerAsync<SetScopeEmailLinksCommand, SetScopeEmailLinksCommandOutput>
 {
@@ -54,15 +55,12 @@ public class SetScopeEmailLinksCommandHandler(
             .SelectMany(x => x.Owners.Select(owner => owner.Person.PublicId))
             .ToListAsync(cancellationToken);
 
-        scope.EmailVerificationUrl = Normalised(command.EmailVerificationUrl);
-        scope.PasswordResetUrl = Normalised(command.PasswordResetUrl);
-        scope.UpdatedAt = DateTime.UtcNow;
-
-        var update = await scopeWriter.UpdateAsync(scope);
-
-        if (!update.Success)
+        // The two links alone, and only while the scope is not deleted (#205), as UC-24 writes its flag:
+        // one deleted since the read above is answered as one deleted before it.
+        if (!await atomicWrites.TrySetEmailLinksAsync(scope, Normalised(command.EmailVerificationUrl),
+                Normalised(command.PasswordResetUrl), DateTime.UtcNow))
         {
-            return output.WithErrors(update.Errors);
+            return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
         return output

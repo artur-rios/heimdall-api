@@ -89,27 +89,44 @@ public static class IdentityAnonymiser
         atomicWrites.TryReapplyErasureAsync(person, AnonymisedName, PlaceholderEmail(person.PublicId), at);
 
     /// <summary>
-    ///     Overwrites the identifying values on <paramref name="googleUser" /> and stamps
-    ///     <paramref name="at" />.
+    ///     NFR-20: anonymises a logically deleted Google User by one targeted write
+    ///     (<see cref="IAtomicWrites.TryAnonymiseAsync(GoogleUser, string, string, string, DateTime)" />):
+    ///     the placeholder name, address and Google subject, the picture and the verification flag
+    ///     cleared, and <paramref name="at" /> stamped.
     /// </summary>
-    public static void Anonymise(GoogleUser googleUser, DateTime at)
-    {
-        googleUser.Name = AnonymisedName;
-        googleUser.Email = PlaceholderEmail(googleUser.PublicId);
+    /// <returns>
+    ///     <c>false</c> when the Google User is no longer deleted, is anonymised already, or has had
+    ///     processing restricted (NFR-24) since they were selected; nothing is written then.
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         Targeted rather than a whole-row save (#205), as a person's is (#237): a save of the
+    ///         selected copy would write a restriction imposed since the selection back to none, and
+    ///         erase a record that must be preserved as it stands.
+    ///     </para>
+    ///     <para>
+    ///         Google's <c>sub</c> is the strongest identifier on this row: it is stable across Google's
+    ///         whole estate, so leaving it would let anyone holding it re-identify the person from outside
+    ///         this system entirely. It carries a unique index, hence the derived value rather than null. A
+    ///         profile picture is a photograph of a person.
+    ///     </para>
+    /// </remarks>
+    public static Task<bool> AnonymiseAsync(IAtomicWrites atomicWrites, GoogleUser googleUser, DateTime at) =>
+        atomicWrites.TryAnonymiseAsync(googleUser, AnonymisedName, PlaceholderEmail(googleUser.PublicId),
+            AnonymisedGoogleId(googleUser.PublicId), at);
 
-        // Google's 'sub' is the strongest identifier on this row: it is stable across Google's whole
-        // estate, so leaving it would let anyone holding it re-identify the person from outside this
-        // system entirely. It carries a unique index, hence the derived value rather than null.
-        googleUser.GoogleId = $"anonymised-{googleUser.PublicId:N}";
+    /// <summary>
+    ///     NFR-25: anonymises a Google User a restore brought back, as <see cref="AnonymiseAsync(IAtomicWrites,
+    ///     GoogleUser, DateTime)" /> does, and marks them a subject-requested deletion whatever state the
+    ///     restore left them in.
+    /// </summary>
+    /// <returns><c>false</c> when they were anonymised already, possibly since they were read.</returns>
+    public static Task<bool> ReapplyAsync(IAtomicWrites atomicWrites, GoogleUser googleUser, DateTime at) =>
+        atomicWrites.TryReapplyErasureAsync(googleUser, AnonymisedName, PlaceholderEmail(googleUser.PublicId),
+            AnonymisedGoogleId(googleUser.PublicId), at);
 
-        // A profile picture is a photograph of a person.
-        googleUser.ProfilePictureUrl = null;
-
-        googleUser.EmailVerified = false;
-
-        googleUser.AnonymisedAt = at;
-        googleUser.UpdatedAt = at;
-    }
+    /// <summary>The placeholder Google subject for a Google User, unique to it.</summary>
+    public static string AnonymisedGoogleId(Guid publicId) => $"anonymised-{publicId:N}";
 
     /// <summary>
     ///     The placeholder address for an identity, unique to it and never deliverable.

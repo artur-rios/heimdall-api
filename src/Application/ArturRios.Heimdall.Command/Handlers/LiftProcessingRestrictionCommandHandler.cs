@@ -36,7 +36,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class LiftProcessingRestrictionCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IRestrictionLiftNotifier notifier,
     IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<LiftProcessingRestrictionCommand, LiftProcessingRestrictionCommandOutput>
@@ -92,19 +91,12 @@ public class LiftProcessingRestrictionCommandHandler(
             return output.WithError(ErasureMessages.NotEligible);
         }
 
+        // As for a person (#205): the restriction's columns alone, and only of the restriction read.
         return await LiftAsync(
             output, googleUser.ProcessingRestrictedAt, googleUser.Email, liftingOwn,
-            async notifiedAt =>
-            {
-                googleUser.ProcessingRestrictedAt = null;
-                googleUser.RestrictionGround = null;
-                googleUser.RestrictionLiftNotifiedAt = notifiedAt;
-                googleUser.UpdatedAt = DateTime.UtcNow;
-
-                var update = await googleUserWriter.UpdateAsync(googleUser);
-
-                return update.Success ? null : update.Errors;
-            },
+            async notifiedAt => await atomicWrites.TryLiftRestrictionAsync(googleUser, notifiedAt, DateTime.UtcNow)
+                ? null
+                : [ErasureMessages.NotRestricted],
             googleUser.PublicId);
     }
 

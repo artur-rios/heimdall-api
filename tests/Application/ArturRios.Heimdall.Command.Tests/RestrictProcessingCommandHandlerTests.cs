@@ -20,7 +20,7 @@ public class RestrictProcessingCommandHandlerTests
     private static RestrictProcessingCommandHandler Handler(
         AsyncFakeRepository<Person, long> persons, AsyncFakeRepository<GoogleUser, long> googleUsers,
         IAtomicWrites? atomicWrites = null) =>
-        new(persons, googleUsers, googleUsers, atomicWrites ?? InMemoryAtomicWrites.Instance);
+        new(persons, googleUsers, atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedPersonAsync(
         AsyncFakeRepository<Person, long> persons, bool isDeleted = false, DateTime? restrictedAt = null)

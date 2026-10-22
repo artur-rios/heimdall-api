@@ -35,7 +35,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class RestrictProcessingCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<RestrictProcessingCommand, RestrictProcessingCommandOutput>
 {
@@ -86,16 +85,10 @@ public class RestrictProcessingCommandHandler(
             return output.WithError(ErasureMessages.ProcessingAlreadyRestricted);
         }
 
-        googleUser.ProcessingRestrictedAt = restrictedAt;
-        googleUser.RestrictionGround = command.Ground;
-        googleUser.RestrictionLiftNotifiedAt = null;
-        googleUser.UpdatedAt = restrictedAt;
-
-        var googleUpdate = await googleUserWriter.UpdateAsync(googleUser);
-
-        return googleUpdate.Success
+        // As for a person (#205): the restriction's columns alone, and only while there is none.
+        return await atomicWrites.TryRestrictProcessingAsync(googleUser, command.Ground, restrictedAt)
             ? Restricted(output, googleUser.PublicId, restrictedAt, command.Ground)
-            : output.WithErrors(googleUpdate.Errors);
+            : output.WithError(ErasureMessages.ProcessingAlreadyRestricted);
     }
 
     private static DataOutput<RestrictProcessingCommandOutput?> Restricted(

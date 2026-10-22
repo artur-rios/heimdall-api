@@ -319,12 +319,14 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     UC-08: renames the person — <c>Name</c> and <c>UpdatedAt</c>, and no other column — while they
-    ///     are not logically deleted (AF-08a). <c>false</c> means they were deleted, possibly since the
-    ///     caller read them, and nothing was written.
+    ///     are not logically deleted (AF-08a) and still hold the role they were read with. <c>false</c>
+    ///     means one of those changed, possibly since the caller read them, and nothing was written.
     /// </summary>
     /// <remarks>
     ///     Targeted rather than a whole-row save (#205), so a restriction, an erasure request or any other
-    ///     change made after the caller read the person stands beside the new name.
+    ///     change made after the caller read the person stands beside the new name. The role is in the
+    ///     condition because it decided who may rename them (UC-08 step 3): a Scope Admin's rename of a
+    ///     User must not land on a System Admin that User became meanwhile.
     /// </remarks>
     Task<bool> TryRenameAsync(Person person, string name, DateTime now);
 
@@ -351,6 +353,88 @@ public interface IAtomicWrites
     ///     deletion read can be older than a settings change made before it took its lock.
     /// </remarks>
     Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at);
+
+    /// <summary>
+    ///     UC-24: sets the scope's <c>GoogleSignInEnabled</c> and <c>UpdatedAt</c>, and no other column,
+    ///     while it is not logically deleted (AF-24a). <c>false</c> means it was deleted, possibly since the
+    ///     caller read it, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted for the reason <see cref="TryUpdateScopeDetailsAsync" /> is (#205), and so are
+    ///     <see cref="TrySetSelfRegistrationAsync" /> and <see cref="TrySetEmailLinksAsync" />: each setting
+    ///     has an endpoint of its own, and none may write back what another, or UC-03, or UC-04, wrote.
+    /// </remarks>
+    Task<bool> TrySetGoogleSignInAsync(Scope scope, bool enabled, DateTime now);
+
+    /// <summary>
+    ///     FR-SR-02: sets the scope's <c>SelfRegistrationEnabled</c> and <c>UpdatedAt</c>, and no other
+    ///     column, while it is not logically deleted. <c>false</c> means nothing was written.
+    /// </summary>
+    Task<bool> TrySetSelfRegistrationAsync(Scope scope, bool enabled, DateTime now);
+
+    /// <summary>
+    ///     Sets the scope's email links — <c>EmailVerificationUrl</c> and <c>PasswordResetUrl</c> — and
+    ///     <c>UpdatedAt</c>, and no other column, while it is not logically deleted. <c>false</c> means
+    ///     nothing was written.
+    /// </summary>
+    Task<bool> TrySetEmailLinksAsync(Scope scope, string? emailVerificationUrl, string? passwordResetUrl, DateTime now);
+
+    /// <summary>
+    ///     UC-28: logically deletes the Google User — <c>IsDeleted</c>, <c>DeletedAt</c>,
+    ///     <c>DeletionKind</c> and <c>UpdatedAt</c>, and no other column — unless they already are.
+    ///     <c>false</c> means they were, possibly since the caller read them, and the first deletion's time
+    ///     and kind stand.
+    /// </summary>
+    /// <remarks>
+    ///     A Google User's lifecycle columns — deletion, erasure request, restriction and anonymisation —
+    ///     are written only by the targeted writes for Google Users here, as a person's are (#237, #205):
+    ///     the mapping keeps every whole-row save off them, so a save of a copy read before one of those
+    ///     changes cannot put the earlier state back.
+    /// </remarks>
+    Task<bool> TryMarkDeletedAsync(GoogleUser googleUser, DeletionKinds kind, DateTime at);
+
+    /// <summary>
+    ///     UC-44 for a Google User, as <see cref="TryRestrictProcessingAsync(Person, int, DateTime)" /> is
+    ///     for a person: only while processing is not already restricted and the record is not anonymised.
+    /// </summary>
+    Task<bool> TryRestrictProcessingAsync(GoogleUser googleUser, int ground, DateTime at);
+
+    /// <summary>
+    ///     UC-45 for a Google User, as <see cref="TryLiftRestrictionAsync(Person, DateTime?, DateTime)" />
+    ///     is for a person: only the restriction the caller read.
+    /// </summary>
+    Task<bool> TryLiftRestrictionAsync(GoogleUser googleUser, DateTime? notifiedAt, DateTime now);
+
+    /// <summary>
+    ///     UC-42 for a Google User: records the request and its deadline, lifts any restriction as UC-45
+    ///     does for a subject lifting their own, and suspends them — nothing can block a Google User's
+    ///     erasure (FR-GO-04) — only while no request was recorded and they are neither deleted nor
+    ///     anonymised. <c>false</c> means one of those changed after the caller read them.
+    /// </summary>
+    Task<bool> TryRecordErasureRequestAsync(GoogleUser googleUser, DateTime requestedAt, DateTime dueAt);
+
+    /// <summary>
+    ///     FR-GO-19: sets the Google User's <c>EmailVerified</c> to what the token just verified says, and
+    ///     <c>UpdatedAt</c>, only while they may sign in as the caller found them: not deleted, not
+    ///     restricted (NFR-24) and not anonymised. <c>false</c> means one of those changed since.
+    /// </summary>
+    Task<bool> TryRefreshEmailVerifiedAsync(GoogleUser googleUser, bool emailVerified, DateTime now);
+
+    /// <summary>
+    ///     NFR-20 for a Google User: the placeholder name, address and Google subject, the picture and the
+    ///     verification flag cleared, <c>AnonymisedAt</c> and <c>UpdatedAt</c> stamped — while they are
+    ///     still deleted, not yet anonymised, and not restricted (NFR-24). <c>false</c> means one of those
+    ///     changed after the caller selected them, and nothing was written.
+    /// </summary>
+    Task<bool> TryAnonymiseAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at);
+
+    /// <summary>
+    ///     NFR-25 for a Google User a restore brought back: anonymised as <see cref="TryAnonymiseAsync(GoogleUser,
+    ///     string, string, string, DateTime)" /> does and marked a subject-requested deletion — dated when they
+    ///     were deleted, or <paramref name="at" /> if the restored row is live — whatever their state, so long
+    ///     as they are not anonymised already.
+    /// </summary>
+    Task<bool> TryReapplyErasureAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at);
 
     /// <summary>
     ///     UC-09 and UC-04's cascade: logically deletes the person — <c>IsDeleted</c>, <c>DeletedAt</c>,

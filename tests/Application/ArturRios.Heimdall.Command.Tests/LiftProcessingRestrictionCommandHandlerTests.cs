@@ -30,7 +30,7 @@ public class LiftProcessingRestrictionCommandHandlerTests
         AsyncFakeRepository<GoogleUser, long> googleUsers,
         IRestrictionLiftNotifier notifier,
         IAtomicWrites? atomicWrites = null) =>
-        new(persons, googleUsers, googleUsers, notifier, atomicWrites ?? InMemoryAtomicWrites.Instance);
+        new(persons, googleUsers, notifier, atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> SeedRestrictedAsync(AsyncFakeRepository<Person, long> persons)
     {

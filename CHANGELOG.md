@@ -149,7 +149,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   update is now answered `404`. A person's restriction, erasure, deletion and lockout columns were already written
   only by their own handlers (#237); tests now interleave a restriction and an erasure request with every writer
   that reads a person before writing it — password reset and email verification, deletion and adding an owner among
-  them — and show that both survive (#205).
+  them — and show that both survive. Setting Google sign-in, self-registration or the email links
+  (`PUT /api/scopes/{id}/google-signin`, `…/self-registration`, `…/email-links`) likewise writes only that setting,
+  so none undoes another's or the scope update's, and a scope deleted in between is answered `404` rather than
+  revived. A name taken by another scope in between is answered with AF-03b's own `409` message. A Google User's
+  deletion, erasure-request, restriction and anonymisation columns are now written only by targeted writes, as a
+  person's are: deleting, restricting, lifting a restriction on or requesting erasure for a Google User, Google
+  sign-in's refresh of `EmailVerified`, and the anonymisation and re-erasure passes each write only their own
+  columns, under the state they read. A sign-in whose account was deleted in between is refused `401`, and the
+  anonymisation pass leaves a Google User restricted since it was selected as it stands. A name-only
+  `PUT /api/persons/{id}` is answered `409` when the person's role changed in between (#205).
 
 ### Changed
 

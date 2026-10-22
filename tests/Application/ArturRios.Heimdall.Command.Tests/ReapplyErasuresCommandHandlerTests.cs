@@ -31,7 +31,7 @@ public class ReapplyErasuresCommandHandlerTests
         AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null,
         IAtomicWrites? atomicWrites = null,
         IAuditLogWriter? auditLog = null) =>
-        new(persons, googleUsers, googleUsers,
+        new(persons, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),

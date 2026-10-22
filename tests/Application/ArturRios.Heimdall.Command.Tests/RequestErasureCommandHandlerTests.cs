@@ -48,7 +48,7 @@ public class RequestErasureCommandHandlerTests
         InMemoryWriteTransactions? transactions = null,
         InMemoryInvariantLocks? locks = null) =>
         new(new RequestErasureCommandValidator(),
-            persons, googleUsers, googleUsers,
+            persons, googleUsers,
             Verifier(payload), Retention(), atomicWrites ?? InMemoryAtomicWrites.Instance,
             transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
@@ -434,6 +434,32 @@ public class RequestErasureCommandHandlerTests
         Assert.True(googleUser.IsDeleted);
         Assert.Equal((int)DeletionKinds.SubjectRequested, googleUser.DeletionKind);
         Assert.False(output.Data.RestrictionLifted);
+    }
+
+    [UnitFact]
+    public async Task GivenAGoogleUserDeletedSinceTheRead_WhenRequestingErasure_ThenNotEligibleAndTheDeletionStands()
+    {
+        // Given UC-28 deleting the Google User between this request's checks and its write (#205)
+        var persons = new AsyncFakeRepository<Person, long>();
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeGoogleUserWrite = row =>
+            {
+                row.IsDeleted = true;
+                row.DeletionKind = (int)DeletionKinds.Administrative;
+            }
+        };
+
+        // When
+        var output = await Handler(persons, googleUsers, Payload(), atomicWrites)
+            .HandleAsync(Command(googleUser.PublicId, password: null, idToken: "a-fresh-token"));
+
+        // Then AF-42b answers, and the administrative deletion keeps its kind
+        Assert.Equal([ErasureMessages.NotEligible], output.Errors);
+        Assert.Null(googleUser.ErasureRequestedAt);
+        Assert.Equal((int)DeletionKinds.Administrative, googleUser.DeletionKind);
     }
 
     [UnitFact]

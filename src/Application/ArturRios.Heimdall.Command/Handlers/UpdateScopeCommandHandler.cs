@@ -1,5 +1,4 @@
 using ArturRios.Data.Relational.Core.Interfaces;
-using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
@@ -83,10 +82,9 @@ public class UpdateScopeCommandHandler(
             // AF-03a: deleted since the read above.
             case ScopeUpdateOutcome.NotFound:
                 return output.WithError(ScopeMessages.ScopeNotFound);
-            // The unique index on the name, for a name another scope took since the check above, answered
-            // as the repository's save answered it.
+            // AF-03b: the unique index on the name, for a name another scope took since the check above.
             case ScopeUpdateOutcome.NameTaken:
-                return output.WithError(RelationalErrors.UniqueViolationMessage);
+                return output.WithError(ScopeMessages.NameAlreadyExists);
         }
 
         // Step 5: return the updated scope.

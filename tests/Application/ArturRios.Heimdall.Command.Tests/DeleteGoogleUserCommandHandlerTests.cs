@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -68,7 +69,7 @@ public class DeleteGoogleUserCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
         var before = googleUser.UpdatedAt;
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(true));
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
@@ -95,7 +96,7 @@ public class DeleteGoogleUserCommandHandlerTests
         checker
             .Setup(x => x.ActorMayManageScopeAsync(It.IsAny<int>(), It.IsAny<Guid>(), It.IsAny<long>()))
             .ReturnsAsync(true);
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, checker.Object);
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, checker.Object);
         var command = Command(googleUser.PublicId, Roles.ScopeAdmin);
 
         // When
@@ -115,7 +116,7 @@ public class DeleteGoogleUserCommandHandlerTests
         // Given an id nobody holds (AF-28a)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers);
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(true));
 
         // When
         var output = await handler.HandleAsync(Command(Guid.NewGuid()));
@@ -132,7 +133,7 @@ public class DeleteGoogleUserCommandHandlerTests
         // addresses (AF-28a)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, scopePublicId: Guid.NewGuid());
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(true));
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
@@ -151,7 +152,7 @@ public class DeleteGoogleUserCommandHandlerTests
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
         var before = googleUser.UpdatedAt;
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(true));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(true));
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId));
@@ -168,12 +169,37 @@ public class DeleteGoogleUserCommandHandlerTests
     }
 
     [UnitFact]
+    public async Task GivenAGoogleUserDeletedSinceTheRead_WhenHandlingDelete_ThenTheFirstDeletionStands()
+    {
+        // Given the subject's erasure request suspending them between this request's read and its write
+        var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
+        var googleUser = await SeedGoogleUserAsync(googleUsers);
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeGoogleUserWrite = row =>
+            {
+                row.IsDeleted = true;
+                row.DeletionKind = (int)DeletionKinds.SubjectRequested;
+            }
+        };
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, atomicWrites, Ownership(true));
+
+        // When
+        var output = await handler.HandleAsync(Command(googleUser.PublicId));
+
+        // Then AF-28b answers, and the subject's deletion keeps its kind (#205)
+        Assert.True(output.Success);
+        Assert.True(output.Data!.AlreadyDeleted);
+        Assert.Equal((int)DeletionKinds.SubjectRequested, googleUser.DeletionKind);
+    }
+
+    [UnitFact]
     public async Task GivenNonOwningScopeAdmin_WhenHandlingDelete_ThenReturnsNotAuthorizedError()
     {
         // Given a Scope Admin who does not own the Google User's scope (AF-28c)
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers);
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(false));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(false));
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId, Roles.ScopeAdmin));
@@ -192,7 +218,7 @@ public class DeleteGoogleUserCommandHandlerTests
         // who may not know that.
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         var googleUser = await SeedGoogleUserAsync(googleUsers, isDeleted: true);
-        var handler = new DeleteGoogleUserCommandHandler(googleUsers, googleUsers, Ownership(false));
+        var handler = new DeleteGoogleUserCommandHandler(googleUsers, InMemoryAtomicWrites.Instance, Ownership(false));
 
         // When
         var output = await handler.HandleAsync(Command(googleUser.PublicId, Roles.ScopeAdmin));

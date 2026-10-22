@@ -4,7 +4,6 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
@@ -40,7 +39,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class ReapplyErasuresCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
@@ -125,44 +123,18 @@ public class ReapplyErasuresCommandHandler(
             }
         }
 
-        // The Google Users are changed only now, after the voids' audit entries are written: those
-        // writes save the unit of work, and must not carry an identity change that has not been made.
-        var googleUsersToWrite = new List<GoogleUser>();
-
+        // Then each Google User, by one targeted write (#205), as each person: marked as a subject-requested
+        // deletion and anonymised in the same statement. One anonymised since it was read is counted as such.
         foreach (var googleUser in googleUsers)
         {
-            if (googleUser.AnonymisedAt is not null)
+            if (googleUser.AnonymisedAt is null && await IdentityAnonymiser.ReapplyAsync(atomicWrites, googleUser, now))
+            {
+                anonymised++;
+            }
+            else
             {
                 alreadyAnonymised++;
-
-                continue;
             }
-
-            googleUser.IsDeleted = true;
-            googleUser.DeletedAt = googleUser.DeletedAt ?? now;
-            googleUser.DeletionKind = (int)DeletionKinds.SubjectRequested;
-
-            IdentityAnonymiser.Anonymise(googleUser, now);
-
-            googleUsersToWrite.Add(googleUser);
-            anonymised++;
-        }
-
-        var errors = new List<string>();
-
-        if (googleUsersToWrite.Count > 0)
-        {
-            var update = await googleUserWriter.UpdateRangeAsync(googleUsersToWrite);
-
-            if (!update.Success)
-            {
-                errors.AddRange(update.Errors);
-            }
-        }
-
-        if (errors.Count > 0)
-        {
-            return output.WithErrors(errors);
         }
 
         var found = persons.Select(person => person.PublicId)

@@ -651,8 +651,10 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
 
     public async Task<bool> TryRenameAsync(Person person, string name, DateTime now)
     {
+        var readRoleId = person.RoleId;
+
         var written = await context.Persons
-            .Where(x => x.Id == person.Id && !x.IsDeleted)
+            .Where(x => x.Id == person.Id && x.RoleId == readRoleId && !x.IsDeleted)
             .ExecuteUpdateAsync(set => set
                 .SetProperty(x => x.Name, name)
                 .SetProperty(x => x.UpdatedAt, now)) == 1;
@@ -715,6 +717,226 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         {
             Accept(scope, x => x.IsDeleted, true);
             Accept(scope, x => x.UpdatedAt, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TrySetGoogleSignInAsync(Scope scope, bool enabled, DateTime now)
+    {
+        var written = await context.Scopes
+            .Where(x => x.Id == scope.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.GoogleSignInEnabled, enabled)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(scope, x => x.GoogleSignInEnabled, enabled);
+            Accept(scope, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TrySetSelfRegistrationAsync(Scope scope, bool enabled, DateTime now)
+    {
+        var written = await context.Scopes
+            .Where(x => x.Id == scope.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.SelfRegistrationEnabled, enabled)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(scope, x => x.SelfRegistrationEnabled, enabled);
+            Accept(scope, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TrySetEmailLinksAsync(
+        Scope scope, string? emailVerificationUrl, string? passwordResetUrl, DateTime now)
+    {
+        var written = await context.Scopes
+            .Where(x => x.Id == scope.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.EmailVerificationUrl, emailVerificationUrl)
+                .SetProperty(x => x.PasswordResetUrl, passwordResetUrl)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(scope, x => x.EmailVerificationUrl, emailVerificationUrl);
+            Accept(scope, x => x.PasswordResetUrl, passwordResetUrl);
+            Accept(scope, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryMarkDeletedAsync(GoogleUser googleUser, DeletionKinds kind, DateTime at)
+    {
+        var deletionKind = (int)kind;
+
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsDeleted, true)
+                .SetProperty(x => x.DeletedAt, at)
+                .SetProperty(x => x.DeletionKind, deletionKind)
+                .SetProperty(x => x.UpdatedAt, at)) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.IsDeleted, true);
+            Accept(googleUser, x => x.DeletedAt, at);
+            Accept(googleUser, x => x.DeletionKind, deletionKind);
+            Accept(googleUser, x => x.UpdatedAt, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryRestrictProcessingAsync(GoogleUser googleUser, int ground, DateTime at)
+    {
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && x.ProcessingRestrictedAt == null && x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ProcessingRestrictedAt, at)
+                .SetProperty(x => x.RestrictionGround, ground)
+                .SetProperty(x => x.RestrictionLiftNotifiedAt, (DateTime?)null)
+                .SetProperty(x => x.UpdatedAt, at)) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.ProcessingRestrictedAt, at);
+            Accept(googleUser, x => x.RestrictionGround, ground);
+            Accept(googleUser, x => x.RestrictionLiftNotifiedAt, null);
+            Accept(googleUser, x => x.UpdatedAt, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryLiftRestrictionAsync(GoogleUser googleUser, DateTime? notifiedAt, DateTime now)
+    {
+        if (googleUser.ProcessingRestrictedAt is not { } restrictedAt)
+        {
+            return false;
+        }
+
+        // The restriction read, by when it began, as for a person.
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && x.ProcessingRestrictedAt == restrictedAt)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ProcessingRestrictedAt, (DateTime?)null)
+                .SetProperty(x => x.RestrictionGround, (int?)null)
+                .SetProperty(x => x.RestrictionLiftNotifiedAt, notifiedAt)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.ProcessingRestrictedAt, null);
+            Accept(googleUser, x => x.RestrictionGround, null);
+            Accept(googleUser, x => x.RestrictionLiftNotifiedAt, notifiedAt);
+            Accept(googleUser, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryRecordErasureRequestAsync(GoogleUser googleUser, DateTime requestedAt, DateTime dueAt)
+    {
+        const int subjectRequested = (int)DeletionKinds.SubjectRequested;
+
+        // One statement: the request, the lifted restriction and the suspension, as for a person (UC-42).
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && x.ErasureRequestedAt == null && !x.IsDeleted &&
+                        x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ErasureRequestedAt, requestedAt)
+                .SetProperty(x => x.ErasureDueAt, dueAt)
+                .SetProperty(x => x.ProcessingRestrictedAt, (DateTime?)null)
+                .SetProperty(x => x.RestrictionGround, (int?)null)
+                .SetProperty(x => x.RestrictionLiftNotifiedAt, (DateTime?)null)
+                .SetProperty(x => x.IsDeleted, true)
+                .SetProperty(x => x.DeletedAt, requestedAt)
+                .SetProperty(x => x.DeletionKind, subjectRequested)
+                .SetProperty(x => x.UpdatedAt, requestedAt)) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.ErasureRequestedAt, requestedAt);
+            Accept(googleUser, x => x.ErasureDueAt, dueAt);
+            Accept(googleUser, x => x.ProcessingRestrictedAt, null);
+            Accept(googleUser, x => x.RestrictionGround, null);
+            Accept(googleUser, x => x.RestrictionLiftNotifiedAt, null);
+            Accept(googleUser, x => x.IsDeleted, true);
+            Accept(googleUser, x => x.DeletedAt, requestedAt);
+            Accept(googleUser, x => x.DeletionKind, subjectRequested);
+            Accept(googleUser, x => x.UpdatedAt, requestedAt);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryRefreshEmailVerifiedAsync(GoogleUser googleUser, bool emailVerified, DateTime now)
+    {
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && !x.IsDeleted && x.ProcessingRestrictedAt == null &&
+                        x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.EmailVerified, emailVerified)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.EmailVerified, emailVerified);
+            Accept(googleUser, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryAnonymiseAsync(
+        GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && x.IsDeleted && x.AnonymisedAt == null &&
+                        x.ProcessingRestrictedAt == null)
+            .ExecuteUpdateAsync(set => SetAnonymised(set, name, email, googleId, at)) == 1;
+
+        if (written)
+        {
+            AcceptAnonymised(googleUser, name, email, googleId, at);
+        }
+
+        return written;
+    }
+
+    public async Task<bool> TryReapplyErasureAsync(
+        GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        const int subjectRequested = (int)DeletionKinds.SubjectRequested;
+
+        var written = await context.GoogleUsers
+            .Where(x => x.Id == googleUser.Id && x.AnonymisedAt == null)
+            .ExecuteUpdateAsync(set =>
+            {
+                set.SetProperty(x => x.IsDeleted, true);
+                set.SetProperty(x => x.DeletedAt, x => x.DeletedAt ?? at);
+                set.SetProperty(x => x.DeletionKind, subjectRequested);
+                SetAnonymised(set, name, email, googleId, at);
+            }) == 1;
+
+        if (written)
+        {
+            Accept(googleUser, x => x.IsDeleted, true);
+            Accept(googleUser, x => x.DeletedAt, googleUser.DeletedAt ?? at);
+            Accept(googleUser, x => x.DeletionKind, subjectRequested);
+            AcceptAnonymised(googleUser, name, email, googleId, at);
         }
 
         return written;
@@ -1021,6 +1243,29 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         set.SetProperty(x => x.ErasureBlockedReason, (string?)null);
         set.SetProperty(x => x.AnonymisedAt, at);
         set.SetProperty(x => x.UpdatedAt, at);
+    }
+
+    private static void SetAnonymised(
+        UpdateSettersBuilder<GoogleUser> set, string name, string email, string googleId, DateTime at)
+    {
+        set.SetProperty(x => x.Name, name);
+        set.SetProperty(x => x.Email, email);
+        set.SetProperty(x => x.GoogleId, googleId);
+        set.SetProperty(x => x.ProfilePictureUrl, (string?)null);
+        set.SetProperty(x => x.EmailVerified, false);
+        set.SetProperty(x => x.AnonymisedAt, at);
+        set.SetProperty(x => x.UpdatedAt, at);
+    }
+
+    private void AcceptAnonymised(GoogleUser googleUser, string name, string email, string googleId, DateTime at)
+    {
+        Accept(googleUser, x => x.Name, name);
+        Accept(googleUser, x => x.Email, email);
+        Accept(googleUser, x => x.GoogleId, googleId);
+        Accept(googleUser, x => x.ProfilePictureUrl, null);
+        Accept(googleUser, x => x.EmailVerified, false);
+        Accept(googleUser, x => x.AnonymisedAt, at);
+        Accept(googleUser, x => x.UpdatedAt, at);
     }
 
     private void AcceptAnonymised(Person person, string name, string email, DateTime at)

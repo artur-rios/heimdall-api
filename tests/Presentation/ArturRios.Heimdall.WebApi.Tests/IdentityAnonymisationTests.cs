@@ -54,7 +54,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         var twoFactorAuths = new EfRepository<TwoFactorAuth, long>(context);
 
         return new AnonymiseExpiredDeletionsCommandHandler(
-            persons, googleUsers, googleUsers,
+            persons, googleUsers,
             passwordResetTokens,
             emailVerificationTokens,
             twoFactorAuths,
@@ -78,7 +78,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         var googleUsers = new EfRepository<GoogleUser, long>(context);
 
         return new ReapplyErasuresCommandHandler(
-            persons, googleUsers, googleUsers,
+            persons, googleUsers,
             new EfRepository<PasswordResetToken, long>(context),
             new EfRepository<EmailVerificationToken, long>(context),
             new EfRepository<TwoFactorAuth, long>(context),

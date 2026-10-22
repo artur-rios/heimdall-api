@@ -274,9 +274,12 @@ restriction only while there is none, a deletion only of a live person, an addre
 only while the person still holds the address and role the request read (#237). Ownership rows are
 added and removed the same way, so neither writes the person at all. The plain profile is targeted too:
 UC-08 writes the name and `UpdatedAt` only while the person is not deleted, and a promotion removes the
-membership row beside the role, so neither saves the person whole (#205). A scope's details and its
-deletion flag are written the same way, leaving the settings their own endpoints change — Google
-sign-in, self-registration and the email links — as they stand.
+membership row beside the role, so neither saves the person whole (#205). A Google User's deletion,
+erasure, restriction and anonymisation columns are mapped and written the same way as a person's. A
+scope's details, its deletion flag and each of its settings with an endpoint of its own — Google
+sign-in, self-registration and the email links — are written by targeted writes too, each of its own
+columns and only while the scope is not deleted, so none writes back another's or revives a deleted
+scope.
 
 **One class owns both directions of the claims.** `IdentityUserMapper` writes the claims when a token
 is issued and reads them when one is validated, so the two cannot drift. Every claim value is a

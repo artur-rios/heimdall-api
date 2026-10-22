@@ -55,6 +55,9 @@ public class InterleavedWriteTests(PostgresFixture db)
     private const string ScopeLock = "SELECT 1 FROM heimdall.scope WHERE id = ANY(";
     private const string VerificationUrl = "https://interleaved.test/verify";
     private const string ResetUrl = "https://interleaved.test/reset";
+    private const string GoogleSignIn = "google-signin";
+    private const string SelfRegistration = "self-registration";
+    private const string EmailLinks = "email-links";
 
     // UC-08: Update Person
 
@@ -90,6 +93,43 @@ public class InterleavedWriteTests(PostgresFixture db)
         var stored = await StoredPersonAsync(person.Id);
         AssertErasureRequested(stored);
         Assert.Equal(person.Name, stored.Name);
+    }
+
+    [FunctionalFact]
+    public async Task GivenAPromotionAfterTheRead_WhenAnAdminRenamesThePerson_ThenTheRenameIsRefusedAsAConflict()
+    {
+        // Given a Scope Admin made a System Admin between the rename's read and its write
+        var person = await SeedScopeAdminAsync(db);
+        await using var writer = Writer(PersonWrite, RoleChange(person.Id, Roles.SystemAdmin));
+
+        // When
+        var output = await UpdatePerson(writer).HandleAsync(Rename(person));
+
+        // Then the person is no longer the one the request read (AF-08l), and the name is not written
+        Assert.Equal([RelationalErrors.ConcurrencyMessage], output.Errors);
+        var stored = await StoredPersonAsync(person.Id);
+        Assert.Equal((long)Roles.SystemAdmin, stored.RoleId);
+        Assert.Equal(person.Name, stored.Name);
+    }
+
+    [FunctionalFact]
+    public async Task GivenARestrictionAfterTheRead_WhenAnAdminChangesTheEmail_ThenTheRestrictionSurvives()
+    {
+        // Given a restriction landing before the change's first write, the stamp rotation
+        var (_, person) = await SeedUserAsync();
+        await using var writer = Writer(PersonWrite, Restriction(person.Id));
+        var command = Rename(person);
+        command.Email = $"moved-{Guid.NewGuid():N}@test.local";
+
+        // When
+        var output = await UpdatePerson(writer).HandleAsync(command);
+
+        // Then the address and the name are written, and the restriction stands
+        Assert.True(output.Success, string.Join(" | ", output.Errors));
+        var stored = await StoredPersonAsync(person.Id);
+        AssertRestricted(stored);
+        Assert.Equal(command.Email, stored.Email);
+        Assert.Equal(Renamed, stored.Name);
     }
 
     // UC-13: Reset Password
@@ -352,11 +392,63 @@ public class InterleavedWriteTests(PostgresFixture db)
         // When
         var output = await UpdateScope(writer).HandleAsync(update);
 
-        // Then the unique index refuses it, answered as the repository's save answered it (AF-03b)
-        Assert.Equal([RelationalErrors.UniqueViolationMessage], output.Errors);
+        // Then the unique index refuses it, answered as the check before it would have answered (AF-03b)
+        Assert.Equal([ScopeMessages.NameAlreadyExists], output.Errors);
         var stored = await StoredScopeAsync(scope.Id);
         Assert.Equal(scope.Name, stored.Name);
         Assert.Null(stored.Description);
+    }
+
+    // UC-24, FR-SR-02 and the email links: the scope settings with endpoints of their own
+
+    [FunctionalTheory]
+    [InlineData(GoogleSignIn)]
+    [InlineData(SelfRegistration)]
+    [InlineData(EmailLinks)]
+    public async Task GivenADeletionAfterTheRead_WhenSettingAScopeSetting_ThenItIsRefusedAndTheScopeStaysDeleted(
+        string setting)
+    {
+        // Given
+        var scope = await SeedScopeAsync(db);
+        await using var writer = Writer(ScopeWrite, ScopeDeletion(scope.Id));
+
+        // When
+        var errors = await SetAsync(writer, setting, scope);
+
+        // Then the endpoint's AF for a deleted scope answers, and the scope is not revived
+        Assert.Equal([ScopeMessages.ScopeNotFound], errors);
+        var stored = await StoredScopeAsync(scope.Id);
+        Assert.True(stored.IsDeleted);
+        Assert.False(stored.GoogleSignInEnabled);
+        Assert.False(stored.SelfRegistrationEnabled);
+        Assert.Null(stored.EmailVerificationUrl);
+    }
+
+    [FunctionalTheory]
+    [InlineData(GoogleSignIn)]
+    [InlineData(SelfRegistration)]
+    [InlineData(EmailLinks)]
+    public async Task GivenAnUpdateAfterTheRead_WhenSettingAScopeSetting_ThenTheUpdateSurvives(string setting)
+    {
+        // Given UC-03 renaming the scope between the setting's read and its write
+        var scope = await SeedScopeAsync(db);
+        var renamed = $"{scope.Name}-renamed";
+        await using var writer = Writer(ScopeWrite, ScopeRename(scope.Id, renamed));
+
+        // When
+        var errors = await SetAsync(writer, setting, scope);
+
+        // Then the setting is written, and the name UC-03 wrote stands
+        Assert.Empty(errors);
+        var stored = await StoredScopeAsync(scope.Id);
+        Assert.Equal(renamed, stored.Name);
+        Assert.False(stored.IsDeleted);
+        Assert.True(setting switch
+        {
+            GoogleSignIn => stored.GoogleSignInEnabled,
+            SelfRegistration => stored.SelfRegistrationEnabled,
+            _ => stored.EmailVerificationUrl == VerificationUrl && stored.PasswordResetUrl == ResetUrl
+        });
     }
 
     // UC-04: Delete Scope
@@ -405,6 +497,14 @@ public class InterleavedWriteTests(PostgresFixture db)
         await using var context = db.CreateContext();
         await context.Persons.Where(x => x.Id == personId)
             .ExecuteUpdateAsync(set => set.SetProperty(x => x.Name, RenamedMeanwhile));
+    };
+
+    /// <summary>Another administrator's role change, on a connection of its own.</summary>
+    private Func<Task> RoleChange(long personId, Roles role) => async () =>
+    {
+        await using var context = db.CreateContext();
+        await context.Persons.Where(x => x.Id == personId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.RoleId, (long)role));
     };
 
     /// <summary>The settings their own endpoints own, set on a connection of their own.</summary>
@@ -560,6 +660,39 @@ public class InterleavedWriteTests(PostgresFixture db)
     {
         Id = scope.PublicId, Name = $"{scope.Name}-renamed", Description = "Described"
     };
+
+    /// <summary>Sets one scope setting through its own handler, as a System Admin; returns the errors.</summary>
+    private static async Task<IReadOnlyCollection<string>> SetAsync(AppDbContext context, string setting, Scope scope)
+    {
+        var scopes = new EfRepository<Scope, long>(context);
+        var writes = new AtomicWrites(context);
+        var owners = new ScopeOwnershipChecker(new EfRepository<Person, long>(context));
+        var actor = Guid.NewGuid();
+        const int systemAdmin = (int)Roles.SystemAdmin;
+
+        return setting switch
+        {
+            GoogleSignIn => (await new SetGoogleSignInCommandHandler(
+                    new SetGoogleSignInCommandValidator(), scopes, writes, owners)
+                .HandleAsync(new SetGoogleSignInCommand
+                {
+                    Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
+                })).Errors.ToList(),
+            SelfRegistration => (await new SetSelfRegistrationCommandHandler(
+                    new SetSelfRegistrationCommandValidator(), scopes, writes, owners)
+                .HandleAsync(new SetSelfRegistrationCommand
+                {
+                    Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
+                })).Errors.ToList(),
+            _ => (await new SetScopeEmailLinksCommandHandler(
+                    new SetScopeEmailLinksCommandValidator(), scopes, writes, owners)
+                .HandleAsync(new SetScopeEmailLinksCommand
+                {
+                    Id = scope.PublicId, EmailVerificationUrl = VerificationUrl, PasswordResetUrl = ResetUrl,
+                    ActingRole = systemAdmin, ActingPersonId = actor
+                })).Errors.ToList()
+        };
+    }
 
     // Handlers, over EF repositories on the writer's context
 

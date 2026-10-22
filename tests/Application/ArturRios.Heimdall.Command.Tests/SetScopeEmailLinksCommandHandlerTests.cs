@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -45,7 +46,8 @@ public class SetScopeEmailLinksCommandHandlerTests
 
     private static SetScopeEmailLinksCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, bool ownershipAllowed = true) =>
-        new(new SetScopeEmailLinksCommandValidator(), scopes, scopes, OwnershipChecker(ownershipAllowed));
+        new(new SetScopeEmailLinksCommandValidator(), scopes, InMemoryAtomicWrites.Instance,
+            OwnershipChecker(ownershipAllowed));
 
     private static SetScopeEmailLinksCommand Command(Guid scopeId, string? verifyUrl, string? resetUrl) => new()
     {

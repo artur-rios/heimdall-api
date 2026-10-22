@@ -3,7 +3,6 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
@@ -81,7 +80,6 @@ public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
     DataRetentionOptions retention,
     IAtomicWrites atomicWrites,
@@ -184,11 +182,14 @@ public class RequestErasureCommandHandler(
                     : null;
         var blocked = blockedReason is not null;
 
-        // The request, the lifted restriction (see LiftRestriction), and the suspension or the
-        // reason it waits, as one targeted write of those columns alone (#237) — made only while no
-        // request is recorded and the person is live. A request recorded since the read refuses this
-        // one as AF-42c, and a deletion as AF-42b, as either would have a moment earlier; the row is
-        // read again, past the tracked copy, to tell which.
+        // The request, the lifted restriction, and the suspension or the reason it waits, as one
+        // targeted write of those columns alone (#237). The restriction is lifted as UC-45 lifts a
+        // subject's own, whether or not NFR-12 blocks the suspension (AF-42d): a blocked subject is then
+        // neither restricted nor suspended, which lets them take part in the ownership transfer (UC-21)
+        // that unblocks their own request. Made only while no request is recorded and the person is
+        // live. A request recorded since the read refuses this one as AF-42c, and a deletion as AF-42b,
+        // as either would have a moment earlier; the row is read again, past the tracked copy, to tell
+        // which.
         if (!await atomicWrites.TryRecordErasureRequestAsync(person, requestedAt, dueAt, blockedReason))
         {
             var requestedSince = await personReader.Query()
@@ -243,66 +244,30 @@ public class RequestErasureCommandHandler(
 
         var requestedAt = DateTime.UtcNow;
         var dueAt = requestedAt + retention.SubjectErasureDeadline;
+        var restrictionLifted = googleUser.ProcessingRestrictedAt is not null;
 
-        googleUser.ErasureRequestedAt = requestedAt;
-        googleUser.ErasureDueAt = dueAt;
-        googleUser.UpdatedAt = requestedAt;
-
-        var restrictionLifted = LiftRestriction(googleUser);
-
-        // Nothing can block a Google User's erasure: FR-GO-04 makes them permanently User-equivalent,
-        // so they own no scope and NFR-12 has nothing to protect.
-        Suspend(googleUser, requestedAt);
-
-        var update = await googleUserWriter.UpdateAsync(googleUser);
-
-        return !update.Success
-            ? output.WithErrors(update.Errors)
-            : Recorded(
-                output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null,
-                restrictionLifted);
-    }
-
-    /// <summary>
-    ///     Lifts the subject's restriction on processing, if they have one, exactly as UC-45 does
-    ///     when a subject lifts their own: the restriction and its ground are cleared, and no
-    ///     notification is recorded because none is owed.
-    /// </summary>
-    /// <returns>Whether there was a restriction to lift.</returns>
-    /// <remarks>
-    ///     Done whether or not NFR-12 blocks the suspension (AF-42d). A blocked subject is then
-    ///     neither restricted nor suspended, which is what lets them take part in the ownership
-    ///     transfer (UC-21) that unblocks their own request.
-    /// </remarks>
-    private static bool LiftRestriction(GoogleUser googleUser)
-    {
-        if (googleUser.ProcessingRestrictedAt is null)
+        // The request, the lifted restriction — as UC-45 lifts a subject's own, with no notice owed —
+        // and the suspension, as one targeted write of those columns alone (#205), made only while no
+        // request is recorded and the Google User is live. Nothing can block a Google User's erasure:
+        // FR-GO-04 makes them permanently User-equivalent, so they own no scope and NFR-12 has nothing
+        // to protect. The suspension is immediate and deliberate: a subject who has asked to be erased
+        // has withdrawn the basis the account operates on, and IsDeleted stops every path — sign-in
+        // refuses it, and ActorLivenessFilter refuses an unexpired token. A request recorded since the
+        // read refuses this one as AF-42c, and a deletion as AF-42b; the row is read again to tell which.
+        if (!await atomicWrites.TryRecordErasureRequestAsync(googleUser, requestedAt, dueAt))
         {
-            return false;
+            var requestedSince = await googleUserReader.Query()
+                .Where(x => x.Id == googleUser.Id)
+                .Select(x => x.ErasureRequestedAt)
+                .FirstOrDefaultAsync();
+
+            return output.WithError(requestedSince is not null
+                ? ErasureMessages.ErasureAlreadyRequested
+                : ErasureMessages.NotEligible);
         }
 
-        googleUser.ProcessingRestrictedAt = null;
-        googleUser.RestrictionGround = null;
-        googleUser.RestrictionLiftNotifiedAt = null;
-
-        return true;
-    }
-
-    /// <summary>
-    ///     Suspends the identity: the same logical deletion UC-09 and UC-28 perform, carrying the
-    ///     kind that gives it the statutory deadline rather than the administrative window.
-    /// </summary>
-    /// <remarks>
-    ///     Suspension is immediate and deliberate. A subject who has asked to be erased has
-    ///     withdrawn the basis on which the account operates, so continuing to authenticate them
-    ///     while the deadline runs would be processing they have objected to. `IsDeleted` already
-    ///     stops every path: login refuses it, and `ActorLivenessFilter` refuses an unexpired token.
-    /// </remarks>
-    private static void Suspend(GoogleUser googleUser, DateTime at)
-    {
-        googleUser.IsDeleted = true;
-        googleUser.DeletedAt = at;
-        googleUser.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        return Recorded(
+            output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null, restrictionLifted);
     }
 
     private static DataOutput<RequestErasureCommandOutput?> Recorded(

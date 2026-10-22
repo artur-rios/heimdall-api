@@ -613,9 +613,10 @@ sequenceDiagram
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
 6. The system applies updates and sets `UpdatedAt`. The name is written with `UpdatedAt` alone, and only
-   while the person is not logically deleted (#205): nothing else of the person as read is written back,
-   so a restriction (UC-44) or an erasure request (UC-42) made since step 3 stands, and a person suspended
-   meanwhile is answered as AF-08a.
+   while the person is not logically deleted and still holds the role step 3 authorised against (#205):
+   nothing else of the person as read is written back, so a restriction (UC-44) or an erasure request
+   (UC-42) made since step 3 stands, a person suspended meanwhile is answered as AF-08a, and one whose role
+   changed meanwhile as AF-08l.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`), its scope ownerships reported as UC-07 read a reports them (FR-PE-19).
 
 > **On re-authenticating an email change.** An address change requires proof of identity, because
@@ -643,7 +644,7 @@ sequenceDiagram
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
 | AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
 | AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
-| AF-08l | The email or role changes, and the person no longer holds the address and role the request read — another request changed, deleted or anonymised them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when the new address was taken meanwhile (FR-PE-09). Neither the change nor the name is written. As for a failed save, the steps before the write stand: the person's tokens are revoked and their reset and verification links retired, and for an own change the account-email budget is charged and any recovery or email code presented is spent. The client reads the person again before retrying |
+| AF-08l | The email or role changes, and the person no longer holds the address and role the request read — or only the name changes, and the person no longer holds the role the request read — another request changed, deleted or anonymised them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when the new address was taken meanwhile (FR-PE-09). Neither the change nor the name is written. As for a failed save, the steps before the write stand: the person's tokens are revoked and their reset and verification links retired, and for an own change the account-email budget is charged and any recovery or email code presented is spent. The client reads the person again before retrying |
 
 ---
 
@@ -1389,7 +1390,10 @@ sequenceDiagram
 2. The system validates the input fields.
 3. The system verifies the scope exists.
 4. The system checks authorization: System Admin, or an existing owner of the scope.
-5. The system sets `GoogleSignInEnabled` to the requested value.
+5. The system sets `GoogleSignInEnabled` to the requested value — that flag and `UpdatedAt` alone, and only
+   while the scope is not logically deleted (#205): the scope's name, description and other settings are
+   left as they stand, and a scope deleted since step 3 is answered as AF-24a. Self-registration (FR-SR-02)
+   and the email links are written the same way by their own endpoints.
 6. The system returns the updated scope.
 
 **Alternative Flows:**
@@ -1457,7 +1461,7 @@ sequenceDiagram
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
 6. If none exists: the system requires the token's `email_verified` claim to be `true` (AF-25f), verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
-7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
+7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands. The refresh writes the flag and `UpdatedAt` alone, and only while the account is still neither deleted, restricted nor anonymised (#205); one that became so since this step's checks is answered as AF-25d.
 8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
 **Alternative Flows:**
@@ -1544,7 +1548,9 @@ sequenceDiagram
 
 1. Actor sends a delete request for a Google User.
 2. The system checks authorization: System Admin, or an owner of the Google User's scope.
-3. The system sets `IsDeleted = true` on the Google User record.
+3. The system sets `IsDeleted = true` on the Google User record, with `DeletedAt` and `DeletionKind`, and
+   writes nothing else of it (#205): a restriction or an erasure request made since step 1 stands, and a
+   Google User deleted since — by their own erasure request, say — is answered as AF-28b.
 4. The system returns success.
 
 **Alternative Flows:**

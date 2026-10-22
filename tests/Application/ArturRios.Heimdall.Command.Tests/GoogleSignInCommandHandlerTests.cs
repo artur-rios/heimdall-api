@@ -592,21 +592,22 @@ public class GoogleSignInCommandHandlerTests
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: false);
-        // A mock writer, not the fake repository: the fake holds entity references, so the handler's
-        // in-memory assignment alone would satisfy a GetAllAsync() assertion whether or not the row
-        // was ever written back. Verifying the write is the only way this test can fail if the
-        // UpdateAsync call goes away.
-        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
+        // Counted at the targeted write (#205): the fake holds entity references, so a bare in-memory
+        // assignment would satisfy a GetAllAsync() assertion whether or not the row was ever written.
+        // Counting the write is the only way this test can fail if the write goes away.
+        var writes = 0;
+        var atomicWrites = new InMemoryAtomicWrites { BeforeGoogleUserWrite = _ => writes++ };
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
+            googleUsers, googleUsers, TokenIssuer().issuer, atomicWrites);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
 
         // Then — the sign-in succeeded and the row was written back carrying Google's value
         Assert.True(output.Success);
-        writer.Verify(w => w.UpdateAsync(It.Is<GoogleUser>(g => g.EmailVerified)), Times.Once);
+        Assert.Equal(1, writes);
+        Assert.True((await googleUsers.GetAllAsync()).Data!.Single().EmailVerified);
     }
 
     [UnitFact]
@@ -618,17 +619,19 @@ public class GoogleSignInCommandHandlerTests
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
+        var writes = 0;
+        var atomicWrites = new InMemoryAtomicWrites { BeforeGoogleUserWrite = _ => writes++ };
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: false)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
+            googleUsers, googleUsers, TokenIssuer().issuer, atomicWrites);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
 
         // Then — written back, in the other direction
         Assert.True(output.Success);
-        writer.Verify(w => w.UpdateAsync(It.Is<GoogleUser>(g => !g.EmailVerified)), Times.Once);
+        Assert.Equal(1, writes);
+        Assert.False((await googleUsers.GetAllAsync()).Data!.Single().EmailVerified);
     }
 
     [UnitFact]
@@ -639,17 +642,18 @@ public class GoogleSignInCommandHandlerTests
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
+        var writes = 0;
+        var atomicWrites = new InMemoryAtomicWrites { BeforeGoogleUserWrite = _ => writes++ };
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
+            googleUsers, googleUsers, TokenIssuer().issuer, atomicWrites);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
 
         // Then
         Assert.True(output.Success);
-        writer.Verify(w => w.UpdateAsync(It.IsAny<GoogleUser>()), Times.Never);
+        Assert.Equal(0, writes);
     }
 
     [UnitFact]
@@ -662,10 +666,11 @@ public class GoogleSignInCommandHandlerTests
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
         await SeedGoogleUserAsync(googleUsers, scope, emailVerified: true);
-        var writer = new Mock<IAsyncRepository<GoogleUser, long>>();
+        var writes = 0;
+        var atomicWrites = new InMemoryAtomicWrites { BeforeGoogleUserWrite = _ => writes++ };
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: null)), scopes, new AsyncFakeRepository<Person, long>(),
-            googleUsers, writer.Object, TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
+            googleUsers, googleUsers, TokenIssuer().issuer, atomicWrites);
 
         // When
         var output = await handler.HandleAsync(Command(scope.PublicId));
@@ -673,7 +678,7 @@ public class GoogleSignInCommandHandlerTests
         // Then — nothing written, and the caller is told what is stored rather than a downgrade
         Assert.True(output.Success);
         Assert.True(output.Data!.EmailVerified);
-        writer.Verify(w => w.UpdateAsync(It.IsAny<GoogleUser>()), Times.Never);
+        Assert.Equal(0, writes);
         var stored = (await googleUsers.GetAllAsync()).Data!.Single();
         Assert.True(stored.EmailVerified);
     }

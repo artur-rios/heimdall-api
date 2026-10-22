@@ -140,7 +140,12 @@ public class GoogleSignInCommandHandler(
         // token just verified is the fresher truth, so the column is brought back into line — a
         // no-op on a sign-up, where the two already agree by construction, and a no-op when the
         // token carries no email_verified claim at all.
-        await RefreshEmailVerifiedAsync(googleUser, payload);
+        if (!await RefreshEmailVerifiedAsync(googleUser, payload))
+        {
+            // Deleted, restricted or anonymised since the checks above: answered as AF-25d answers a
+            // deleted account. A restricted one gets its subject-rights-only token on the next attempt.
+            return output.WithError(AuthMessages.GoogleAuthenticationFailed);
+        }
 
         // UC-25 step 8 (FR-GO-04): the token claims the Google User's PublicId, the User role — a
         // Google account is never a ScopeAdmin or SystemAdmin — and the one scope it belongs to.
@@ -176,23 +181,20 @@ public class GoogleSignInCommandHandler(
     ///     client asked for a token without the <c>email</c> scope keeps whatever is stored.
     /// </summary>
     /// <remarks>
-    ///     A failed write does not fail the sign-in. The caller has proved the account is theirs and
-    ///     the token is theirs to receive; a flag that could not be refreshed is a data-freshness
-    ///     problem, not an authentication one — the same judgement <c>EmailVerificationService</c>
-    ///     and <c>PasswordResetService</c> make about the writes they discard the result of. The
-    ///     response reports the in-memory row either way, so the caller is told the value this
-    ///     sign-in settled on regardless of whether the write landed.
+    ///     The flag and <c>UpdatedAt</c> alone, by a targeted write made only while the account may
+    ///     still sign in as the checks before it found it — not deleted, restricted or anonymised
+    ///     (#205). A whole-row save of the copy read would write those back as read, reviving an
+    ///     account deleted in between. <c>false</c> means the account changed in between, and the
+    ///     sign-in is refused.
     /// </remarks>
-    private async Task RefreshEmailVerifiedAsync(GoogleUser googleUser, GoogleIdTokenPayload payload)
+    private async Task<bool> RefreshEmailVerifiedAsync(GoogleUser googleUser, GoogleIdTokenPayload payload)
     {
         if (payload.EmailVerified is not { } claimed || googleUser.EmailVerified == claimed)
         {
-            return;
+            return true;
         }
 
-        googleUser.EmailVerified = claimed;
-
-        await googleUserWriter.UpdateAsync(googleUser);
+        return await atomicWrites.TryRefreshEmailVerifiedAsync(googleUser, claimed, DateTime.UtcNow);
     }
 
     /// <summary>

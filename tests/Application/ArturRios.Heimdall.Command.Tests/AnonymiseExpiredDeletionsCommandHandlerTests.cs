@@ -55,9 +55,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         public AnonymiseExpiredDeletionsCommandHandler Handler(
             DataRetentionOptions? retention = null, IAtomicWrites? atomicWrites = null,
-            IAsyncRepository<GoogleUser, long>? googleUserWriter = null, IAuditLogWriter? auditLog = null,
-            IAsyncReadOnlyRepository<Person, long>? personReader = null) =>
-            new(personReader ?? Persons, GoogleUsers, googleUserWriter ?? GoogleUsers,
+            IAuditLogWriter? auditLog = null, IAsyncReadOnlyRepository<Person, long>? personReader = null) =>
+            new(personReader ?? Persons, GoogleUsers,
                 PasswordResetTokens,
                 EmailVerificationTokens,
                 TwoFactorAuths,
@@ -572,9 +571,9 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenTheGoogleUserSaveFailsAfterSeveralBatchesOfPersons_WhenAnonymising_ThenTheLedgerNamesEveryPerson()
+    public async Task GivenTheGoogleUserWriteFailsAfterSeveralBatchesOfPersons_WhenAnonymising_ThenTheLedgerNamesEveryPerson()
     {
-        // Given five overdue persons — three batches of two — and an overdue Google User whose save fails
+        // Given five overdue persons — three batches of two — and an overdue Google User whose write fails
         var fakes = Fakes.New();
         var persons = new List<Person>();
 
@@ -586,13 +585,8 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         var googleUser = await SeedGoogleUserAsync(
             fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
-        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
-        failingWriter
-            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(DataOutput<IEnumerable<GoogleUser>>.New.WithError("database unavailable"));
-
         // When
-        var output = await fakes.Handler(Retention(batchSize: 2), googleUserWriter: failingWriter.Object)
+        var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: FailingGoogleUserWrites())
             .HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         // Then — every person anonymised in the run is in the ledger, from every batch, and the Google User
@@ -834,21 +828,16 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
             ownedScopeIds: scopeId);
 
     [UnitFact]
-    public async Task GivenTheGoogleUserSaveFails_WhenAnonymising_ThenTheAnonymisedPersonsAreStillNamed()
+    public async Task GivenTheGoogleUserWriteFails_WhenAnonymising_ThenTheAnonymisedPersonsAreStillNamed()
     {
-        // The persons are anonymised before the Google Users are saved; their ids are the erasure ledger
-        // and must survive the failed save, while the unsaved Google User must not appear in it.
+        // The persons are anonymised before the Google Users are written; their ids are the erasure ledger
+        // and must survive the failed write, while the unwritten Google User must not appear in it.
         var fakes = Fakes.New();
         var person = await SeedDueScopeAdminAsync(fakes);
         var googleUser = await SeedGoogleUserAsync(
             fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
-        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
-        failingWriter
-            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
-            .Returns(async (IEnumerable<GoogleUser> users, CancellationToken token) =>
-                (await fakes.GoogleUsers.UpdateRangeAsync(users, token)).WithError("database unavailable"));
 
-        var output = await fakes.Handler(googleUserWriter: failingWriter.Object)
+        var output = await fakes.Handler(atomicWrites: FailingGoogleUserWrites())
             .HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         Assert.False(output.Success);
@@ -1062,6 +1051,10 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(3, writer.Entries.Count);
     }
 
+    /// <summary>Atomic writes whose write of a Google User fails, as a statement the database refuses does.</summary>
+    private static InMemoryAtomicWrites FailingGoogleUserWrites() =>
+        new() { BeforeGoogleUserWrite = _ => throw new InvalidOperationException("database unavailable") };
+
     private static AuditingCommandHandler<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput> Audited(
         AnonymiseExpiredDeletionsCommandHandler handler, IAuditLogWriter auditLog) =>
         new(handler, auditLog,
@@ -1071,20 +1064,15 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     [UnitFact]
     public async Task GivenALaterWriteFailsAfterAVoid_WhenTheAuditedPassRuns_ThenTheVoidIsStillAudited()
     {
-        // Given — the void commits on its own, so a Google User save failing after it must not take its
+        // Given — the void commits on its own, so a Google User write failing after it must not take its
         // audit entry with it: a retry finds the invitation already ended and returns no id to audit
         var fakes = Fakes.New();
         var person = await SeedDueScopeAdminAsync(fakes);
         var invitation = await SeedInvitationAsync(fakes, person.Id, null);
         await SeedGoogleUserAsync(
             fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
-        var failingWriter = new Mock<IAsyncRepository<GoogleUser, long>>();
-        failingWriter
-            .Setup(writer => writer.UpdateRangeAsync(It.IsAny<IEnumerable<GoogleUser>>(), It.IsAny<CancellationToken>()))
-            .Returns(async (IEnumerable<GoogleUser> users, CancellationToken token) =>
-                (await fakes.GoogleUsers.UpdateRangeAsync(users, token)).WithError("database unavailable"));
         var auditLog = fakes.AuditLog;
-        var handler = Audited(fakes.Handler(googleUserWriter: failingWriter.Object), auditLog);
+        var handler = Audited(fakes.Handler(atomicWrites: FailingGoogleUserWrites()), auditLog);
 
         // When
         var output = await handler.HandleAsync(new AnonymiseExpiredDeletionsCommand());
