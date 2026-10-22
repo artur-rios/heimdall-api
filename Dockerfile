@@ -21,6 +21,12 @@ RUN dotnet tool restore
 # the restore cache, and a version change should.
 COPY Directory.Packages.props ./
 
+# The shared build settings (target framework, nullable, warnings as errors) are imported by every
+# project, so restore cannot evaluate a project without them: Directory.Build.shared.props at the root
+# and the src/Directory.Build.props that imports it. Same layer rule as above.
+COPY Directory.Build.shared.props ./
+COPY src/Directory.Build.props src/
+
 COPY src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall.WebApi.csproj src/Presentation/ArturRios.Heimdall.WebApi/
 COPY src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj src/Application/ArturRios.Heimdall.Command/
 COPY src/Application/ArturRios.Heimdall.Query/ArturRios.Heimdall.Query.csproj src/Application/ArturRios.Heimdall.Query/

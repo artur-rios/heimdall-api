@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    The build settings every project in the solution shares, production and test alike. MSBuild stops at
+    the nearest Directory.Build.props, so src/Directory.Build.props and tests/Directory.Build.props each
+    import this file and add only what is particular to them.
+
+    Two entries under WarningsAsErrors fail a build: nullable flags a possible null dereference or a
+    broken nullability contract, and CA2016 flags a method that holds a CancellationToken yet calls an
+    overload that would take it without passing it on, which is the shape of #219. Everything else stays
+    a warning.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable;CA2016</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
