@@ -106,8 +106,8 @@ start rather than logging tokens in plaintext.
 
 ## Apply migrations
 
-The schema is managed with **EF Core migrations, applied explicitly**. The API never migrates on
-startup, and **refuses to start when migrations are pending** — so this step comes before the first
+The schema is managed with **EF Core migrations, applied explicitly**. The API process never migrates
+(the container entrypoint does by default; see [Operations](../operations/#migrations)), and **refuses to start when migrations are pending** — so this step comes before the first
 run:
 
 ```bash

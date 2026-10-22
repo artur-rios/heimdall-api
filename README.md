@@ -460,8 +460,9 @@ no idempotent path; a second call is a 404. Neither cascades, because a Google U
 
 ## Migrations
 
-The schema is managed with **EF Core migrations, applied explicitly** — the API never migrates on
-startup, and refuses to start when migrations are pending. Apply them before the first run, and after
+The schema is managed with **EF Core migrations, applied explicitly** — the API process never migrates (the
+container entrypoint does by default unless `HEIMDALL_RUN_MIGRATIONS` is set to something other than `true`),
+and refuses to start when migrations are pending. Apply them before the first run, and after
 every update, with the interactive migration menu:
 
 ```bash
@@ -545,7 +546,7 @@ The image carries an **EF Core migrations bundle** built from
 `src/Infrastructure/ArturRios.Heimdall.Data/Migrations`. The entrypoint applies pending migrations
 and only then starts the API, which is what lets a container be pointed at an empty database — the
 API itself never migrates, and refuses to start while migrations are pending. Set
-`HEIMDALL_RUN_MIGRATIONS=false` to apply them out of band instead (`python scripts/migrations.py`),
+`HEIMDALL_RUN_MIGRATIONS=false` (any value other than `true` skips it) to apply them out of band instead (`python scripts/migrations.py`),
 which is required if the environment ever runs more than one replica.
 
 The bundle migrates with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` when it is set and with the API's

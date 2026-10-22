@@ -119,10 +119,11 @@ the current numbers; figures quoted in prose go stale.
 
 ## Migrations
 
-The schema is managed with **EF Core migrations, applied explicitly** — the API process never migrates, and refuses to start when migrations are
-pending. (The container image applies pending ones itself before starting the API unless
-`HEIMDALL_RUN_MIGRATIONS=false`; see the operations guide.) Use the interactive migration menu to
-**list, create (generate), or apply** migrations:
+The schema is managed with **EF Core migrations, applied explicitly** — the API process never
+migrates, and refuses to start when migrations are pending. (The container image applies pending
+ones itself before starting the API unless `HEIMDALL_RUN_MIGRATIONS` is set to something other than
+`true`; see the operations guide.) Use the interactive migration menu to **list, create (generate),
+or apply** migrations:
 
 ```bash
 python scripts/migrations.py

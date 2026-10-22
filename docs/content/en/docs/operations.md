@@ -34,7 +34,7 @@ decision rather than a side effect.
 **The shipped container image does migrate, unless told not to.** `docker/entrypoint.sh` runs the
 migration bundle built into the image before it starts the API, so a container pointed at an empty
 database comes up working. That is the default: `HEIMDALL_RUN_MIGRATIONS` is `true` when unset, and
-`true` in all four `docker/*.env.example` templates; only the exact value `false` switches it off. The
+`true` in all four `docker/*.env.example` templates; the entrypoint migrates only when it is unset, empty or exactly `true`, and any other value (`false`, `False`, `0`, `no`, `TRUE`) skips the migration, after which the API refuses to start while migrations are pending. The
 bundle connects with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the schema owner) when that is set and with
 `HEIMDALL_DATA_CONNECTIONSTRING` otherwise, and the entrypoint removes the owner's string before the API
 starts (see [Database roles](#database-roles--th-18)). Set `HEIMDALL_RUN_MIGRATIONS=false` and run
@@ -1182,7 +1182,7 @@ JSON on the console and in the log directory; see [Logging](#logging).
 | `Failed to write audit log entry for {Action} (target {TargetId})` | Log | A command succeeded but its audit entry was not written, so the trail has a gap. Each one is a missing record of something the API did | Warning |
 | `Request to {Route} answered 503` (and `AuthenticationTemporarilyUnavailable` in the audit trail) | Log; `CREDENTIAL_VERIFICATION_SHEDDING` signal | The password-hash gate is saturated and shedding logins, usually a credential flood. A readiness probe failing logs the same line, so tell them apart by route | Warning |
 | `Request to {Route} answered {StatusCode}` for any 5xx but 503 | Log, with the trace id | A request failed on the server. The line carries the route template and trace id only | Error |
-| `Mailgun refused the {Purpose} email` or `Could not deliver the {Purpose} email` | Log | Verification, reset or two-factor mail is not leaving; users are waiting on mail the API reported as sent. See [Email delivery](#email-delivery-mailgun) | Error |
+| `Mailgun refused the {Purpose} email`, `Could not deliver the {Purpose} email`, `Mailgun refused the restriction lift notification` or `Could not deliver the restriction lift notification` | Log | Verification, reset or two-factor mail is not leaving; users are waiting on mail the API reported as sent. See [Email delivery](#email-delivery-mailgun) | Error |
 | `REGISTRATION_CAP_REACHED` | Log, with the scope's public id | A scope holds its maximum of live pending self-registrations (`HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`) and is dropping new ones silently: an attack, or a cap set too low for a real sign-up campaign | Warning |
 | `GET /api/healthcheck/ready` answering `503` | Probe; log `The database health check failed` | The database does not answer; Traefik stops routing to the instance. See [Health checks](#health-checks--uc-30) | Warning |
 | `SECURITY_SIGNAL` | Log, with its `Kind` | See [Security signal detection](#security-signal-detection--nfr-26) | Warning |
@@ -1197,7 +1197,8 @@ Three costs depend on how much data a deployment holds. None needs a change toda
 look at and when to act, so a slow screen is not a surprise.
 
 - **Name and email filters scan.** The list endpoints filter with `x.Name.ToLower().Contains(name)` (and
-  the same for email) in the persons, owners, admins, Google Users and System Admins listings. A match with
+  the same for email) in the scopes, persons, owners, admins, Google Users, System Admins, applications and
+  permissions listings. A match with
   a leading wildcard cannot use a b-tree index. For a scope's own listings that is fine: the query is
   limited to one scope's rows first. The one place it can matter is a System Admin listing across every
   scope. Act only if those listings are slow with real data: add a `pg_trgm` GIN index on the lower-cased
@@ -1478,7 +1479,7 @@ no longer verify HS256.
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint and `scripts/migrations.py` only, never by the API (see [Database roles](#database-roles--th-18)) |
-| `HEIMDALL_RUN_MIGRATIONS` | | `true` → the container entrypoint applies pending migrations before starting the API; only `false` skips it. Read by the entrypoint only, never by the API (see [Migrations](#migrations)) |
+| `HEIMDALL_RUN_MIGRATIONS` | | `true` → the container entrypoint applies pending migrations before starting the API; unset, empty or exactly `true` migrates; any other value (`false`, `0`, `TRUE`, ...) skips it, and the API then refuses to start until migrations are applied out of band. Read by the entrypoint only, never by the API (see [Migrations](#migrations)) |
 | `PUBLIC_HOST` / `UI_HOST` | | unset → these two name no public host (the verification and reset URLs and the CORS origins are read too; see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
 | `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → with a public host, EF Core's sensitive logging and detailed errors and the developer exception page are off |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
