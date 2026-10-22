@@ -190,7 +190,6 @@ public class UpdatePersonCommandHandlerTests
             PassingValidator(),
             persons,
             googleUsers ?? new AsyncFakeRepository<GoogleUser, long>(),
-            persons,
             Ownership(ownershipAllowed),
             verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             resetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
@@ -262,6 +261,26 @@ public class UpdatePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(RelationalErrors.ConcurrencyMessage, output.Errors);
         Assert.Equal("other-change@test.local", target.Email);
+    }
+
+    [UnitFact]
+    public async Task GivenThePersonDeletedSinceTheRead_WhenRenamingThem_ThenNotFoundAndTheNameStays()
+    {
+        // Given another request that suspends the person — an erasure request, say — between this one's
+        // checks and its write (#205)
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = row => row.IsDeleted = true };
+        var handler = HandlerFor(persons, atomicWrites: atomicWrites);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then AF-08a answers, and the name is not written
+        Assert.Equal([PersonMessages.PersonNotFound], output.Errors);
+        Assert.Equal("user-10", target.Name);
     }
 
     [UnitFact]
@@ -512,7 +531,7 @@ public class UpdatePersonCommandHandlerTests
     [UnitFact]
     public async Task GivenAnEmailChange_WhenTheNewAddressIsSaved_ThenTheResetAndVerificationLinksWereAlreadyRetired()
     {
-        // Given a writer that records the links' state at the moment the new address is saved
+        // Given a write that records the links' state at the moment the new address is saved
         var target = User(10, Scope(1));
         var persons = await PersonsWith(target);
         var reset = new PasswordResetToken
@@ -528,22 +547,18 @@ public class UpdatePersonCommandHandlerTests
         bool? resetUsedDuringSave = null;
         bool? verificationUsedDuringSave = null;
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns((Person person, CancellationToken ct) =>
+        // An administrator's change makes no conditional write before the address's own (#237).
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = _ =>
             {
-                resetUsedDuringSave = reset.Used;
-                verificationUsedDuringSave = verification.Used;
-                return persons.UpdateAsync(person, ct);
-            });
+                resetUsedDuringSave ??= reset.Used;
+                verificationUsedDuringSave ??= verification.Used;
+            }
+        };
 
-        var twoFactor = new TwoFactorState();
-        var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
-            Ownership(true), verificationTokens, await ResetTokensAsync(reset),
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
+        var handler = HandlerFor(persons, verificationTokens: verificationTokens,
+            resetTokens: await ResetTokensAsync(reset), atomicWrites: atomicWrites);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -574,15 +589,23 @@ public class UpdatePersonCommandHandlerTests
             PersonId = target.Id, TokenHash = "late-verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns(async (Person person, CancellationToken ct) =>
+        // Issued as the address is written: an administrator's change makes no conditional write before
+        // the address's own (#237).
+        var issued = false;
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = _ =>
             {
-                await resetTokens.CreateAsync(lateReset, ct);
-                await verificationTokens.CreateAsync(lateVerification, ct);
-                return await persons.UpdateAsync(person, ct);
-            });
+                if (issued)
+                {
+                    return;
+                }
+
+                issued = true;
+                resetTokens.CreateAsync(lateReset).GetAwaiter().GetResult();
+                verificationTokens.CreateAsync(lateVerification).GetAwaiter().GetResult();
+            }
+        };
 
         bool? resetUsedAtNotice = null;
         var sender = new Mock<IEmailChangeNoticeSender>();
@@ -593,9 +616,9 @@ public class UpdatePersonCommandHandlerTests
 
         var twoFactor = new TwoFactorState();
         var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
+            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(),
             Ownership(true), verificationTokens, resetTokens,
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
+            atomicWrites, twoFactor.Configurations, twoFactor.Verifier(),
             sender.Object, new AdminEmailOptions(), twoFactor.RetryAfter);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
@@ -1435,28 +1458,19 @@ public class UpdatePersonCommandHandlerTests
     [UnitFact]
     public async Task GivenAnEmailChange_WhenHandlingUpdate_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
     {
-        // Given a writer that records the stamp a concurrent sign-in would have read during the save
+        // Given a write that records the stamp a concurrent sign-in would have read during the save
         var target = User(10, Scope(1));
         var original = target.SecurityStamp;
         var persons = await PersonsWith(target);
         Guid? duringSave = null;
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns((Person person, CancellationToken ct) =>
-            {
-                duringSave = person.SecurityStamp;
-                return persons.UpdateAsync(person, ct);
-            });
+        // An administrator's change makes no conditional write before the address's own (#237).
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person => duringSave ??= person.SecurityStamp
+        };
 
-        var twoFactor = new TwoFactorState();
-        var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
-            Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
-            new AsyncFakeRepository<PasswordResetToken, long>(),
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
+        var handler = HandlerFor(persons, atomicWrites: atomicWrites);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 

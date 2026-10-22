@@ -139,6 +139,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   deletion and erasure holds one transaction-scoped advisory lock on the System Admin set, taken after the scope
   row locks, and decides on the person's role and ownerships as read under the locks. A restriction on processing
   is never refused, and `PUT /api/persons/{id}` never demotes a System Admin (#203).
+- Editing a person (`PUT /api/persons/{id}`), promoting a User to scope owner
+  (`POST /api/scopes/{scopeId}/users/{personId}/promote`), updating a scope (`PUT /api/scopes/{id}`) and deleting a
+  scope (`DELETE /api/scopes/{id}`) now write only the columns they change, where each saved the whole row it had
+  read. An edit or a promotion wrote the name back as read, over a rename made in between, and an edit still
+  renamed a person an erasure request had suspended in between; that edit is now answered `404`, as for any deleted
+  person. A scope update or deletion wrote Google sign-in, self-registration and the email links back as read,
+  undoing a change their own endpoints made in between, and a scope update revived a scope deleted in between; that
+  update is now answered `404`. A person's restriction, erasure, deletion and lockout columns were already written
+  only by their own handlers (#237); tests now interleave a restriction and an erasure request with every writer
+  that reads a person before writing it — password reset and email verification, deletion and adding an owner among
+  them — and show that both survive (#205).
 
 ### Changed
 

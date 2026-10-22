@@ -317,24 +317,20 @@ public class PersonStaleSaveTests(PostgresFixture db)
             p.ScopeMembership = new ScopeUser { ScopeId = scope.Id };
         });
 
-        // When promoted (UC-23) the way the handler does it: the role targeted, the join rows saved
-        // through the aggregate in the same transaction
+        // When promoted (UC-23) the way the handler does it: the role and the membership row targeted,
+        // the ownership row inserted in the same transaction (#205)
         var stored = await StaleSaveAcrossAsync(person.Id, async (writes, _, context) =>
         {
             var current = await context.Persons
                 .Include(x => x.ScopeMembership)
-                .Include(x => x.ScopeOwnerships)
                 .SingleAsync(x => x.Id == person.Id);
 
             Assert.Equal(AccountChangeOutcome.Changed, await writes.TryChangeEmailAndRoleAsync(
-                current, current.Email, (long)Roles.ScopeAdmin, Now(), async () =>
-                {
-                    current.ScopeMembership = null;
-                    current.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = current.Id });
-                    context.Persons.Update(current);
-                    await context.SaveChangesAsync();
-                    return true;
-                }));
+                current, current.Email, (long)Roles.ScopeAdmin, Now(),
+                () => writes.TryAddScopeOwnerAsync(current, scope.Id)));
+
+            // A later save in the same unit of work finds nothing of the change left to write
+            await context.SaveChangesAsync();
         });
 
         // Then the role, the cleared scope, and both join-row edits stand

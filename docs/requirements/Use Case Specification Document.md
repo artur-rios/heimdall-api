@@ -257,7 +257,10 @@ sequenceDiagram
 1. System Admin sends an update request with the scope ID and new field values.
 2. The system validates the input.
 3. The system verifies the scope exists and is not logically deleted.
-4. The system applies the updates and sets `UpdatedAt`.
+4. The system applies the updates and sets `UpdatedAt` — the name, description, default legal basis and
+   privacy notice URI, and nothing else of the scope (#205). Google sign-in (UC-24), self-registration
+   (FR-SR-02) and the email links have endpoints of their own and are left as they stand, whatever this
+   request read; a scope deleted since step 3 is not revived, and is answered as AF-03a.
 5. The system returns the updated scope.
 
 **Alternative Flows:**
@@ -609,7 +612,10 @@ sequenceDiagram
    naming the scope they will own (FR-PE-11) and making someone a `User` requires naming the scope
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
-6. The system applies updates and sets `UpdatedAt`.
+6. The system applies updates and sets `UpdatedAt`. The name is written with `UpdatedAt` alone, and only
+   while the person is not logically deleted (#205): nothing else of the person as read is written back,
+   so a restriction (UC-44) or an erasure request (UC-42) made since step 3 stands, and a person suspended
+   meanwhile is answered as AF-08a.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`), its scope ownerships reported as UC-07 read a reports them (FR-PE-19).
 
 > **On re-authenticating an email change.** An address change requires proof of identity, because
@@ -1329,6 +1335,8 @@ sequenceDiagram
 3. The system verifies the person exists, is not logically deleted, and is currently a `User` belonging to that scope.
 4. The system changes the person's `RoleId` to `ScopeAdmin`.
 5. The system removes the person's `SCOPE_USER` row and inserts a `SCOPE_OWNER` row linking them to the scope.
+   Steps 4 and 5 write those rows and columns only, in one transaction (#205): nothing else of the person
+   as read is written back, so a rename, restriction or erasure request made meanwhile stands.
 6. The system returns the updated person.
 
 **Alternative Flows:**

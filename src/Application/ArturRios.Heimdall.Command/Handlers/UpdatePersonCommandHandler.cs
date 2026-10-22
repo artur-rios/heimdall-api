@@ -46,7 +46,6 @@ public class UpdatePersonCommandHandler(
     IValidator<UpdatePersonCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IAsyncRepository<EmailVerificationToken, long> verificationTokenWriter,
     IAsyncRepository<PasswordResetToken, long> resetTokenWriter,
@@ -207,59 +206,42 @@ public class UpdatePersonCommandHandler(
             await atomicWrites.RotateSecurityStampAsync(person);
         }
 
-        // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it). The name and
-        // UpdatedAt are the plain profile a whole-row save still writes.
+        // UC-08 step 6: apply and stamp UpdatedAt (no DB trigger maintains it). The name is written by a
+        // targeted write of its own, and only while the person is not deleted (#205): a whole-row save
+        // of the copy read above would write every other column back as it was read, and AF-08a, asked
+        // at the read, would not be asked again.
         var now = DateTime.UtcNow;
-
-        person.Name = command.Name;
-        person.UpdatedAt = now;
 
         if (emailChanged || roleChange.Applies)
         {
             // UC-08 steps 4 and 5 (#237): the address — with EmailVerified cleared beside it (AF-08b)
             // — and the role are written by one targeted write, only while the person still holds
             // the address and role they were read with, so a change that landed since is never
-            // overwritten. The save of everything else runs in its transaction, once it is written.
-            DataOutput<Person>? save = null;
-
+            // overwritten. The role change removes the membership row with it (FR-PE-10); the
+            // ownership rows stay (#224): a System Admin may be a named owner (FR-SC-08), and dropping
+            // them would leave a scope the person alone owned, and the applications they own, without
+            // a valid owner. The rename runs in its transaction, once the change is written.
             var change = await atomicWrites.TryChangeEmailAndRoleAsync(
                 person, newEmail, roleChange.TargetRoleId, now,
-                async () =>
-                {
-                    // FR-PE-10: a System Admin is a member of no scope, so the membership row is
-                    // severed — which deletes it, since the relationship is required and cascades.
-                    // Only now, so a refused change leaves nothing staged. The ownership rows stay
-                    // (#224): a System Admin may be a named owner (FR-SC-08), and dropping them would
-                    // leave a scope the person alone owned, and the applications they own, without
-                    // a valid owner.
-                    if (roleChange.Applies)
-                    {
-                        person.ScopeMembership = null;
-                    }
-
-                    save = await personWriter.UpdateAsync(person);
-
-                    return save.Success;
-                });
+                () => atomicWrites.TryRenameAsync(person, command.Name, now));
 
             switch (change)
             {
+                // Not expected — the change has just written the row, live, in the same transaction —
+                // but a refused rename means the person is deleted, which is AF-08a, as on the path
+                // below.
                 case AccountChangeOutcome.SaveFailed:
-                    return output.WithErrors(save!.Errors);
+                    return output.WithError(PersonMessages.PersonNotFound);
                 case AccountChangeOutcome.AddressTaken:
                     return output.WithError(RelationalErrors.UniqueViolationMessage);
                 case AccountChangeOutcome.Stale:
                     return output.WithError(RelationalErrors.ConcurrencyMessage);
             }
         }
-        else
+        else if (!await atomicWrites.TryRenameAsync(person, command.Name, now))
         {
-            var update = await personWriter.UpdateAsync(person);
-
-            if (!update.Success)
-            {
-                return output.WithErrors(update.Errors);
-            }
+            // AF-08a: deleted — suspended for erasure, say — since the read above.
+            return output.WithError(PersonMessages.PersonNotFound);
         }
 
         // FR-AU-11 again, once the new address is saved: a sign-in between the first rotation and
@@ -470,8 +452,8 @@ public class UpdatePersonCommandHandler(
     /// <remarks>
     ///     Nothing is written here, deliberately. The uniqueness check that follows it can still
     ///     refuse the request, and a handler that had already rewritten the loaded person's role
-    ///     would be relying on the caller never saving — true today, since a refusal returns before
-    ///     <c>UpdateAsync</c>, but true only by accident and invisible from here.
+    ///     would be relying on nothing in the same unit of work saving it — true today, since the person
+    ///     is written only by targeted writes, but true only by accident and invisible from here.
     /// </remarks>
     private static RoleChange ValidateRoleChange(UpdatePersonCommand command, Person person)
     {

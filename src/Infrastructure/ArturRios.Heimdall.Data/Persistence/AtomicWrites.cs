@@ -617,6 +617,19 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         {
             Accept(person, x => x.RoleId, roleId);
             Accept(person, x => x.ScopeId, null);
+
+            // FR-PE-10: the membership goes with the role, as its copy in ScopeId just did. Detached before
+            // the navigation is cleared: severed while still tracked, the row would be deleted again by the
+            // next save, and that delete would find nothing.
+            await context.ScopeUsers.Where(x => x.PersonId == id).ExecuteDeleteAsync();
+
+            foreach (var membership in context.ChangeTracker.Entries<ScopeUser>()
+                         .Where(entry => entry.Entity.PersonId == id).ToList())
+            {
+                membership.State = EntityState.Detached;
+            }
+
+            person.ScopeMembership = null;
         }
 
         if (!await saveAlongside())
@@ -634,6 +647,77 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         }
 
         return AccountChangeOutcome.Changed;
+    }
+
+    public async Task<bool> TryRenameAsync(Person person, string name, DateTime now)
+    {
+        var written = await context.Persons
+            .Where(x => x.Id == person.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.Name, name)
+                .SetProperty(x => x.UpdatedAt, now)) == 1;
+
+        if (written)
+        {
+            Accept(person, x => x.Name, name);
+            Accept(person, x => x.UpdatedAt, now);
+        }
+
+        return written;
+    }
+
+    public async Task<ScopeUpdateOutcome> TryUpdateScopeDetailsAsync(Scope scope, string name, string? description,
+        int? defaultLegalBasis, string? privacyNoticeUri, DateTime now)
+    {
+        bool written;
+
+        try
+        {
+            written = await context.Scopes
+                .Where(x => x.Id == scope.Id && !x.IsDeleted)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(x => x.Name, name)
+                    .SetProperty(x => x.Description, description)
+                    .SetProperty(x => x.DefaultLegalBasis, defaultLegalBasis)
+                    .SetProperty(x => x.PrivacyNoticeUri, privacyNoticeUri)
+                    .SetProperty(x => x.UpdatedAt, now)) == 1;
+        }
+        catch (Exception exception) when (RelationalErrors.IsUniqueViolation(exception))
+        {
+            // AF-03b's unique index on the name: another scope took it between the caller's check and this
+            // write.
+            return ScopeUpdateOutcome.NameTaken;
+        }
+
+        if (!written)
+        {
+            return ScopeUpdateOutcome.NotFound;
+        }
+
+        Accept(scope, x => x.Name, name);
+        Accept(scope, x => x.Description, description);
+        Accept(scope, x => x.DefaultLegalBasis, defaultLegalBasis);
+        Accept(scope, x => x.PrivacyNoticeUri, privacyNoticeUri);
+        Accept(scope, x => x.UpdatedAt, now);
+
+        return ScopeUpdateOutcome.Updated;
+    }
+
+    public async Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at)
+    {
+        var written = await context.Scopes
+            .Where(x => x.Id == scope.Id && !x.IsDeleted)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsDeleted, true)
+                .SetProperty(x => x.UpdatedAt, at)) == 1;
+
+        if (written)
+        {
+            Accept(scope, x => x.IsDeleted, true);
+            Accept(scope, x => x.UpdatedAt, at);
+        }
+
+        return written;
     }
 
     public async Task<bool> TryMarkDeletedAsync(Person person, DeletionKinds kind, DateTime at)

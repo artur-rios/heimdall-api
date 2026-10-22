@@ -149,7 +149,7 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
 
     private static DeleteScopeCommandHandler DeleteScopeHandler(AppDbContext context) => new(
         new EfRepository<Scope, long>(context),
-        new EfRepository<Scope, long>(context),
+        new AtomicWrites(context),
         new EfRepository<Person, long>(context),
         new EfRepository<GoogleUser, long>(context),
         new EfRepository<Application, long>(context),

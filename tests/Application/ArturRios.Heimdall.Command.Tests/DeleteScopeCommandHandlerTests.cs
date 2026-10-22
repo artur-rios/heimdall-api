@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // which ScopeDeleteCascadeTests shows against PostgreSQL.
 public class DeleteScopeCommandHandlerTests
 {
-    // One fake per aggregate; each is passed as BOTH the reader and the writer argument.
+    // One fake per aggregate, passed as its reader; the scope's flag goes through the atomic writes.
     private sealed record Fakes(
         AsyncFakeRepository<Scope, long> Scopes,
         AsyncFakeRepository<Person, long> Persons,
@@ -27,7 +27,7 @@ public class DeleteScopeCommandHandlerTests
         public InMemoryInvariantLocks Locks { get; } = new();
 
         public DeleteScopeCommandHandler Handler() => new(
-            Scopes, Scopes, Persons, GoogleUsers, Applications,
+            Scopes, InMemoryAtomicWrites.Instance, Persons, GoogleUsers, Applications,
             new InMemoryScopeCascades(Persons, GoogleUsers, Applications), Transactions, Locks);
     }
 

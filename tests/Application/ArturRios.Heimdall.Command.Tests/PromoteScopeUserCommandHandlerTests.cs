@@ -90,7 +90,7 @@ public class PromoteScopeUserCommandHandlerTests
     private static PromoteScopeUserCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
         IAtomicWrites? atomicWrites = null) =>
-        new(scopes, persons, persons, OwnershipChecker(allowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
+        new(scopes, persons, OwnershipChecker(allowed), atomicWrites ?? InMemoryAtomicWrites.Instance);
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);

@@ -23,10 +23,16 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
     /// <summary>
     ///     Called with the person before any conditional write to their row evaluates its condition —
     ///     <see cref="TrySetPasswordAsync" />, <see cref="TryMarkEmailVerifiedAsync" /> and the
-    ///     lifecycle writes (#237) — so a test can land a change on the row between the handler's own
-    ///     checks and the write.
+    ///     lifecycle writes (#237) and the rename (#205) — so a test can land a change on the row between
+    ///     the handler's own checks and the write.
     /// </summary>
     public Action<Person>? BeforeConditionalWrite { get; init; }
+
+    /// <summary>
+    ///     Called with the scope before a write to its row evaluates its condition, as
+    ///     <see cref="BeforeConditionalWrite" /> is for a person's.
+    /// </summary>
+    public Action<Scope>? BeforeScopeWrite { get; init; }
 
     /// <summary>
     ///     The Google ID token keys recorded as used (FR-GO-21), or <c>null</c> — as on
@@ -421,11 +427,65 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         {
             person.RoleId = roleId;
             person.ScopeId = null;
+            person.ScopeMembership = null;
         }
 
         person.UpdatedAt = now;
 
         return await saveAlongside() ? AccountChangeOutcome.Changed : AccountChangeOutcome.SaveFailed;
+    }
+
+    public Task<bool> TryRenameAsync(Person person, string name, DateTime now)
+    {
+        BeforeConditionalWrite?.Invoke(person);
+
+        if (person.IsDeleted)
+        {
+            return Task.FromResult(false);
+        }
+
+        person.Name = name;
+        person.UpdatedAt = now;
+
+        return Task.FromResult(true);
+    }
+
+    /// <remarks>
+    ///     The name's unique index is the database's; here only the deletion condition is applied, so
+    ///     <see cref="ScopeUpdateOutcome.NameTaken" /> is never answered.
+    /// </remarks>
+    public Task<ScopeUpdateOutcome> TryUpdateScopeDetailsAsync(Scope scope, string name, string? description,
+        int? defaultLegalBasis, string? privacyNoticeUri, DateTime now)
+    {
+        BeforeScopeWrite?.Invoke(scope);
+
+        if (scope.IsDeleted)
+        {
+            return Task.FromResult(ScopeUpdateOutcome.NotFound);
+        }
+
+        scope.Name = name;
+        scope.Description = description;
+        scope.DefaultLegalBasis = defaultLegalBasis;
+        scope.PrivacyNoticeUri = privacyNoticeUri;
+        scope.UpdatedAt = now;
+
+        return Task.FromResult(ScopeUpdateOutcome.Updated);
+    }
+
+    public Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at)
+    {
+        BeforeScopeWrite?.Invoke(scope);
+
+        if (scope.IsDeleted)
+        {
+            return Task.FromResult(false);
+        }
+
+        scope.IsDeleted = true;
+        scope.UpdatedAt = at;
+
+        return Task.FromResult(true);
     }
 
     public Task<bool> TryMarkDeletedAsync(Person person, DeletionKinds kind, DateTime at)

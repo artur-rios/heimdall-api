@@ -538,16 +538,16 @@ scope it implies, the login lockout, and the deletion, erasure-request, restrict
 columns — are written only by targeted, conditional writes of the columns each change concerns, like
 the password, the security stamp and the budgets above, never by a whole-row save. A save of a copy
 read before one of those changes therefore cannot put the earlier value back; what a whole-row save
-still writes is the plain profile, `Name` and the recorded basis among it, and `UpdatedAt` (#237).
+could still write is the plain profile, `Name` and the recorded basis among it, and `UpdatedAt` (#237).
+UC-08 and UC-23, the last writers that saved a person row whole, no longer do: UC-08 writes the name and
+`UpdatedAt` by a targeted write that requires the person not to be logically deleted, and a role change
+(UC-08, UC-23) removes the `SCOPE_USER` row beside the role rather than through a save of the person
+(#205). A scope's details (UC-03) and its deletion flag (UC-04) are written the same way, so neither
+writes back the settings that have endpoints of their own — Google sign-in, self-registration, the email
+links — and UC-03 cannot revive a scope deleted meanwhile.
 
-Two residuals are recorded rather than closed:
+One residual is recorded rather than closed:
 
-- **`Name` is still written whole-row.** A save of a copy read before an anonymisation could put the
-  real name back over the placeholder. Anonymisation reaches only rows deleted for the whole retention
-  window, which no profile edit spans (UC-08 reads live persons only), so the one overlap is an
-  operator running `ReapplyErasures` after a restore, racing a name edit or another save that has the
-  person tracked, within one request's duration. Writing the name by a targeted write that requires
-  the person live and not anonymised would close it.
 - **An ownership gained while its holder is taken out is not guarded.** Every writer that can take an
   owner out of a scope — removing an ownership (UC-22), deleting a person (UC-09, UC-10), suspending
   one for erasure (UC-42 and the anonymisation pass's retry) — asks NFR-12's guard and writes in one

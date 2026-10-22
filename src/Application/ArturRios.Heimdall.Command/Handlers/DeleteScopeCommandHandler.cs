@@ -45,10 +45,15 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         scope run one after the other: an owner removal that follows finds the scope gone (AF-22a),
 ///         and the deletion never acts on a scope read before another request deleted it.
 ///     </para>
+///     <para>
+///         <b>The flag alone</b> (#205). The scope is written by a targeted write of <c>IsDeleted</c> and
+///         <c>UpdatedAt</c>, not a save of the copy read before the lock, which would write the scope's
+///         name, description and settings back as they were read, over a change made in between.
+///     </para>
 /// </remarks>
 public class DeleteScopeCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
-    IAsyncRepository<Scope, long> scopeWriter,
+    IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
     IAsyncReadOnlyRepository<Application, long> applicationReader,
@@ -89,18 +94,11 @@ public class DeleteScopeCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        // Step 3: flip the scope itself. AF-04b: an already-deleted scope is left as it is.
+        // Step 3: flip the scope itself, and nothing else of it. AF-04b: an already-deleted scope is left
+        // as it is. Under the lock nothing else writes the row, so the write cannot find it deleted.
         if (isDeleted == false)
         {
-            scope.IsDeleted = true;
-            scope.UpdatedAt = now;
-
-            var scopeUpdate = await scopeWriter.UpdateAsync(scope);
-
-            if (!scopeUpdate.Success)
-            {
-                return output.WithErrors(scopeUpdate.Errors);
-            }
+            await atomicWrites.TryMarkScopeDeletedAsync(scope, now);
         }
 
         // Step 4, for a new deletion and for AF-04b alike: every member not yet deleted. It is an

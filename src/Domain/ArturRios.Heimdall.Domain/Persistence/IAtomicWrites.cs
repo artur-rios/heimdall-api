@@ -37,6 +37,14 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         still live.
 ///     </para>
 ///     <para>
+///         <b>Writes of plain details</b> (#205). A person's name, or a scope's name and description, races
+///         nothing single-use, but a whole-row save of them would still write every other column back as
+///         the request read it: a restriction or an erasure request made meanwhile, a scope deleted
+///         meanwhile, or the scope settings that have endpoints of their own. So those are targeted too,
+///         writing their own columns and <c>UpdatedAt</c> only, under the condition the caller read — the
+///         row not deleted.
+///     </para>
+///     <para>
 ///         Every method takes the entity the caller already holds and, when the write succeeds,
 ///         brings that instance's changed properties in line with what was written, so the caller
 ///         and anything it saves later see the same values the database does.
@@ -272,19 +280,19 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     UC-08 and UC-23: writes the person's address and role — the email, <c>EmailVerified</c>
-    ///     cleared when the address changes (AF-08b), the role with <c>ScopeId</c> cleared when the role
-    ///     changes (FR-PE-10), and <c>UpdatedAt</c> — while the person still holds the address and role
-    ///     they were read with and is neither logically deleted nor anonymised. Then, in the same
-    ///     transaction, runs <paramref name="saveAlongside" />: the caller's own save of what the change
-    ///     brings with it, the membership and ownership rows and the plain profile columns.
+    ///     cleared when the address changes (AF-08b), the role with <c>ScopeId</c> cleared and the
+    ///     <c>SCOPE_USER</c> row removed when the role changes (FR-PE-10), and <c>UpdatedAt</c> — while
+    ///     the person still holds the address and role they were read with and is neither logically
+    ///     deleted nor anonymised. Then, in the same transaction, runs <paramref name="saveAlongside" />:
+    ///     the caller's own writes of what the change brings with it, the ownership row or the name.
     /// </summary>
     /// <param name="person">The person as the caller read them.</param>
     /// <param name="email">The address to hold; the one read for no address change.</param>
     /// <param name="roleId">The role to hold; the one read for no role change.</param>
     /// <param name="now">The time stamped as <c>UpdatedAt</c>.</param>
     /// <param name="saveAlongside">
-    ///     Runs only once the change is written, and returns whether its save succeeded. When it did
-    ///     not, the change is rolled back with it.
+    ///     Runs only once the change is written, and returns whether its writes succeeded. When they did
+    ///     not, the change is rolled back with them.
     /// </param>
     /// <remarks>
     ///     <para>
@@ -300,9 +308,49 @@ public interface IAtomicWrites
     ///         the caller's tracked entities, so a later save of anything else in the same unit of
     ///         work cannot write half of the change.
     ///     </para>
+    ///     <para>
+    ///         The <c>SCOPE_USER</c> row is deleted here, beside <c>ScopeId</c>, rather than by a save of the
+    ///         person aggregate (#205): that save would write the person's plain profile back as the caller
+    ///         read it, over a rename made meanwhile. No role a change can reach has a membership.
+    ///     </para>
     /// </remarks>
     Task<AccountChangeOutcome> TryChangeEmailAndRoleAsync(
         Person person, string email, long roleId, DateTime now, Func<Task<bool>> saveAlongside);
+
+    /// <summary>
+    ///     UC-08: renames the person — <c>Name</c> and <c>UpdatedAt</c>, and no other column — while they
+    ///     are not logically deleted (AF-08a). <c>false</c> means they were deleted, possibly since the
+    ///     caller read them, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted rather than a whole-row save (#205), so a restriction, an erasure request or any other
+    ///     change made after the caller read the person stands beside the new name.
+    /// </remarks>
+    Task<bool> TryRenameAsync(Person person, string name, DateTime now);
+
+    /// <summary>
+    ///     UC-03: writes the scope's details — its name, description, default legal basis and privacy
+    ///     notice URI, and <c>UpdatedAt</c>, and no other column — while it is not logically deleted
+    ///     (AF-03a).
+    /// </summary>
+    /// <remarks>
+    ///     Targeted rather than a whole-row save (#205): Google sign-in, self-registration and the email
+    ///     links have endpoints of their own (UC-24, FR-SR-02, the email-links one), and a save of the
+    ///     copy read here would write them back as read, over a change one of those made meanwhile — and
+    ///     the deletion flag with them, reviving a scope deleted meanwhile.
+    /// </remarks>
+    Task<ScopeUpdateOutcome> TryUpdateScopeDetailsAsync(Scope scope, string name, string? description,
+        int? defaultLegalBasis, string? privacyNoticeUri, DateTime now);
+
+    /// <summary>
+    ///     UC-04: logically deletes the scope — <c>IsDeleted</c> and <c>UpdatedAt</c>, and no other column —
+    ///     unless it already is. <c>false</c> means it was, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted for the reason <see cref="TryUpdateScopeDetailsAsync" /> is (#205): the copy the
+    ///     deletion read can be older than a settings change made before it took its lock.
+    /// </remarks>
+    Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at);
 
     /// <summary>
     ///     UC-09 and UC-04's cascade: logically deletes the person — <c>IsDeleted</c>, <c>DeletedAt</c>,

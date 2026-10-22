@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
@@ -57,7 +58,8 @@ public class UpdateScopeCommandHandlerTests
         var id = Guid.NewGuid();
         var ownerId = Guid.NewGuid();
         var repository = await RepositoryWith(ExistingScope(id, "Old Name", ownerId));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "New Name", Description = "New description" };
 
         // When
@@ -78,7 +80,8 @@ public class UpdateScopeCommandHandlerTests
         // Given
         var id = Guid.NewGuid();
         var repository = await RepositoryWith(ExistingScope(id, "Old Name", Guid.NewGuid()));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "Old Name", Description = null };
 
         // When
@@ -95,7 +98,8 @@ public class UpdateScopeCommandHandlerTests
         // Given a scope keeping its own name
         var id = Guid.NewGuid();
         var repository = await RepositoryWith(ExistingScope(id, "Same Name", Guid.NewGuid()));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "Same Name", Description = "Changed" };
 
         // When
@@ -111,7 +115,8 @@ public class UpdateScopeCommandHandlerTests
     {
         // Given an empty store
         var repository = await RepositoryWith();
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = Guid.NewGuid(), Name = "New Name" };
 
         // When
@@ -128,7 +133,8 @@ public class UpdateScopeCommandHandlerTests
         // Given a scope that is logically deleted
         var id = Guid.NewGuid();
         var repository = await RepositoryWith(ExistingScope(id, "Old Name", Guid.NewGuid(), isDeleted: true));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "New Name" };
 
         // When
@@ -147,7 +153,8 @@ public class UpdateScopeCommandHandlerTests
         var repository = await RepositoryWith(
             ExistingScope(id, "Target", Guid.NewGuid()),
             ExistingScope(Guid.NewGuid(), "Taken", Guid.NewGuid()));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "Taken" };
 
         // When
@@ -167,7 +174,8 @@ public class UpdateScopeCommandHandlerTests
         var repository = await RepositoryWith(
             ExistingScope(id, "Target", Guid.NewGuid()),
             ExistingScope(Guid.NewGuid(), "Taken", Guid.NewGuid()));
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = id, Name = "TAKEN" };
 
         // When
@@ -187,7 +195,7 @@ public class UpdateScopeCommandHandlerTests
             .Setup(v => v.ValidateAsync(It.IsAny<UpdateScopeCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult([new ValidationFailure("Name", ScopeMessages.NameRequired)]));
         var repository = await RepositoryWith();
-        var handler = new UpdateScopeCommandHandler(validator.Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(validator.Object, repository, InMemoryAtomicWrites.Instance);
         var command = new UpdateScopeCommand { Id = Guid.NewGuid(), Name = string.Empty };
 
         // When
@@ -208,7 +216,8 @@ public class UpdateScopeCommandHandlerTests
         scope.EmailVerificationUrl = "https://app.test/verify-email";
         scope.PasswordResetUrl = "https://app.test/password-reset";
         var repository = await RepositoryWith(scope);
-        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, repository);
+        var handler = new UpdateScopeCommandHandler(
+            ValidValidator().Object, repository, InMemoryAtomicWrites.Instance);
 
         var output = await handler.HandleAsync(new UpdateScopeCommand { Id = id, Name = "New Name" });
 
@@ -218,5 +227,24 @@ public class UpdateScopeCommandHandlerTests
         Assert.Equal("https://app.test/password-reset", stored.PasswordResetUrl);
         Assert.Equal("https://app.test/verify-email", output.Data!.EmailVerificationUrl);
         Assert.Equal("https://app.test/password-reset", output.Data.PasswordResetUrl);
+    }
+
+    [UnitFact]
+    public async Task GivenTheScopeDeletedSinceTheRead_WhenHandlingUpdateScope_ThenReturnsScopeNotFound()
+    {
+        // Given another request that deletes the scope between this one's checks and its write (#205)
+        var id = Guid.NewGuid();
+        var scope = ExistingScope(id, "Old Name", Guid.NewGuid());
+        var repository = await RepositoryWith(scope);
+        var atomicWrites = new InMemoryAtomicWrites { BeforeScopeWrite = row => row.IsDeleted = true };
+        var handler = new UpdateScopeCommandHandler(ValidValidator().Object, repository, atomicWrites);
+
+        // When
+        var output = await handler.HandleAsync(new UpdateScopeCommand { Id = id, Name = "New Name" });
+
+        // Then AF-03a answers, and the deleted scope keeps its name
+        Assert.Equal([ScopeMessages.ScopeNotFound], output.Errors);
+        Assert.Equal("Old Name", scope.Name);
+        Assert.True(scope.IsDeleted);
     }
 }
