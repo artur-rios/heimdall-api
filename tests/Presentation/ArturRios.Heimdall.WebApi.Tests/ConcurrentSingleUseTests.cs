@@ -34,7 +34,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Concurrency-Pass!";
+    private const string Password = Seeds.Password;
     private const string EmailCode = "123456";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
@@ -76,24 +76,6 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
         {
             PasswordHashGate.Shared = original;
         }
-    }
-
-    private async Task<Person> SeedPersonAsync(string prefix)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = prefix,
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
     }
 
     private async Task<TwoFactorAuth> SeedTwoFactorAsync(
@@ -155,7 +137,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given one outstanding challenge and five good recovery codes — five, the challenge's guess
         // budget, so every request is compared and only redemption can tell them apart
-        var person = await SeedPersonAsync("parallel-challenge");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-challenge", EmailPrefix = "parallel-challenge" });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var codes = new List<string>();
 
@@ -181,7 +163,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given an active configuration and one recovery code, used as the factor for UC-40 — which
         // has no challenge to serialise it, so only the code itself can
-        var person = await SeedPersonAsync("parallel-regenerate");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-regenerate", EmailPrefix = "parallel-regenerate" });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -211,7 +193,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenOneAppCode_WhenConfirmingSetupInParallel_ThenExactlyOneConfirms()
     {
         // Given a pending App setup made through the API, so its secret is genuinely encrypted
-        var person = await SeedPersonAsync("parallel-totp");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-totp", EmailPrefix = "parallel-totp" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         var enable = await Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
@@ -243,7 +225,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenOneResetToken_WhenSpentInParallel_ThenExactlyOnePasswordIsSet()
     {
         // Given one live reset token
-        var person = await SeedPersonAsync("parallel-reset");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-reset", EmailPrefix = "parallel-reset" });
         const string token = "ParallelResetToken0123456789abcdefABCDEF0123456789";
 
         await using (var context = db.CreateContext())
@@ -276,7 +258,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenOneVerificationToken_WhenSpentInParallel_ThenExactlyOneSucceeds()
     {
         // Given one live verification token
-        var person = await SeedPersonAsync("parallel-verify");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-verify", EmailPrefix = "parallel-verify" });
         const string token = "ParallelVerifyToken0123456789abcdefABCDEF012345678";
 
         await using (var context = db.CreateContext())
@@ -308,7 +290,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given FR-AU-09's threshold of ten, reached in one burst. Counted after the derivation, the
         // ten requests all read a count of zero and all wrote one: the account never locked.
-        var person = await SeedPersonAsync("parallel-lockout");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-lockout", EmailPrefix = "parallel-lockout" });
 
         // When
         var responses = await InParallelAsync(10, _ =>
@@ -330,7 +312,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenTenWrongEmailCodesAtOnce_WhenConfirmingSetup_ThenOnlyFiveAreComparedAndTheCodeIsRetired()
     {
         // Given a pending email setup with one live code (FR-2F-13: five guesses)
-        var person = await SeedPersonAsync("parallel-email-code");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-email-code", EmailPrefix = "parallel-email-code" });
         var twoFactorAuth = await SeedTwoFactorAsync(person, isActive: false, appEnabled: false, emailEnabled: true);
 
         await using (var context = db.CreateContext())
@@ -366,7 +348,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenEightResendsAtOnce_WhenReissuingTheChallengeCode_ThenOnlyThreeCodesAreIssued()
     {
         // Given an outstanding challenge on an email configuration (FR-2F-13: three reissues)
-        var person = await SeedPersonAsync("parallel-resend");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-resend", EmailPrefix = "parallel-resend" });
         var twoFactorAuth = await SeedTwoFactorAsync(person, appEnabled: false, emailEnabled: true);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
 
@@ -391,7 +373,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenEightWrongAppCodesAtOnce_WhenVerifying_ThenFiveAreChargedAndTheChallengeIsRetired()
     {
         // Given an outstanding challenge on an app configuration
-        var person = await SeedPersonAsync("parallel-challenge-cap");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "parallel-challenge-cap", EmailPrefix = "parallel-challenge-cap" });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
 
         // When
@@ -410,7 +392,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenFiveWrongRecoveryCodes_WhenTheRightOneFollows_ThenTheChallengeIsAlreadyGone()
     {
         // Given an outstanding challenge and one good recovery code
-        var person = await SeedPersonAsync("challenge-cap");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "challenge-cap", EmailPrefix = "challenge-cap" });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
 

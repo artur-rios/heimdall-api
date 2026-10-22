@@ -8,7 +8,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +25,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Nfr-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
@@ -224,18 +223,8 @@ public class NonFunctionalRequirementTests(PostgresFixture db) : WebApiTest<Prog
     {
         await using var context = db.CreateContext();
 
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Gated",
-            Email = UniqueEmail("nfr-gated"),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
+        var person = await Seeds.PersonAsync(
+            context, Roles.SystemAdmin, new PersonOptions { Name = "Gated", EmailPrefix = "nfr-gated" });
 
         context.TwoFactorAuths.Add(new TwoFactorAuth
         {

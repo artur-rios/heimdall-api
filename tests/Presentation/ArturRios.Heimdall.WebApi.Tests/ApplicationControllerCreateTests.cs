@@ -25,67 +25,12 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
 
     private static string Route(Guid scopeId) => $"/api/scopes/{scopeId}/applications";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true, IsDeleted = isDeleted
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true, IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPostApplications_ThenApplicationIsCreated()
     {
         // Given a scope with a ScopeAdmin owner who will own the application (FR-AP-03)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command(owner.PublicId);
 
@@ -113,8 +58,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwningScopeAdminNamingThemself_WhenPostApplications_ThenApplicationIsCreated()
     {
         // Given a ScopeAdmin who owns the scope, naming themself as owner (matrix: "self as owner")
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
         var command = Command(admin.PublicId);
 
@@ -138,9 +83,9 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a ScopeAdmin naming a co-owner of the same scope as owner (AF-16c). The co-owner
         // would satisfy FR-AP-03, so the refusal is about who asked.
-        var scope = await SeedScopeAsync();
-        var caller = await SeedScopeAdminAsync(ownedScope: scope);
-        var coOwner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin));
         var command = Command(coOwner.PublicId);
 
@@ -160,8 +105,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a caller holding the User role: FR-AP-03 lets them own nothing, so the endpoint's
         // [RoleRequirement] refuses them before the handler runs
-        var scope = await SeedScopeAsync();
-        var caller = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
         var command = Command(caller.PublicId);
 
@@ -181,8 +126,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a User of the scope named as owner: FR-AP-03 restricts ownership to a ScopeAdmin who
         // owns the scope, so belonging to it is not enough (AF-16b)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -211,7 +156,7 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenLogicallyDeletedScope_WhenPostApplications_ThenNotFound()
     {
         // Given a logically deleted scope (AF-16a)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -226,9 +171,9 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenScopeAdminNotOwner_WhenPostApplications_ThenForbidden()
     {
         // Given a ScopeAdmin who does NOT own the scope (AF-16e)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var stranger = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -243,7 +188,7 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenUnknownOwner_WhenPostApplications_ThenBadRequest()
     {
         // Given an owner id nobody holds (AF-16b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -258,9 +203,9 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnerOfADifferentScope_WhenPostApplications_ThenBadRequest()
     {
         // Given a ScopeAdmin who owns another scope entirely (AF-16b)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var stranger = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -275,8 +220,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenLogicallyDeletedOwner_WhenPostApplications_ThenBadRequest()
     {
         // Given a logically deleted owner of the scope (AF-16b)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope, isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", IsDeleted = true, Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -291,8 +236,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenEmptyName_WhenPostApplications_ThenBadRequest()
     {
         // Given a command with no name (AF-16d)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -307,7 +252,7 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenNoToken_WhenPostApplications_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.PostAsync<DataOutput<CreateApplicationCommandOutput?>>(
@@ -321,8 +266,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenDuplicateName_WhenPostApplications_ThenBothAreCreated()
     {
         // Given an application already registered under a name: no requirement makes names unique
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command(owner.PublicId);
         var first = await Gateway.PostAsync<DataOutput<CreateApplicationCommandOutput?>>(

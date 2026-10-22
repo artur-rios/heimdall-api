@@ -18,42 +18,11 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
 {
     private static string UniqueName() => $"scope-{Guid.NewGuid():N}";
 
-    private async Task<Person> SeedPersonAsync(Roles role)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Owner",
-            Email = $"person-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Scope> SeedScopeAsync(string name)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = name };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdminAndValidOwner_WhenPostScope_ThenScopeIsCreated()
     {
         // Given
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var name = UniqueName();
 
@@ -78,7 +47,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenSystemAdminNamingThemselvesOwner_WhenPostScope_ThenScopeIsCreatedAndOwnedByThem()
     {
         // Given a System Admin who names themselves the scope's owner (FR-SC-08)
-        var systemAdmin = await SeedPersonAsync(Roles.SystemAdmin);
+        var systemAdmin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.For(systemAdmin.PublicId, (int)Roles.SystemAdmin));
         var name = UniqueName();
 
@@ -102,8 +71,8 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenDuplicateName_WhenPostScope_ThenConflict()
     {
         // Given an existing scope and a valid owner
-        var existing = await SeedScopeAsync(UniqueName());
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var existing = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName() });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -120,8 +89,8 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given an existing scope and a valid owner; the new name differs only by case (name
         // uniqueness is case-insensitive)
-        var existing = await SeedScopeAsync(UniqueName());
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var existing = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName() });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -141,7 +110,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
         // PostgreSQL and came back as "22001: value too long for type character varying(200)" —
         // a 400, but one that names the database's error code and the column's type to the caller
         // instead of saying what was wrong with the request (NFR-10).
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -159,7 +128,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenOverlongDescription_WhenPostScope_ThenBadRequestWithTheValidationMessage()
     {
         // Given a description one character past its column, the optional field's counterpart
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -194,7 +163,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenOwnerIsUser_WhenPostScope_ThenBadRequest()
     {
         // Given an owner that is a plain User, not an administrator (AF-01d)
-        var owner = await SeedPersonAsync(Roles.User);
+        var owner = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -210,7 +179,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenNonSystemAdmin_WhenPostScope_ThenForbidden()
     {
         // Given a valid owner but a non-System-Admin caller (AF-01c)
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -226,7 +195,7 @@ public class ScopeControllerCreateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenNoToken_WhenPostScope_ThenUnauthorized()
     {
         // Given a valid owner but no bearer token on the gateway
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
 
         // When
         var response = await Gateway.PostAsync<DataOutput<CreateScopeCommandOutput?>>(

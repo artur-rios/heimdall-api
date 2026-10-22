@@ -40,7 +40,7 @@ public class SystemAdminRaceTests(PostgresFixture db)
         // Given a database whose only System Admins are the master user and one more
         await using var isolated = await IsolatedDatabase.CreateAsync(db);
         var master = (await SystemAdminsAsync(isolated)).Single();
-        var second = await SeedSystemAdminAsync(isolated);
+        var second = await Seeds.PersonAsync(isolated, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "second-admin" });
         var hold = new PauseBefore("UPDATE heimdall.person");
         var log = new CommandLog();
         await using var held = Runtime(isolated, hold, log);
@@ -88,19 +88,5 @@ public class SystemAdminRaceTests(PostgresFixture db)
             .Where(Person.Active)
             .Where(person => person.RoleId == (long)Roles.SystemAdmin)
             .ToListAsync();
-    }
-
-    private static async Task<Person> SeedSystemAdminAsync(IsolatedDatabase isolated)
-    {
-        await using var context = isolated.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Second Admin",
-            Email = $"second-admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.SystemAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
     }
 }

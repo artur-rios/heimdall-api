@@ -29,55 +29,6 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
 {
     private static string Route(Guid personId) => $"/api/persons/{personId}/verification-email";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role,
-        Scope? memberOf = null,
-        Scope? ownerOf = null,
-        bool emailVerified = false,
-        bool isDeleted = false,
-        bool restricted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = $"email-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = emailVerified,
-            IsDeleted = isDeleted,
-            ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null,
-            RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        person.ScopeId = memberOf?.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (memberOf is not null)
-        {
-            context.ScopeUsers.Add(new ScopeUser { ScopeId = memberOf.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        if (ownerOf is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownerOf.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private async Task<int> LiveTokenCountAsync(Person person)
     {
         await using var context = db.CreateContext();
@@ -93,7 +44,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenSystemAdmin_WhenSending_ThenALiveTokenIsIssuedForThePerson()
     {
         // Given an unverified User
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -110,7 +61,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenSystemAdmin_WhenSending_ThenTheResponseCarriesNoToken()
     {
         // Given
-        var target = await SeedPersonAsync(Roles.ScopeAdmin);
+        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "email", EmailVerified = false });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When — read raw, so a field the typed body does not declare would still show
@@ -126,8 +77,8 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenASuccessfulSend_WhenAudited_ThenTheEntryNamesTheAdminAndThePerson()
     {
         // Given a seeded System Admin, so the actor can be asserted
-        var admin = await SeedPersonAsync(Roles.SystemAdmin, emailVerified: true);
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "email" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -146,9 +97,9 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenOwningScopeAdmin_WhenSendingToAUserOfTheirScope_ThenItIsSent()
     {
         // Given an owner and a User of the same scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: scope, emailVerified: true);
-        var target = await SeedPersonAsync(Roles.User, memberOf: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "email", Owns = [scope] });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -163,8 +114,8 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenScopeAdmin_WhenSendingToAUserOfAnotherScope_ThenReturnsForbidden()
     {
         // Given AF-51b
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: await SeedScopeAsync(), emailVerified: true);
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "email", Owns = [await Seeds.ScopeAsync(db)] });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -180,9 +131,9 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenScopeAdmin_WhenSendingToAnotherScopeAdmin_ThenReturnsForbidden()
     {
         // Given AF-51b — a co-owner is not a User
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: scope, emailVerified: true);
-        var coOwner = await SeedPersonAsync(Roles.ScopeAdmin, ownerOf: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "email", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "email", EmailVerified = false, Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -210,7 +161,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenAGoogleUsersId_WhenSending_ThenReturnsNotFound()
     {
         // Given AF-51a — Google Users are not persons and have no verification email
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await using var context = db.CreateContext();
         var googleUser = new GoogleUser
         {
@@ -236,7 +187,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenALogicallyDeletedPerson_WhenSending_ThenReturnsConflict()
     {
         // Given AF-51c
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(), isDeleted: true);
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, IsDeleted = true, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -252,7 +203,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenARestrictedPerson_WhenSending_ThenReturnsConflict()
     {
         // Given AF-51c (NFR-24)
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(), restricted: true);
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, RestrictedAt = DateTime.UtcNow, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -267,7 +218,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenAVerifiedAddress_WhenSending_ThenReturnsBadRequest()
     {
         // Given AF-51d
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync(), emailVerified: true);
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -282,8 +233,8 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenASecondRequestInsideTheCooldown_WhenSending_ThenReturnsTooManyRequestsAndSendsNothing()
     {
         // Given AF-51e — a first send has just succeeded
-        var admin = await SeedPersonAsync(Roles.SystemAdmin, emailVerified: true);
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "email" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(target.PublicId)).StatusCode);
 
@@ -305,7 +256,7 @@ public class PersonControllerSendVerificationEmailTests(PostgresFixture db) : We
     public async Task GivenAUser_WhenSending_ThenReturnsForbidden()
     {
         // Given the role gate
-        var target = await SeedPersonAsync(Roles.User, memberOf: await SeedScopeAsync());
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "email", EmailVerified = false, MemberOf = await Seeds.ScopeAsync(db) });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When

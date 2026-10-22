@@ -33,8 +33,8 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
     public async Task GivenThePersonDeleteFails_WhenHardDeletingAPerson_ThenNothingIsRemovedAndTheFailureIsAudited()
     {
         // Given a person who owns an application and holds both kinds of token
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync(Roles.SystemAdmin);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "person" });
         var application = await SeedApplicationAsync(scope, person);
 
         await using (var seed = db.CreateContext())
@@ -79,8 +79,8 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
     public async Task GivenTheScopeDeleteFails_WhenHardDeletingAScope_ThenNoMemberIsRemovedAndNoneIsTombstoned()
     {
         // Given a scope with a User, a Google User and an application
-        var scope = await SeedScopeAsync();
-        var user = await SeedScopeUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "person", MemberOf = scope });
         var googleUser = await SeedGoogleUserAsync(scope);
         var application = await SeedApplicationAsync(scope, user);
         var fault = new FailingCommand("DELETE", "scope");
@@ -142,41 +142,6 @@ public class HardDeleteAtomicityTests(PostgresFixture db)
 
     private static async Task<int> FailedEntriesSinceAsync(AppDbContext context, string action, DateTime since) =>
         await context.AuditLogs.CountAsync(x => x.Action == action && !x.Succeeded && x.CreatedAt >= since);
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role, long? scopeId = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Person",
-            Email = $"person-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true,
-            ScopeId = scopeId
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedScopeUserAsync(Scope scope)
-    {
-        var user = await SeedPersonAsync(Roles.User, scope.Id);
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = user.Id });
-        await context.SaveChangesAsync();
-        return user;
-    }
 
     private async Task<GoogleUser> SeedGoogleUserAsync(Scope scope)
     {

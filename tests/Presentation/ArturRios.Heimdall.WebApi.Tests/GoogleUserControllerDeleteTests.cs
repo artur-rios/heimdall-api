@@ -27,23 +27,6 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
 {
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/google-users/{id}";
 
-    private async Task<Scope> SeedScopeAsync(bool googleSignInEnabled = true)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"scope-{Guid.NewGuid():N}",
-            GoogleSignInEnabled = googleSignInEnabled
-        };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync(
         Scope scope, bool isDeleted = false, string? googleId = null)
     {
@@ -67,31 +50,6 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
         return googleUser;
     }
 
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     private Task<HttpOutput<DataOutput<DeleteGoogleUserCommandOutput?>?>> DeleteAsync(Guid scopeId, Guid id) =>
         Gateway.DeleteAsync<DataOutput<DeleteGoogleUserCommandOutput?>>(Route(scopeId, id));
 
@@ -106,7 +64,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenSystemAdminAndActiveGoogleUser_WhenDelete_ThenFlagIsSet()
     {
         // Given a System Admin, who may delete any Google User (UC-28 main flow)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -129,9 +87,9 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenOwningScopeAdmin_WhenDelete_ThenFlagIsSet()
     {
         // Given the owner of the Google User's scope (UC-28 step 2)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
-        var admin = await SeedScopeAdminAsync(scope);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -147,7 +105,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given a Google User this endpoint just deleted — the flag is only a deletion if the reads
         // honour it (FR-GO-17)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         await DeleteAsync(scope.PublicId, googleUser.PublicId);
@@ -167,7 +125,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
         // Given an account signed up through UC-25 and then deleted here. UC-25 AF-25d refuses a
         // logically deleted Google User, so the deletion has to actually end the account's access —
         // the same GoogleId must not be able to sign back in.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var idToken = TestGoogleTokens.For(subject);
 
@@ -199,7 +157,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenAlreadyDeletedGoogleUser_WhenDelete_ThenSucceedsIdempotentlyWithoutWriting()
     {
         // Given a record already logically deleted (AF-28b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -219,7 +177,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenUnknownId_WhenDelete_ThenNotFound()
     {
         // Given an identifier nobody holds (AF-28a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -234,8 +192,8 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenGoogleUserOfAnotherScope_WhenDelete_ThenNotFoundAndNotDeleted()
     {
         // Given a Google User addressed through the wrong scope (AF-28a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
+        var otherScope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(otherScope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -251,10 +209,10 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenNonOwningScopeAdmin_WhenDelete_ThenForbiddenAndNotDeleted()
     {
         // Given a Scope Admin who owns some other scope (AF-28c)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
-        var otherScope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(otherScope);
+        var otherScope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin, null, otherScope.PublicId));
 
         // When
@@ -271,7 +229,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given the Google User themselves. UC-27 lets them read their own record; the matrix grants
         // them no deletion of it, and the RoleRequirement refuses them before the handler runs.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -287,7 +245,7 @@ public class GoogleUserControllerDeleteTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenAnonymousCaller_WhenDelete_ThenUnauthorized()
     {
         // Given no bearer token
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
 
         // When

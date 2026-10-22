@@ -32,7 +32,7 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
     public async Task GivenAFailureMidCascade_WhenDeletingAScopeAndRetrying_ThenNoMemberIsLeftLive()
     {
         // Given a scope with Users, a Google User and an application
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var users = await SeedUsersAsync(scope, 2);
         await SeedGoogleUserAsync(scope);
         await SeedApplicationAsync(scope, users[0]);
@@ -67,7 +67,7 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
     {
         // Given a scope already flagged deleted whose cascade never ran — what an attempt before #204 left
         // when it failed part-way — and one User deleted on their own request long before
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var users = await SeedUsersAsync(scope, 2);
         await SeedGoogleUserAsync(scope);
         await SeedApplicationAsync(scope, users[0]);
@@ -100,7 +100,7 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
     public async Task GivenAScopeOf5000Users_WhenDeletingIt_ThenEveryUserIsDeletedByOneStatement()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedUsersAsync(scope, LargeTenant);
         var log = new CommandLog();
 
@@ -123,7 +123,7 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
     public async Task GivenAScopeOf5000Users_WhenHardDeletingIt_ThenEveryUserIsRemovedInBatchesAndTombstoned()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var users = await SeedUsersAsync(scope, LargeTenant);
         var log = new CommandLog();
 
@@ -201,15 +201,6 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
     {
         await using var context = db.CreateContext();
         return await context.Scopes.SingleAsync(x => x.Id == id);
-    }
-
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
     }
 
     /// <summary>

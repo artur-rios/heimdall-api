@@ -27,7 +27,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class SingleUseWriteFailureTests(PostgresFixture db)
 {
-    private const string Password = "Str0ng-Atomic-Pass!";
+    private const string Password = Seeds.Password;
     private const string NewPassword = "Str0ng-Atomic-New-Pass!";
     private const string EmailCode = "123456";
 
@@ -35,7 +35,7 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
     public async Task GivenThePasswordWriteFails_WhenResettingPassword_ThenTheTokenIsStillUsable()
     {
         // Given
-        var person = await SeedPersonAsync("atomic-reset");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "atomic-reset", EmailPrefix = "atomic-reset" });
         var token = SingleUseToken.New();
         await SeedResetTokenAsync(person, token);
         var fault = new FailingCommand("UPDATE", "person");
@@ -63,7 +63,7 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
     public async Task GivenTheVerifiedFlagWriteFails_WhenVerifyingEmail_ThenTheTokenIsStillUsable()
     {
         // Given
-        var person = await SeedPersonAsync("atomic-verify", emailVerified: false);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "atomic-verify", EmailPrefix = "atomic-verify", EmailVerified = false });
         var token = SingleUseToken.New();
 
         await using (var seed = db.CreateContext())
@@ -100,7 +100,7 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
     public async Task GivenTheActivationFails_WhenConfirmingTwoFactorSetup_ThenTheEmailCodeIsStillUsable()
     {
         // Given a pending email-only setup with one live code
-        var person = await SeedPersonAsync("atomic-2fa");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "atomic-2fa", EmailPrefix = "atomic-2fa" });
         long twoFactorAuthId;
 
         await using (var seed = db.CreateContext())
@@ -159,7 +159,7 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
     public async Task GivenTheAccountInsertFails_WhenConfirmingARegistration_ThenTheRegistrationIsStillThere()
     {
         // Given
-        var scope = await SeedOpenScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("atomic-pending");
         var token = await SeedPendingAsync(scope, email);
         var fault = new FailingCommand("INSERT", "person");
@@ -187,10 +187,10 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
     public async Task GivenTheAddressWasTakenMeanwhile_WhenConfirmingARegistration_ThenTheRegistrationIsKept()
     {
         // Given a registration whose address a User of the scope now holds
-        var scope = await SeedOpenScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("atomic-taken");
         var token = await SeedPendingAsync(scope, email);
-        await SeedScopeUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Existing", Email = email, MemberOf = scope });
 
         // When
         await using var context = db.CreateContext();
@@ -241,24 +241,6 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
-    private async Task<Person> SeedPersonAsync(string prefix, bool emailVerified = true)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = prefix,
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = emailVerified
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
     private async Task SeedResetTokenAsync(Person person, string token)
     {
         await using var context = db.CreateContext();
@@ -269,45 +251,19 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
         await context.SaveChangesAsync();
     }
 
-    private async Task<Scope> SeedOpenScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", SelfRegistrationEnabled = true
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task SeedScopeUserAsync(Scope scope, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Existing", Email = email, RoleId = (long)Roles.User,
-            EmailVerified = true, ScopeId = scope.Id
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-    }
-
     private async Task<string> SeedPendingAsync(Scope scope, string email)
     {
         var token = SingleUseToken.New();
 
+        var credentials = Seeds.Credentials();
         await using var context = db.CreateContext();
         context.PendingRegistrations.Add(new PendingRegistration
         {
             ScopeId = scope.Id,
             Name = "Pending Person",
             Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
+            PasswordHash = credentials.Hash,
+            Salt = credentials.Salt,
             TokenHash = SingleUseTokenHash.Of(token),
             ExpiresAt = DateTime.UtcNow.AddHours(1),
             CreatedAt = DateTime.UtcNow

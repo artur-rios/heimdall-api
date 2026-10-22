@@ -9,7 +9,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -27,24 +26,6 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@gmail.test";
-
-    private async Task<Scope> SeedScopeAsync(bool googleSignInEnabled = true, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"scope-{Guid.NewGuid():N}",
-            GoogleSignInEnabled = googleSignInEnabled,
-            IsDeleted = isDeleted
-        };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
 
     private async Task<GoogleUser> SeedGoogleUserAsync(
         Scope scope, string googleId, string email, bool isDeleted = false, bool emailVerified = true)
@@ -66,32 +47,6 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         await context.SaveChangesAsync();
 
         return googleUser;
-    }
-
-    private async Task SeedUserPersonAsync(Scope scope, string email)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Password User",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt("Str0ng-Pass!", out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.User,
-            EmailVerified = true
-        };
-
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
     }
 
     private Task<HttpOutput<DataOutput<GoogleSignInCommandOutput?>?>> SignInAsync(
@@ -116,7 +71,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given a scope with Google sign-in on and a Google account that has never signed in
         // (UC-25 main flow, FR-GO-09)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("newcomer");
 
@@ -153,7 +108,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenExistingGoogleUser_WhenPostAuthGoogle_ThenTokenIsReturnedAndNoDuplicateIsCreated()
     {
         // Given the Google account already signed up in this scope (FR-GO-10)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("returning");
         var existing = await SeedGoogleUserAsync(scope, subject, email);
@@ -176,7 +131,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given a token whose issuer withheld the profile claims — the optional fields stay empty
         // and the account is still created (FR-GO-05)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(
@@ -196,7 +151,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given a Google User who has just signed in — the token the endpoint issues must be one the
         // API reads back, as UC-11's suite proves for a password login
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var signIn = await SignInAsync(scope.PublicId, TestGoogleTokens.For());
         Assert.Equal(HttpStatusCode.OK, signIn.StatusCode);
 
@@ -212,7 +167,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenForgedIdToken_WhenPostAuthGoogle_ThenReturnsUnauthorized()
     {
         // Given a token signed with someone else's key (AF-25a, FR-GO-11)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.SignedWithWrongSecret());
@@ -227,7 +182,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenExpiredIdToken_WhenPostAuthGoogle_ThenReturnsUnauthorized()
     {
         // Given a correctly signed token whose lifetime has run out (AF-25a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(
@@ -244,7 +199,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given no token at all — UC-25 defines no 400 flow, and needs none: an absent token simply
         // fails verification (AF-25a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(scope.PublicId, string.Empty);
@@ -271,7 +226,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenLogicallyDeletedScope_WhenPostAuthGoogle_ThenReturnsForbidden()
     {
         // Given the scope is logically deleted (AF-25b, FR-GO-13)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true, IsDeleted = true });
 
         // When
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For());
@@ -286,7 +241,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenGoogleSignInDisabled_WhenPostAuthGoogle_ThenReturnsForbidden()
     {
         // Given an active scope that UC-24 never switched the setting on for (AF-25b, FR-GO-03)
-        var scope = await SeedScopeAsync(googleSignInEnabled: false);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
 
         // When
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For());
@@ -307,7 +262,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // (scope_id, lower(email)) does not, so this answered "address is free" and then failed on
         // the insert — a persistence error in place of the 409, for a caller who could never get
         // past it. The check now matches the index.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("deleted-holder");
         await SeedGoogleUserAsync(scope, $"google-sub-{Guid.NewGuid():N}", email, isDeleted: true);
 
@@ -326,7 +281,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // Given the same address in different casing. The application compares with LOWER(), so the
         // index has to as well — over the raw column, "Taken@x" and "taken@x" were two free
         // addresses to the database and one taken address to the handler.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("cased");
         await SeedGoogleUserAsync(scope, $"google-sub-{Guid.NewGuid():N}", email.ToUpperInvariant());
 
@@ -344,7 +299,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given the address is held in this scope by a Google User with a different 'sub'
         // (AF-25c, FR-GO-07)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("taken");
         await SeedGoogleUserAsync(scope, $"google-sub-{Guid.NewGuid():N}", email);
 
@@ -362,9 +317,9 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given the address belongs to a password-authenticated User of the same scope — the half of
         // FR-GO-07 that spans two tables, so no unique index can enforce it (AF-25c)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("person");
-        await SeedUserPersonAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
@@ -378,26 +333,6 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     /// <summary>
     ///     Seeds an admin person: no scope membership, which is how UC-06 path b creates one.
     /// </summary>
-    private async Task<Person> SeedAdminPersonAsync(Roles role, string email)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt("Str0ng-Pass!", out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     [FunctionalFact]
     public async Task GivenEmailAlreadyUsedByAnAdminPerson_WhenPostAuthGoogle_ThenASeparateGoogleUserIsCreated()
@@ -414,9 +349,9 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // unconditionally. The admin's person row is untouched and the caller receives none of its
         // authority. What is real is that the address now exists twice across the two tables, which
         // is narrower than FR-GO-07 reads.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("sysadmin");
-        var admin = await SeedAdminPersonAsync(Roles.SystemAdmin, email);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When somebody signs in with Google using that same address
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
@@ -444,9 +379,9 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // address must name the Google User and the User role, never the admin it shares an address
         // with. UC-25 hard-codes Roles.User, and ActorLivenessFilter refuses a Google identity
         // claiming anything else — this pins the outcome from the caller's side.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("scopeadmin");
-        var admin = await SeedAdminPersonAsync(Roles.ScopeAdmin, email);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email });
 
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(email: email));
 
@@ -472,8 +407,8 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given the address is held in a different scope — FR-GO-07 is per-scope, so it does not
         // collide here
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
+        var otherScope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("shared");
         await SeedGoogleUserAsync(otherScope, $"google-sub-{Guid.NewGuid():N}", email);
 
@@ -489,7 +424,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenLogicallyDeletedGoogleUser_WhenPostAuthGoogle_ThenReturnsUnauthorized()
     {
         // Given the account signed up before and was logically deleted since (AF-25d, FR-GO-12)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("deleted");
         await SeedGoogleUserAsync(scope, subject, email, isDeleted: true);
@@ -511,7 +446,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // Given an account under a restriction of processing (UC-44): from that moment the identity
         // authenticates for its own rights only (NFR-24, AF-25e), and its record is preserved exactly
         // as it stands
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("restricted");
         var googleUser = await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
@@ -549,7 +484,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         bool? emailVerified)
     {
         // Given a first sign-in with email_verified false or absent (AF-25f, FR-GO-07)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(
@@ -565,9 +500,9 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenAnUnverifiedSignUpTokenForAnAddressTakenInTheScope_WhenPostAuthGoogle_ThenForbiddenNotConflict()
     {
         // Given the address held by a User person, and a token Google does not vouch for
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var email = UniqueEmail("held");
-        await SeedUserPersonAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await SignInAsync(
@@ -584,7 +519,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenANonceTheTokenCarries_WhenPostAuthGoogle_ThenSignedIn()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var nonce = $"nonce-{Guid.NewGuid():N}";
 
         // When
@@ -602,7 +537,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         string? tokenNonce)
     {
         // Given a token minted for another nonce, or with none
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(
@@ -618,7 +553,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     public async Task GivenNoNonceInTheRequest_WhenTheTokenCarriesOne_ThenSignedInAsBefore()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
 
         // When
         var response = await SignInAsync(scope.PublicId, TestGoogleTokens.For(nonce: "unasked"));
@@ -634,7 +569,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // a stored true, and a token that actively asserts the address is not verified. FR-GO-19 is
         // "match the token", so this must reach the database — unlike an absent claim, which asserts
         // nothing and leaves the row alone.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("downgrade");
         await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
@@ -655,7 +590,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
     {
         // Given a Google User registered while their address was unverified, signing in again with
         // a token that now says verified (FR-GO-19)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("stale");
         await SeedGoogleUserAsync(scope, subject, email, emailVerified: false);
@@ -677,7 +612,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // Given a verified Google User signing in again with a token that carries no email_verified
         // claim at all — what a client that asked for a token without the email scope presents. An
         // absent claim asserts nothing, so FR-GO-19's refresh must not downgrade the stored value
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("silent-claim");
         await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);
@@ -699,7 +634,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         // Given a verified Google User signing in again with a token whose email_verified claim is
         // present but JSON null. It asserts no more than an omitted claim does, so FR-GO-19's
         // refresh must leave the stored value alone here too rather than read the null as "false"
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = UniqueEmail("null-claim");
         await SeedGoogleUserAsync(scope, subject, email, emailVerified: true);

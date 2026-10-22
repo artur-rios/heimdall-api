@@ -99,7 +99,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenAPromotionAfterTheRead_WhenAnAdminRenamesThePerson_ThenTheRenameIsRefusedAsAConflict()
     {
         // Given a Scope Admin made a System Admin between the rename's read and its write
-        var person = await SeedScopeAdminAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await using var writer = Writer(PersonWrite, RoleChange(person.Id, Roles.SystemAdmin));
 
         // When
@@ -253,8 +253,8 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenARestrictionAfterTheRead_WhenAddingThePersonAsOwner_ThenTheRestrictionSurvives()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var person = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await using var writer = Writer(OwnerInsert, Restriction(person.Id));
 
         // When
@@ -271,8 +271,8 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenAnErasureRequestAfterTheRead_WhenAddingThePersonAsOwner_ThenTheAddIsRefusedAndTheRequestSurvives()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var person = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await using var writer = Writer(OwnerInsert, ErasureRequest(person.Id));
 
         // When
@@ -349,7 +349,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenTheSettingsChangedAfterTheRead_WhenUpdatingTheScope_ThenTheSettingsSurvive()
     {
         // Given Google sign-in, self-registration and the email links set by their own endpoints meanwhile
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         await using var writer = Writer(ScopeWrite, Settings(scope.Id));
 
         // When
@@ -367,7 +367,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenADeletionAfterTheRead_WhenUpdatingTheScope_ThenTheUpdateIsRefusedAndTheScopeStaysDeleted()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         await using var writer = Writer(ScopeWrite, ScopeDeletion(scope.Id));
 
         // When
@@ -384,8 +384,8 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenTheNameTakenAfterTheCheck_WhenUpdatingTheScope_ThenAConflictAndNothingIsWritten()
     {
         // Given another scope renamed to the requested name between this request's check and its write
-        var scope = await SeedScopeAsync(db);
-        var other = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var other = await Seeds.ScopeAsync(db);
         var update = ScopeUpdate(scope);
         await using var writer = Writer(ScopeWrite, ScopeRename(other.Id, update.Name));
 
@@ -409,7 +409,7 @@ public class InterleavedWriteTests(PostgresFixture db)
         string setting)
     {
         // Given
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         await using var writer = Writer(ScopeWrite, ScopeDeletion(scope.Id));
 
         // When
@@ -431,7 +431,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenAnUpdateAfterTheRead_WhenSettingAScopeSetting_ThenTheUpdateSurvives(string setting)
     {
         // Given UC-03 renaming the scope between the setting's read and its write
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         var renamed = $"{scope.Name}-renamed";
         await using var writer = Writer(ScopeWrite, ScopeRename(scope.Id, renamed));
 
@@ -457,7 +457,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     public async Task GivenTheSettingsChangedAfterTheRead_WhenDeletingTheScope_ThenTheSettingsSurvive()
     {
         // Given settings changed between the deletion's read and its lock
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         await using var writer = Writer(ScopeLock, Settings(scope.Id));
 
         // When
@@ -568,7 +568,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     /// <summary>A live, verified-or-not User of a fresh scope, the membership row and its copy both set.</summary>
     private async Task<(Scope Scope, Person Person)> SeedUserAsync(bool emailVerified = true)
     {
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
 
         await using var context = db.CreateContext();
         var person = new Person

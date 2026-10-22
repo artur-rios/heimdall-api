@@ -26,44 +26,6 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     private static string Route(Guid scopeId, Guid registrationId) =>
         $"/api/scopes/{scopeId}/pending-registrations/{registrationId}";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"scope-{Guid.NewGuid():N}",
-            IsDeleted = isDeleted,
-            SelfRegistrationEnabled = true
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role, Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = $"discard-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     /// <summary>Writes a pending registration directly, returning it and the plaintext token mailed for it.</summary>
     private async Task<(PendingRegistration Row, string Token)> SeedPendingAsync(Scope scope)
     {
@@ -101,7 +63,7 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenSystemAdmin_WhenDiscarding_ThenTheRowIsRemovedAndItsLinkNoLongerConfirms()
     {
         // Given a registration whose link the registrant still holds
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var (row, token) = await SeedPendingAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -124,8 +86,8 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenOwningScopeAdmin_WhenDiscarding_ThenTheDiscardIsAuditedWithTheRegistrationAsTarget()
     {
         // Given an owner of the scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "discard", Owns = [scope] });
         var (row, _) = await SeedPendingAsync(scope);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -145,9 +107,9 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenARegistrationOfAnotherScope_WhenDiscarding_ThenReturnsNotFoundAndKeepsIt()
     {
         // Given AF-50c — the caller owns one scope, the registration is another's
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin, ownedScope: scope);
-        var (row, _) = await SeedPendingAsync(await SeedScopeAsync());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "discard", Owns = [scope] });
+        var (row, _) = await SeedPendingAsync(await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true }));
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -163,8 +125,8 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenAScopeAdminWhoDoesNotOwnTheScope_WhenDiscarding_ThenReturnsForbiddenAndKeepsIt()
     {
         // Given AF-50b
-        var scope = await SeedScopeAsync();
-        var stranger = await SeedPersonAsync(Roles.ScopeAdmin, ownedScope: await SeedScopeAsync());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "discard", Owns = [await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true })] });
         var (row, _) = await SeedPendingAsync(scope);
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
@@ -195,7 +157,7 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenAnUnknownRegistration_WhenDiscarding_ThenReturnsNotFound()
     {
         // Given AF-50c
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -210,7 +172,7 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenAUser_WhenDiscarding_ThenReturnsForbidden()
     {
         // Given the role gate
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var (row, _) = await SeedPendingAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
@@ -226,7 +188,7 @@ public class ScopeControllerDiscardPendingRegistrationTests(PostgresFixture db) 
     public async Task GivenNoToken_WhenDiscarding_ThenReturnsUnauthorized()
     {
         // Given no bearer token
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var (row, _) = await SeedPendingAsync(scope);
 
         // When

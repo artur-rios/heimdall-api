@@ -24,41 +24,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Confirm-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync(bool open = true)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", SelfRegistrationEnabled = open
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Existing", Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt), Salt = salt,
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>Writes a pending registration directly, so the test holds the plaintext token.</summary>
     private async Task<string> SeedPendingAsync(
@@ -66,14 +34,15 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     {
         var token = SingleUseToken.New();
 
+        var credentials = Seeds.Credentials();
         await using var context = db.CreateContext();
         context.PendingRegistrations.Add(new PendingRegistration
         {
             ScopeId = scope.Id,
             Name = "Confirmed Person",
             Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
+            PasswordHash = credentials.Hash,
+            Salt = credentials.Salt,
             TokenHash = SingleUseTokenHash.Of(token),
             ExpiresAt = DateTime.UtcNow.Add(lifetime ?? TimeSpan.FromHours(1)),
             CreatedAt = DateTime.UtcNow,
@@ -169,19 +138,15 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     /// </summary>
     private async Task WaitForPendingAsync(Scope scope, string email)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-
-        while (await PendingCountAsync(scope, email) == 0)
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The registration queue did not settle in time.");
-            await Task.Delay(50);
-        }
+        await Poll.UntilAsync(
+            async () => await PendingCountAsync(scope, email) > 0,
+            "The registration queue did not settle in time.");
     }
 
     [FunctionalFact]
     public async Task GivenAPendingRegistrationToken_WhenPostVerifyEmail_ThenAVerifiedUserExistsAndCanSignIn()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("pending");
         var token = await SeedPendingAsync(scope, email);
 
@@ -206,7 +171,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenAPendingRegistrationToken_WhenPostedWithoutAPassword_ThenUnprocessableAndNothingIsCreated()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("nopassword");
         var token = await SeedPendingAsync(scope, email);
 
@@ -221,7 +186,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenAPendingRegistrationToken_WhenPostedWithAWrongPassword_ThenUnauthorizedAndTheRowIsKept()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("wrongpassword");
         var token = await SeedPendingAsync(scope, email);
 
@@ -236,7 +201,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenWrongPasswords_WhenPostedForAPendingRegistration_ThenEachIsCountedOnTheRow()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("counted");
         var token = await SeedPendingAsync(scope, email);
 
@@ -250,7 +215,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     public async Task GivenNineWrongPasswords_WhenTheTenthIsPosted_ThenTheTokenStopsWorking()
     {
         // Nine are seeded rather than posted: the auth endpoints allow ten requests a minute per address.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("capped");
         var token = await SeedPendingAsync(scope, email, failedAttempts: 9);
 
@@ -272,7 +237,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
         // as the per-address limit admits, so every request reaches the confirmer and the cap is the only
         // thing that can refuse. Counted after the comparison, the ten all read six and all wrote seven,
         // and every one of them was compared and answered 401.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("burst");
         var token = await SeedPendingAsync(scope, email, failedAttempts: 6);
 
@@ -296,7 +261,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     public async Task GivenTheGuessBudgetIsSpent_WhenTheRightPasswordIsPosted_ThenItIsRefusedWithoutBeingCompared()
     {
         // Given a row whose ten guesses were all charged but which a lost delete left behind
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("spent");
         var token = await SeedPendingAsync(scope, email, failedAttempts: 10);
 
@@ -313,7 +278,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenAPendingRegistrationToken_WhenPostedTwice_ThenTheSecondIsInvalidAndThereIsOnePerson()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("twice");
         var token = await SeedPendingAsync(scope, email);
 
@@ -329,7 +294,7 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     [FunctionalFact]
     public async Task GivenAnExpiredPendingRegistrationToken_WhenPostVerifyEmail_ThenTokenExpiredAndNoPerson()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("expired");
         var token = await SeedPendingAsync(scope, email, TimeSpan.FromMinutes(-5));
 
@@ -345,10 +310,10 @@ public class AuthControllerConfirmRegistrationTests(PostgresFixture db) : WebApi
     {
         // Given a free address registered through the API (so only a pending registration exists) and
         // an existing User whose password is about to be got wrong
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("unconfirmed");
         var existingEmail = UniqueEmail("existing");
-        await SeedUserAsync(scope, existingEmail);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = existingEmail, MemberOf = scope });
 
         var registration = await RegisterAsync(email, scope.PublicId);
         await WaitForPendingAsync(scope, email);

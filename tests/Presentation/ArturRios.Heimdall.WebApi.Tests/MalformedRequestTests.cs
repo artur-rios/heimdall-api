@@ -104,7 +104,7 @@ public class MalformedRequestTests(PostgresFixture db) : WebApiTest<Program>(Env
     public async Task GivenABodyFieldOfTheWrongType_WhenUpdatingAScope_ThenBadRequest()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When

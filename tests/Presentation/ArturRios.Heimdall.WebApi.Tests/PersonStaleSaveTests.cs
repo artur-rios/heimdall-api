@@ -26,40 +26,6 @@ public class PersonStaleSaveTests(PostgresFixture db)
     private const string SavedLater = "Saved later";
     private const string RealName = "Ada Lovelace";
 
-    private async Task<Person> SeedPersonAsync(Action<Person>? configure = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = RealName,
-            Email = $"stale-{Guid.NewGuid():N}@test.local",
-            PasswordHash = [1, 2, 3],
-            Salt = [4, 5, 6],
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-
-        configure?.Invoke(person);
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     /// <summary>
     ///     Reads a copy of the person, runs <paramref name="transition" /> on a second context, then
     ///     saves the copy whole, renamed, and returns the row as stored afterwards.
@@ -101,7 +67,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeARestriction_WhenSavedAsAWholeRow_ThenTheRestrictionStands()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var at = Now();
 
         // When
@@ -118,11 +84,11 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeALift_WhenSavedAsAWholeRow_ThenTheLiftStands()
     {
         // Given
-        var person = await SeedPersonAsync(p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.ProcessingRestrictedAt = Now().AddDays(-1);
             p.RestrictionGround = (int)RestrictionGrounds.ObjectionPending;
-        });
+        } });
         var notifiedAt = Now();
 
         // When
@@ -140,7 +106,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeADeletion_WhenSavedAsAWholeRow_ThenTheDeletionStands()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) =>
@@ -156,11 +122,11 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAnErasureRequest_WhenSavedAsAWholeRow_ThenTheRequestAndSuspensionStand()
     {
         // Given a restricted person, whose request also lifts the restriction
-        var person = await SeedPersonAsync(p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.ProcessingRestrictedAt = Now().AddDays(-1);
             p.RestrictionGround = (int)RestrictionGrounds.AccuracyContested;
-        });
+        } });
         var requestedAt = Now();
 
         // When
@@ -179,7 +145,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeABlockedErasureRequest_WhenSavedAsAWholeRow_ThenTheBlockStands()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var requestedAt = Now();
 
         // When
@@ -197,12 +163,12 @@ public class PersonStaleSaveTests(PostgresFixture db)
     {
         // Given
         var requestedAt = Now().AddDays(-2);
-        var person = await SeedPersonAsync(p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.ErasureRequestedAt = requestedAt;
             p.ErasureDueAt = requestedAt.AddDays(30);
             p.ErasureBlockedReason = "blocked";
-        });
+        } });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) =>
@@ -218,14 +184,14 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAnonymisation_WhenSavedAsAWholeRow_ThenTheAnonymisationStands()
     {
         // Given a deleted person with a lockout on record
-        var person = await SeedPersonAsync(p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.IsDeleted = true;
             p.DeletedAt = Now().AddDays(-400);
             p.DeletionKind = (int)DeletionKinds.Administrative;
             p.FailedLoginAttempts = 3;
             p.LockedOutUntil = Now().AddMinutes(10);
-        });
+        } });
         var placeholder = $"anonymised-{person.PublicId:N}@anonymised.invalid";
 
         // When
@@ -247,7 +213,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAReappliedErasure_WhenSavedAsAWholeRow_ThenTheErasureStands()
     {
         // Given a live person a restore brought back
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var placeholder = $"anonymised-{person.PublicId:N}@anonymised.invalid";
 
         // When
@@ -266,7 +232,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAnAddressChange_WhenSavedAsAWholeRow_ThenTheNewAddressStands()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var newEmail = $"changed-{Guid.NewGuid():N}@test.local";
 
         // When
@@ -288,7 +254,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenAnAddressChangeOnlyInCase_WhenChanged_ThenTheAddressStaysVerified()
     {
         // Given a verified person
-        var person = await SeedPersonAsync(p => p.EmailVerified = true);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.EmailVerified = true });
         var recased = person.Email.ToUpperInvariant();
 
         // When only the case of the address changes (#225)
@@ -309,13 +275,13 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeAPromotion_WhenSavedAsAWholeRow_ThenTheRoleAndOwnershipStand()
     {
         // Given a User of a scope
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync(p =>
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.RoleId = (long)Roles.User;
             p.ScopeId = scope.Id;
             p.ScopeMembership = new ScopeUser { ScopeId = scope.Id };
-        });
+        } });
 
         // When promoted (UC-23) the way the handler does it: the role and the membership row targeted,
         // the ownership row inserted in the same transaction (#205)
@@ -344,7 +310,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeVerification_WhenSavedAsAWholeRow_ThenTheAddressStaysVerified()
     {
         // Given
-        var person = await SeedPersonAsync(p => p.EmailVerified = false);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.EmailVerified = false });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) =>
@@ -358,7 +324,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadBeforeALockout_WhenSavedAsAWholeRow_ThenTheLockoutStands()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var now = Now();
         var lockedOutUntil = now.AddMinutes(15);
 
@@ -375,11 +341,11 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenACopyReadWhileLockedOut_WhenSavedAfterTheLockoutWasCleared_ThenItStaysCleared()
     {
         // Given
-        var person = await SeedPersonAsync(p =>
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p =>
         {
             p.FailedLoginAttempts = 4;
             p.LockedOutUntil = Now().AddMinutes(15);
-        });
+        } });
 
         // When
         var stored = await StaleSaveAcrossAsync(person.Id, (writes, current) => writes.ClearLoginAttemptsAsync(current));
@@ -393,7 +359,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenARestrictionAlreadyImposed_WhenRestrictingFromAStaleRead_ThenTheFirstStands()
     {
         // Given a copy read while unrestricted, and a restriction imposed after
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var first = Now().AddMinutes(-1);
 
         await using var stale = db.CreateContext();
@@ -421,7 +387,7 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenAnAddressChangedSinceTheRead_WhenChangingItFromTheStaleRead_ThenNothingIsWritten()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
         var otherEmail = $"other-{Guid.NewGuid():N}@test.local";
 
         await using var stale = db.CreateContext();
@@ -454,8 +420,8 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenAnAddressAnotherAdminHolds_WhenChangingToIt_ThenAddressTakenAndNothingIsWritten()
     {
         // Given two live admins
-        var holder = await SeedPersonAsync();
-        var person = await SeedPersonAsync();
+        var holder = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
 
         await using var context = db.CreateContext();
         var current = await context.Persons.SingleAsync(x => x.Id == person.Id);
@@ -473,8 +439,8 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenALiveAdmin_WhenAddingAnOwnership_ThenTheRowIsWrittenOnceAndTheProfileIsNot()
     {
         // Given an admin renamed by another request after this one read them
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
 
         await using var context = db.CreateContext();
         var current = await context.Persons.Include(x => x.ScopeOwnerships).SingleAsync(x => x.Id == person.Id);
@@ -502,8 +468,8 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenAnAdminDeletedSinceTheRead_WhenAddingAnOwnership_ThenNoRowIsWritten()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale" });
 
         await using var context = db.CreateContext();
         var current = await context.Persons.Include(x => x.ScopeOwnerships).SingleAsync(x => x.Id == person.Id);
@@ -526,9 +492,9 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenTheLastLiveCoOwnerDeletedSinceTheCheck_WhenRemovingAnOwnership_ThenTheRowStays()
     {
         // Given a scope owned by two admins, the other of whom is deleted after this request checked
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync(p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]);
-        var coOwner = await SeedPersonAsync(p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }] });
 
         await using var context = db.CreateContext();
         var current = await context.Persons.Include(x => x.ScopeOwnerships).SingleAsync(x => x.Id == person.Id);
@@ -551,9 +517,9 @@ public class PersonStaleSaveTests(PostgresFixture db)
     public async Task GivenALiveCoOwner_WhenRemovingAnOwnership_ThenOnlyThatRowGoes()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var person = await SeedPersonAsync(p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]);
-        var coOwner = await SeedPersonAsync(p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }]);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = RealName, EmailPrefix = "stale", Configure = p => p.ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id }] });
 
         await using var context = db.CreateContext();
         var current = await context.Persons.Include(x => x.ScopeOwnerships).SingleAsync(x => x.Id == person.Id);

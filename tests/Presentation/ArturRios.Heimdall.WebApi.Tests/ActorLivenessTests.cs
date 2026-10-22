@@ -6,7 +6,6 @@ using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
@@ -24,37 +23,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Liveness-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(Roles role, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = UniqueEmail($"liveness-{role}"),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
 
     private async Task DeleteAsync(Person person)
     {
@@ -71,8 +42,8 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         // is the case that mattered most and was covered least: a System Admin bypasses every
         // ownership check, so for the rest of the token's life they could still delete or hard-delete
         // any person, change any role, and create or destroy scopes.
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
-        var target = await SeedPersonAsync(Roles.User);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = $"liveness-{Roles.SystemAdmin}" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = $"liveness-{Roles.User}" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // The token works while they are live
@@ -101,7 +72,7 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     {
         // Given the "acting on yourself" branch, which granted access on the claim alone — a deleted
         // person could still read and rewrite their own record
-        var person = await SeedPersonAsync(Roles.User, isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = $"liveness-{Roles.User}", IsDeleted = true });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -132,7 +103,7 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         // Given a Google-authenticated caller UC-28 deleted. A Google token names a GOOGLE_USER row,
         // not a person, so the filter has to consult both tables or it would refuse every Google
         // User outright.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         await using (var context = db.CreateContext())
         {
@@ -170,7 +141,7 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     {
         // Given a live Google User: the filter must not refuse an identity that only exists in the
         // GOOGLE_USER table, which is the failure mode of checking PERSON alone.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         await using (var context = db.CreateContext())
         {
@@ -216,8 +187,8 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         // at all: the role travels in a claim, and until this filter compared it, nothing re-read it.
         // For the rest of the token's life — an hour by default — a demoted System Admin kept
         // authority over every scope in the system.
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
-        var target = await SeedPersonAsync(Roles.User);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = $"liveness-{Roles.SystemAdmin}" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = $"liveness-{Roles.User}" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // The token works while the claim agrees with the row
@@ -240,7 +211,7 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         // from the acting role claim, and the one transition UC-08 supports is a promotion to System
         // Admin — so the window was long enough for a demoted account to make itself permanent with a
         // write that outlives every token involved.
-        var admin = await SeedPersonAsync(Roles.SystemAdmin);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = $"liveness-{Roles.SystemAdmin}" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         await DemoteAsync(admin, Roles.ScopeAdmin);
@@ -265,7 +236,7 @@ public class ActorLivenessTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         // The same rule in the harmless direction, asserted so the check cannot quietly become a
         // one-way "is the claim at least as high as the row" comparison, which would let a stale
         // higher claim through — the exact case this exists to stop.
-        var person = await SeedPersonAsync(Roles.User);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = $"liveness-{Roles.User}" });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         await DemoteAsync(person, Roles.ScopeAdmin);

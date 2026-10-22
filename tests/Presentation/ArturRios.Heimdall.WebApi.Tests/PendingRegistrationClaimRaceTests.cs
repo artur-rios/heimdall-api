@@ -33,7 +33,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class PendingRegistrationClaimRaceTests(PostgresFixture db)
 {
-    private const string Password = "Str0ng-Claim-Race-Pass!";
+    private const string Password = Seeds.Password;
 
     [FunctionalFact]
     public async Task GivenAClaimHeldUncommitted_WhenTheSameRegistrationIsConfirmedAgain_ThenItWaitsAndIsAlreadyClaimed()
@@ -92,13 +92,14 @@ public class PendingRegistrationClaimRaceTests(PostgresFixture db)
 
         var email = $"claim-race-{Guid.NewGuid():N}@test.local";
         var tokenHash = SingleUseTokenHash.Of(SingleUseToken.New());
+        var credentials = Seeds.Credentials();
         context.PendingRegistrations.Add(new PendingRegistration
         {
             ScopeId = scope.Id,
             Name = "Claimed Person",
             Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
+            PasswordHash = credentials.Hash,
+            Salt = credentials.Salt,
             TokenHash = tokenHash,
             ExpiresAt = DateTime.UtcNow.AddHours(1),
             CreatedAt = DateTime.UtcNow

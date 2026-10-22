@@ -24,58 +24,6 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
 
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/permissions/{id}";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<ScopePermission> SeedScopePermissionAsync(Scope scope, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -104,7 +52,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenSystemAdmin_WhenDeleteScopePermission_ThenOkAndRowIsFlagged()
     {
         // Given a scope permission a System Admin does not own
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -127,8 +75,8 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenOwningScopeAdmin_WhenDeleteScopePermission_ThenOkAndRowIsFlagged()
     {
         // Given the Scope Admin who owns the scope the permission belongs to (UC-34 step 2)
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
@@ -146,7 +94,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenAlreadyDeletedScopePermission_WhenDeleteScopePermission_ThenOkAndNothingChanges()
     {
         // Given a permission that is already logically deleted (AF-34b)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -167,8 +115,8 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenScopePermissionDeletedTwice_WhenDeleteScopePermission_ThenSecondCallReportsAlreadyDeleted()
     {
         // Given the endpoint called twice for the same permission (AF-34b: the call is idempotent)
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
@@ -194,7 +142,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
         // Given a deleted permission inside a logically deleted scope. UC-04 does not cascade to
         // permissions, so the two flags are independent; the handler does not consult the scope's
         // own state either way, it just finds the deleted row (AF-34b)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var permission = await SeedScopePermissionAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -212,9 +160,9 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenScopeAdminNotOwner_WhenDeleteScopePermission_ThenForbidden()
     {
         // Given a Scope Admin who does NOT own the scope (AF-34e)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
-        var stranger = await SeedScopeAdminAsync();
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -233,9 +181,9 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenUserRole_WhenDeleteScopePermission_ThenForbidden()
     {
         // Given a caller holding the User role: the endpoint's [RoleRequirement] refuses them
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
-        var caller = await SeedUserAsync(scope);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -251,7 +199,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenUnknownScopePermission_WhenDeleteScopePermission_ThenNotFound()
     {
         // Given a permission id nobody holds (AF-34a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -266,8 +214,8 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenScopePermissionOfAnotherScope_WhenDeleteScopePermission_ThenNotFound()
     {
         // Given the permission exists, but under a different scope than the path addresses (AF-34a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(otherScope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -284,7 +232,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenNoToken_WhenDeleteScopePermission_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeleteScopePermissionCommandOutput?>>(

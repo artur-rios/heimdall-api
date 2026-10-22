@@ -11,7 +11,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -31,28 +30,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Budget-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(string prefix, Action<Person>? configure = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = prefix,
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true
-        };
-        configure?.Invoke(person);
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedTwoFactorAsync(Person person, bool appEnabled = true)
     {
@@ -158,7 +138,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenFailuresFromEarlierChallenges_WhenFreshLoginsFollow_ThenTheyAccumulateAndTheRightCodeIsRefused()
     {
         // Given five failures an earlier login left behind, and a good recovery code
-        var person = await SeedPersonAsync("budget-across", p => p.FailedSecondFactorAttempts = 5);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-across", EmailPrefix = "budget-across", Configure = p => p.FailedSecondFactorAttempts = 5 });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
 
@@ -199,7 +179,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     {
         // Given an email-only configuration, whose guesses the challenge does not count, two short of
         // the limit
-        var person = await SeedPersonAsync("budget-burst", p => p.FailedSecondFactorAttempts = 8);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-burst", EmailPrefix = "budget-burst", Configure = p => p.FailedSecondFactorAttempts = 8 });
         await SeedTwoFactorAsync(person, appEnabled: false);
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
 
@@ -224,11 +204,11 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenTwoEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheWriteLocksForAnHour()
     {
         // Given
-        var person = await SeedPersonAsync("budget-escalate", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-escalate", EmailPrefix = "budget-escalate", Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
             p.SecondFactorLockouts = 2;
-        });
+        } });
         var now = DateTime.UtcNow;
 
         // When
@@ -250,11 +230,11 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenManyEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheWriteLocksForADay()
     {
         // Given
-        var person = await SeedPersonAsync("budget-cap", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-cap", EmailPrefix = "budget-cap", Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
             p.SecondFactorLockouts = 40;
-        });
+        } });
         var now = DateTime.UtcNow;
 
         // When
@@ -271,12 +251,12 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenALockThatHasRunOut_WhenTheRightCodeIsPresented_ThenTheBudgetIsCleared()
     {
         // Given
-        var person = await SeedPersonAsync("budget-clear", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-clear", EmailPrefix = "budget-clear", Configure = p =>
         {
             p.FailedSecondFactorAttempts = 4;
             p.SecondFactorLockouts = 3;
             p.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
-        });
+        } });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
 
@@ -299,7 +279,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenSevenWrongPasswordsAtOnce_WhenDisablingTwoFactor_ThenReauthenticationPausesAndSignInStillWorks()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-burst");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-burst", EmailPrefix = "reauth-burst" });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -348,7 +328,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenAWrongPasswordAndAWrongCode_WhenDisablingTwoFactor_ThenTheAnswersAreIdentical()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-identical");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-identical", EmailPrefix = "reauth-identical" });
         await SeedTwoFactorAsync(person);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -368,11 +348,11 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenFourFailuresInAWindowThatHasRunOut_WhenAnotherIsCharged_ThenTheWriteStartsANewWindow()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-window-out", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-window-out", EmailPrefix = "reauth-window-out", Configure = p =>
         {
             p.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-16);
-        });
+        } });
         var now = DateTime.UtcNow;
 
         // When
@@ -395,11 +375,11 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenFourFailuresInAnOpenWindow_WhenAnotherIsCharged_ThenTheWritePausesAndClosesTheWindow()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-window-open", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-window-open", EmailPrefix = "reauth-window-open", Configure = p =>
         {
             p.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-14);
-        });
+        } });
         var now = DateTime.UtcNow;
 
         // When
@@ -420,11 +400,11 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenEarlierFailures_WhenTheRightPasswordEnablesTwoFactor_ThenTheyAreCleared()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-clear", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-clear", EmailPrefix = "reauth-clear", Configure = p =>
         {
             p.FailedReauthenticationAttempts = 3;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-1);
-        });
+        } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -446,7 +426,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenACopyReadBeforeTheBudgetsWereCharged_WhenSavedAsAWholeRow_ThenTheChargesStand()
     {
         // Given one request holding the person as it was, while others charge both budgets
-        var person = await SeedPersonAsync("budget-whole-row");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-whole-row", EmailPrefix = "budget-whole-row" });
 
         await using var stale = db.CreateContext();
         var staleCopy = await stale.Persons.SingleAsync(x => x.Id == person.Id);
@@ -493,7 +473,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     {
         // Given
         var lockedUntil = DateTime.UtcNow.AddMinutes(10);
-        var person = await SeedPersonAsync("budget-refused-write", p => p.SecondFactorLockedOutUntil = lockedUntil);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-refused-write", EmailPrefix = "budget-refused-write", Configure = p => p.SecondFactorLockedOutUntil = lockedUntil });
         var version = await RowVersionAsync(person);
         var now = DateTime.UtcNow;
 
@@ -517,7 +497,7 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     {
         // Given
         var pausedUntil = DateTime.UtcNow.AddMinutes(10);
-        var person = await SeedPersonAsync("reauth-refused-write", p => p.ReauthenticationPausedUntil = pausedUntil);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-refused-write", EmailPrefix = "reauth-refused-write", Configure = p => p.ReauthenticationPausedUntil = pausedUntil });
         var version = await RowVersionAsync(person);
         var now = DateTime.UtcNow;
 
@@ -541,12 +521,12 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenACountPastTheLimitWithAnExpiredLock_WhenAReservationIsMade_ThenItIsAdmittedAndLocks()
     {
         // Given a row left past the limit — by a lowered limit, say — whose lock has run out
-        var person = await SeedPersonAsync("budget-heal-expired", p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-heal-expired", EmailPrefix = "budget-heal-expired", Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts + 2;
             p.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
             p.SecondFactorLockouts = 1;
-        });
+        } });
         var now = DateTime.UtcNow;
 
         // When

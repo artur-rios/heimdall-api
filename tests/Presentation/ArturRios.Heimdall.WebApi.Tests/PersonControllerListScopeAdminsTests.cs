@@ -18,46 +18,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(
-        Scope? ownedScope = null, string name = "Admin", Roles role = Roles.ScopeAdmin)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = name,
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenListScopeAdmins_ThenReturnsEveryLiveScopeAdmin()
     {
         // Given two Scope Admins with a shared, distinctive name fragment
         var marker = $"pick{Guid.NewGuid():N}";
-        await SeedScopeAdminAsync(name: $"Ana {marker}");
-        await SeedScopeAdminAsync(name: $"Bruno {marker}");
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin" });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Bruno {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -74,8 +41,8 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
     {
         // Given a Scope Admin and a System Admin — either may own a scope (FR-SC-08)
         var marker = $"pick{Guid.NewGuid():N}";
-        await SeedScopeAdminAsync(name: $"Ana {marker}");
-        await SeedScopeAdminAsync(name: $"Root {marker}", role: Roles.SystemAdmin);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin" });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Root {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -93,9 +60,9 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
         // Given a Scope Admin looking for co-owners while a System Admin matches the filter too —
         // a System Admin's address is not tenant-facing (FR-PE-12)
         var marker = $"pick{Guid.NewGuid():N}";
-        var scope = await SeedScopeAsync();
-        var caller = await SeedScopeAdminAsync(ownedScope: scope, name: $"Caller {marker}");
-        await SeedScopeAdminAsync(name: $"Root {marker}", role: Roles.SystemAdmin);
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Caller {marker}", EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Root {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -113,9 +80,9 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
         // Given a Scope Admin who shares no scope with the administrator they are looking for —
         // the case UC-07's own visibility rule could never surface (UI-14 step 3)
         var marker = $"pick{Guid.NewGuid():N}";
-        var scope = await SeedScopeAsync();
-        var caller = await SeedScopeAdminAsync(ownedScope: scope, name: $"Caller {marker}");
-        await SeedScopeAdminAsync(name: $"Stranger {marker}");
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Caller {marker}", EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Stranger {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -132,9 +99,9 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
     {
         // Given a scope the caller owns, and one other administrator (UI-14 AF-14c)
         var marker = $"pick{Guid.NewGuid():N}";
-        var scope = await SeedScopeAsync();
-        var caller = await SeedScopeAdminAsync(ownedScope: scope, name: $"Owner {marker}");
-        var candidate = await SeedScopeAdminAsync(name: $"Candidate {marker}");
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Owner {marker}", EmailPrefix = "admin", Owns = [scope] });
+        var candidate = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Candidate {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When
@@ -153,9 +120,9 @@ public class PersonControllerListScopeAdminsTests(PostgresFixture db) : WebApiTe
     {
         // Given a Scope Admin naming a scope they do not own. This is the regression test for the
         // enumeration leak: with/without diffing would otherwise reveal that scope's owners.
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var caller = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.ScopeAdmin, null, scope.PublicId));
 
         // When

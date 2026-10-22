@@ -41,9 +41,9 @@ public class ScopeOwnerRaceTests(PostgresFixture db)
     public async Task GivenTwoOwners_WhenBothAreRemovedAtOnce_ThenOneIsRefusedAndOneOwnerRemains()
     {
         // Given a scope with two owners
-        var scope = await SeedScopeAsync(db);
-        var first = await SeedScopeAdminAsync(db, scope);
-        var second = await SeedScopeAdminAsync(db, scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var first = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var second = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         var hold = new PauseBefore("DELETE FROM heimdall.scope_owner");
         var log = new CommandLog();
         await using var held = Runtime(hold, log);
@@ -69,9 +69,9 @@ public class ScopeOwnerRaceTests(PostgresFixture db)
     public async Task GivenTwoOwners_WhenOneIsRemovedWhileTheOtherIsDeleted_ThenOneIsRefusedAndAnActiveOwnerRemains()
     {
         // Given a scope with two owners
-        var scope = await SeedScopeAsync(db);
-        var first = await SeedScopeAdminAsync(db, scope);
-        var second = await SeedScopeAdminAsync(db, scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var first = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var second = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
         var hold = new PauseBefore("UPDATE heimdall.person");
         await using var held = Runtime(hold);
         await using var other = Runtime();

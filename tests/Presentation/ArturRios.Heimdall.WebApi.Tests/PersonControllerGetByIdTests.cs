@@ -16,68 +16,12 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Member",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User,
-            IsDeleted = isDeleted
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenGetPersonById_ThenReturnsPersonWithoutSecrets()
     {
         // Given
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -102,8 +46,8 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenUserRequestingSelf_WhenGetPersonById_ThenReturnsPerson()
     {
         // Given a User authenticated as themselves
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -118,9 +62,9 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenUserRequestingAnotherPerson_WhenGetPersonById_ThenForbidden()
     {
         // Given two Users of the same scope (AF-07b)
-        var scope = await SeedScopeAsync();
-        var actor = await SeedUserAsync(scope);
-        var target = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var actor = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.User));
 
         // When
@@ -134,9 +78,9 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenOwnerScopeAdmin_WhenGetPersonById_ThenReturnsScopeUser()
     {
         // Given a ScopeAdmin who owns the User's scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        var target = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -151,9 +95,9 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenScopeAdminNotOwningScope_WhenGetPersonById_ThenForbidden()
     {
         // Given a ScopeAdmin who does not own the User's scope (AF-07b)
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync();
-        var target = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
+        var target = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -180,8 +124,8 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenDeletedPerson_WhenGetPersonByIdWithoutIncludeDeleted_ThenNotFound()
     {
         // Given a logically deleted person (FR-PE-08)
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", IsDeleted = true, EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -195,8 +139,8 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenDeletedPerson_WhenGetPersonByIdWithIncludeDeleted_ThenReturnsPerson()
     {
         // Given a logically deleted person (FR-PE-08)
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", IsDeleted = true, EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -212,8 +156,8 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenNoToken_WhenGetPersonById_ThenUnauthorized()
     {
         // Given a person but no bearer token on the gateway
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
 
         // When
         var response = await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}");
@@ -226,8 +170,8 @@ public class PersonControllerGetByIdTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenPersonWithActiveTwoFactor_WhenGetPersonById_ThenTwoFactorEnabledIsTrue()
     {
         // Given a person whose two-factor configuration has been confirmed
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         await using var context = db.CreateContext();
         context.TwoFactorAuths.Add(new TwoFactorAuth
         {

@@ -24,37 +24,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Guid> SeedSystemAdminAsync()
-    {
-        await using var context = db.CreateContext();
-        var admin = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Creating Admin", Email = $"creator-{Guid.NewGuid():N}@test.local",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.SystemAdmin, EmailVerified = true
-        };
-        context.Persons.Add(admin);
-        await context.SaveChangesAsync();
-
-        return admin.PublicId;
-    }
-
-    private async Task<Guid> SeedUserAsync()
-    {
-        await using var context = db.CreateContext();
-        var user = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Plain User", Email = $"user-{Guid.NewGuid():N}@test.local",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.User, EmailVerified = true
-        };
-        context.Persons.Add(user);
-        await context.SaveChangesAsync();
-
-        return user.PublicId;
-    }
-
     private async Task<string> SubjectRightsTokenAsync()
     {
-        var admin = await SeedSystemAdminAsync();
+        var admin = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
 
         return TestTokens.WithAudience(
             new IdentityUser(admin, (int)Roles.SystemAdmin)
@@ -109,7 +81,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenOneActorSpentTheMinutesBudget_WhenTheyCreateAgainFromAnotherAddress_ThenTooManyRequests()
     {
         // Given an actor who spent thirty from one address
-        var actor = await SeedSystemAdminAsync();
+        var actor = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
         await SpendAsync(actor, "203.0.113.70", Startup.AccountCreationPermitLimit);
 
         // When they move to an address of their own
@@ -125,8 +97,8 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenOneAddressSpentTheMinutesBudget_WhenAnotherActorCreatesFromIt_ThenTooManyRequestsAndAnotherAddressIsServed()
     {
         // Given — the address is bounded too: one actor spends thirty from an address
-        var first = await SeedSystemAdminAsync();
-        var second = await SeedSystemAdminAsync();
+        var first = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
+        var second = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
         await SpendAsync(first, "203.0.113.72", Startup.AccountCreationPermitLimit);
 
         // When a fresh actor creates from the same address, and from another
@@ -143,7 +115,7 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     public async Task GivenAnonymousRequestsSpentAnAddressesMinute_WhenAnAdministratorCreatesFromIt_ThenTheyAreServed()
     {
         // Given thirty requests without a token from one address
-        var actor = await SeedSystemAdminAsync();
+        var actor = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
         await SpendAsync(null, "203.0.113.74", Startup.AccountCreationPermitLimit);
 
         // When an administrator creates from the same address
@@ -162,12 +134,12 @@ public class AccountCreationRateLimitTests(PostgresFixture db) : WebApiTest<Prog
     {
         // Given thirty requests from one address with a token the endpoint refuses: a User's, an
         // administrator's two-factor challenge, or an administrator's subject-rights-only token
-        var actor = await SeedSystemAdminAsync();
+        var actor = (await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId;
         var (address, token) = kind switch
         {
-            "user" => ("203.0.113.75", TestTokens.For(await SeedUserAsync(), (int)Roles.User)),
+            "user" => ("203.0.113.75", TestTokens.For((await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user" })).PublicId, (int)Roles.User)),
             "challenge" => ("203.0.113.76",
-                TestTokens.ForMfaPending(await SeedSystemAdminAsync(), (int)Roles.SystemAdmin)),
+                TestTokens.ForMfaPending((await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "creator" })).PublicId, (int)Roles.SystemAdmin)),
             _ => ("203.0.113.77", await SubjectRightsTokenAsync())
         };
 

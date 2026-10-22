@@ -23,15 +23,6 @@ public class ScopeControllerSetSelfRegistrationTests(PostgresFixture db) : WebAp
     private Task<HttpOutput<DataOutput<SetSelfRegistrationCommandOutput?>?>> SetAsync(Guid scopeId, bool enabled) =>
         Gateway.PutAsync<DataOutput<SetSelfRegistrationCommandOutput?>>(Route(scopeId), new { enabled });
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
     private async Task<bool> PersistedFlagAsync(Scope scope)
     {
         await using var context = db.CreateContext();
@@ -42,7 +33,7 @@ public class ScopeControllerSetSelfRegistrationTests(PostgresFixture db) : WebAp
     [FunctionalFact]
     public async Task GivenANewScope_WhenReadingItsFlag_ThenSelfRegistrationIsClosed()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         Assert.False(await PersistedFlagAsync(scope));
     }
@@ -50,7 +41,7 @@ public class ScopeControllerSetSelfRegistrationTests(PostgresFixture db) : WebAp
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPutSelfRegistrationEnabled_ThenOkAndFlagIsOn()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await SetAsync(scope.PublicId, enabled: true);
@@ -64,7 +55,7 @@ public class ScopeControllerSetSelfRegistrationTests(PostgresFixture db) : WebAp
     [FunctionalFact]
     public async Task GivenAUser_WhenPutSelfRegistration_ThenForbiddenAndFlagUnchanged()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         var response = await SetAsync(scope.PublicId, enabled: true);

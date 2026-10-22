@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
@@ -92,16 +93,8 @@ public class RegistrationDispatcherTests
     private static RegistrationDispatcher DispatcherFor(ServiceProvider provider, RegistrationQueue queue) =>
         new(queue, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<RegistrationDispatcher>.Instance);
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-
-        while (!condition())
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The dispatcher did not process the queue in time.");
-            await Task.Delay(20);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition) =>
+        Poll.UntilAsync(condition, "The dispatcher did not process the queue in time.", TimeSpan.FromSeconds(10));
 
     [UnitFact]
     public async Task GivenQueuedRequests_WhenTheDispatcherRuns_ThenEachIsProcessedInAScopeOfItsOwn()

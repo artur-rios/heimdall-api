@@ -227,7 +227,7 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
     private async Task<(Scope Scope, GoogleUser GoogleUser)> SeedGoogleUserAsync(
         bool emailVerified = true, bool restricted = false, int? deletedDaysAgo = null)
     {
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
 
         await using var context = db.CreateContext();
         await context.Scopes.Where(x => x.Id == scope.Id)

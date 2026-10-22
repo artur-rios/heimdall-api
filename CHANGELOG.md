@@ -191,6 +191,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   delete the ownership rows, so the applications the person owned were left with an owner who owned no scope, and
   it was refused with `409` when the person was a scope's only owner (AF-08g); it is now accepted, and AF-08g is
   retired. FR-PE-10 and UC-08 step 5 say a System Admin is a member of no scope but may own scopes (#224).
+- The WebApi functional tests seed scopes and persons through one helper, `Support/Seeds.cs`, instead of a copy in
+  each of about seventy test files, so a new required column or trigger rule on either table is fixed in one
+  place. Every seeded person shares one salted Argon2id hash of the test password, derived once per process, where
+  each had its own, which cuts the suite's time and memory. No test now sleeps for a fixed time: the queue-drain
+  waits poll a condition up to a deadline with `Support/Poll.cs`, and the credential list test seeds its two
+  credentials with explicit creation times (#217, #228).
 
 ## [4.1.0] - 2026-10-21
 

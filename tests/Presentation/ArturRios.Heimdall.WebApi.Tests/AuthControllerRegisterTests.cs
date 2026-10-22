@@ -8,7 +8,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -23,42 +22,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Register-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync(bool open = true, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}",
-            SelfRegistrationEnabled = open, IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Existing", Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt), Salt = salt,
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private Task<HttpOutput<DataOutput<RegisterCommandOutput?>?>> RegisterAsync(
         string email, Guid? scopeId, string password = Password, string name = "New Person") =>
@@ -98,18 +64,14 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     /// </summary>
     private async Task SettleAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("sentinel");
 
         await RegisterAsync(email, scope.PublicId);
 
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-
-        while ((await PendingForAsync(scope, email)).Count == 0)
-        {
-            Assert.True(DateTime.UtcNow < deadline, "The registration queue did not settle in time.");
-            await Task.Delay(50);
-        }
+        await Poll.UntilAsync(
+            async () => (await PendingForAsync(scope, email)).Count > 0,
+            "The registration queue did not settle in time.");
     }
 
     private static void AssertGenericAcceptance(HttpOutput<DataOutput<RegisterCommandOutput?>?> response)
@@ -123,7 +85,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenAFreeAddressInAnOpenScope_WhenRegistering_ThenAcceptedAndOnlyAPendingRegistrationExists()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("new");
 
         var response = await RegisterAsync(email, scope.PublicId);
@@ -139,9 +101,9 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenATakenAddress_WhenRegistering_ThenTheSameAnswerAndNoPendingRegistration()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("taken");
-        var existing = await SeedUserAsync(scope, email);
+        var existing = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         var response = await RegisterAsync(email.ToUpperInvariant(), scope.PublicId);
         await SettleAsync();
@@ -155,7 +117,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenTheSameNewAddressTwice_WhenRegistering_ThenTwoPendingRegistrationsAndNoPerson()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("twice");
 
         var first = await RegisterAsync(email, scope.PublicId);
@@ -171,7 +133,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenAClosedScope_WhenRegistering_ThenForbiddenWithTheUnavailableMessage()
     {
-        var scope = await SeedScopeAsync(open: false);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = false });
 
         var response = await RegisterAsync(UniqueEmail("closed"), scope.PublicId);
 
@@ -182,7 +144,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenADeletedScope_WhenRegistering_ThenForbiddenWithTheUnavailableMessage()
     {
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true, IsDeleted = true });
 
         var response = await RegisterAsync(UniqueEmail("deleted"), scope.PublicId);
 
@@ -202,7 +164,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenAShortPassword_WhenRegistering_ThenBadRequestAndNothingIsCreated()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("short");
 
         var response = await RegisterAsync(email, scope.PublicId, password: "1234567");
@@ -217,7 +179,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     [FunctionalFact]
     public async Task GivenAnyRequest_WhenRegistering_ThenThePasswordIsNotEchoed()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
 
         var response = await RegisterAsync(UniqueEmail("echo"), scope.PublicId);
 
@@ -229,7 +191,7 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenFourRegistrationsOfOneFreeAddress_WhenProcessed_ThenOnlyThreeArePending()
     {
         // Given — FR-SR-13: each pending registration is a confirmation mail to the address
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("capped");
 
         // When
@@ -248,8 +210,8 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenAScopeAtItsCapOfLivePendingRegistrations_WhenRegistering_ThenTheSameAnswerAndNothingStored()
     {
         // Given — #206: a scope already holding the default cap of live pending registrations
-        var full = await SeedScopeAsync();
-        var open = await SeedScopeAsync();
+        var full = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
+        var open = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
 
         await using (var context = db.CreateContext())
         {
@@ -286,9 +248,9 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     public async Task GivenFourRegistrationsOfATakenAddress_WhenProcessed_ThenItsHolderIsSentThreeNotices()
     {
         // Given — FR-SR-14: the holder is told of an attempt at most three times a day
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
         var email = UniqueEmail("noticed");
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         for (var attempt = 1; attempt <= 4; attempt++)

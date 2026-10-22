@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -24,67 +23,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Login-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role, string email, bool isDeleted = false, string password = Password)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email, bool isDeleted = false)
-    {
-        var person = await SeedPersonAsync(Roles.User, email, isDeleted);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(string email, params Scope[] owned)
-    {
-        var person = await SeedPersonAsync(Roles.ScopeAdmin, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeOwners.AddRange(
-            owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id }));
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private async Task SeedScopePermissionAsync(
         Scope scope, string name, bool includeAsJwtClaim, bool isDeleted = false)
@@ -116,13 +57,13 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
     public async Task GivenUserOfScopeWithFlaggedAndUnflaggedPermissions_WhenPostLogin_ThenTokenCarriesOnlyFlaggedNames()
     {
         // Given a live scope with one flagged and one unflagged permission, and a User of that scope
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var flagged = $"documents.read-{Guid.NewGuid():N}";
         var unflagged = $"documents.write-{Guid.NewGuid():N}";
         await SeedScopePermissionAsync(scope, flagged, includeAsJwtClaim: true);
         await SeedScopePermissionAsync(scope, unflagged, includeAsJwtClaim: false);
         var email = UniqueEmail("user");
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email, scopeId: scope.PublicId);
@@ -138,14 +79,14 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
     public async Task GivenScopeAdminOwningScopesWithFlaggedPermissions_WhenPostLogin_ThenTokenCarriesAllOwnedScopesFlaggedNames()
     {
         // Given a Scope Admin owning two scopes, each with one flagged permission
-        var first = await SeedScopeAsync();
-        var second = await SeedScopeAsync();
+        var first = await Seeds.ScopeAsync(db);
+        var second = await Seeds.ScopeAsync(db);
         var firstPermission = $"first.read-{Guid.NewGuid():N}";
         var secondPermission = $"second.read-{Guid.NewGuid():N}";
         await SeedScopePermissionAsync(first, firstPermission, includeAsJwtClaim: true);
         await SeedScopePermissionAsync(second, secondPermission, includeAsJwtClaim: true);
         var email = UniqueEmail("admin");
-        await SeedScopeAdminAsync(email, first, second);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [first, second] });
 
         // When
         var response = await LoginAsync(email);
@@ -161,11 +102,11 @@ public class AuthControllerScopePermissionClaimTests(PostgresFixture db)
     public async Task GivenFlaggedButLogicallyDeletedPermission_WhenPostLogin_ThenTokenDoesNotCarryIt()
     {
         // Given a flagged permission that has been logically deleted (FR-SP-09)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var deleted = $"deleted.read-{Guid.NewGuid():N}";
         await SeedScopePermissionAsync(scope, deleted, includeAsJwtClaim: true, isDeleted: true);
         var email = UniqueEmail("user");
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email, scopeId: scope.PublicId);

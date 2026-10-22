@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Heimdall.WebApi.Retention;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,15 +74,8 @@ public class ScheduledPassServiceTests
             Task.FromResult(run(Interlocked.Increment(ref _runs)));
     }
 
-    private static async Task WaitForAsync(Func<bool> condition)
-    {
-        using var timeout = new CancellationTokenSource(Patience);
-
-        while (!condition())
-        {
-            await Task.Delay(5, timeout.Token);
-        }
-    }
+    private static Task WaitForAsync(Func<bool> condition) =>
+        Poll.UntilAsync(condition, "The pass did not reach the awaited state in time.", Patience);
 
     [UnitFact]
     public async Task GivenAPass_WhenTheIntervalElapses_ThenItRunsRepeatedlyAndLogsASummary()

@@ -20,42 +20,12 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
         Name = "Owner", Email = $"owner-{Guid.NewGuid():N}@test.local", Password = "Str0ngPass!"
     };
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenOwnerScopeAdmin_WhenPostScopeOwners_ThenCoOwnerIsCreated()
     {
         // Given a ScopeAdmin who owns the scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
         var command = Command();
 
@@ -79,7 +49,7 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenPostScopeOwners_ThenCoOwnerIsCreated()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command();
 
@@ -107,8 +77,8 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenScopeAdminNotOwner_WhenPostScopeOwners_ThenForbidden()
     {
         // AF-06e
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
@@ -131,8 +101,8 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenDuplicateAdminEmail_WhenPostScopeOwners_ThenConflict()
     {
-        var scope = await SeedScopeAsync();
-        var existing = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var existing = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var command = Command();
         command.Email = existing.Email;
@@ -146,7 +116,7 @@ public class PersonControllerCreateScopeOwnerTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenNoToken_WhenPostScopeOwners_ThenUnauthorized()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/owners", Command());

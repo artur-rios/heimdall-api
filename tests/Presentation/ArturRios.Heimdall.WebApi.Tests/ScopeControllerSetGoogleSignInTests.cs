@@ -32,64 +32,6 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     private Task<HttpOutput<DataOutput<SetGoogleSignInCommandOutput?>?>> SetAsync(Guid scopeId, bool enabled) =>
         Gateway.PutAsync<DataOutput<SetGoogleSignInCommandOutput?>>(Route(scopeId), new { enabled });
 
-    private async Task<Scope> SeedScopeAsync(bool googleSignInEnabled = false, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"scope-{Guid.NewGuid():N}",
-            GoogleSignInEnabled = googleSignInEnabled,
-            IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<bool> PersistedFlagAsync(Scope scope)
     {
         await using var context = db.CreateContext();
@@ -101,7 +43,7 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     public async Task GivenSystemAdmin_WhenPutGoogleSignInEnabled_ThenOkAndFlagIsEnabled()
     {
         // Given a scope with Google Sign-In off (UC-24 main flow)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -121,7 +63,7 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     public async Task GivenSystemAdminAndEnabledScope_WhenPutGoogleSignInDisabled_ThenOkAndFlagIsDisabled()
     {
         // Given a scope already enabled — the "Disable" half of UC-24
-        var scope = await SeedScopeAsync(googleSignInEnabled: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -137,8 +79,8 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     public async Task GivenExistingOwner_WhenPutGoogleSignIn_ThenOkAndFlagIsEnabled()
     {
         // Given a Scope Admin who owns the scope (FR-GO-02: owners may toggle their own scope)
-        var scope = await SeedScopeAsync();
-        var actor = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -155,9 +97,9 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     public async Task GivenScopeAdminOfAnotherScope_WhenPutGoogleSignIn_ThenForbidden()
     {
         // Given a Scope Admin who owns some other scope (AF-24b)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var actor = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
+        var otherScope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -173,8 +115,8 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     public async Task GivenUserRole_WhenPutGoogleSignIn_ThenForbidden()
     {
         // Given a caller holding the User role — refused by the attribute, before any handler runs
-        var scope = await SeedScopeAsync();
-        var user = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(user.PublicId, (int)Roles.User));
 
         // When
@@ -202,7 +144,7 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     {
         // AF-24a treats a logically deleted scope as absent — FR-GO-13 would refuse Google sign-in
         // for it anyway, so the flag could never take effect
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false, IsDeleted = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await SetAsync(scope.PublicId, enabled: true);
@@ -216,7 +158,7 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     {
         // Given an enabled scope and a request that never said which value to set (AF-24c). Without
         // the nullable Enabled and its validator this would bind to false and disable the scope.
-        var scope = await SeedScopeAsync(googleSignInEnabled: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -232,7 +174,7 @@ public class ScopeControllerSetGoogleSignInTests(PostgresFixture db) : WebApiTes
     [FunctionalFact]
     public async Task GivenNoToken_WhenPutGoogleSignIn_ThenUnauthorized()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = false });
 
         var response = await SetAsync(scope.PublicId, enabled: true);
 
