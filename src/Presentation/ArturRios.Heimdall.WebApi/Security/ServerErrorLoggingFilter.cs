@@ -26,8 +26,13 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         personal data the retention schedule would then have to cover (NFR-22). 503 is logged at
 ///         Warning instead — in this API it is always a deliberate answer (a saturated password-hash
 ///         gate, which <see cref="PasswordHashSaturationFilter" /> keeps out of the error log, or a
-///         readiness probe reporting the database down, whose cause <c>DatabaseHealthCheck</c> already
-///         logs), and a probe every few seconds would otherwise bury real faults.
+///         readiness probe reporting the database down), and a probe every few seconds would otherwise
+///         bury real faults.
+///     </para>
+///     <para>
+///         The readiness action carries <see cref="SuppressServerErrorLogAttribute" /> and gets no line
+///         here at all: <c>ReadinessCache</c> holds the answer for a window, and the database check
+///         writes one Warning per window with the cause, which is the only line an outage should cost.
 ///     </para>
 /// </remarks>
 public class ServerErrorLoggingFilter(ILogger<ServerErrorLoggingFilter> logger) : IAlwaysRunResultFilter
@@ -41,6 +46,11 @@ public class ServerErrorLoggingFilter(ILogger<ServerErrorLoggingFilter> logger) 
         var statusCode = context.HttpContext.Response.StatusCode;
 
         if (statusCode < StatusCodes.Status500InternalServerError)
+        {
+            return;
+        }
+
+        if (context.ActionDescriptor.EndpointMetadata?.OfType<SuppressServerErrorLogAttribute>().Any() == true)
         {
             return;
         }

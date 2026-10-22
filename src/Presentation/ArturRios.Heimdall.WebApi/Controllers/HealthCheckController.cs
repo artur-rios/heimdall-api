@@ -3,6 +3,7 @@ using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.WebApi.Monitoring;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Mediator.Query;
 using ArturRios.Output;
 using ArturRios.Util.Http;
@@ -16,7 +17,7 @@ namespace ArturRios.Heimdall.WebApi.Controllers;
 ///     Under <c>api/</c> like every other route, because that prefix is all that carries a request on
 ///     the web UI's host through to the API — see <c>OpenApiContractTests</c>. The container probe and
 ///     yggdrasil's status catalog call the root <c>/healthcheck</c>, which the edge pipeline in
-///     <see cref="Startup" /> rewrites to this address.
+///     <c>EdgePipeline</c> rewrites to this address.
 /// </remarks>
 [Route("api/healthcheck")]
 public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCheck databaseHealthCheck,
@@ -55,6 +56,7 @@ public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCh
     [HttpGet]
     [Route("ready")]
     [AllowAnonymous]
+    [SuppressServerErrorLog]
     public async Task<ActionResult<DataOutput<string?>>> Ready()
     {
         var healthy = await readinessCache.IsReadyAsync(databaseHealthCheck.IsHealthyAsync);

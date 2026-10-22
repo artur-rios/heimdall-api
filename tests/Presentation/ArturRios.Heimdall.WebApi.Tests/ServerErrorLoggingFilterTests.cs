@@ -1,3 +1,5 @@
+using System.Reflection;
+using ArturRios.Heimdall.WebApi.Controllers;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.Http;
@@ -64,6 +66,22 @@ public class ServerErrorLoggingFilterTests
         Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
+    [UnitFact]
+    public void GivenTwoReadinessProbesAnswering503_WhenTheirResultsAreExecuted_ThenNoRequestLineIsLogged()
+    {
+        // Given the real readiness action's own metadata, as routing would hand it to the filter
+        var logger = new RecordingLogger();
+        var metadata = typeof(HealthCheckController).GetMethod(nameof(HealthCheckController.Ready))!
+            .GetCustomAttributes(inherit: true);
+
+        // When two probes within one cache window are answered 503
+        Run(logger, StatusCodes.Status503ServiceUnavailable, out _, metadata);
+        Run(logger, StatusCodes.Status503ServiceUnavailable, out _, metadata);
+
+        // Then the cache's own once-per-window Warning is the only line, so the filter adds none
+        Assert.Empty(logger.Entries);
+    }
+
     [UnitTheory]
     [InlineData(StatusCodes.Status200OK)]
     [InlineData(StatusCodes.Status400BadRequest)]
@@ -81,7 +99,8 @@ public class ServerErrorLoggingFilterTests
         Assert.Empty(logger.Entries);
     }
 
-    private static void Run(RecordingLogger logger, int statusCode, out string traceId)
+    private static void Run(RecordingLogger logger, int statusCode, out string traceId,
+        IEnumerable<object>? endpointMetadata = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Response.StatusCode = statusCode;
@@ -93,7 +112,8 @@ public class ServerErrorLoggingFilterTests
 
         var descriptor = new ActionDescriptor
         {
-            AttributeRouteInfo = new AttributeRouteInfo { Template = Template }
+            AttributeRouteInfo = new AttributeRouteInfo { Template = Template },
+            EndpointMetadata = [.. endpointMetadata ?? []]
         };
         var actionContext = new ActionContext(httpContext, new RouteData(), descriptor);
         var context = new ResultExecutedContext(actionContext, [], new StatusCodeResult(statusCode), new object());
