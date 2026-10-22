@@ -28,7 +28,8 @@ Every other document in this folder **references this document** for technical c
 | --- | --- | --- |
 | Runtime / framework | **.NET 10** (`net10.0`) | Every project targets `net10.0`. The Web API uses the `Microsoft.NET.Sdk.Web` SDK; libraries use `Microsoft.NET.Sdk`. |
 | Language | **C# 14** | C# 14 is the default language version for `net10.0`, so it is used implicitly — no explicit `<LangVersion>` is set, which keeps the language pinned to the target framework's default. |
-| Language features | `Nullable` **enabled**, `ImplicitUsings` **enabled** | Applied consistently across all production and test projects. |
+| Language features | `Nullable` **enabled**, `ImplicitUsings` **enabled** | Applied consistently across all production and test projects, and stated once: the target framework, `Nullable` and `ImplicitUsings` live in `src/Directory.Build.props` and `tests/Directory.Build.props`, not in the project files. `nullable` and `CA2016` (forward the `CancellationToken`) warnings are errors. |
+| SDK | **.NET SDK 10.0.113**, `rollForward: latestFeature` | `global.json` at the root pins the SDK band; CI reads it through `actions/setup-dotnet`, and the Dockerfile pins the `sdk` and `aspnet` image tags to an exact patch. |
 
 **Why explicit:** C# 14 ships with and is the default for .NET 10. New code may freely use C# 14 features (collection expressions, primary constructors — already used e.g. in `Startup`, etc.). Do **not** pin an older `<LangVersion>`; let it track the .NET 10 default.
 

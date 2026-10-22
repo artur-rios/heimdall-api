@@ -146,6 +146,11 @@ csharp_space_between_method_declaration_parameter_list_parentheses = false
 csharp_space_between_parentheses = false
 csharp_space_between_square_brackets = false
 
+# Analyzers
+# CA2016: a method that receives a CancellationToken passes it to the overloads that take one (#219).
+# A warning here; the Directory.Build.props files promote it to an error.
+dotnet_diagnostic.CA2016.severity = warning
+
 # Xml project files
 [*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,nativeproj,locproj}]
 indent_size = 2

@@ -4,7 +4,11 @@
 # built here because applying migrations needs the SDK and the dotnet-ef tool, neither of which the
 # runtime image carries -- the bundle is a plain executable that the entrypoint can run before the
 # API starts, so the deployed container never needs the SDK.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# The sdk and aspnet tags are pinned to the exact patch the floating 10.0 tag resolved to when they were
+# pinned (the digests of 10.0 and of these tags matched on mcr.microsoft.com), so a rebuild gets the same
+# toolchain and runtime until someone bumps them on purpose. global.json is not copied in: the SDK
+# the image carries is the one it builds with.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build
 WORKDIR /source
 
 # Restored first and on their own so the tool and package layers survive a source-only change.
@@ -47,7 +51,7 @@ RUN HEIMDALL_DATA_CONNECTIONSTRING="Host=localhost;Port=5432;Database=heimdall;U
         --force
 
 # Runtime stage.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13 AS final
 WORKDIR /app
 
 # curl is installed for the container health check alone: the runtime image ships neither curl nor

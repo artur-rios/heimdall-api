@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    Build settings every production project shares, so a csproj states only what is particular to it.
+    MSBuild stops at the nearest Directory.Build.props, so tests/ carries its own copy of the same
+    settings (tests/Directory.Build.props) and the two are kept in step by hand. The two entries under
+    WarningsAsErrors are the ones that fail a build: nullable flags a possible null dereference or a
+    broken nullability contract, and CA2016 flags a method that holds a CancellationToken yet calls an
+    overload that would take it without passing it on, which is the shape of #219. Everything else stays a
+    warning.
+
+    The condition keeps the settings off the solution file: src/ArturRios.Heimdall.sln lives in this
+    directory, and a TargetFramework on the solution's generated project breaks restore.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectFullPath.EndsWith('.csproj'))">
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable;CA2016</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

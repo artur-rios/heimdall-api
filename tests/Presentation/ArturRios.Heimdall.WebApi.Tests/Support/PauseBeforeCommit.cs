@@ -28,7 +28,7 @@ public sealed class PauseBeforeCommit : DbTransactionInterceptor
         if (Interlocked.Exchange(ref _fired, 1) == 0)
         {
             _reached.TrySetResult();
-            await _resume.Task.WaitAsync(Bound);
+            await _resume.Task.WaitAsync(Bound, cancellationToken);
         }
 
         return result;

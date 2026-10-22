@@ -1,11 +1,19 @@
 <Project>
 
   <!--
+    The shared settings repeat src/Directory.Build.props, because MSBuild stops at the nearest file
+    and the test projects never see the one under src/; keep the two in step.
+
     Scoped to tests/ on purpose: MSBuild walks up from each project to the nearest
     Directory.Build.props, and every test project lives under this directory while no production
     project does. Nothing under src/ is affected.
   -->
   <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable;CA2016</WarningsAsErrors>
     <RunSettingsFilePath>$(MSBuildThisFileDirectory)default.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
