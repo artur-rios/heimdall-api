@@ -23,11 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   failure), labelled by `pass`, so an operator can alert on "no successful run in N hours". Both are described in
   `operations.md` (#214).
 - `GET /api/healthcheck/ready`, anonymous, answers `200` while the database responds and `503` when it does not,
-  with only the bare status (`Healthy` or `Unhealthy`) in the body, so an orchestrator can tell an instance that
-  has lost its database from one that is up. The container health check in `docker-compose.yml` now calls it
-  (`/healthcheck/ready` at the root), so Traefik stops routing to such an instance. The answer is cached for 5
-  seconds, so the probe costs the database one read per window however often it is called; `/healthcheck` stays
-  the liveness probe and reads no database. `operations.md` explains which to use for what (#215).
+  with only the bare status (`Healthy` or `Unhealthy`) in the body, so an orchestrator that runs more than one
+  instance can tell one that has lost its database from one that is up. The answer is cached for 5 seconds, so the
+  probe costs the database one read per window however often it is called, and its `503` costs one Warning per
+  window rather than one per request. `/healthcheck` stays the liveness probe and reads no database, and it stays
+  the one the Compose container health check calls: each environment runs a single instance, so a readiness probe
+  would take that instance out of Traefik's routing during a database outage and the public host would answer
+  Traefik 404s instead of the API's JSON `503`. `operations.md` explains which to use for what and when to switch
+  (#215).
 - Every `5xx` a handler returns is now logged at Error with the route template, the status code and the trace
   id, and nothing of the query string, body or caller; a `503`, which is always a deliberate answer here, is
   logged at Warning. An unhandled exception was already logged, so it is not logged twice (#227).
@@ -43,11 +46,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The token purge, the identity anonymisation and the audit pseudonymisation now drain a backlog: each repeats its
   batch while the batch comes back full, up to `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches (default 20) per
   table in one run, where one batch a run capped a table at 12,000 rows a day and a busy audit trail could fall
-  behind for good. Each run's log line now ends with the rows still due after it, so a backlog that is not
-  draining is visible. A run that fails part-way still counts the rows its earlier batches processed, and the
-  anonymisation's erasure ledger still names every identity the run anonymised, from every batch, even when a
-  write throws; if only counting what is still due fails afterwards, the run stays a success and its line says an
-  unknown number is still due. The retry of blocked erasure requests takes its batches the same way, each after the last
+  behind for good. Each run's log line now ends with the rows still due after it, so a backlog that is not draining
+  is visible. A run that fails part-way still counts the rows its earlier batches processed, and the
+  anonymisation's erasure ledger still names every identity the run anonymised, from every batch, even when a write
+  throws; if only counting what is still due fails afterwards, the run stays a success and its line says an unknown
+  number is still due. The retry of blocked erasure requests takes its batches the same way, each after the last
   request of the one before, so requests still blocked can no longer keep newer ones from being retried. The
   variable is in the `docker/*.env.example` templates and `operations.md` (#206).
 - The audit pseudonymisation pass no longer reads the whole attribution window on every run. It evaluated up to
@@ -63,7 +66,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   best-effort: its failure is logged and reported with the run's errors, and the identities that are due are still
   anonymised. The retry reads blocked requests `PurgeBatchSize` at a time, oldest first, where it loaded them all
   (#210).
-
 - A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
   answering) now leaves a failed audit entry, and the exception still propagates: the gate's refusal records
   `AuthenticationTemporarilyUnavailable`, anything else a fixed reason, never the exception's text. The
@@ -81,9 +83,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `docs/content/en/docs/operations.md` described the rolling log files as `<yyyy/MM>/log-<date>.json`, a folder per
   month. They are `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one per day, flat in the directory, as the
   retention section of the same page already said (#216).
-- Confirming two-factor setup (`POST /api/auth/2fa/confirm`) checks the email code before the authenticator code, so
-  a wrong email code no longer spends a right app code's 30-second step and the caller can retry with the same one
-  (#225). Use case 37 now says so.
+- Confirming two-factor setup (`POST /api/auth/2fa/confirm`) checks the email code before the authenticator code,
+  so a wrong email code no longer spends a right app code's 30-second step and the caller can retry with the same
+  one (#225). Use case 37 now says so.
 - A change of an email address that differs only in case (`PUT /api/persons/{id}`) keeps `EmailVerified = true`: it
   is the same mailbox, as sign-in, recovery and uniqueness already treat it. It is still a change for everything
   else — it asks for the password, revokes the person's tokens and notifies the previous address (#225). Use case
@@ -192,18 +194,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   it was refused with `409` when the person was a scope's only owner (AF-08g); it is now accepted, and AF-08g is
   retired. FR-PE-10 and UC-08 step 5 say a System Admin is a member of no scope but may own scopes (#224).
 - The WebApi functional tests seed scopes and persons through one helper, `Support/Seeds.cs`, instead of a copy in
-  each of about seventy test files, so a new required column or trigger rule on either table is fixed in one
-  place. Every seeded person shares one salted Argon2id hash of the test password, derived once per process, where
-  each had its own, which cuts the suite's time and memory. No test now sleeps for a fixed time: the queue-drain
-  waits poll a condition up to a deadline with `Support/Poll.cs`, and the credential list test seeds its two
+  each of about seventy test files, so a new required column or trigger rule on either table is fixed in one place.
+  Every seeded person shares one salted Argon2id hash of the test password, derived once per process, where each
+  had its own, which cuts the suite's time and memory. No test now sleeps to wait for a background worker: the
+  queue-drain waits poll a condition up to a deadline with `Support/Poll.cs` (the one remaining fixed wait is
+  deliberate, the scheduled-pass check that no run follows a stop), and the credential list test seeds its two
   credentials with explicit creation times (#217, #228).
 - The operations guide now covers what an operator needs for upgrades and alerting (#220): migrating big tables
-  (`CREATE INDEX CONCURRENTLY` through `suppressTransaction`, `NOT NULL` with a default, batched backfills, and what
-  the per-row public-id triggers cost a bulk update), that the container image applies migrations on start unless
-  `HEIMDALL_RUN_MIGRATIONS=false` and how that fits the owner connection string, the retention throughput ceiling
-  with the formula and how to see a backlog, and the log lines and metrics to alert on. CONTRIBUTING.md carries the
-  matching migration rules. A "Query costs to watch" section records three data-dependent query costs (name filters,
-  the audit listing's count, the per-request liveness read) and when to act on each (#229).
+  (`CREATE INDEX CONCURRENTLY` through `suppressTransaction`, `NOT NULL` with a default, batched backfills, and
+  what the per-row public-id triggers cost a bulk update), that the container image applies migrations on start
+  unless `HEIMDALL_RUN_MIGRATIONS=false` and how that fits the owner connection string, the retention throughput
+  ceiling with the formula and how to see a backlog, and the log lines and metrics to alert on. CONTRIBUTING.md
+  carries the matching migration rules. A "Query costs to watch" section records three data-dependent query costs
+  (name filters, the audit listing's count, the per-request liveness read) and when to act on each (#229).
 
 ## [4.1.0] - 2026-10-21
 

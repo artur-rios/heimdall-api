@@ -326,7 +326,7 @@ sitting and hold the environment's deploys meanwhile.
    environment's env file. Leave `DB_USER` and `DB_PASSWORD` as they are.
 5. **Redeploy** the environment as usual. The start-up log shows
    `entrypoint: applying EF Core migrations with HEIMDALL_MIGRATIONS_CONNECTIONSTRING...`.
-6. **Verify**: the container reports healthy (`/healthcheck/ready`); a sign-in works, and so does an
+6. **Verify**: the container reports healthy (`/healthcheck`); a sign-in works, and so does an
    administrative change, which writes an audit entry; `check-runtime-login.sql` passes as
    `heimdall_svc`, and the superuser queries above return what they should.
 
@@ -437,8 +437,8 @@ empty.
 | `GET /api/healthcheck/detailed` | System Admin | Reports the status of each verified dependency. |
 
 All three also answer at the root, `/healthcheck`, `/healthcheck/ready` and `/healthcheck/detailed`; the
-container health check calls `/healthcheck/ready` and yggdrasil's status page calls the others. Use the `/api/` addresses through Traefik: on the web
-UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
+container health check calls `/healthcheck` and yggdrasil's status page calls the others. Use the `/api/`
+addresses through Traefik: on the web UI's host, a path outside `/api/` is served by heimdall-ui, not the API.
 
 ```json
 {
@@ -455,14 +455,21 @@ The aggregate `status` is `Healthy` only when **every** entry is healthy (**FR-H
 database, so an instance that has lost its database still passes it. Use it where failing means a restart.
 Readiness says the instance can serve requests: it asks `DatabaseHealthCheck` alone and answers `200`, or
 `503` when the database does not respond. Use it where failing means stop routing to the instance, which is
-how the Compose health check uses it, so Traefik stops sending traffic to a container that can only answer
-`500`. Its body is the same envelope as liveness's with only the bare status as data, `"Healthy"` or
+what an orchestrator or load balancer in front of **more than one** instance wants. Its body is the same envelope as liveness's with only the bare status as data, `"Healthy"` or
 `"Unhealthy"`, never a service name or a cause (the cause is in the log, at Warning, from
-`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, but it does not read the database per call: the
-answer, healthy or not, is held for **5 seconds** and shared by every caller in that window, so a flood of
+`DatabaseHealthCheck`). Like liveness it is anonymous and carries no rate limit, but it does not read the
+database per call: the answer, healthy or not, is held for **5 seconds** and shared by every caller in that window, so a flood of
 probes costs the database one small read per 5 seconds and, while it is down, writes one Warning per window
-rather than one per request. That is shorter than the Compose probe's 15-second interval, so the probe still
-sees a change at its next call.
+rather than one per request. That is shorter than a typical 15-second probe interval, so the probe still sees a
+change at its next call.
+
+**Which probe Compose uses.** The container health check in `docker-compose.yml` calls **liveness**
+(`/healthcheck`), not readiness. Each environment runs one API instance, and Traefik routes only to healthy
+containers, so a readiness probe would take the only instance out of routing during a database outage: the
+web UI's same-origin `/api/*` calls could then fall through to heimdall-ui's catch-all (`200` with HTML), and
+the public host would answer Traefik `404`s instead of the API's JSON `503`. Switch the Compose probe to
+`/healthcheck/ready` only when more than one instance runs behind Traefik, so a healthy one can take the
+traffic.
 
 The liveness and readiness endpoints are anonymous because a load balancer cannot authenticate; the detailed
 one is System-Admin-only because "which of my dependencies is down" is operational intelligence, which a bare
@@ -542,7 +549,8 @@ a result, such as a persistence error mapped to `500`, is logged at **Error** by
 as `Request to {Route} answered {StatusCode} (trace {TraceId})`: the route template (`api/person/{publicId}`,
 never the path with its ids), the status and the trace id, and nothing of the query string, body, headers or
 caller. A `503` is the exception, logged at **Warning**: here it is always a deliberate answer (a saturated
-password-hash gate, a readiness probe reporting the database down), not a fault.
+password-hash gate), not a fault. A readiness probe's `503` gets no such line at all: the database check's own
+`The database health check failed` Warning, one per 5-second window, is the only record.
 
 ### Retention and redaction — NFR-22
 
@@ -1021,7 +1029,9 @@ The same passes publish two metrics on the [Prometheus endpoint](#metrics--prome
 A pass that has not succeeded since the API started has no sample for the gauge. To alert on a
 retention obligation silently lapsing, alert on the age of the last success, for example
 `time() - heimdall_scheduled_pass_last_success_timestamp > 6 * 3600` for a pass that runs hourly, or on
-`absent(heimdall_scheduled_pass_last_success_timestamp{pass="identity-anonymisation"})`.
+`absent(heimdall_scheduled_pass_last_success_timestamp{pass="identity-anonymisation"})`. Give an `absent()`
+rule a `for:` of at least one pass interval plus a margin (for example `for: 75m` on an hourly pass), and
+expect it to fire for a pass that is disabled, because a disabled pass never sets the gauge.
 
 An identity anonymisation run that retries a blocked erasure request and fails is reported the same
 way, but it does not stop the run anonymising the identities that are due: the failure is logged with
@@ -1180,11 +1190,11 @@ JSON on the console and in the log directory; see [Logging](#logging).
 | `SCHEDULED_PASS_FAILED` | Log, with the `pass` name | A retention or monitoring pass failed or threw; it retries next tick. See [When a scheduled pass fails](#when-a-scheduled-pass-fails) | Error |
 | `time() - heimdall_scheduled_pass_last_success_timestamp` large, or the series `absent` | Metric, per `pass` | A pass has not completed a run for longer than its interval allows | n/a |
 | `Failed to write audit log entry for {Action} (target {TargetId})` | Log | A command succeeded but its audit entry was not written, so the trail has a gap. Each one is a missing record of something the API did | Warning |
-| `Request to {Route} answered 503` (and `AuthenticationTemporarilyUnavailable` in the audit trail) | Log; `CREDENTIAL_VERIFICATION_SHEDDING` signal | The password-hash gate is saturated and shedding logins, usually a credential flood. A readiness probe failing logs the same line, so tell them apart by route | Warning |
+| `Request to {Route} answered 503` (and `AuthenticationTemporarilyUnavailable` in the audit trail) | Log; `CREDENTIAL_VERIFICATION_SHEDDING` signal | The password-hash gate is saturated and shedding logins, usually a credential flood. A readiness probe failing does not log this line (see the next row) | Warning |
 | `Request to {Route} answered {StatusCode}` for any 5xx but 503 | Log, with the trace id | A request failed on the server. The line carries the route template and trace id only | Error |
 | `Mailgun refused the {Purpose} email`, `Could not deliver the {Purpose} email`, `Mailgun refused the restriction lift notification` or `Could not deliver the restriction lift notification` | Log | Verification, reset or two-factor mail is not leaving; users are waiting on mail the API reported as sent. See [Email delivery](#email-delivery-mailgun) | Error |
 | `REGISTRATION_CAP_REACHED` | Log, with the scope's public id | A scope holds its maximum of live pending self-registrations (`HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`) and is dropping new ones silently: an attack, or a cap set too low for a real sign-up campaign | Warning |
-| `GET /api/healthcheck/ready` answering `503` | Probe; log `The database health check failed` | The database does not answer; Traefik stops routing to the instance. See [Health checks](#health-checks--uc-30) | Warning |
+| `GET /api/healthcheck/ready` answering `503` | Probe; log `The database health check failed` | The database does not answer; an orchestrator running several instances stops routing to this one (Compose probes liveness and does not). The log line is written once per 5-second window. See [Health checks](#health-checks--uc-30) | Warning |
 | `SECURITY_SIGNAL` | Log, with its `Kind` | See [Security signal detection](#security-signal-detection--nfr-26) | Warning |
 | `still due after this run` not falling | Log | A retention backlog is not draining; see [How much a pass can clear](#how-much-a-pass-can-clear-and-how-to-see-a-backlog) | Information |
 

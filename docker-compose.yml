@@ -186,11 +186,13 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
 
-    # Readiness, not liveness: 200 only while the database answers, so Compose (and Traefik, which routes
-    # only to healthy containers) stops sending traffic to an instance that has lost it. Liveness,
-    # /healthcheck, reads no database and stays for restart decisions and the status catalog.
+    # Liveness, not readiness: each environment runs one instance and Traefik routes only to healthy
+    # containers, so a readiness probe would take the only instance out of routing during a database outage.
+    # The web UI's same-origin /api/* calls could then fall through to heimdall-ui's catch-all (200 HTML), and
+    # the public host would answer Traefik 404s instead of the API's JSON 503. /healthcheck/ready stays for
+    # orchestrators that run more than one instance.
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck/ready"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5
