@@ -75,6 +75,24 @@ jobs:
         # Built once here so both test steps can run with --no-build and neither pays for it.
         run: dotnet build src/ArturRios.Heimdall.sln --configuration Release --no-restore
 
+      - name: Check the model has no pending migration
+        # A change to an entity or its map that was committed without `dotnet ef migrations add` builds,
+        # passes every test that runs against the migrated schema only by luck, and fails on the first
+        # deployment that needs the column. `has-pending-model-changes` compares the compiled model with
+        # the latest snapshot and exits non-zero on a difference.
+        #
+        # The command reads no database, but the design-time factory insists on a connection string, so
+        # a placeholder is passed: nothing connects to it. The tool is the version .config/dotnet-tools.json
+        # pins.
+        env:
+          HEIMDALL_DATA_CONNECTIONSTRING: Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes \
+            --project src/Infrastructure/ArturRios.Heimdall.Data \
+            --startup-project src/Infrastructure/ArturRios.Heimdall.Data \
+            --configuration Release --no-build
+
       - name: Check every test has a category
         # The two test steps below select by Category trait, so a test without one would run in
         # neither. List the tests outside both categories and fail on any.
