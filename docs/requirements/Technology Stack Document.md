@@ -85,7 +85,7 @@ The data access pattern is **repository-based**: application handlers depend on 
 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
-| Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
+| Input validation | **FluentValidation** | `12.2.0` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
 | Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`) | `4.4.0` / `10.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory and the retention period are configurable via environment variables (NFR-22). |
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` and `ArturRios.Jwt` | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `HEIMDALL_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
 | Google ID token verification | **Google.Apis.Auth** | `1.77.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
@@ -105,7 +105,7 @@ These are the technologies mandated for tests. **How** they are applied to each 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
 | Test framework | **xUnit v3** (`xunit.v3.mtp-off`, `xunit.runner.visualstudio`) | `4.0.2` / `4.0.1` | The test framework for every test project. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its `--filter` and the `.trx` logger work as before. |
-| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.10.1` | Test host/runner integration for `dotnet test` and IDEs. |
+| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.11.0` | Test host/runner integration for `dotnet test` and IDEs. |
 | Coverage | `coverlet.collector` | `10.1.0` | Collects code coverage during test runs. |
 | Test helpers & doubles | **`ArturRios.Util.Test`** | `5.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
 | Mocking | **Moq** | `4.21.0` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
@@ -135,7 +135,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Data | EFCore.NamingConventions | `10.0.1` |
 | Authentication | Google.Apis.Auth | `1.77.0` |
 | Authentication | Microsoft.IdentityModel.JsonWebTokens | `8.23.0` |
-| Validation | FluentValidation | `12.1.1` |
+| Validation | FluentValidation | `12.2.0` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
 | Metrics | OpenTelemetry.Extensions.Hosting | `1.19.1` |
@@ -144,7 +144,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.19.1-beta.1` |
 | Testing | xunit.v3.mtp-off | `4.0.2` |
 | Testing | xunit.runner.visualstudio | `4.0.1` |
-| Testing | Microsoft.NET.Test.Sdk | `18.10.1` |
+| Testing | Microsoft.NET.Test.Sdk | `18.11.0` |
 | Testing | coverlet.collector | `10.1.0` |
 | Testing | Testcontainers.PostgreSql | `4.16.0` |
 | Testing | Moq | `4.21.0` |

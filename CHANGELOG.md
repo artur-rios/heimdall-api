@@ -178,6 +178,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   hung Testcontainers pull or a deadlocked test no longer holds a runner and its concurrency group for six hours.
   `tests.yml` now declares `permissions: contents: read` at the top, and the workflows that build the code take
   the SDK from `global.json` rather than a floating `10.0.x` (#218).
+- FluentValidation is updated from 12.1.1 to 12.2.0 and Microsoft.NET.Test.Sdk from 18.10.1 to 18.11.0 (#231).
 - The detailed health check logs the exception behind "Database: Unhealthy" at Warning, so the cause is in the log
   and not only the status (#226).
 - Promoting a Scope Admin to System Admin (`PUT /api/persons/{id}` with `roleId` 1) keeps their scope ownerships,
