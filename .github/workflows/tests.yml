@@ -32,8 +32,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     # A hung Testcontainers pull or a deadlocked test must not hold the runner, and the concurrency
-    # group with it, for the six-hour default.
-    timeout-minutes: 30
+    # group with it, for the six-hour default. 60, not 30: recent runs took 24 to 45 minutes.
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which no test touches.
