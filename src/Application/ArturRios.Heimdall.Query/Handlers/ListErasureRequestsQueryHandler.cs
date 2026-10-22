@@ -40,7 +40,7 @@ public class ListErasureRequestsQueryHandler(
         var output = PaginatedOutput<ErasureRequestOutput>.New;
 
         // NFR-10: page number and size bounds, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -61,7 +61,7 @@ public class ListErasureRequestsQueryHandler(
                 DueAt = person.ErasureDueAt!.Value,
                 BlockedReason = person.ErasureBlockedReason
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var googleUsers = await googleUserReader.Query()
             .Where(googleUser => googleUser.ErasureRequestedAt != null && googleUser.AnonymisedAt == null)
@@ -73,7 +73,7 @@ public class ListErasureRequestsQueryHandler(
                 DueAt = googleUser.ErasureDueAt!.Value,
                 BlockedReason = googleUser.ErasureBlockedReason
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var requests = persons.Concat(googleUsers).ToList();
 

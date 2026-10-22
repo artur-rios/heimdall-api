@@ -44,14 +44,15 @@ public static class ApplicationManagementAccess
         Guid scopeId,
         Guid applicationId,
         int actingRole,
-        Guid actingPersonId)
+        Guid actingPersonId,
+        CancellationToken cancellationToken = default)
     {
         var application = await applications
             .Include(x => x.Scope)
             .Include(x => x.Owner)
             .ThenInclude(owner => owner.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == applicationId && x.Scope.PublicId == scopeId &&
-                                      !x.IsDeleted && !x.Scope.IsDeleted);
+                                      !x.IsDeleted && !x.Scope.IsDeleted, cancellationToken);
 
         if (application is null)
         {

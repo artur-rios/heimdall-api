@@ -99,7 +99,7 @@ public class ListAuditLogQueryHandler(
                 FailureReason = x.FailureReason
             });
 
-        var page = await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(AuditMessages.AuditLogRetrieved);
     }

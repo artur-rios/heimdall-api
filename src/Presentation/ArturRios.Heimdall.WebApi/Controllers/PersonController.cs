@@ -272,7 +272,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         var query = new GetPersonByIdQuery { Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetPersonByIdQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -292,7 +292,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopePersonsQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -312,7 +312,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeOwnersQuery, PersonOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -332,7 +332,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeAdminsQuery, PersonSummaryOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }
@@ -355,7 +355,7 @@ public class PersonController(CommandMediator commandMediator, QueryMediator que
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query);
+            .ExecutePaginatedQueryAsync<ListSystemAdminsQuery, PersonSummaryOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: PersonMessageMap.StatusCodes);
     }

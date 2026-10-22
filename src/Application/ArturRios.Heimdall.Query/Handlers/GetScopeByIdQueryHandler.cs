@@ -58,7 +58,7 @@ public class GetScopeByIdQueryHandler(IAsyncReadOnlyRepository<Scope, long> scop
                     UpdatedAt = x.UpdatedAt
                 }
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         // AF-02a: no such scope (or it is logically deleted and was not explicitly requested).
         if (scope is null)

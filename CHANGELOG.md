@@ -159,6 +159,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   columns, under the state they read. A sign-in whose account was deleted in between is refused `401`, and the
   anonymisation pass leaves a Google User restricted since it was selected as it stands. A name-only
   `PUT /api/persons/{id}` is answered `409` when the person's role changed in between (#205).
+- Aborting a read request now stops its query. The controllers handed the mediator no cancellation token, and the
+  query handlers passed it on to neither validation nor EF Core (25 called `ValidateAsync` without it), so an
+  abandoned `GET /api/audit-log` with a wide filter ran to completion on the server. Every query endpoint now
+  passes `HttpContext.RequestAborted`, and the Query project's validators, lookups and pagination forward it;
+  commands stay uncancellable by design, so a write that has begun still finishes or rolls back as one unit. A
+  cancelled request is dropped quietly by the exception middleware, as before. Rule CA2016 now fails the build
+  where a method holding a token calls an overload that would take it (#219).
 
 ### Changed
 

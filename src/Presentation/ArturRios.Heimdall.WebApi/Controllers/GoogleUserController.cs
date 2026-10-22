@@ -36,7 +36,7 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopeGoogleUsersQuery, GoogleUserOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }
@@ -58,7 +58,7 @@ public class GoogleUserController(CommandMediator commandMediator, QueryMediator
         var query = new GetGoogleUserByIdQuery { ScopeId = scopeId, Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetGoogleUserByIdQuery, GoogleUserOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetGoogleUserByIdQuery, GoogleUserOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: GoogleUserMessageMap.StatusCodes);
     }

@@ -38,7 +38,7 @@ public class GetScopePermissionByIdQueryHandler(
             .Include(x => x.Scope)
             .FirstOrDefaultAsync(x => x.PublicId == query.Id &&
                                       x.Scope.PublicId == query.ScopeId &&
-                                      (query.IncludeDeleted || !x.IsDeleted));
+                                      (query.IncludeDeleted || !x.IsDeleted), cancellationToken);
 
         if (permission is null)
         {
@@ -48,7 +48,7 @@ public class GetScopePermissionByIdQueryHandler(
         // AF-32e: a System Admin sees every permission; anyone else must own the scope. A scope
         // permission has no owner of its own, so owning the scope is the only authorization.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                query.ActingRole, query.ActingPersonId, permission.ScopeId))
+                query.ActingRole, query.ActingPersonId, permission.ScopeId, cancellationToken))
         {
             return output.WithError(ScopePermissionMessages.NotScopeOwner);
         }

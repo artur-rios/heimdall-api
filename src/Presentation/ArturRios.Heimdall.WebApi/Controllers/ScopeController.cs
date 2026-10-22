@@ -150,7 +150,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>(query);
+            .ExecutePaginatedQueryAsync<ListPendingRegistrationsQuery, PendingRegistrationOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
@@ -191,7 +191,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListScopesQuery, ScopeOutput>(query);
+            .ExecutePaginatedQueryAsync<ListScopesQuery, ScopeOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }
@@ -208,7 +208,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
         var query = new GetScopeByIdQuery { Id = id, IncludeDeleted = includeDeleted };
         HttpContext.ApplyActor(query);
 
-        var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query);
+        var result = await queryMediator.ExecuteQueryAsync<GetScopeByIdQuery, ScopeOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ScopeMessageMap.StatusCodes);
     }

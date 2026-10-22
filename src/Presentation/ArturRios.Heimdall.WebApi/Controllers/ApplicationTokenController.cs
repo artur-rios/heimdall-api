@@ -57,7 +57,7 @@ public class ApplicationTokenController(CommandMediator commandMediator, QueryMe
         var query = new CheckApplicationTokenQuery { Token = BearerToken(Request) };
 
         var result = await queryMediator
-            .ExecuteQueryAsync<CheckApplicationTokenQuery, ApplicationTokenCheckOutput>(query);
+            .ExecuteQueryAsync<CheckApplicationTokenQuery, ApplicationTokenCheckOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ApplicationTokenMessageMap.StatusCodes);
     }

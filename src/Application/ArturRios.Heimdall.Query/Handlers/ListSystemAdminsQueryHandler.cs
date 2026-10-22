@@ -32,7 +32,7 @@ public class ListSystemAdminsQueryHandler(
         var output = PaginatedOutput<PersonSummaryOutput>.New;
 
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -73,7 +73,7 @@ public class ListSystemAdminsQueryHandler(
         // a page boundary and appear on both pages while a third appeared on neither.
         var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
 
-        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(PersonMessages.PersonsRetrievedSuccessfully);
     }

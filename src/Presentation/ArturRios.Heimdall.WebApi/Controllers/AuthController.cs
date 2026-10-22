@@ -627,7 +627,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListErasureRequestsQuery, ErasureRequestOutput>(query);
+            .ExecutePaginatedQueryAsync<ListErasureRequestsQuery, ErasureRequestOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ErasureMessageMap.StatusCodes);
     }
@@ -653,7 +653,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecuteQueryAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>(query);
+            .ExecuteQueryAsync<GetTwoFactorStatusQuery, TwoFactorStatusOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: TwoFactorMessageMap.StatusCodes);
     }

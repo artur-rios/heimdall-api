@@ -77,7 +77,7 @@ public class HealthCheckController(QueryMediator queryMediator, DatabaseHealthCh
     public async Task<ActionResult<DataOutput<HealthCheckOutput?>>> Detailed()
     {
         var result = await queryMediator
-            .ExecuteQueryAsync<DetailedHealthQuery, HealthCheckOutput>(new DetailedHealthQuery());
+            .ExecuteQueryAsync<DetailedHealthQuery, HealthCheckOutput>(new DetailedHealthQuery(), HttpContext.RequestAborted);
 
         var statusCode = result.Data?.Status == HealthStatuses.Healthy
             ? HttpStatusCodes.Ok

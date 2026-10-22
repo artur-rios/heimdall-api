@@ -44,7 +44,7 @@ public class GetApplicationByIdQueryHandler(IAsyncReadOnlyRepository<Application
                 },
                 OwnerOwnsScope = x.Owner.ScopeOwnerships.Any(ownership => ownership.ScopeId == x.ScopeId)
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         var application = found?.Output;
 

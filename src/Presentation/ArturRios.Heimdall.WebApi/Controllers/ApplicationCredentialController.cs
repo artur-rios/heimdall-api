@@ -62,7 +62,7 @@ public class ApplicationCredentialController(CommandMediator commandMediator, Qu
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecuteQueryAsync<ListApplicationCredentialsQuery, ApplicationCredentialListOutput>(query);
+            .ExecuteQueryAsync<ListApplicationCredentialsQuery, ApplicationCredentialListOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: ApplicationCredentialMessageMap.StatusCodes);
     }

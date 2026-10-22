@@ -289,6 +289,10 @@ public class Startup : WebApiStartup
         // #202: the scope row locks that make a last-owner guard and its write one step.
         Builder.Services.AddScoped<IInvariantLocks, InvariantLocks>();
 
+        // #219: commands are dispatched without a cancellation token, by design. A write that has begun
+        // must finish or roll back as one unit, not stop halfway because the client went away, so the
+        // controllers hand ExecuteCommandAsync no HttpContext.RequestAborted and the command handlers
+        // forward no token to EF Core. Queries are the opposite: they receive the request's token.
         Builder.Services.AddScoped<CommandMediator>();
         Builder.Services.AddHttpContextAccessor();
         Builder.Services.AddScoped<IActorAccessor, HttpContextActorAccessor>();
@@ -393,6 +397,8 @@ public class Startup : WebApiStartup
 
         AddDataRetention();
 
+        // #219: the controllers pass HttpContext.RequestAborted to every query, and the mediator forwards it
+        // to the handler, so an abandoned read stops its query. Commands are the opposite (see CommandMediator).
         Builder.Services.AddScoped<QueryMediator>();
         Builder.Services
             .AddScoped<IQueryHandlerAsync<GetScopeByIdQuery, ScopeOutput>, GetScopeByIdQueryHandler>();

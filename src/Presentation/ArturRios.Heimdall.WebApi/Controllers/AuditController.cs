@@ -35,7 +35,7 @@ public class AuditController(QueryMediator queryMediator) : Controller
         HttpContext.ApplyActor(query);
 
         var result = await queryMediator
-            .ExecutePaginatedQueryAsync<ListAuditLogQuery, AuditLogEntryOutput>(query);
+            .ExecutePaginatedQueryAsync<ListAuditLogQuery, AuditLogEntryOutput>(query, HttpContext.RequestAborted);
 
         return result.ToActionResult(statusMap: AuditMessageMap.StatusCodes);
     }

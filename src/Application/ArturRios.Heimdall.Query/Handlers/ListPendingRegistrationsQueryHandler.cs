@@ -62,7 +62,8 @@ public class ListPendingRegistrationsQueryHandler(
         }
 
         // AF-49b: a System Admin bypasses; anyone else must own the scope.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(
+                query.ActingRole, query.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.NotScopeOwner);
         }
@@ -90,7 +91,7 @@ public class ListPendingRegistrationsQueryHandler(
                 Expired = x.ExpiresAt <= now
             });
 
-        var page = await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(ScopeMessages.PendingRegistrationsRetrieved);
     }
