@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Data.Relational.Core.Repositories;
@@ -368,6 +369,9 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
     }
 
+    private static readonly Expression<Func<AuditLog, bool>> IsShedLogin = x =>
+        x.Action == nameof(LoginCommand) && x.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable;
+
     [FunctionalFact]
     public async Task GivenTheHashGateShedsLogins_WhenDetectingSecuritySignals_ThenSheddingIsRaisedFromTheTrail()
     {
@@ -376,7 +380,13 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // through the audit decorator, nothing was written, and the signal could never fire.
         var email = UniqueEmail("shed-signal");
         await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
-        var since = DateTime.UtcNow.AddSeconds(-1);
+
+        // A shed leaves no account on its audit row (the login is refused before anyone is resolved),
+        // so the rows cannot be scoped to this test's account, and a time window also catches the
+        // shed rows a neighbouring test wrote a moment earlier. The collection runs one test at a
+        // time, so the rows already there are the baseline and this test's own are what is added.
+        await using var baselineContext = db.CreateContext();
+        var shedBefore = await baselineContext.AuditLogs.AsNoTracking().CountAsync(IsShedLogin);
 
         var release = new TaskCompletionSource();
         var holding = new TaskCompletionSource();
@@ -415,13 +425,12 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         await using var context = db.CreateContext();
 
         var shedEntries = await context.AuditLogs.AsNoTracking()
-            .Where(x => x.CreatedAt >= since
-                        && x.Action == nameof(LoginCommand)
-                        && x.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable)
+            .Where(IsShedLogin)
+            .OrderByDescending(x => x.Id)
             .ToListAsync();
 
-        Assert.Equal(sheds, shedEntries.Count);
-        Assert.All(shedEntries, entry => Assert.False(entry.Succeeded));
+        Assert.Equal(shedBefore + sheds, shedEntries.Count);
+        Assert.All(shedEntries.Take(sheds), entry => Assert.False(entry.Succeeded));
 
         // When the detector reads the trail the API itself wrote, with the threshold at what was shed
         var handler = new DetectSecuritySignalsQueryHandler(
@@ -549,6 +558,9 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // anonymisation and the admin who took the address over can both be stored. The lookup must
         // resolve the live one; resolving the deleted one refused the new holder until the old row
         // was anonymised, months later.
+        // Both rows share the seed's default password, so the password cannot tell them apart: the test
+        // still discriminates because resolving the deleted row answers 401 (a deleted person cannot
+        // sign in), not 200.
         var email = UniqueEmail("reused-admin");
         await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, IsDeleted = true });
         var current = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });

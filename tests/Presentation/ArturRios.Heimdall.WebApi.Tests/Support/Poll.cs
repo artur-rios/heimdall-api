@@ -16,7 +16,8 @@ public static class Poll
 
     /// <summary>Returns once <paramref name="condition" /> holds; fails with <paramref name="timeoutMessage" /> if it never does.</summary>
     public static async Task UntilAsync(
-        Func<Task<bool>> condition, string timeoutMessage, TimeSpan? timeout = null)
+        Func<Task<bool>> condition, string timeoutMessage, TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
     {
         var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
 
@@ -27,11 +28,12 @@ public static class Poll
                 throw new TimeoutException(timeoutMessage);
             }
 
-            await Task.Delay(Interval);
+            await Task.Delay(Interval, cancellationToken);
         }
     }
 
-    /// <inheritdoc cref="UntilAsync(Func{Task{bool}}, string, TimeSpan?)" />
-    public static Task UntilAsync(Func<bool> condition, string timeoutMessage, TimeSpan? timeout = null) =>
-        UntilAsync(() => Task.FromResult(condition()), timeoutMessage, timeout);
+    /// <inheritdoc cref="UntilAsync(Func{Task{bool}}, string, TimeSpan?, CancellationToken)" />
+    public static Task UntilAsync(Func<bool> condition, string timeoutMessage, TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        UntilAsync(() => Task.FromResult(condition()), timeoutMessage, timeout, cancellationToken);
 }
