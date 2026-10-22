@@ -19,6 +19,11 @@ on:
       - main
       - develop
 
+# Least privilege for every job: the test and docker jobs only read the repository. The docs job
+# declares what it needs for itself below.
+permissions:
+  contents: read
+
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
@@ -26,6 +31,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A hung Testcontainers pull or a deadlocked test must not hold the runner, and the concurrency
+    # group with it, for the six-hour default.
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which no test touches.
@@ -34,7 +42,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Run the Python helper tests
         # scripts/test_migrations.py covers migrations.py's pure helpers — the .env parser, and the
@@ -183,6 +191,7 @@ jobs:
   # inside it is already covered by the suites above.
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

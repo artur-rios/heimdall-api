@@ -174,6 +174,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   are errors. `global.json` pins the SDK band (10.0.113, `rollForward: latestFeature`), and the Dockerfile's `sdk`
   and `aspnet` tags are pinned to the patch the floating `10.0` tag resolved to (10.0.402 and 10.0.13), so an image
   rebuild no longer changes toolchain on its own (#230).
+- Every CI job now has a `timeout-minutes` (30 for the tests, 15 for the container build, 10 for the rest), so a
+  hung Testcontainers pull or a deadlocked test no longer holds a runner and its concurrency group for six hours.
+  `tests.yml` now declares `permissions: contents: read` at the top, and the workflows that build the code take
+  the SDK from `global.json` rather than a floating `10.0.x` (#218).
 - The detailed health check logs the exception behind "Database: Unhealthy" at Warning, so the cause is in the log
   and not only the status (#226).
 - Promoting a Scope Admin to System Admin (`PUT /api/persons/{id}` with `roleId` 1) keeps their scope ownerships,

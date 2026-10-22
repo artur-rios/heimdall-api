@@ -40,6 +40,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         # No submodules: the only one is the documentation site's theme, which this job never builds.
@@ -48,7 +49,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Check the committed document is up to date
         # Builds the generator (and so the Web API it reflects over), regenerates the document into a
