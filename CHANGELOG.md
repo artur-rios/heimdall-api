@@ -197,6 +197,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   each had its own, which cuts the suite's time and memory. No test now sleeps for a fixed time: the queue-drain
   waits poll a condition up to a deadline with `Support/Poll.cs`, and the credential list test seeds its two
   credentials with explicit creation times (#217, #228).
+- The operations guide now covers what an operator needs for upgrades and alerting (#220): migrating big tables
+  (`CREATE INDEX CONCURRENTLY` through `suppressTransaction`, `NOT NULL` with a default, batched backfills, and what
+  the per-row public-id triggers cost a bulk update), that the container image applies migrations on start unless
+  `HEIMDALL_RUN_MIGRATIONS=false` and how that fits the owner connection string, the retention throughput ceiling
+  with the formula and how to see a backlog, and the log lines and metrics to alert on. CONTRIBUTING.md carries the
+  matching migration rules. A "Query costs to watch" section records three data-dependent query costs (name filters,
+  the audit listing's count, the per-request liveness read) and when to act on each (#229).
 
 ## [4.1.0] - 2026-10-21
 

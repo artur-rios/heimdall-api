@@ -19,7 +19,7 @@ otherwise — see [Database roles](#database-roles--th-18)), then offers **list*
 **create (generate)**, and **apply**. It needs `dotnet tool restore` to have been run once, for the
 pinned EF Core CLI tool. Authoring a migration is covered in [Contributing](../contributing/#migrations).
 
-**The API never migrates on startup, and refuses to start when migrations are pending.** The seeder
+**The API process never migrates, and refuses to start when migrations are pending.** The seeder
 checks `GetPendingMigrationsAsync` first and throws with the missing migration names:
 
 ```
@@ -30,6 +30,59 @@ Apply them with scripts/migrations.py before starting the API.
 Automatic migration on startup is convenient exactly until two instances start at once, or until a
 deployment silently applies a migration nobody reviewed. An explicit step makes schema change a
 decision rather than a side effect.
+
+**The shipped container image does migrate, unless told not to.** `docker/entrypoint.sh` runs the
+migration bundle built into the image before it starts the API, so a container pointed at an empty
+database comes up working. That is the default: `HEIMDALL_RUN_MIGRATIONS` is `true` when unset, and
+`true` in all four `docker/*.env.example` templates; only the exact value `false` switches it off. The
+bundle connects with `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` (the schema owner) when that is set and with
+`HEIMDALL_DATA_CONNECTIONSTRING` otherwise, and the entrypoint removes the owner's string before the API
+starts (see [Database roles](#database-roles--th-18)). Set `HEIMDALL_RUN_MIGRATIONS=false` and run
+`python scripts/migrations.py` as its own deploy step when a deployment runs more than one replica (two
+containers applying migrations at start-up race each other), when a migration needs review or timing
+first (see [Migrating big tables](#migrating-big-tables)), or when the owner's password should not be on
+the container at all. The argument above is against the API process migrating itself; the image's
+default is the same choice made at deployment, opt-out, and a deployment that wants the explicit step
+takes it with this one variable.
+
+### Migrating big tables
+
+Most tables are small. `audit_log` is not: nearly every command inserts a row and nothing deletes one, so
+it only grows, and `person` is read by every login. A migration that locks either one stalls the API for
+as long as it runs. When a migration touches a table that may hold millions of rows:
+
+- **Build indexes with `CREATE INDEX CONCURRENTLY`.** A plain `CREATE INDEX` takes a `SHARE` lock and
+  blocks every insert and update for the whole build. `CONCURRENTLY` cannot run inside a transaction, so
+  issue it as `migrationBuilder.Sql(..., suppressTransaction: true)`, with `IF NOT EXISTS` so an
+  interrupted run can be repeated, and `DROP INDEX CONCURRENTLY IF EXISTS` in `Down`. A concurrent build
+  that fails leaves an index marked `INVALID` (`\d heimdall.audit_log`); drop it before applying again.
+  `20261021183451_AddPersonLowerEmailIndex` is the example to copy (it also drops the superseded index
+  concurrently); `20261021161812_AddAuditRetentionIndexes` builds two partial indexes on `audit_log` the
+  same way. `20261014045512_AddAuditLogTargetIndex` predates the rule and builds its index with a plain
+  `CREATE INDEX`: apply nothing like it to a large trail.
+- **Add a column as nullable, or with a default.** `ADD COLUMN ... NOT NULL DEFAULT <constant>` is a
+  catalog change on PostgreSQL 11 and later, with no table rewrite. A `NOT NULL` column with no default,
+  or a default that is volatile, forces a rewrite under an `ACCESS EXCLUSIVE` lock. To tighten an existing
+  column, add it nullable, backfill in batches, then set `NOT NULL`.
+- **Backfill in batches, never in one `UPDATE`.** A single `UPDATE person SET ...` over the whole table
+  (as `20260909163322_AnonymiseDeletedIdentities` does, once, on a small table) holds its row locks until
+  it commits, writes every row's new version at once and bloats the table. Update a bounded slice at a
+  time (`WHERE id IN (SELECT id ... LIMIT 1000)`, or by id range), committing between slices, and
+  `suppressTransaction: true` is what allows that inside a migration.
+- **Mind the per-row triggers.** `person`, `google_user`, `scope` and the other tables named in
+  [Shared public ids](#shared-public-ids--before-protectidentitypublicids-199) carry two row-level
+  triggers each from `20261015035042_ProtectIdentityPublicIds` and `20261015041235_ProtectEntityPublicIds`:
+  `*_public_id_is_immutable` (`BEFORE UPDATE ... FOR EACH ROW`) fires on every updated row, whichever
+  column the update sets, and `*_public_id_is_unused` (`BEFORE INSERT`) looks the id up in the other
+  tables. A bulk backfill therefore pays a function call per row, plus those lookups on insert, on top of
+  the write itself; budget for it, keep the slices small, and expect a backfill to run several times
+  slower than the same update on a table without them.
+- **Take the lock timeout you can afford.** Statements that need a brief lock (`ALTER TABLE`, a trigger)
+  queue behind long transactions and block everything queued after them; `SET lock_timeout = '5s'` makes
+  them fail fast and retry rather than stall the API.
+- **Apply it as its own step.** Run it with `HEIMDALL_RUN_MIGRATIONS=false` and `scripts/migrations.py`,
+  off peak, rather than letting a container's start-up carry a long build. Authoring rules are in
+  [Contributing](../contributing/#migrations).
 
 ### Shared public ids — before `ProtectIdentityPublicIds` (#199)
 
@@ -902,6 +955,43 @@ policy. An interval below a minute turns a purge into continuous delete pressure
 login path writes to; one above seven days is past what `PeriodicTimer` accepts, and the exception
 it would throw inside a hosted service stops the host by default.
 
+### How much a pass can clear, and how to see a backlog
+
+Each pass clears at most `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` rows per batch and at most
+`HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches per table in one run, and runs every
+`HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES`. The ceiling for one table is therefore:
+
+```
+rows per day = batch size × max batches per tick × (1440 ÷ interval in minutes)
+```
+
+At the defaults (500 × 20 × 24) that is 10,000 rows per table per hour and **240,000 per day**. The cap
+applies to each table or kind of row on its own, not to the pass: the token purge allows it for each of
+its eight tables (password reset tokens, email verification tokens, two-factor email codes, pending
+registrations, application credentials, attempt-notice budgets, used Google ID tokens, scope owner
+invitations); identity anonymisation for persons and for Google Users separately; audit pseudonymisation
+for the entries and, separately, the tombstones. Recompute it with your settings: a 250-row batch, 10
+batches and a 30-minute interval give 250 × 10 × 48 = 120,000 per day. A table that is fed faster than its
+ceiling (a busy `audit_log` is the likely one) never drains, and the rows past the retention period pile
+up, which is a retention obligation silently lapsing; raise the batch size or the batches per tick before
+the interval, since a longer batch is cheaper than a more frequent run.
+
+**Seeing it.** Each run that removed anything, or left anything due, logs one line at Information with the
+rows still due after it:
+
+| Pass | Line (the part to read) |
+| --- | --- |
+| `token-retention` | `Token retention purge removed {n} rows ({backlog} still due after this run): ...` |
+| `audit-retention` | `Cleared the actor attribution from ... audit entries ...; {backlog} still due after this run` |
+| `identity-anonymisation` | `Anonymised {n} identities past their retention window: ...; {backlog} still due after this run.` |
+
+A run with nothing removed and nothing due logs nothing. **A "still due" number that does not fall from
+run to run is a backlog that is not draining.** Identity anonymisation prints `an unknown number` where
+counting the backlog itself failed (logged at Warning as `Counting the identities still due failed`).
+There is no backlog metric: `heimdall_scheduled_pass_rows_processed_total` per `pass` (see below) divided
+over time shows a pass working at its ceiling, which is `rate(...)` close to the figure above, and is the
+cue to read the log line.
+
 ### When a scheduled pass fails
 
 Every scheduled pass (token retention, audit pseudonymisation, identity anonymisation and security
@@ -1078,6 +1168,50 @@ to include addresses.**
 
 The alert also says, in its own body, that the moment you read it is when awareness happened — the
 timestamp that goes in the Art. 33(5) register, not the time the signal was raised.
+
+## What to alert on
+
+Everything below is a log line or a metric the API already writes; nothing needs new instrumentation.
+Match on the marker or the quoted text, not on the surrounding prose, and on the level shown. Logs are
+JSON on the console and in the log directory; see [Logging](#logging).
+
+| Alert on | Where it comes from | Means | Level |
+| --- | --- | --- | --- |
+| `SCHEDULED_PASS_FAILED` | Log, with the `pass` name | A retention or monitoring pass failed or threw; it retries next tick. See [When a scheduled pass fails](#when-a-scheduled-pass-fails) | Error |
+| `time() - heimdall_scheduled_pass_last_success_timestamp` large, or the series `absent` | Metric, per `pass` | A pass has not completed a run for longer than its interval allows | n/a |
+| `Failed to write audit log entry for {Action} (target {TargetId})` | Log | A command succeeded but its audit entry was not written, so the trail has a gap. Each one is a missing record of something the API did | Warning |
+| `Request to {Route} answered 503` (and `AuthenticationTemporarilyUnavailable` in the audit trail) | Log; `CREDENTIAL_VERIFICATION_SHEDDING` signal | The password-hash gate is saturated and shedding logins, usually a credential flood. A readiness probe failing logs the same line, so tell them apart by route | Warning |
+| `Request to {Route} answered {StatusCode}` for any 5xx but 503 | Log, with the trace id | A request failed on the server. The line carries the route template and trace id only | Error |
+| `Mailgun refused the {Purpose} email` or `Could not deliver the {Purpose} email` | Log | Verification, reset or two-factor mail is not leaving; users are waiting on mail the API reported as sent. See [Email delivery](#email-delivery-mailgun) | Error |
+| `REGISTRATION_CAP_REACHED` | Log, with the scope's public id | A scope holds its maximum of live pending self-registrations (`HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE`) and is dropping new ones silently: an attack, or a cap set too low for a real sign-up campaign | Warning |
+| `GET /api/healthcheck/ready` answering `503` | Probe; log `The database health check failed` | The database does not answer; Traefik stops routing to the instance. See [Health checks](#health-checks--uc-30) | Warning |
+| `SECURITY_SIGNAL` | Log, with its `Kind` | See [Security signal detection](#security-signal-detection--nfr-26) | Warning |
+| `still due after this run` not falling | Log | A retention backlog is not draining; see [How much a pass can clear](#how-much-a-pass-can-clear-and-how-to-see-a-backlog) | Information |
+
+An alert on Warning or above catches all but the last. The prose around a marker will change; the
+markers and the pass names are stable.
+
+## Query costs to watch
+
+Three costs depend on how much data a deployment holds. None needs a change today; each says what to
+look at and when to act, so a slow screen is not a surprise.
+
+- **Name and email filters scan.** The list endpoints filter with `x.Name.ToLower().Contains(name)` (and
+  the same for email) in the persons, owners, admins, Google Users and System Admins listings. A match with
+  a leading wildcard cannot use a b-tree index. For a scope's own listings that is fine: the query is
+  limited to one scope's rows first. The one place it can matter is a System Admin listing across every
+  scope. Act only if those listings are slow with real data: add a `pg_trgm` GIN index on the lower-cased
+  column, built `CONCURRENTLY` as in [Migrating big tables](#migrating-big-tables).
+- **Every page of the audit listing counts the table.** `ListAuditLogQueryHandler` pages with
+  `PaginateAsync`, which issues a `COUNT(*)` with the same filters on each request (library behaviour).
+  Filtered by actor, target, action or date range that is cheap; on an unfiltered request it counts all of
+  `audit_log`, a table that only grows. Watch the listing's latency as the trail grows; if the unfiltered
+  count becomes slow, move the listing to keyset pagination on `(created_at, id)` or return an approximate
+  total, and tell the UI, which shows a total.
+- **Every authenticated request reads the actor.** `ActorLivenessFilter` makes one or two indexed queries
+  (by `public_id`) per authenticated request so that a deleted or restricted person's token stops working at
+  once. That is deliberate (see [Scaling](#scaling)); it is the price of immediate revocation. Do not
+  cache it to save the reads: a cache is exactly the window in which a deleted person's token still works.
 
 ## Cross-origin requests
 
@@ -1344,6 +1478,7 @@ no longer verify HS256.
 | `HEIMDALL_RETENTION_AUDIT_PSEUDONYMISATION_ENABLED` | | `true` |
 | `HEIMDALL_DATA_REQUIRE_TLS` | | `false` |
 | `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` | | unset → the entrypoint migrates with `HEIMDALL_DATA_CONNECTIONSTRING`; read by the entrypoint and `scripts/migrations.py` only, never by the API (see [Database roles](#database-roles--th-18)) |
+| `HEIMDALL_RUN_MIGRATIONS` | | `true` → the container entrypoint applies pending migrations before starting the API; only `false` skips it. Read by the entrypoint only, never by the API (see [Migrations](#migrations)) |
 | `PUBLIC_HOST` / `UI_HOST` | | unset → these two name no public host (the verification and reset URLs and the CORS origins are read too; see [Diagnostics on a public host](#diagnostics-on-a-public-host--nfr-28)) |
 | `HEIMDALL_ALLOW_SENSITIVE_DIAGNOSTICS` | | `false` → with a public host, EF Core's sensitive logging and detailed errors and the developer exception page are off |
 | `HEIMDALL_RETENTION_LOG_DAYS` | | `365` |
