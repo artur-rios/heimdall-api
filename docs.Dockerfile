@@ -33,6 +33,9 @@
 # docs/package-lock.json.
 FROM hugomods/hugo:debian-node-git-0.165.0@sha256:83cbf887851fea9fa73dc25fd55018deaa302fcb757375057a4cc9bbfc54177d AS build
 
+# Renovate follows the version below (the comment under this one), but not the checksum: when it moves the version,
+# copy the sha256 of dart-sass-<version>-linux-x64.tar.gz from the release page into the ADD by hand.
+# renovate: datasource=github-releases depName=sass/dart-sass
 ARG DART_SASS_VERSION=1.105.1
 ADD --checksum=sha256:9046fdd4a31a524a0020298c55d9e155d4c22363ef268e8992574335a72c6a6f \
     https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz \

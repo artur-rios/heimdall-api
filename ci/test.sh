@@ -16,6 +16,8 @@
 # your machine -- scripts/coverage.py makes the free report and says so. It is never printed.
 set -euo pipefail
 
+# Renovate follows this version (the comment below); it is a tool, so there is no checksum to update with it.
+# renovate: datasource=nuget depName=dotnet-reportgenerator-globaltool
 REPORTGENERATOR_VERSION=5.5.11
 SOLUTION=src/ArturRios.Heimdall.sln
 
