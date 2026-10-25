@@ -1,0 +1,16 @@
+# The build context of docs.Dockerfile (BuildKit reads this file for it, in place of .dockerignore, which is the API's
+# image's and leaves docs/ out). Only what the Hugo site is built from comes in: the site (docs/), the two files it
+# renders at the repository's root (CHANGELOG.md and CONTRIBUTING.md, mounted by docs/hugo.toml), and the history
+# enableGitInfo reads (.git). The coverage report is part of docs/: the deploy copies it in before the build.
+*
+!docs
+!CHANGELOG.md
+!CONTRIBUTING.md
+!.git
+
+# Not part of the site, or rebuilt by the image.
+docs/node_modules
+docs/public
+docs/resources
+docs/.hugo_build.lock
+docs/themes
