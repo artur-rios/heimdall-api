@@ -4,6 +4,12 @@
 **/obj/
 .git/
 .github/
+# The pipeline: its scripts and files, and the docs site's own image (docs.Dockerfile has a .dockerignore of its own).
+ci/
+yggdrasil.yml
+renovate.json
+docs.Dockerfile
+docs.Dockerfile.dockerignore
 .idea/
 .vs/
 .vscode/
