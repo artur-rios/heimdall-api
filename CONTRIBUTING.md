@@ -110,8 +110,8 @@ python scripts/coverage.py --clean
 ```
 
 If `REPORTGENERATOR_LICENSE` is set, the script passes it to ReportGenerator and the PRO version generates the
-report; the key is never echoed. CI reads it from the repository secret of the same name. Unset — as on a pull
-request from a fork, where GitHub withholds secrets — generation still succeeds with the free version.
+report; the key is never echoed. CI reads it from the Jenkins credential `reportgenerator-license`. Unset — as on a
+build of a `renovate/*` branch, which binds no credential — generation still succeeds with the free version.
 
 The published report is not committed. Jenkins's `test` check writes it to `docs/coverage-report` and archives it,
 and the build that deploys the docs site (a push to `main`) runs that check and builds the site's image
