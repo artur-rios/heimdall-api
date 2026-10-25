@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Sourced by ci/test.sh and ci/check.sh (not run on its own): makes sure `python3` is on the PATH.
 #
 # The repository's checks run Python helpers (scripts/*.py: the vulnerability scan, the coverage gate, the OpenAPI
