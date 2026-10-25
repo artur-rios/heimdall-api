@@ -21,11 +21,8 @@ Building from source, running the test suites and the other contributor tooling 
 
 ## Clone
 
-The documentation site's theme is a git submodule, so clone with submodules (or initialise them
-afterwards):
-
 ```bash
-git clone --recurse-submodules https://github.com/artur-rios/heimdall-api.git
+git clone https://git.techcraftsmen.net/artur-rios/heimdall-api.git
 ```
 
 ## Configure

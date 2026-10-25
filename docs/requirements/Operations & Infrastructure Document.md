@@ -221,7 +221,7 @@ runs as that login; the operations guide, "Database roles", gives the order. The
 them, and until then an environment runs as one login, as before.
 
 The step-by-step setup of each environment is on the documentation site, under
-[Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/).
+[Environments and deployment](https://docs.artur-rios.tech/heimdall-api/docs/environments-and-deployment/).
 
 ## 1. Introduction
 

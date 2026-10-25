@@ -45,7 +45,7 @@ follow the controller's instructions. Sections 2 to 9 map onto Art. 28(3)(a) to 
 
 2.1 The Processor processes the Controller's personal data only on the Controller's documented
 instructions. **The instructions are the API**: each endpoint the Controller calls is an instruction,
-and the [API Reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/) with the
+and the [API Reference](https://docs.artur-rios.tech/heimdall-api/docs/api-reference/) with the
 [Use Case Specification](Use%20Case%20Specification%20Document.md) is the documented set of them.
 Anything outside that set requires a written instruction.
 

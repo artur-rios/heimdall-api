@@ -1,4 +1,4 @@
-baseURL = 'https://artur-rios.github.io/heimdall-api/'
+baseURL = 'https://docs.artur-rios.tech/heimdall-api/'
 title = 'Heimdall API'
 # Docsy is installed as the @docsy/theme NPM package (see package.json), pinned by package-lock.json.
 # It used to be a git submodule, which is not part of the checkout the docs image is built from.
