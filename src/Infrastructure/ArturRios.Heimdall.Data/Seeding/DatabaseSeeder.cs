@@ -99,7 +99,7 @@ public class DatabaseSeeder(
                 $"{MasterUserOptions.PasswordVariable} before starting the API.");
         }
 
-        var passwordHash = Hash.EncodeWithRandomSalt(masterUser.Password, out var salt);
+        var passwordHash = Hash.EncodeWithRandomSalt(masterUser.Password, out var salt, PasswordHashing.Configuration);
 
         var master = new Person
         {

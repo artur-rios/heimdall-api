@@ -99,7 +99,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
     private static async Task<TwoFactorEmailCode> SeedEmailCodeAsync(
         Fixture fixture, long twoFactorAuthId, bool used = false, bool expired = false)
     {
-        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration);
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,

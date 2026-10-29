@@ -355,6 +355,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` | Empty (set only while rotating the signing key, to the key being retired, in the same format: its public half stays published and its tokens stay valid, but it never signs) |
 | `HEIMDALL_APPLICATION_TOKEN_EXPIRATION_IN_SECONDS` | `600` (10 minutes) |
 | `HEIMDALL_AUTH_MAX_CONCURRENT_PASSWORD_HASHES` | `4` (~2.4 GB of Argon2id working set) |
+| `HEIMDALL_INSECURE_TEST_PASSWORD_HASHING` | Unset: the production Argon2id cost (600 MB, 16 lanes). `true` selects the cheapest cost Argon2id accepts, for the test suite only (`tests/default.runsettings` sets it). Startup refuses it in Production and Staging, and no hash stored under it verifies once it is removed, so never set it in a deployment |
 | `HEIMDALL_EMAIL_VERIFICATION_TOKEN_EXPIRATION_IN_SECONDS` | `86400` (24 hours) |
 | `HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS` | `3600` (1 hour) |
 | `HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS` | `300` (5 minutes) — the per-person cooldown on account email: administrator-sent links, anonymous password recovery, and a person's own resends, setup codes and email-change notices (which are also capped at five per day-long window); `0` turns the cooldown off |

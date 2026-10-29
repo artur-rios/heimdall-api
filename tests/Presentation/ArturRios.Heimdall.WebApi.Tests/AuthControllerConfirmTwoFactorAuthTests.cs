@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
@@ -54,7 +55,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         long twoFactorAuthId, bool used = false, bool expired = false)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration);
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,

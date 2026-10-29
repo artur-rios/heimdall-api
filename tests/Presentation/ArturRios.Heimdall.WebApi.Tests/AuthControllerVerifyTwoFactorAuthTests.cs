@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -58,7 +59,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         long twoFactorAuthId, string code, bool used = false, TimeSpan? remainingLife = null)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt, PasswordHashing.Configuration);
         context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,

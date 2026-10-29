@@ -40,7 +40,7 @@ public class UpdatePersonCommandHandlerTests
     /// </summary>
     private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
     {
-        var hash = Hash.EncodeWithRandomSalt(Password, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
 
         return (hash, salt);
     });
@@ -1569,7 +1569,7 @@ public class UpdatePersonCommandHandlerTests
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = configuration.Id,
-            CodeHash = Hash.EncodeWithRandomSalt("123456", out var salt),
+            CodeHash = Hash.EncodeWithRandomSalt("123456", out var salt, PasswordHashing.Configuration),
             Salt = salt,
             ExpiresAt = DateTime.UtcNow.AddMinutes(10)
         };

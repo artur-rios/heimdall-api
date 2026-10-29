@@ -64,7 +64,7 @@ public class ResetPasswordCommandHandlerTests
             PublicId = Guid.NewGuid(),
             Name = "person",
             Email = "person@test.local",
-            PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt),
+            PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt, PasswordHashing.Configuration),
             Salt = salt,
             RoleId = (long)Roles.SystemAdmin,
             IsDeleted = isDeleted
@@ -119,8 +119,8 @@ public class ResetPasswordCommandHandlerTests
         Assert.Contains(AuthMessages.PasswordResetSuccessful, output.Messages);
 
         // Then — the new password verifies and the old one no longer does (FR-PR-03)
-        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
-        Assert.False(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
+        Assert.False(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     [UnitFact]
@@ -206,7 +206,7 @@ public class ResetPasswordCommandHandlerTests
         Assert.True(output.Success);
         Assert.Contains(AuthMessages.PasswordResetSuccessful, output.Messages);
         Assert.True(clicked.Used);
-        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
 
         // Then — the reset's own transaction committed, the clean-up's did not, and the failure was logged
         Assert.Equal(2, transactions.Begun);
@@ -261,7 +261,7 @@ public class ResetPasswordCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.TokenExpired, output.Errors);
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     [UnitFact]
@@ -277,7 +277,7 @@ public class ResetPasswordCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, output.Errors);
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     [UnitFact]
@@ -309,7 +309,7 @@ public class ResetPasswordCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.TokenInvalid, output.Errors);
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     [UnitFact]
@@ -348,7 +348,7 @@ public class ResetPasswordCommandHandlerTests
         Assert.Contains(AuthMessages.PasswordTooShort, output.Errors);
         Assert.DoesNotContain(AuthMessages.PasswordResetSuccessful, output.Messages);
         Assert.False(token.Used);
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     /// <summary>
@@ -413,7 +413,7 @@ public class ResetPasswordCommandHandlerTests
         Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
 
         // Then — the record and the token are as they were (NFR-24)
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
         Assert.Equal(updatedAt, fixture.Person.UpdatedAt);
         Assert.False(token.Used);
@@ -450,7 +450,7 @@ public class ResetPasswordCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(NewPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
     }
 
     // FR-AU-11: the reset revokes every token issued before it.
@@ -538,7 +538,7 @@ public class ResetPasswordCommandHandlerTests
 
         // Then — answered as AF-13e, and the record keeps its password and its stamp (NFR-24)
         Assert.Equal([AuthMessages.TokenInvalid], output.Errors);
-        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, fixture.Person.PasswordHash, fixture.Person.Salt, PasswordHashing.Configuration));
         Assert.Equal(stamp, fixture.Person.SecurityStamp);
     }
 

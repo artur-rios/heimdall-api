@@ -334,7 +334,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         await using var context = db.CreateContext();
         var stored = await context.Persons.SingleAsync(x => x.Id == person.Id);
 
-        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
         Assert.Equal(person.SecurityStamp, stored.SecurityStamp);
         Assert.All(await context.PasswordResetTokens.Where(x => x.PersonId == person.Id).ToListAsync(),
             token => Assert.False(token.Used));
@@ -420,7 +420,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         }
 
         // When
-        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
         var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
@@ -428,7 +428,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         Assert.False(written);
         await using var checking = db.CreateContext();
         var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
-        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
     }
 
     [FunctionalFact]
@@ -441,7 +441,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
 
         // When
-        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
         var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
@@ -449,7 +449,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         Assert.True(written);
         await using var checking = db.CreateContext();
         var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
-        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
         Assert.Equal(person.Email, stored.Email);
         Assert.NotEqual(person.SecurityStamp, stored.SecurityStamp);
         Assert.Equal(read.SecurityStamp, stored.SecurityStamp);
@@ -479,8 +479,8 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // Then the reset password still verifies, the old one does not, and the rename landed
         await using var checking = db.CreateContext();
         var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
-        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt));
-        Assert.False(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(NewPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
+        Assert.False(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
         Assert.Equal("Renamed meanwhile", stored.Name);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email, NewPassword)).StatusCode);
     }
@@ -512,7 +512,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         }
 
         // When
-        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
         var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
@@ -520,7 +520,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         Assert.False(written);
         await using var checking = db.CreateContext();
         var stored = await checking.Persons.SingleAsync(x => x.Id == person.Id);
-        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(OldPassword, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
         Assert.Equal(person.SecurityStamp, stored.SecurityStamp);
     }
 }
