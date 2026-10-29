@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -53,7 +54,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     private async Task SeedEmailCodeAsync(long twoFactorAuthId, string code, bool used = false)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt, PasswordHashing.Configuration);
         context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,

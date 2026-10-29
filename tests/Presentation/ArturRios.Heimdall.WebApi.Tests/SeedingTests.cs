@@ -52,7 +52,7 @@ public class SeedingTests(PostgresFixture fixture) : WebApiTest<Program>(Environ
         Assert.NotEmpty(master.Salt);
 
         // The password is stored hashed, not in the clear, and the stored hash verifies.
-        Assert.True(Hash.TextMatches(PostgresFixture.MasterUserPassword, master.PasswordHash, master.Salt));
+        Assert.True(Hash.TextMatches(PostgresFixture.MasterUserPassword, master.PasswordHash, master.Salt, PasswordHashing.Configuration));
     }
 
     [FunctionalFact]

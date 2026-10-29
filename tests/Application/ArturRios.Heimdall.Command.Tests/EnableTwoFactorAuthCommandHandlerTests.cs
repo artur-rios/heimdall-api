@@ -28,7 +28,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
     /// <summary>One Argon2id derivation for the whole class, shared by every person it builds.</summary>
     private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
     {
-        var hash = Hash.EncodeWithRandomSalt(Password, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
 
         return (hash, salt);
     });

@@ -1,6 +1,7 @@
 using ArturRios.Data.PostgreSql;
 using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Registration;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Data.Registration;
 using ArturRios.Heimdall.Data.Seeding;
@@ -142,6 +143,13 @@ public class Startup : WebApiStartup
         AddMetrics();
 
         builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, _diagnostics));
+
+        // The insecure test cost is for the test suite: deployed, in Production or in homologation's
+        // Staging, it would leave every password hash trivial to brute-force, so start-up refuses it
+        // rather than warning.
+        PasswordHashing.EnsureAllowed(
+            Builder.Environment.IsProduction() || Builder.Environment.IsStaging(),
+            PasswordHashing.Configuration);
 
         builder.Services.AddTokenSecurity();
         ConfigureCors();

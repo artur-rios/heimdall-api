@@ -115,7 +115,7 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
             seed.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt),
+                CodeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration),
                 Salt = salt,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(10)
             });

@@ -320,7 +320,7 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
             context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt),
+                CodeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration),
                 Salt = salt,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(10)
             });

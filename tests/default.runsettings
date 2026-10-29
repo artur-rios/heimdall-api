@@ -12,6 +12,14 @@
   projects running concurrently cannot overwrite each other's results.
 -->
 <RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <!-- The cheapest Argon2id cost instead of 600 MB a derivation (PasswordHashing): the suite derives
+           thousands of times, and at the production cost the CI agent killed the test process at its
+           memory limit. Start-up refuses it in Production and Staging. -->
+      <HEIMDALL_INSECURE_TEST_PASSWORD_HASHING>true</HEIMDALL_INSECURE_TEST_PASSWORD_HASHING>
+    </EnvironmentVariables>
+  </RunConfiguration>
   <LoggerRunSettings>
     <Loggers>
       <Logger friendlyName="trx" enabled="True" />

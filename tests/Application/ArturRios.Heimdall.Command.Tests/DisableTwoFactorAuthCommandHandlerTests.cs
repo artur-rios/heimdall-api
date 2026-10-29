@@ -68,7 +68,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
             PublicId = Guid.NewGuid(),
             Name = "person",
             Email = "person@test.local",
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
+            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration),
             Salt = salt,
             RoleId = (long)Roles.User
         };
@@ -104,7 +104,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
     private static async Task<TwoFactorEmailCode> SeedEmailCodeAsync(
         Fixture fixture, long twoFactorAuthId, bool used = false, bool expired = false)
     {
-        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration);
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,

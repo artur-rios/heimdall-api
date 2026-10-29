@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -206,7 +207,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         Assert.Equal(HttpStatusCode.BadRequest, reset.StatusCode);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, reset.Body!.Errors);
         var stored = await ReloadAsync(person);
-        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
     }
 
     [FunctionalFact]

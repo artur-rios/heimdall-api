@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -176,7 +177,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
             context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = Hash.EncodeWithRandomSalt(FirstCode, out var salt),
+                CodeHash = Hash.EncodeWithRandomSalt(FirstCode, out var salt, PasswordHashing.Configuration),
                 Salt = salt,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                 Used = false

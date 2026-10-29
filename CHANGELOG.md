@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `HEIMDALL_INSECURE_TEST_PASSWORD_HASHING=true` derives every password and code with the cheapest Argon2id cost
+  (one lane, one pass, 8 KB) instead of 600 MB and 16 lanes, for the test suite, which sets it in
+  `tests/default.runsettings`. At the production cost the suite's test process grew past the CI agent's memory
+  limit and was killed, and Command.Tests took two and a half minutes; it now takes seconds. Unset, or any value
+  but `true`, keeps the production cost. Startup refuses it in Production and Staging, since it makes every hash
+  trivial to brute-force and no hash stored under it verifies once it is removed.
 - A scope now holds at most `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (default 1000) live pending
   self-registrations, whatever their addresses (FR-SR-15, AF-47m). `POST /auth/register` had only the per-IP limit
   against a caller with many source addresses, and each request stored a row and mailed a link, so the table grew

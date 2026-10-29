@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -65,7 +66,7 @@ public static class Seeds
 
     private static readonly Lazy<(byte[] Hash, byte[] Salt)> SharedCredentials = new(() =>
     {
-        var hash = ArturRios.Util.Hashing.Hash.EncodeWithRandomSalt(Password, out var salt);
+        var hash = ArturRios.Util.Hashing.Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
         return (hash, salt);
     });
 

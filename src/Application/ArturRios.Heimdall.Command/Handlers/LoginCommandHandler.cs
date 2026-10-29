@@ -65,7 +65,7 @@ public class LoginCommandHandler(
     private static (byte[] Hash, byte[] Salt) CreateDecoy()
     {
         var hash = Hash.EncodeWithRandomSalt(
-            CustomRandom.Text(new RandomStringOptions { Length = 32 }), out var salt);
+            CustomRandom.Text(new RandomStringOptions { Length = 32 }), out var salt, PasswordHashing.Configuration);
 
         return (hash, salt);
     }
