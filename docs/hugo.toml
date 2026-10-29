@@ -1,8 +1,9 @@
-baseURL = 'https://artur-rios.github.io/heimdall-api/'
+baseURL = 'https://docs.artur-rios.tech/heimdall-api/'
 title = 'Heimdall API'
-# Docsy ships the theme in a `theme/` subdirectory of its repository (v0.16.0+), so the
-# submodule root is not itself the theme.
-theme = 'docsy/theme'
+# Docsy is installed as the @docsy/theme NPM package (see package.json), pinned by package-lock.json.
+# It used to be a git submodule, which is not part of the checkout the docs image is built from.
+theme = '@docsy/theme'
+themesDir = 'node_modules'
 
 enableRobotsTXT = true
 enableGitInfo = true
@@ -42,8 +43,8 @@ target = 'content'
 source = 'requirements'
 target = 'content/docs/requirements'
 # The ReportGenerator coverage report is served as-is, not as Hugo content — it is a
-# self-contained static site of its own. The directory is generated, not committed: CI unpacks the
-# Tests workflow's artifact here before building, and scripts/coverage.py writes it locally.
+# self-contained static site of its own. The directory is generated, not committed: the deploy copies
+# in the archive of the `test` check (yggdrasil.yml) before building, and scripts/coverage.py writes it locally.
 [[module.mounts]]
 source = 'coverage-report'
 target = 'static/coverage-report'

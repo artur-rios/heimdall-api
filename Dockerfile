@@ -8,7 +8,7 @@
 # pinned (the digests of 10.0 and of these tags matched on mcr.microsoft.com), so a rebuild gets the same
 # toolchain and runtime until someone bumps them on purpose. global.json is not copied in: the SDK
 # the image carries is the one it builds with.
-FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2 AS build
 WORKDIR /source
 
 # Restored first and on their own so the tool and package layers survive a source-only change.
@@ -57,7 +57,7 @@ RUN HEIMDALL_DATA_CONNECTIONSTRING="Host=localhost;Port=5432;Database=heimdall;U
         --force
 
 # Runtime stage.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.13 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca AS final
 WORKDIR /app
 
 # curl is installed for the container health check alone: the runtime image ships neither curl nor

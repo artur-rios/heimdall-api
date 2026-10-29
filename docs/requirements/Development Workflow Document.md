@@ -85,7 +85,7 @@ feature/uc-##-use-case-name
 
 A change that is not a use case — a defect, a dependency, documentation — goes on a
 `fix/<name>` or `feature/<name>` branch in the same way. Those two prefixes are the only ones the
-**Branch Policy** check accepts into `develop` (besides Dependabot's), and it also refuses a branch
+**Branch Policy** check accepts into `develop` (besides Renovate's), and it also refuses a branch
 that was cut from `main` instead of `develop`.
 
 | Use case | Branch |

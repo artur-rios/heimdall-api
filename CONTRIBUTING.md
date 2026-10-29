@@ -1,5 +1,7 @@
 # Contributing
 
+This repository lives at <https://git.techcraftsmen.net/artur-rios/heimdall-api>. The GitHub repository is a read-only mirror of it.
+
 ## Prerequisites
 
 - **.NET 10 SDK**
@@ -25,7 +27,7 @@ docs/                                           Hugo (Docsy) documentation site 
   requirements/                                 Vision, requirements, use cases, tech stack, data protection, testing
   content/en/                                   The site's own pages (overview, architecture, flows…)
   openapi/                                      Generated OpenAPI document, published by the site
-  themes/docsy/                                 The site theme, as a git submodule
+  package.json                                  The site theme (Docsy), installed with npm
 scripts/                                        Tooling (EF Core migrations, coverage, OpenAPI)
   sql/                                          The database roles: setup, switch-over and check (psql)
 tools/ArturRios.Heimdall.OpenApiGen/            Writes docs/openapi/heimdall.json (not in the solution)
@@ -108,14 +110,13 @@ python scripts/coverage.py --clean
 ```
 
 If `REPORTGENERATOR_LICENSE` is set, the script passes it to ReportGenerator and the PRO version generates the
-report; the key is never echoed. CI reads it from the repository secret of the same name. Unset — as on a pull
-request from a fork, where GitHub withholds secrets — generation still succeeds with the free version.
+report; the key is never echoed. CI reads it from the Jenkins credential `reportgenerator-license`. Unset — as on a
+build of a `renovate/*` branch, which binds no credential — generation still succeeds with the free version.
 
-The published report is not committed. The Tests workflow uploads it as an artifact and, once its suites pass on
-`main`, calls the Build Docs workflow, which unpacks that run's report into `docs/coverage-report` before Hugo
-builds, so a change under `src/` moves the published numbers once it reaches `main`. A docs-only push takes the
-report from the latest successful Tests run on `main`. The report itself is the only statement of
-the current numbers; figures quoted in prose go stale.
+The published report is not committed. Jenkins's `test` check writes it to `docs/coverage-report` and archives it,
+and the build that deploys the docs site (a push to `main`) runs that check and builds the site's image
+(`docs.Dockerfile`) with the report, so a change under `src/` moves the published numbers once it reaches
+`main`. The report itself is the only statement of the current numbers; figures quoted in prose go stale.
 
 ## Migrations
 
@@ -143,7 +144,7 @@ column nullable, or `NOT NULL` with a constant default; never `NOT NULL` without
 batches rather than one `UPDATE`, and remember that the public-id triggers on `person`, `google_user`,
 `scope` and the other tables fire for every updated row. Give the migration a `<remarks>` saying which of
 this it relies on. The operator's side of it, and `HEIMDALL_RUN_MIGRATIONS`, is in the
-[operations guide](https://artur-rios.github.io/heimdall-api/docs/operations/#migrating-big-tables).
+[operations guide](https://docs.artur-rios.tech/heimdall-api/docs/operations/#migrating-big-tables).
 
 A migration grants nothing. The API runs as a login that owns nothing (NFR-29), and the default
 privileges `scripts/sql/runtime-grants.sql` sets give it rows on every table the owner creates. A new
@@ -160,7 +161,7 @@ it after changing anything it describes:
 python scripts/openapi.py
 ```
 
-[`check-openapi.yml`](./.github/workflows/check-openapi.yml) fails the build if it is out of date —
+The `check` check ([`ci/check.sh`](./ci/check.sh)) fails the build if it is out of date —
 otherwise a controller change would keep being published with the old document, since the docs site
 publishes the committed file and nothing else regenerates it.
 
@@ -172,11 +173,7 @@ The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.do
 stylesheets with) required:
 
 ```bash
-git submodule update --init --recursive
-```
-
-```bash
-npm run install:theme-deps --prefix docs/themes/docsy
+npm ci --prefix docs
 ```
 
 ```bash
@@ -204,7 +201,7 @@ Names are lowercase: letters, digits, `.`, `_` and `-`. A `release/` branch is a
 `develop` and carries no commits of its own: a fix for a release lands on `develop` through a
 `fix/` branch and a new release branch is cut.
 
-The **Branch Policy** workflow checks all of this on every pull request and is a required check
+The `branch-policy` check checks all of this on every pull request and is a required check
 on `develop` and `main`.
 
 Each use case ships on its own `feature/` branch, issue and pull request into `develop` — see the
@@ -240,14 +237,14 @@ deployment supplies, and the database the deployment keeps between releases.
 
 The version is not stored in the source. It is the name of the release branch: `release/1.4.0` is deployed as the
 image tag `1.4.0-<short commit>`, which is what the yggdrasil console shows, and when it reaches production Jenkins
-tags the merge `v1.4.0` and creates the GitHub release of that name. The Branch Policy workflow refuses a release
+tags the merge `v1.4.0` and creates the GitHub release of that name. The `branch-policy` check refuses a release
 branch whose version already has a tag. The `v1` in the OpenAPI document and its URL (`/swagger/v1/swagger.json`)
 is the document's name, not the release version, and does not change with it.
 
 ## Releasing
 
 Four environments, described in
-[Environments and deployment](https://artur-rios.github.io/heimdall-api/docs/environments-and-deployment/):
+[Environments and deployment](https://docs.artur-rios.tech/heimdall-api/docs/environments-and-deployment/):
 `local` is the developer's own Docker Desktop, deployed by hand; `development`, `homologation` and
 `production` share one VPS and are deployed by Jenkins.
 

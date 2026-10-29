@@ -1,0 +1,14 @@
+{
+  "name": "heimdall-api-docs",
+  "version": "1.0.0",
+  "description": "Documentation site for Heimdall API",
+  "private": true,
+  "license": "SEE LICENSE IN ../LICENSE",
+  "scripts": {
+    "build": "hugo --minify --cleanDestinationDir --gc",
+    "serve": "hugo server"
+  },
+  "devDependencies": {
+    "@docsy/theme": "0.18.0"
+  }
+}
