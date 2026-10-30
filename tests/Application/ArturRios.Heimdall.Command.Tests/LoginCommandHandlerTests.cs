@@ -38,7 +38,7 @@ public class LoginCommandHandlerTests
         PublicId = Guid.NewGuid(),
         Name = $"person-{id}",
         Email = email,
-        PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt),
+        PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt, PasswordHashing.Configuration),
         Salt = salt,
         RoleId = (long)role,
         IsDeleted = isDeleted

@@ -70,9 +70,11 @@ public class RegistrationProcessorTests
 
         public RegistrationProcessor Processor(
             IAsyncRepository<PendingRegistration, long>? pendingWriter = null,
-            ILogger<RegistrationProcessor>? logger = null) =>
+            ILogger<RegistrationProcessor>? logger = null,
+            int maxPendingPerScope = RegistrationOptions.DefaultMaxPendingPerScope) =>
             new(Scopes, Persons, GoogleUsers, Pending, pendingWriter ?? Pending, Links, Attempts,
-                NoticeBudgets, Options, logger ?? NullLogger<RegistrationProcessor>.Instance);
+                NoticeBudgets, Options, new RegistrationOptions { MaxPendingPerScope = maxPendingPerScope },
+                logger ?? NullLogger<RegistrationProcessor>.Instance);
 
         public async Task<PendingRegistration> PendingAsync(Scope scope, string email, DateTime expiresAt)
         {
@@ -379,6 +381,83 @@ public class RegistrationProcessorTests
 
         // When
         await fixture.Processor().ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Single(fixture.Pending.Query().Where(x => x.ScopeId == scope.Id).ToList());
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    // #206: at most HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE live pending registrations in a scope.
+
+    [UnitFact]
+    public async Task GivenAScopeAtItsCap_WhenProcessing_ThenNothingIsStoredOrMailedAndTheCapIsLoggedForTheScope()
+    {
+        // Given two live registrations of other addresses, and a cap of two
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(scope, "first@test.local", DateTime.UtcNow.AddHours(1));
+        await fixture.PendingAsync(scope, "second@test.local", DateTime.UtcNow.AddHours(2));
+        var logger = new RecordingLogger<RegistrationProcessor>();
+
+        // When
+        await fixture.Processor(logger: logger, maxPendingPerScope: 2).ProcessAsync(Request(scope));
+
+        // Then — nothing stored or mailed, and one warning an operator can match on, naming the scope and
+        // never the address (NFR-22)
+        Assert.Equal(2, fixture.Pending.Query().Count());
+        Assert.Empty(fixture.Links.Sent);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains(RegistrationProcessor.CapReachedMarker, entry.Text);
+        Assert.Equal("REGISTRATION_CAP_REACHED", RegistrationProcessor.CapReachedMarker);
+        Assert.Contains(scope.PublicId.ToString(), entry.Text);
+        Assert.DoesNotContain("new@test.local", entry.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [UnitFact]
+    public async Task GivenAScopeOneBelowItsCap_WhenProcessing_ThenTheRegistrationIsStoredAndMailed()
+    {
+        // Given
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(scope, "first@test.local", DateTime.UtcNow.AddHours(1));
+
+        // When
+        await fixture.Processor(maxPendingPerScope: 2).ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Equal(2, fixture.Pending.Query().Count());
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenExpiredRegistrationsBeyondTheCap_WhenProcessing_ThenOnlyLiveOnesCount()
+    {
+        // Given two expired registrations awaiting the purge, and a cap of two
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(scope, "first@test.local", DateTime.UtcNow.AddMinutes(-1));
+        await fixture.PendingAsync(scope, "second@test.local", DateTime.UtcNow.AddMinutes(-2));
+
+        // When
+        await fixture.Processor(maxPendingPerScope: 2).ProcessAsync(Request(scope));
+
+        // Then
+        Assert.Single(fixture.Links.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenAnotherScopeAtItsCap_WhenProcessing_ThenThisScopeStillStores()
+    {
+        // Given — the cap is per scope
+        var fixture = new Fixture();
+        var other = await fixture.ScopeAsync();
+        var scope = await fixture.ScopeAsync();
+        await fixture.PendingAsync(other, "first@test.local", DateTime.UtcNow.AddHours(1));
+        await fixture.PendingAsync(other, "second@test.local", DateTime.UtcNow.AddHours(2));
+
+        // When
+        await fixture.Processor(maxPendingPerScope: 2).ProcessAsync(Request(scope));
 
         // Then
         Assert.Single(fixture.Pending.Query().Where(x => x.ScopeId == scope.Id).ToList());

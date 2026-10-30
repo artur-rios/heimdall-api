@@ -12,13 +12,13 @@ Both cover every operation — the same set the
 subject: authentication, scopes, persons, applications, scope permissions, Google Users, health, audit trail.
 
 For what each endpoint means and who may call it, see the
-[API reference](https://artur-rios.github.io/heimdall-api/docs/api-reference/). To read the schemas,
-see the [API explorer](https://artur-rios.github.io/heimdall-api/docs/api-explorer/), or a running
+[API reference](https://docs.artur-rios.tech/heimdall-api/docs/api-reference/). To read the schemas,
+see the [API explorer](https://docs.artur-rios.tech/heimdall-api/docs/api-explorer/), or a running
 instance's own Swagger UI at `/swagger` — they publish the same document.
 
 ## Before the first request
 
-Run the API locally — see [Getting started](https://artur-rios.github.io/heimdall-api/docs/getting-started/)
+Run the API locally — see [Getting started](https://docs.artur-rios.tech/heimdall-api/docs/getting-started/)
 — and note two values from your `.env.local`:
 
 - `HEIMDALL_MASTER_USER_EMAIL` and `HEIMDALL_MASTER_USER_PASSWORD`. The master user is seeded at

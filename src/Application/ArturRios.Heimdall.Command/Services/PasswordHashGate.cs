@@ -108,14 +108,14 @@ public sealed class PasswordHashGate
 
     /// <summary>Verifies <paramref name="text" /> against a stored hash, under the bound.</summary>
     public Task<bool> TextMatchesAsync(string text, byte[] hash, byte[] salt) =>
-        RunDerivationAsync(() => Hash.TextMatches(text, hash, salt));
+        RunDerivationAsync(() => Hash.TextMatches(text, hash, salt, PasswordHashing.Configuration));
 
     /// <summary>Derives a hash for <paramref name="text" /> under a fresh salt, under the bound.</summary>
     public async Task<(byte[] Hash, byte[] Salt)> EncodeWithRandomSaltAsync(string text)
     {
         byte[] salt = [];
 
-        var hash = await RunDerivationAsync(() => Hash.EncodeWithRandomSalt(text, out salt));
+        var hash = await RunDerivationAsync(() => Hash.EncodeWithRandomSalt(text, out salt, PasswordHashing.Configuration));
 
         return (hash, salt);
     }

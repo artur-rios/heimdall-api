@@ -17,23 +17,11 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
 {
     private static string UniqueName() => $"scope-{Guid.NewGuid():N}";
 
-    private async Task<Scope> SeedScopeAsync(string name, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = name, Description = "Original", IsDeleted = isDeleted };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdminAndValidPayload_WhenPutScope_ThenScopeIsUpdated()
     {
         // Given
-        var scope = await SeedScopeAsync(UniqueName());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
         var newName = UniqueName();
 
@@ -73,7 +61,7 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenLogicallyDeletedScope_WhenPutScope_ThenNotFound()
     {
         // Given
-        var scope = await SeedScopeAsync(UniqueName(), isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original", IsDeleted = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -89,8 +77,8 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenNameOfAnotherScope_WhenPutScope_ThenConflict()
     {
         // Given two scopes; the target tries to take the other's name
-        var target = await SeedScopeAsync(UniqueName());
-        var other = await SeedScopeAsync(UniqueName());
+        var target = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
+        var other = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -111,7 +99,7 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenEmptyName_WhenPutScope_ThenBadRequest()
     {
         // Given
-        var scope = await SeedScopeAsync(UniqueName());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -127,7 +115,7 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenNonSystemAdmin_WhenPutScope_ThenForbidden()
     {
         // Given
-        var scope = await SeedScopeAsync(UniqueName());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -143,7 +131,7 @@ public class ScopeControllerUpdateTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenNoToken_WhenPutScope_ThenUnauthorized()
     {
         // Given a scope but no Authorize call (no bearer token on the gateway)
-        var scope = await SeedScopeAsync(UniqueName());
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), Description = "Original" });
 
         // When
         var response = await Gateway.PutAsync<DataOutput<UpdateScopeCommandOutput?>>(

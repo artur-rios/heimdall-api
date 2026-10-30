@@ -59,9 +59,9 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnOpenInvitation_WhenASecondOneIsInsertedForThePair_ThenTheDatabaseRefusesIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await SeedInvitationAsync(scope, invitee, inviter);
 
         // When
@@ -77,9 +77,9 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnEndedInvitation_WhenANewOneIsInsertedForThePair_ThenTheDatabaseAllowsIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         await SeedInvitationAsync(scope, invitee, inviter, DateTime.UtcNow, ScopeOwnerInvitationOutcomes.Declined);
 
         // When
@@ -93,8 +93,8 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnUnendedInvitation_WhenAnOutcomeIsWritten_ThenTheDatabaseRefusesIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var invitation = await SeedInvitationAsync(scope, invitee, null);
 
         // When
@@ -110,8 +110,8 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnUnknownOutcome_WhenAnEndedInvitationIsInsertedWithIt_ThenTheDatabaseRefusesIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
 
         // When
         var failure = await Record.ExceptionAsync(() =>
@@ -127,8 +127,8 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenNoOutcome_WhenAnInvitationEndedByExpiryIsInserted_ThenTheDatabaseAllowsIt()
     {
         // Given — the shape ScopeOwnerInvitations.OpenAsync leaves when it closes an expired row
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
 
         // When
         var failure = await Record.ExceptionAsync(() =>
@@ -142,8 +142,8 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnOutcome_WhenAnInvitationWithNoEndIsInsertedWithIt_ThenTheDatabaseRefusesIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
 
         // When
         var failure = await Record.ExceptionAsync(() =>
@@ -159,9 +159,9 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenAnOpenInvitation_WhenTheInviterIsHardDeleted_ThenItSurvivesWithoutAnInviter()
     {
         // Given — Review Focus 4: the inviter is removed by UC-10 while the invitation is open
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var invitation = await SeedInvitationAsync(scope, invitee, inviter);
 
         // When
@@ -178,10 +178,10 @@ public class ScopeOwnerInvitationSchemaTests(PostgresFixture db)
     public async Task GivenInvitations_WhenTheirInviteeOrScopeIsHardDeleted_ThenTheyGoWithIt()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
-        var otherScope = await SeedScopeAsync(db);
-        var invitee = await SeedScopeAdminAsync(db);
-        var otherInvitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var otherInvitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         var ofInvitee = await SeedInvitationAsync(scope, invitee, null);
         var ofScope = await SeedInvitationAsync(otherScope, otherInvitee, null);
 

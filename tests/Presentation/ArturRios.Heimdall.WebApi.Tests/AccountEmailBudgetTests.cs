@@ -10,7 +10,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -26,27 +25,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Mail-Budget-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(string prefix, bool emailVerified = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Mail Budget",
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = emailVerified
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<Person> ReloadAsync(Person person)
     {
@@ -85,7 +66,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     {
         // Given ten reservations released together, each on its own connection and its own copy of the
         // row, with the cooldown off so only the count can refuse them
-        var person = await SeedPersonAsync("burst-cap");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "burst-cap", EmailVerified = false });
         var now = DateTime.UtcNow;
         using var start = new ManualResetEventSlim(false);
 
@@ -116,7 +97,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTenSimultaneousResends_WhenPosted_ThenExactlyOneLinkIsSent()
     {
         // Given — a burst that every request of used to pass a read-first cooldown together
-        var person = await SeedPersonAsync("burst-resend");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "burst-resend", EmailVerified = false });
         ActAs(person);
 
         // When
@@ -139,7 +120,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTheDaysAccountEmailsAreSpent_WhenPostResendVerification_ThenTooManyRequestsWithTheDailyLimit()
     {
         // Given five sends in an open window, the last two hours ago — well out of the cooldown
-        var person = await SeedPersonAsync("daily-cap");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "daily-cap", EmailVerified = false });
         await SetBudgetAsync(person, AccountEmailBudget.MaxPerDay, DateTime.UtcNow.AddHours(10), DateTime.UtcNow.AddHours(-2));
         ActAs(person);
 
@@ -155,7 +136,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenAnAddressSwitchedAway_WhenSwitchedBackAtOnce_ThenTooManyRequestsAndTheAddressStays()
     {
         // Given an own change away from the victim's address, which mails the victim a notice
-        var person = await SeedPersonAsync("switch", emailVerified: true);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "switch" });
         var victim = person.Email;
         var elsewhere = UniqueEmail("elsewhere");
         ActAs(person);
@@ -177,7 +158,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTheDaysAccountEmailsAreSpent_WhenChangingOwnEmail_ThenTooManyRequestsWithTheDailyLimit()
     {
         // Given — a day of switching already spent
-        var person = await SeedPersonAsync("switch-cap", emailVerified: true);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "switch-cap" });
         await SetBudgetAsync(person, AccountEmailBudget.MaxPerDay, DateTime.UtcNow.AddHours(10), DateTime.UtcNow.AddHours(-2));
         ActAs(person);
 
@@ -194,7 +175,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTheDaysAccountEmailsAreSpent_WhenPostResendVerification_ThenRetryAfterNamesTheWindowsEnd()
     {
         // Given a window ending in ten hours
-        var person = await SeedPersonAsync("daily-cap-retry");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "daily-cap-retry", EmailVerified = false });
         await SetBudgetAsync(person, AccountEmailBudget.MaxPerDay, DateTime.UtcNow.AddHours(10), DateTime.UtcNow.AddHours(-2));
         ActAs(person);
 
@@ -212,7 +193,7 @@ public class AccountEmailBudgetTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenThePersonVanishedBeforeTheReservation_WhenReserved_ThenItIsRefusedWithoutAnError()
     {
         // Given a copy of a person whose row is then hard deleted (UC-10) before the write
-        var person = await SeedPersonAsync("vanished");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "vanished", EmailVerified = false });
         await using var context = db.CreateContext();
         var copy = await context.Persons.SingleAsync(x => x.Id == person.Id);
 

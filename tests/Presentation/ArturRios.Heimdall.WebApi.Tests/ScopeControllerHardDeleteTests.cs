@@ -16,52 +16,6 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
 {
     private static string UniqueName() => $"scope-{Guid.NewGuid():N}";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = UniqueName(), IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Person",
-            Email = $"person-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedOwnerAsync(Scope scope)
-    {
-        var owner = await SeedPersonAsync(Roles.ScopeAdmin);
-        await using var context = db.CreateContext();
-        context.ScopeOwners.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = owner.Id });
-        await context.SaveChangesAsync();
-        return owner;
-    }
-
-    private async Task<Person> SeedScopeUserAsync(Scope scope)
-    {
-        var user = await SeedPersonAsync(Roles.User);
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = user.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        user.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-        return user;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync(Scope scope)
     {
         await using var context = db.CreateContext();
@@ -97,10 +51,10 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenSystemAdminAndScopeWithMembers_WhenHardDeleteScope_ThenScopeAndMembersAreRemovedButOwnerRemains()
     {
         // Given a scope with an owner, two Users, one Google User, and one application
-        var scope = await SeedScopeAsync();
-        var owner = await SeedOwnerAsync(scope);
-        var user1 = await SeedScopeUserAsync(scope);
-        var user2 = await SeedScopeUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName() });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
+        var user1 = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "person", MemberOf = scope });
+        var user2 = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "person", MemberOf = scope });
         var googleUser = await SeedGoogleUserAsync(scope);
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -157,8 +111,8 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenLogicallyDeletedScope_WhenHardDeleteScope_ThenOkAndScopeRemoved()
     {
         // Given an already logically deleted scope with one application
-        var scope = await SeedScopeAsync(isDeleted: true);
-        var owner = await SeedOwnerAsync(scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName(), IsDeleted = true });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "person" });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -180,7 +134,7 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenNonSystemAdmin_WhenHardDeleteScope_ThenForbidden()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName() });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -195,7 +149,7 @@ public class ScopeControllerHardDeleteTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenNoToken_WhenHardDeleteScope_ThenUnauthorized()
     {
         // Given a scope but no bearer token on the gateway
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = UniqueName() });
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeleteScopeCommandOutput?>>(

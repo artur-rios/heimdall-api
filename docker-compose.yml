@@ -91,6 +91,7 @@ services:
       HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS: ${HEIMDALL_PASSWORD_RESET_TOKEN_EXPIRATION_IN_SECONDS:-}
       HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS: ${HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS:-}
       HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS: ${HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS:-}
+      HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE: ${HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE:-}
 
       # Unset outside Production and both e-mails are logged instead of sent; in Production the API
       # refuses to start without them (AddEmailSenders).
@@ -142,6 +143,7 @@ services:
       HEIMDALL_RETENTION_TOKEN_GRACE_DAYS: ${HEIMDALL_RETENTION_TOKEN_GRACE_DAYS:-}
       HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES: ${HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES:-}
       HEIMDALL_RETENTION_PURGE_BATCH_SIZE: ${HEIMDALL_RETENTION_PURGE_BATCH_SIZE:-}
+      HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK: ${HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK:-}
       HEIMDALL_RETENTION_PURGE_ENABLED: ${HEIMDALL_RETENTION_PURGE_ENABLED:-}
       HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS: ${HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS:-}
       HEIMDALL_RETENTION_DELETION_WINDOW_DAYS: ${HEIMDALL_RETENTION_DELETION_WINDOW_DAYS:-}
@@ -184,6 +186,11 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
 
+    # Liveness, not readiness: each environment runs one instance and Traefik routes only to healthy
+    # containers, so a readiness probe would take the only instance out of routing during a database outage.
+    # The web UI's same-origin /api/* calls could then fall through to heimdall-ui's catch-all (200 HTML), and
+    # the public host would answer Traefik 404s instead of the API's JSON 503. /healthcheck/ready stays for
+    # orchestrators that run more than one instance.
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/healthcheck"]
       interval: 15s

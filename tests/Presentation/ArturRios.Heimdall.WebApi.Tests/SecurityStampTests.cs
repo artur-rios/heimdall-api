@@ -13,7 +13,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -31,7 +30,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Stamp-Pass!";
+    private const string Password = Seeds.Password;
     private const string NewPassword = "N3w-Str0ng-Stamp-Pass!";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
@@ -42,30 +41,6 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     private static string? StampClaimOf(string token) =>
         new JwtSecurityTokenHandler().ReadJwtToken(token).Claims
             .FirstOrDefault(claim => claim.Type == IdentityUserMapper.SecurityStampClaim)?.Value;
-
-    private async Task<Person> SeedPersonAsync(
-        string prefix, Roles role = Roles.SystemAdmin, DateTime? restrictedAt = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Stamp",
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restrictedAt,
-            RestrictionGround = restrictedAt is null ? null : (int)RestrictionGrounds.AccuracyContested
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private async Task<Guid> StoredStampAsync(Person person)
     {
@@ -163,7 +138,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenASignIn_WhenTheTokenIsRead_ThenItCarriesThePersonsCurrentStamp()
     {
         // Given
-        var person = await SeedPersonAsync("stamp-claim");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-claim" });
 
         // When
         var login = await LoginAsync(person.Email);
@@ -178,7 +153,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     {
         // Given a person token minted with the host's real key but without the stamp claim, as every
         // token issued before the stamp existed is
-        var person = await SeedPersonAsync("stamp-missing");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-missing" });
         ActAs(TestTokens.WithAudience(
             new IdentityUser(person.PublicId, (int)Roles.SystemAdmin), TestTokens.Audiences.Person));
 
@@ -193,7 +168,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenWithAnotherStamp_WhenUsed_ThenItIsRefused()
     {
         // Given
-        var person = await SeedPersonAsync("stamp-other");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-other" });
         ActAs(TestTokens.WithAudience(
             new IdentityUser(person.PublicId, (int)Roles.SystemAdmin) { SecurityStamp = Guid.NewGuid() },
             TestTokens.Audiences.Person));
@@ -211,7 +186,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenIssuedBeforeAPasswordReset_WhenUsedAfterIt_ThenItIsRefusedAndAFreshOneWorks()
     {
         // Given a signed-in person, whose token works
-        var person = await SeedPersonAsync("stamp-reset");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-reset" });
         var before = (await LoginAsync(person.Email)).Body!.Data!.Token!;
         ActAs(before);
         Assert.Equal(HttpStatusCode.OK, (await ReadAsync(person)).StatusCode);
@@ -234,9 +209,9 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenIssuedBeforeAnEmailChange_WhenUsedAfterIt_ThenItIsRefusedAndAFreshOneWorks()
     {
         // Given a person holding a token, and an administrator who changes the person's address
-        var person = await SeedPersonAsync("stamp-email", Roles.User);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "stamp-email" });
         var before = TestTokens.For(person.PublicId, (int)Roles.User);
-        var admin = await SeedPersonAsync("stamp-email-admin");
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-email-admin" });
 
         // When
         ActAs(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
@@ -261,7 +236,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenANameOnlyUpdate_WhenTheEarlierTokenIsUsed_ThenItStillWorks()
     {
         // Given — a change that touches no credential
-        var person = await SeedPersonAsync("stamp-name");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-name" });
         var token = TestTokens.For(person.PublicId, (int)Roles.SystemAdmin);
         var stamp = await StoredStampAsync(person);
         ActAs(token);
@@ -280,7 +255,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenIssuedBeforeTwoFactorIsConfirmed_WhenUsedAfterIt_ThenItIsRefusedAndAFreshOneWorks()
     {
         // Given a person who starts App setup with their token
-        var person = await SeedPersonAsync("stamp-2fa-on");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-2fa-on" });
         var before = TestTokens.For(person.PublicId, (int)Roles.SystemAdmin);
         ActAs(before);
 
@@ -309,7 +284,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenIssuedBeforeTwoFactorIsDisabled_WhenUsedAfterIt_ThenItIsRefusedAndAFreshOneWorks()
     {
         // Given
-        var person = await SeedPersonAsync("stamp-2fa-off");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-2fa-off" });
         var twoFactorAuth = await SeedActiveTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth);
         ActAs(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -331,7 +306,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATokenIssuedBeforeRecoveryCodesAreRegenerated_WhenUsedAfterIt_ThenItIsRefused()
     {
         // Given
-        var person = await SeedPersonAsync("stamp-2fa-codes");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-2fa-codes" });
         var twoFactorAuth = await SeedActiveTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth);
         ActAs(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -352,7 +327,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenATwoFactorSignIn_WhenRedeemed_ThenTheChallengeAndTheFullTokenCarryTheStampAndWork()
     {
         // Given a 2FA-gated person who signs in with their password
-        var person = await SeedPersonAsync("stamp-challenge");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-challenge" });
         var recoveryCode = await SeedRecoveryCodeAsync(await SeedActiveTwoFactorAsync(person));
         var stamp = (await StoredStampAsync(person)).ToString();
 
@@ -375,7 +350,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenAChallengeIssuedBeforeAPasswordReset_WhenRedeemedAfterIt_ThenUnauthorized()
     {
         // Given a challenge obtained with the old password, still outstanding
-        var person = await SeedPersonAsync("stamp-challenge-reset");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-challenge-reset" });
         var recoveryCode = await SeedRecoveryCodeAsync(await SeedActiveTwoFactorAsync(person));
         var challengeToken = (await LoginAsync(person.Email)).Body!.Data!.ChallengeToken!;
 
@@ -392,7 +367,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenASubjectRightsToken_WhenUsedBeforeAndAfterTheStampRotates_ThenItWorksAndThenIsRefused()
     {
         // Given a restricted person, signed in for their own rights
-        var person = await SeedPersonAsync("stamp-rights", restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-rights", RestrictedAt = DateTime.UtcNow.AddDays(-1) });
         var login = await LoginAsync(person.Email);
         var rightsToken = login.Body!.Data!.Token!;
         Assert.Equal((await StoredStampAsync(person)).ToString(), StampClaimOf(rightsToken));
@@ -416,7 +391,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenARestrictedPersonHoldingAResetLink_WhenFollowed_ThenRefusedAndTheirSubjectRightsTokenStillWorks()
     {
         // Given — NFR-24 preserves the record exactly, the stamp included
-        var person = await SeedPersonAsync("stamp-rights-reset", restrictedAt: DateTime.UtcNow.AddDays(-1));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-rights-reset", RestrictedAt = DateTime.UtcNow.AddDays(-1) });
         var login = await LoginAsync(person.Email);
         ActAs(login.Body!.Data!.Token!);
 
@@ -434,7 +409,7 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
     public async Task GivenACopyReadBeforeARotation_WhenSavedAsAWholeRow_ThenTheRotatedStampStands()
     {
         // Given one request holding the person as it was, while another rotates the stamp
-        var person = await SeedPersonAsync("stamp-whole-row");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "stamp-whole-row" });
 
         await using var stale = db.CreateContext();
         var staleCopy = await stale.Persons.SingleAsync(x => x.Id == person.Id);

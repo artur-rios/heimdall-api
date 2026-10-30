@@ -1,16 +1,20 @@
+using System.Linq.Expressions;
 using System.Net;
 using ArturRios.Configuration.Enums;
+using ArturRios.Data.Relational.Core.Repositories;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.Query.Handlers;
+using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -26,68 +30,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Login-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role, string email, bool isDeleted = false, string password = Password,
-        bool emailVerified = true)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = emailVerified,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email, bool isDeleted = false)
-    {
-        var person = await SeedPersonAsync(Roles.User, email, isDeleted);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(string email, params Scope[] owned)
-    {
-        var person = await SeedPersonAsync(Roles.ScopeAdmin, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeOwners.AddRange(
-            owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id }));
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private Task<HttpOutput<DataOutput<LoginCommandOutput?>?>> LoginAsync(
         string email, string password = Password, Guid? scopeId = null) =>
@@ -103,9 +48,9 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenUserWithScopeIdAndCorrectPassword_WhenPostLogin_ThenTokenCarriesPersonAndScope()
     {
         // Given a User of a live scope
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        var person = await SeedUserAsync(scope, email);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email, scopeId: scope.PublicId);
@@ -129,10 +74,10 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenScopeAdminWithoutScopeId_WhenPostLogin_ThenTokenCarriesOwnedScopes()
     {
         // Given a ScopeAdmin owning two live scopes
-        var first = await SeedScopeAsync();
-        var second = await SeedScopeAsync();
+        var first = await Seeds.ScopeAsync(db);
+        var second = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("admin");
-        var person = await SeedScopeAdminAsync(email, first, second);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [first, second] });
 
         // When
         var response = await LoginAsync(email);
@@ -170,8 +115,8 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         var login = await LoginAsync(PostgresFixture.MasterUserEmail, PostgresFixture.MasterUserPassword);
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
 
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, UniqueEmail("member"));
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("member"), MemberOf = scope });
         Authorize(login.Body!.Data!.Token!);
 
         // When the token is used on an endpoint that requires authentication
@@ -187,7 +132,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given a stored email in mixed case
         var email = UniqueEmail("MiXeD").ToUpper();
-        await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When authenticating with the lower-case form
         var response = await LoginAsync(email.ToLower());
@@ -212,10 +157,10 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenUserAndWrongScopeId_WhenPostLogin_ThenUnauthorized()
     {
         // Given — AF-11a: the User exists, but in another scope
-        var theirScope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var theirScope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        await SeedUserAsync(theirScope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = theirScope });
 
         // When
         var response = await LoginAsync(email, scopeId: otherScope.PublicId);
@@ -228,9 +173,9 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenUserEmailWithoutScopeId_WhenPostLogin_ThenUnauthorized()
     {
         // Given — AF-11a: without a scope id the admin lookup runs, which must not reach a User
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("user");
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email);
@@ -244,7 +189,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given — AF-11b
         var email = UniqueEmail("admin");
-        await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var response = await LoginAsync(email, password: "Wr0ng-Pass!");
@@ -259,7 +204,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given — AF-11c (FR-AU-05): correct credentials, deleted account
         var email = UniqueEmail("deleted");
-        await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, IsDeleted = true });
 
         // When
         var response = await LoginAsync(email);
@@ -272,9 +217,9 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenUserWhoseScopeIsDeleted_WhenPostLogin_ThenUnauthorized()
     {
         // Given — AF-11d (FR-AU-06)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var email = UniqueEmail("user");
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email, scopeId: scope.PublicId);
@@ -287,10 +232,10 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenScopeAdminWhoseScopesAreAllDeleted_WhenPostLogin_ThenUnauthorized()
     {
         // Given — AF-11e (FR-AU-07)
-        var first = await SeedScopeAsync(isDeleted: true);
-        var second = await SeedScopeAsync(isDeleted: true);
+        var first = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
+        var second = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var email = UniqueEmail("admin");
-        await SeedScopeAdminAsync(email, first, second);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [first, second] });
 
         // When
         var response = await LoginAsync(email);
@@ -303,10 +248,10 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenScopeAdminWithOneLiveScope_WhenPostLogin_ThenOnlyLiveScopeIsClaimed()
     {
         // Given — the AF-11e boundary: one owned scope deleted, one live
-        var live = await SeedScopeAsync();
-        var deleted = await SeedScopeAsync(isDeleted: true);
+        var live = await Seeds.ScopeAsync(db);
+        var deleted = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var email = UniqueEmail("admin");
-        await SeedScopeAdminAsync(email, deleted, live);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email, Owns = [deleted, live] });
 
         // When
         var response = await LoginAsync(email);
@@ -348,8 +293,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenUnverifiedPerson_WhenPostAuthLogin_ThenResponseReportsEmailVerifiedFalse()
     {
         // Given an admin who never confirmed their address (FR-EV-05)
-        var person = await SeedPersonAsync(
-            Roles.SystemAdmin, UniqueEmail("unverified"), emailVerified: false);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("unverified"), EmailVerified = false });
 
         // When
         var response = await LoginAsync(person.Email);
@@ -363,7 +307,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenVerifiedPerson_WhenPostAuthLogin_ThenResponseReportsEmailVerifiedTrue()
     {
         // Given an admin who confirmed their address
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("verified"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("verified") });
 
         // When
         var response = await LoginAsync(person.Email);
@@ -385,7 +329,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // configures the one the API uses. Functional tests share a collection and so run one at a
         // time; the original bound is restored either way.
         var email = UniqueEmail("saturated");
-        await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         var release = new TaskCompletionSource();
         var holding = new TaskCompletionSource();
@@ -425,13 +369,93 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
     }
 
+    private static readonly Expression<Func<AuditLog, bool>> IsShedLogin = x =>
+        x.Action == nameof(LoginCommand) && x.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable;
+
+    [FunctionalFact]
+    public async Task GivenTheHashGateShedsLogins_WhenDetectingSecuritySignals_ThenSheddingIsRaisedFromTheTrail()
+    {
+        // #201, end to end and without hand-seeding: each shed login must leave an audit entry with the
+        // canonical reason, and the TH-03 signal counts exactly those. Before, the exception passed
+        // through the audit decorator, nothing was written, and the signal could never fire.
+        var email = UniqueEmail("shed-signal");
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
+
+        // A shed leaves no account on its audit row (the login is refused before anyone is resolved),
+        // so the rows cannot be scoped to this test's account, and a time window also catches the
+        // shed rows a neighbouring test wrote a moment earlier. The collection runs one test at a
+        // time, so the rows already there are the baseline and this test's own are what is added.
+        await using var baselineContext = db.CreateContext();
+        var shedBefore = await baselineContext.AuditLogs.AsNoTracking().CountAsync(IsShedLogin);
+
+        var release = new TaskCompletionSource();
+        var holding = new TaskCompletionSource();
+
+        var original = PasswordHashGate.Shared;
+        var saturated = new PasswordHashGate(1, TimeSpan.FromMilliseconds(100));
+
+        PasswordHashGate.Shared = saturated;
+
+        var holder = saturated.RunAsync(async () =>
+        {
+            holding.SetResult();
+
+            await release.Task;
+        });
+
+        const int sheds = 3;
+
+        try
+        {
+            await holding.Task;
+
+            for (var i = 0; i < sheds; i++)
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, (await LoginAsync(email)).StatusCode);
+            }
+        }
+        finally
+        {
+            release.SetResult();
+            await holder;
+
+            PasswordHashGate.Shared = original;
+        }
+
+        await using var context = db.CreateContext();
+
+        var shedEntries = await context.AuditLogs.AsNoTracking()
+            .Where(IsShedLogin)
+            .OrderByDescending(x => x.Id)
+            .ToListAsync();
+
+        Assert.Equal(shedBefore + sheds, shedEntries.Count);
+        Assert.All(shedEntries.Take(sheds), entry => Assert.False(entry.Succeeded));
+
+        // When the detector reads the trail the API itself wrote, with the threshold at what was shed
+        var handler = new DetectSecuritySignalsQueryHandler(
+            new EfRepository<AuditLog, long>(context),
+            new EfRepository<Person, long>(context),
+            new DataRetentionOptions
+            {
+                MonitoringWindow = TimeSpan.FromMinutes(5), RefusalThreshold = sheds
+            });
+
+        var signals = await handler.HandleAsync(new DetectSecuritySignalsQuery());
+
+        // Then
+        Assert.Contains(
+            signals.Data!.Signals,
+            signal => signal.Kind == DetectSecuritySignalsQueryHandler.CredentialVerificationShedding);
+    }
+
     [FunctionalFact]
     public async Task GivenTheHashGateShedsTheTenthAttempt_WhenPostLogin_ThenTheAccountIsLockedAndUnlocksByItself()
     {
         // Given nine failures, seeded rather than sent: the nine that matter here are the count, not
         // nine hashes
         var email = UniqueEmail("shed-tenth");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         await using (var seed = db.CreateContext())
         {
@@ -499,7 +523,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     {
         // Given a row left at the limit with no lockout date, as an older instance or a lowered limit can
         var email = UniqueEmail("stuck");
-        var person = await SeedPersonAsync(Roles.SystemAdmin, email);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         await using (var seed = db.CreateContext())
         {
@@ -534,9 +558,12 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // anonymisation and the admin who took the address over can both be stored. The lookup must
         // resolve the live one; resolving the deleted one refused the new holder until the old row
         // was anonymised, months later.
+        // Both rows share the seed's default password, so the password cannot tell them apart: the test
+        // still discriminates because resolving the deleted row answers 401 (a deleted person cannot
+        // sign in), not 200.
         var email = UniqueEmail("reused-admin");
-        await SeedPersonAsync(Roles.SystemAdmin, email, isDeleted: true, password: "0ld-Deleted-Pass!");
-        var current = await SeedPersonAsync(Roles.SystemAdmin, email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email, IsDeleted = true });
+        var current = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When
         var response = await LoginAsync(email);
@@ -554,10 +581,10 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenAnAddressFreedByADeletedUser_WhenItsNewHolderLogsIn_ThenTheyAreAuthenticated()
     {
         // The per-scope half of the same rule.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = UniqueEmail("reused-user");
-        await SeedUserAsync(scope, email, isDeleted: true);
-        await SeedUserAsync(scope, email);
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, IsDeleted = true, MemberOf = scope });
+        await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
 
         // When
         var response = await LoginAsync(email, scopeId: scope.PublicId);

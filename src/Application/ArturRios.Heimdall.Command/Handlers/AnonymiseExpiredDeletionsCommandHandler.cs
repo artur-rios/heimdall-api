@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.Entities;
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Input;
@@ -67,7 +66,6 @@ namespace ArturRios.Heimdall.Command.Handlers;
 public class AnonymiseExpiredDeletionsCommandHandler(
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IAsyncRepository<PasswordResetToken, long> passwordResetTokenWriter,
     IAsyncRepository<EmailVerificationToken, long> emailVerificationTokenWriter,
     IAsyncRepository<TwoFactorAuth, long> twoFactorAuthWriter,
@@ -76,7 +74,9 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     IScopeOwnerInvitations invitations,
     IAsyncReadOnlyRepository<ScopeOwnerInvitation, long> invitationReader,
     IAuditLogWriter auditLog,
-    ILogger<AnonymiseExpiredDeletionsCommandHandler> logger)
+    ILogger<AnonymiseExpiredDeletionsCommandHandler> logger,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<AnonymiseExpiredDeletionsCommand, AnonymiseExpiredDeletionsCommandOutput>
 {
     /// <summary>
@@ -86,14 +86,6 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     /// </summary>
     private const int SubjectRequested = (int)DeletionKinds.SubjectRequested;
 
-    /// <remarks>
-    ///     The two queries below are near-identical and are still written out twice. A generic
-    ///     helper over an interface both entities implement would read better and would not
-    ///     translate: EF Core maps the properties of the entity types, and an expression tree
-    ///     referencing an interface's members gives it member accesses it cannot resolve to columns.
-    ///     The failure mode is a silent client-side evaluation of the whole table, or an exception —
-    ///     neither worth the six lines saved.
-    /// </remarks>
     public async Task<DataOutput<AnonymiseExpiredDeletionsCommandOutput?>> HandleAsync(
         AnonymiseExpiredDeletionsCommand command, CancellationToken cancellationToken = default)
     {
@@ -114,13 +106,199 @@ public class AnonymiseExpiredDeletionsCommandHandler(
         // transferred, a co-owner added (UC-21). Re-checked here rather than requiring an
         // administrator to resubmit anything: the subject asked once, and the deadline has been
         // running the whole time.
-        await RetryBlockedRequestsAsync(now);
+        //
+        // Best-effort (#210): a request the retry cannot save is reported with the run's errors and
+        // does not stop the due identities below, whose statutory deadlines are running regardless.
+        var retryErrors = await RetryBlockedRequestsAsync(now);
 
         // Before selecting anyone new: a person anonymised by an earlier run that failed before their
         // invitations were forgotten is never selected again, and would otherwise stay named for good.
         var caughtUp = await ForgetAnonymisedStillNamedAsync(now);
 
-        var persons = await personReader.Query()
+        var result = new AnonymiseExpiredDeletionsCommandOutput { ScopeOwnerInvitationsVoided = caughtUp.Count };
+        var anonymisedIds = new List<Guid>();
+        var errors = new List<string>();
+
+        // A batch at a time, repeated while a batch comes back full (#206): one batch a run left a large
+        // scope's deleted members waiting days past their deadline.
+        var personsFull = false;
+        var googleUsersFull = false;
+        var interrupted = false;
+
+        // Thrown part-way, the run still reports what it did: the identities anonymised before the
+        // failure are erased, and the ledger has to name them (NFR-25), from every batch of the run.
+        try
+        {
+            for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
+            {
+                var persons = await DuePersons(now, erasureCutoff, administrativeCutoff)
+                    .OrderBy(person => person.DeletedAt)
+                    .Take(retention.PurgeBatchSize)
+                    .ToListAsync();
+
+                if (persons.Count == 0)
+                {
+                    personsFull = false;
+                    break;
+                }
+
+                var (removed, dependentErrors) = await RemovePersonDependentsAsync(persons);
+
+                result.DependentsRemoved += removed;
+
+                // A failed dependent removal stops the run before the record is overwritten. Anonymising
+                // anyway would leave the person's two-factor secret behind with nothing left to connect it
+                // to a name — material kept past its purpose, and unreachable by the next run, which selects
+                // on records not yet anonymised.
+                errors.AddRange(dependentErrors);
+
+                if (errors.Count > 0)
+                {
+                    personsFull = false;
+                    break;
+                }
+
+                // One targeted write per person (#237): the identifying values, the password, the factor and
+                // account-email budgets together, and only while the record is still deleted, unanonymised
+                // and unrestricted. A record restricted since it was selected is preserved as it stands
+                // (NFR-24), and is not counted.
+                var anonymisedPersons = new List<Person>();
+
+                foreach (var person in persons)
+                {
+                    if (await IdentityAnonymiser.AnonymiseAsync(atomicWrites, person, now))
+                    {
+                        // Counted and named as soon as it is written, so a failure on the next one cannot
+                        // drop it from the ledger.
+                        anonymisedPersons.Add(person);
+                        result.PersonsAnonymised++;
+                        anonymisedIds.Add(person.PublicId);
+                    }
+                }
+
+                // An erased person cannot answer an invitation, and keeping one open would keep naming them
+                // (FR-SC-17): their unended invitations are voided, and they are cleared as the inviter of any
+                // other. Only for the persons actually anonymised — one restricted since the selection is not
+                // erased (NFR-24), so what names them stays as it stands.
+                var voided = await ErasedPersonInvitations.ForgetAsync(
+                    invitations, auditLog, logger, anonymisedPersons.Select(person => person.Id).ToList(), now);
+
+                result.ScopeOwnerInvitationsVoided += voided.Count;
+
+                personsFull = persons.Count == retention.PurgeBatchSize;
+
+                // A full batch in which nobody could be anonymised made no progress — every one of them
+                // changed since it was selected — so it is not repeated: the next run starts afresh.
+                if (!personsFull || anonymisedPersons.Count == 0)
+                {
+                    break;
+                }
+            }
+
+            // After a failed dependent removal nothing else is attempted this run, as before the drain.
+            for (var batch = 0; errors.Count == 0 && batch < retention.MaxBatchesPerTick; batch++)
+            {
+                var googleUsers = await DueGoogleUsers(now, erasureCutoff, administrativeCutoff)
+                    .OrderBy(googleUser => googleUser.DeletedAt)
+                    .Take(retention.PurgeBatchSize)
+                    .ToListAsync();
+
+                if (googleUsers.Count == 0)
+                {
+                    googleUsersFull = false;
+                    break;
+                }
+
+                // One targeted write per Google User (#205), as for a person: only while the record is still
+                // deleted, unanonymised and unrestricted. One restricted since it was selected is preserved
+                // as it stands (NFR-24), and is not counted.
+                var anonymisedGoogleUsers = 0;
+
+                foreach (var googleUser in googleUsers)
+                {
+                    if (await IdentityAnonymiser.AnonymiseAsync(atomicWrites, googleUser, now))
+                    {
+                        // Counted and named as soon as it is written, so a failure on the next one cannot
+                        // drop it from the ledger.
+                        anonymisedGoogleUsers++;
+                        result.GoogleUsersAnonymised++;
+                        anonymisedIds.Add(googleUser.PublicId);
+                    }
+                }
+
+                googleUsersFull = googleUsers.Count == retention.PurgeBatchSize;
+
+                // As for persons: a full batch in which nobody could be anonymised made no progress.
+                if (!googleUsersFull || anonymisedGoogleUsers == 0)
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            interrupted = true;
+            logger.LogError(
+                exception, "Anonymising the identities due failed part-way; those already anonymised are named");
+            errors.Add(RetentionMessages.AnonymisationInterrupted);
+        }
+
+        // Outside the catch above: the erasures are done by now, so a count that fails leaves the run as it was
+        // and only the backlog unknown. After an interrupted run nothing says where the batches stopped.
+        result.Backlog = interrupted
+            ? null
+            : await CountBacklogAsync(personsFull, googleUsersFull, now, erasureCutoff, administrativeCutoff);
+
+        // The errors ride along with the data rather than replacing it: the identities anonymised before
+        // the failure, in this batch or an earlier one, are erased, and the caller has to be able to name
+        // them (the erasure ledger, NFR-25) or a restore could not re-apply their erasures.
+        result.AnonymisedIds = anonymisedIds;
+
+        var success = output
+            .WithData(result)
+            .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
+
+        return errors.Count > 0
+            ? success.WithErrors(errors.Concat(retryErrors).ToList())
+            : WithRetryErrors(success, retryErrors);
+    }
+
+    /// <summary>
+    ///     The identities still due once the run stopped, counted only where it stopped on a full batch — one
+    ///     that was not full took all that was due — or <c>null</c> when the count itself failed.
+    /// </summary>
+    private async Task<int?> CountBacklogAsync(
+        bool personsFull, bool googleUsersFull, DateTime now, DateTime erasureCutoff, DateTime administrativeCutoff)
+    {
+        try
+        {
+            return (personsFull ? await DuePersons(now, erasureCutoff, administrativeCutoff).CountAsync() : 0)
+                   + (googleUsersFull
+                       ? await DueGoogleUsers(now, erasureCutoff, administrativeCutoff).CountAsync()
+                       : 0);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Counting the identities still due failed; this run's backlog is unknown");
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     The logically deleted persons whose retention window has run out and who are neither
+    ///     anonymised nor restricted.
+    /// </summary>
+    /// <remarks>
+    ///     This and <see cref="DueGoogleUsers" /> are near-identical and are still written out twice. A
+    ///     generic helper over an interface both entities implement would read better and would not
+    ///     translate: EF Core maps the properties of the entity types, and an expression tree
+    ///     referencing an interface's members gives it member accesses it cannot resolve to columns.
+    ///     The failure mode is a silent client-side evaluation of the whole table, or an exception —
+    ///     neither worth the six lines saved.
+    /// </remarks>
+    private IQueryable<Person> DuePersons(DateTime now, DateTime erasureCutoff, DateTime administrativeCutoff) =>
+        personReader.Query()
             // A restricted record is preserved exactly as it stands rather than entering the window
             // (NFR-24): restriction and deletion are independent, so a record can be both — deleted
             // by an administrator while under dispute, or restricted by a subject already pending
@@ -133,12 +311,12 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                                      && person.DeletedAt != null
                                      && (person.DeletionKind == SubjectRequested
                                          ? person.DeletedAt <= erasureCutoff
-                                         : person.DeletedAt <= administrativeCutoff))))
-            .OrderBy(person => person.DeletedAt)
-            .Take(retention.PurgeBatchSize)
-            .ToListAsync();
+                                         : person.DeletedAt <= administrativeCutoff))));
 
-        var googleUsers = await googleUserReader.Query()
+    /// <summary>The Google User counterpart of <see cref="DuePersons" />.</summary>
+    private IQueryable<GoogleUser> DueGoogleUsers(
+        DateTime now, DateTime erasureCutoff, DateTime administrativeCutoff) =>
+        googleUserReader.Query()
             .Where(googleUser => googleUser.IsDeleted
                                  && googleUser.AnonymisedAt == null
                                  && googleUser.ProcessingRestrictedAt == null
@@ -147,73 +325,11 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                                          && googleUser.DeletedAt != null
                                          && (googleUser.DeletionKind == SubjectRequested
                                              ? googleUser.DeletedAt <= erasureCutoff
-                                             : googleUser.DeletedAt <= administrativeCutoff))))
-            .OrderBy(googleUser => googleUser.DeletedAt)
-            .Take(retention.PurgeBatchSize)
-            .ToListAsync();
+                                             : googleUser.DeletedAt <= administrativeCutoff))));
 
-        if (persons.Count == 0 && googleUsers.Count == 0)
-        {
-            return Success(output, 0, 0, 0, invitationsVoided: caughtUp.Count);
-        }
-
-        var errors = new List<string>();
-        var dependentsRemoved = 0;
-
-        if (persons.Count > 0)
-        {
-            var (removed, dependentErrors) = await RemovePersonDependentsAsync(persons);
-
-            dependentsRemoved += removed;
-            errors.AddRange(dependentErrors);
-        }
-
-        // A failed dependent removal stops the run before the record is overwritten. Anonymising
-        // anyway would leave the person's two-factor secret behind with nothing left to connect it
-        // to a name — material kept past its purpose, and unreachable by the next run, which selects
-        // on records not yet anonymised.
-        if (errors.Count > 0)
-        {
-            return output.WithErrors(errors);
-        }
-
-        // One targeted write per person (#237): the identifying values, the password, the factor and
-        // account-email budgets together, and only while the record is still deleted, unanonymised
-        // and unrestricted. A record restricted since it was selected is preserved as it stands
-        // (NFR-24), and is not counted.
-        var anonymisedPersons = new List<Person>();
-
-        foreach (var person in persons)
-        {
-            if (await IdentityAnonymiser.AnonymiseAsync(atomicWrites, person, now))
-            {
-                anonymisedPersons.Add(person);
-            }
-        }
-
-        // An erased person cannot answer an invitation, and keeping one open would keep naming them
-        // (FR-SC-17): their unended invitations are voided, and they are cleared as the inviter of any
-        // other. Only for the persons actually anonymised — one restricted since the selection is not
-        // erased (NFR-24), so what names them stays as it stands.
-        var voided = await ErasedPersonInvitations.ForgetAsync(
-            invitations, auditLog, logger, anonymisedPersons.Select(person => person.Id).ToList(), now);
-
-        foreach (var googleUser in googleUsers)
-        {
-            IdentityAnonymiser.Anonymise(googleUser, now);
-        }
-
-        errors.AddRange(await SaveAsync(googleUsers, googleUserWriter));
-
-        return errors.Count > 0
-            ? output.WithErrors(errors)
-            : Success(
-                output, anonymisedPersons.Count, googleUsers.Count, dependentsRemoved,
-                anonymisedPersons.Select(person => person.PublicId)
-                    .Concat(googleUsers.Select(googleUser => googleUser.PublicId))
-                    .ToList(),
-                caughtUp.Count + voided.Count);
-    }
+    private static DataOutput<AnonymiseExpiredDeletionsCommandOutput?> WithRetryErrors(
+        DataOutput<AnonymiseExpiredDeletionsCommandOutput?> output, IReadOnlyCollection<string> retryErrors) =>
+        retryErrors.Count == 0 ? output : output.WithErrors(retryErrors.ToList());
 
     /// <summary>
     ///     Suspends the persons whose erasure request was blocked when it was made and is no longer
@@ -226,29 +342,116 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     ///     get another month, which is exactly the breach the deadline exists to prevent. Dating it
     ///     from the request means a long-blocked record is due immediately, which is correct: it is
     ///     already late.
+    ///     <para>
+    ///         <b>Best-effort and bounded (#210).</b> A failure on one request is logged and counted, and
+    ///         the next is still tried; the caller carries the errors on without stopping. Requests are
+    ///         loaded <see cref="DataRetentionOptions.PurgeBatchSize" /> at a time, oldest first, so a
+    ///         backlog cannot turn one run into one unbounded read.
+    ///     </para>
+    ///     <para>
+    ///         <b>Past the ones still blocked (#206).</b> A request still blocked, or one whose retry fails,
+    ///         stays in the selection, so taking the oldest batch again would take the same requests again:
+    ///         a batch of them would keep every newer request from ever being retried. Each further batch
+    ///         therefore starts after the last request of the one before, by request date and then id, and
+    ///         batches are taken while they come back full, up to
+    ///         <see cref="DataRetentionOptions.MaxBatchesPerTick" />. No request is tried twice in a run.
+    ///     </para>
+    ///     <para>
+    ///         <b>Both blocks (#203).</b> A request blocked because its subject was a scope's last owner
+    ///         (NFR-12) or the last active System Admin (NFR-32) is released once neither holds — whichever
+    ///         reason was recorded, both are asked again.
+    ///     </para>
+    ///     <para>
+    ///         <b>Each under the locks of the person's scopes (#202).</b> The guards and the suspension run in
+    ///         a transaction of their own per request, holding the rows of the scopes the person owns and the
+    ///         System Admin set (<see cref="IInvariantLocks" />, <see cref="LockedPerson" />), as every writer
+    ///         that can take an owner or a System Admin out does, so one removed or deleted at the same moment
+    ///         is seen.
+    ///         A request still blocked commits that transaction too: nothing was written, and committing
+    ///         keeps the run's other tracked requests tracked, which a rollback would clear.
+    ///     </para>
     /// </remarks>
-    private async Task RetryBlockedRequestsAsync(DateTime now)
+    /// <returns>The errors to report: empty when every attempted retry went through.</returns>
+    private async Task<IReadOnlyCollection<string>> RetryBlockedRequestsAsync(DateTime now)
     {
-        var blocked = await personReader.Query()
-            .Include(person => person.ScopeOwnerships)
-            .Where(person => !person.IsDeleted
-                             && person.ErasureRequestedAt != null
-                             && person.ErasureBlockedReason != null
-                             // NFR-24, as above: a restricted record is not moved toward erasure.
-                             && person.ProcessingRestrictedAt == null)
-            .ToListAsync();
+        var failures = 0;
 
-        foreach (var person in blocked)
+        try
         {
-            if (await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader))
-            {
-                continue;
-            }
+            DateTime? afterRequestedAt = null;
+            var afterId = 0L;
 
-            // A targeted write (#237), made only while the request is still blocked and the record
-            // live and unrestricted, so a restriction or deletion that landed since stands.
-            await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+            for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
+            {
+                var candidates = personReader.Query()
+                    .Where(person => !person.IsDeleted
+                                     && person.ErasureRequestedAt != null
+                                     && person.ErasureBlockedReason != null
+                                     // NFR-24, as above: a restricted record is not moved toward erasure.
+                                     && person.ProcessingRestrictedAt == null);
+
+                if (afterRequestedAt is { } at)
+                {
+                    candidates = candidates.Where(person =>
+                        person.ErasureRequestedAt > at || (person.ErasureRequestedAt == at && person.Id > afterId));
+                }
+
+                var blocked = await candidates
+                    .OrderBy(person => person.ErasureRequestedAt)
+                    .ThenBy(person => person.Id)
+                    .Take(retention.PurgeBatchSize)
+                    .ToListAsync();
+
+                foreach (var person in blocked)
+                {
+                    try
+                    {
+                        await using var transaction = await transactions.BeginAsync();
+
+                        // The person as they stand under the locks (#202, #203): the guards decide on this.
+                        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
+
+                        // Released once neither NFR-12 nor NFR-32 blocks it, whichever blocked it first (#203).
+                        // A targeted write (#237), made only while the request is still blocked and the record
+                        // live and unrestricted, so a restriction or deletion that landed since stands.
+                        var stillBlocked = locked is null ||
+                            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(
+                                person.Id, locked.OwnedScopeIds, personReader) ||
+                            (locked.IsLiveSystemAdmin &&
+                             await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader));
+
+                        if (!stillBlocked)
+                        {
+                            await atomicWrites.TrySuspendBlockedErasureAsync(person, now);
+                        }
+
+                        await transaction.CommitAsync();
+                    }
+                    catch (Exception exception)
+                    {
+                        failures++;
+                        logger.LogError(
+                            exception, "Retrying the blocked erasure request of person {PersonId} failed",
+                            person.PublicId);
+                    }
+                }
+
+                if (blocked.Count < retention.PurgeBatchSize)
+                {
+                    break;
+                }
+
+                afterRequestedAt = blocked[^1].ErasureRequestedAt;
+                afterId = blocked[^1].Id;
+            }
         }
+        catch (Exception exception)
+        {
+            failures++;
+            logger.LogError(exception, "Loading the blocked erasure requests to retry failed");
+        }
+
+        return failures == 0 ? [] : [RetentionMessages.BlockedErasureRetryFailed];
     }
 
     /// <summary>
@@ -290,35 +493,4 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             passwordResetTokenWriter,
             emailVerificationTokenWriter,
             twoFactorAuthWriter);
-
-    private static async Task<IEnumerable<string>> SaveAsync<T>(
-        IReadOnlyCollection<T> records, IAsyncRepository<T, long> writer) where T : Entity<long>
-    {
-        if (records.Count == 0)
-        {
-            return [];
-        }
-
-        var update = await writer.UpdateRangeAsync(records);
-
-        return update.Success ? [] : update.Errors;
-    }
-
-    private static DataOutput<AnonymiseExpiredDeletionsCommandOutput?> Success(
-        DataOutput<AnonymiseExpiredDeletionsCommandOutput?> output,
-        int persons,
-        int googleUsers,
-        int dependents,
-        IEnumerable<Guid>? anonymisedIds = null,
-        int invitationsVoided = 0) =>
-        output
-            .WithData(new AnonymiseExpiredDeletionsCommandOutput
-            {
-                PersonsAnonymised = persons,
-                GoogleUsersAnonymised = googleUsers,
-                DependentsRemoved = dependents,
-                AnonymisedIds = anonymisedIds ?? [],
-                ScopeOwnerInvitationsVoided = invitationsVoided
-            })
-            .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
 }

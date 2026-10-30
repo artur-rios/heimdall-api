@@ -21,61 +21,6 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
 {
     private static string Route(Guid scopeId) => $"/api/scopes/{scopeId}/permissions?pageNumber=1&pageSize=10";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<ScopePermission> SeedScopePermissionAsync(Scope scope, string name, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -97,8 +42,8 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenSystemAdmin_WhenGetScopePermissions_ThenOkWithEveryPermissionInTheScope()
     {
         // Given a scope with two permissions, plus one in another scope
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var alpha = await SeedScopePermissionAsync(scope, "Alpha");
         var beta = await SeedScopePermissionAsync(scope, "Beta");
         await SeedScopePermissionAsync(otherScope, "Gamma");
@@ -118,8 +63,8 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     {
         // Given a ScopeAdmin who owns the scope: a scope permission has no owner of its own, so owning
         // the scope is the whole of the rule — they see every permission in it
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var alpha = await SeedScopePermissionAsync(scope, "Alpha");
         var beta = await SeedScopePermissionAsync(scope, "Beta");
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
@@ -137,9 +82,9 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenScopeAdminNotOwner_WhenGetScopePermissions_ThenForbidden()
     {
         // Given a Scope Admin with no standing in the scope (AF-32e)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedScopePermissionAsync(scope, "Alpha");
-        var stranger = await SeedScopeAdminAsync();
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -153,8 +98,8 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenUserRole_WhenGetScopePermissions_ThenForbidden()
     {
         // Given a caller holding the User role (AF-32e, at the framework layer)
-        var scope = await SeedScopeAsync();
-        var caller = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -181,7 +126,7 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenLogicallyDeletedScope_WhenGetScopePermissions_ThenNotFound()
     {
         // Given a logically deleted scope (AF-31a, reused by the listing)
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -195,7 +140,7 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenDeletedScopePermission_WhenGetScopePermissions_ThenItIsExcludedUnlessRequested()
     {
         // Given one active and one logically deleted permission (FR-SP-09)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var active = await SeedScopePermissionAsync(scope, "Alpha");
         await SeedScopePermissionAsync(scope, "Beta", isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -215,7 +160,7 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenNameFilter_WhenGetScopePermissions_ThenOnlyMatchingPermissionsAreReturned()
     {
         // Given two permissions with distinct names, filtered case-insensitively
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var billing = await SeedScopePermissionAsync(scope, "documents.read");
         await SeedScopePermissionAsync(scope, "documents.write");
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -234,7 +179,7 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenPageSize_WhenGetScopePermissions_ThenResultsArePaged()
     {
         // Given three permissions and a page size of two, ordered by name
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         await SeedScopePermissionAsync(scope, "Charlie");
         var alpha = await SeedScopePermissionAsync(scope, "Alpha");
         var bravo = await SeedScopePermissionAsync(scope, "Bravo");
@@ -254,8 +199,8 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     {
         // Given a Scope Admin claiming SystemAdmin in the query string: the query binds [FromQuery],
         // but ApplyActor runs after model binding and overwrites both acting fields from the token
-        var scope = await SeedScopeAsync();
-        var stranger = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var stranger = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin" });
         await SeedScopePermissionAsync(scope, "Alpha");
         Authorize(TestTokens.For(stranger.PublicId, (int)Roles.ScopeAdmin));
 
@@ -271,7 +216,7 @@ public class ScopePermissionControllerListTests(PostgresFixture db) : WebApiTest
     public async Task GivenNoToken_WhenGetScopePermissions_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<ScopePermissionOutput>>(Route(scope.PublicId));

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Linq.Expressions;
 using ArturRios.Data.Relational.Core.Entities;
 
 namespace ArturRios.Heimdall.Domain.Entities;
@@ -276,8 +277,8 @@ public class Person : Entity<long>
     public Role Role { get; set; } = null!;
 
     /// <summary>
-    ///     Scope-ownership join rows. Non-empty for a <c>ScopeAdmin</c> (one per owned scope);
-    ///     empty for a <c>User</c> or <c>SystemAdmin</c>.
+    ///     Scope-ownership join rows. Non-empty for a <c>ScopeAdmin</c> (one per owned scope), empty
+    ///     for a <c>User</c>; a <c>SystemAdmin</c> may hold any number (FR-SC-08, FR-PE-10).
     /// </summary>
     public ICollection<ScopeOwner> ScopeOwnerships { get; set; } = new List<ScopeOwner>();
 
@@ -301,4 +302,20 @@ public class Person : Entity<long>
     ///     UC-36 initiates setup.
     /// </summary>
     public TwoFactorAuth? TwoFactorAuth { get; set; }
+
+    /// <summary>
+    ///     The one definition of an <em>active</em> person, as an expression a query can filter on in the
+    ///     database: not logically deleted, no erasure requested, and processing not restricted. It is
+    ///     who counts as a live co-owner when NFR-12 decides whether a scope would be left without an
+    ///     owner (#211).
+    /// </summary>
+    /// <remarks>
+    ///     A suspended person cannot authenticate, and neither in effect can the other two: a restricted
+    ///     person's tokens are refused on every action but the data-subject ones (<c>ActorLivenessFilter</c>)
+    ///     and the scope's owner list hides them, and a person whose erasure is requested is either
+    ///     suspended already or waiting only for the block on that suspension to clear. None of them can
+    ///     administer the scope, so none of them keeps it owned.
+    /// </remarks>
+    public static Expression<Func<Person, bool>> Active { get; } =
+        person => !person.IsDeleted && person.ErasureRequestedAt == null && person.ProcessingRestrictedAt == null;
 }

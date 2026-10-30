@@ -29,12 +29,15 @@ public class HardDeletePersonCommandHandlerTests
         AsyncFakeRepository<EmailVerificationToken, long> EmailVerificationTokens,
         InMemoryErasedSubjects ErasedSubjects)
     {
+        public InMemoryWriteTransactions Transactions { get; } = new();
+        public InMemoryInvariantLocks Locks { get; } = new();
+
         public HardDeletePersonCommandHandler Handler() => new(
             Persons, Persons,
             Applications, Applications,
             PasswordResetTokens, PasswordResetTokens,
             EmailVerificationTokens, EmailVerificationTokens,
-            ErasedSubjects);
+            ErasedSubjects, Transactions, Locks);
     }
 
     private static Fakes EmptyFakes() => new(
@@ -269,6 +272,29 @@ public class HardDeletePersonCommandHandlerTests
         Assert.Empty(fakes.ErasedSubjects.Recorded);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingHardDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError(
+        InactiveOwner how)
+    {
+        // Given — AF-10b: the scope's other owner is restricted or waiting on their erasure, and neither
+        // keeps the scope owned (#211)
+        var fakes = EmptyFakes();
+        var scope = Scope(1);
+        var target = await SeedScopeAdminAsync(fakes, owned: scope);
+        InactiveOwners.Make(await SeedScopeAdminAsync(fakes, owned: scope), how);
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then — refused, and nothing was removed
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal(2, (await fakes.Persons.GetAllAsync()).Data!.Count());
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
+    }
+
     [UnitFact]
     public async Task GivenSoleOwnerSystemAdmin_WhenHandlingHardDeletePerson_ThenReturnsScopeWouldLoseLastOwnerError()
     {
@@ -377,5 +403,108 @@ public class HardDeletePersonCommandHandlerTests
         Assert.Equal(target.PublicId, tombstone.Id);
         Assert.True(tombstone.CreatedAt > earlier.AddDays(1));
         Assert.Equal(bystander.PublicId, Assert.Single((await fakes.Persons.GetAllAsync()).Data!).PublicId);
+    }
+
+    // #202: the transaction opens before the guard, which runs under the locks of the person's scopes.
+
+    [UnitFact]
+    public async Task GivenTheSoleOwner_WhenHandlingHardDeletePerson_ThenTheirScopeIsLockedBeforeTheRefusal()
+    {
+        // Given
+        var fakes = EmptyFakes();
+        var target = await SeedScopeAdminAsync(fakes, owned: Scope(3));
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal([3L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Begun);
+        Assert.Equal(0, fakes.Transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenACoOwner_WhenHandlingHardDeletePerson_ThenTheirScopeIsLockedAndTheDeleteCommitted()
+    {
+        // Given
+        var fakes = EmptyFakes();
+        var scope = Scope(3);
+        var target = await SeedScopeAdminAsync(fakes, owned: scope);
+        await SeedScopeAdminAsync(fakes, owned: scope);
+        var command = CommandFor(target);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(command);
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([3L], Assert.Single(fakes.Locks.ScopeLocks));
+        Assert.Equal(1, fakes.Transactions.Committed);
+    }
+
+    // #203 (NFR-32): no hard delete may leave the system without an active System Admin.
+
+    private static async Task<Person> SeedSystemAdminAsync(Fakes fakes, bool isDeleted = false)
+    {
+        var person = new Person
+        {
+            PublicId = Guid.NewGuid(),
+            Name = "System Admin",
+            Email = $"system-admin-{Guid.NewGuid():N}@test.local",
+            RoleId = (long)Roles.SystemAdmin,
+            IsDeleted = isDeleted
+        };
+        await fakes.Persons.CreateAsync(person);
+
+        return person;
+    }
+
+    [UnitFact]
+    public async Task GivenTheOnlyOtherSystemAdminIsRestricted_WhenHardDeletingTheActiveOne_ThenReturnsWouldRemoveLastSystemAdmin()
+    {
+        // Given — AF-10d
+        var fakes = EmptyFakes();
+        var target = await SeedSystemAdminAsync(fakes);
+        var actor = InactiveOwners.Make(await SeedSystemAdminAsync(fakes), InactiveOwner.Restricted);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(CommandFor(target, actor.PublicId));
+
+        // Then — refused under the System Admin lock, and nothing was removed or tombstoned
+        Assert.Equal([PersonMessages.WouldRemoveLastSystemAdmin], output.Errors);
+        Assert.Equal(2, (await fakes.Persons.GetAllAsync()).Data!.Count());
+        Assert.Empty(fakes.ErasedSubjects.Recorded);
+        Assert.Equal(1, fakes.Locks.SystemAdminLocks);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOnlySystemAdmin_WhenHardDeletingThemselves_ThenReturnsCannotDeleteSelf()
+    {
+        // Given
+        var fakes = EmptyFakes();
+        var target = await SeedSystemAdminAsync(fakes);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(CommandFor(target, target.PublicId));
+
+        // Then
+        Assert.Equal([PersonMessages.CannotDeleteSelf], output.Errors);
+        Assert.Single((await fakes.Persons.GetAllAsync()).Data!);
+    }
+
+    [UnitFact]
+    public async Task GivenALogicallyDeletedSystemAdminAndNoActiveOne_WhenHardDeletingThem_ThenRemoved()
+    {
+        // Given — a deleted administrator is no longer one of the set NFR-32 protects
+        var fakes = EmptyFakes();
+        var target = await SeedSystemAdminAsync(fakes, isDeleted: true);
+
+        // When
+        var output = await fakes.Handler().HandleAsync(CommandFor(target));
+
+        // Then
+        Assert.True(output.Success);
     }
 }

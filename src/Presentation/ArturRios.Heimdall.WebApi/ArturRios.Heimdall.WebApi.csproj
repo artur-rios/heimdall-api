@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <!-- The controllers carry the per-endpoint documentation the published OpenAPI page is built
          from (tools/ArturRios.Heimdall.OpenApiGen); without the XML file those summaries never leave
          the source. CS1591 is off because the target is the controllers, which are documented — not

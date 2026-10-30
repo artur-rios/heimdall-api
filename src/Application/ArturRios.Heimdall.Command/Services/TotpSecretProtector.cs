@@ -5,7 +5,8 @@ namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
 ///     Default <see cref="ITotpSecretProtector" />, wrapping ASP.NET Core's Data Protection API
-///     (UC-36 step 3, FR-2F-02). Registered from <c>Startup.AddDependencies</c>, which also adds
+///     (UC-36 step 3, FR-2F-02). Registered from <c>CommandServiceCollectionExtensions.AddTwoFactorServices</c>,
+///     after <c>DataServiceCollectionExtensions.AddDataProtectionKeyRing</c> has added
 ///     <c>AddDataProtection()</c> to the container this protector's <see cref="IDataProtector" /> is
 ///     resolved from.
 /// </summary>

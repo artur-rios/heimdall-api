@@ -45,6 +45,13 @@ public static class ErasureMessages
     public const string BlockedByLastScopeOwnership =
         "The account owns a scope that would be left without an owner; ownership must be transferred first.";
 
+    /// <summary>
+    ///     AF-42e: NFR-32 — the caller is the last active System Admin, so suspending them would leave the
+    ///     system without one. Recorded as the blocking reason rather than returned as a refusal.
+    /// </summary>
+    public const string BlockedByLastSystemAdmin =
+        "The account is the last active System Admin; another System Admin must be added first.";
+
     /// <summary>UC-41: the subject's copy of their data was produced.</summary>
     public const string DataExported = "Your data has been exported.";
     /// <summary>UC-44: processing of the caller's identity is now restricted.</summary>

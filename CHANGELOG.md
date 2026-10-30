@@ -7,6 +7,215 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-10-29
+
+### Added
+
+- `HEIMDALL_INSECURE_TEST_PASSWORD_HASHING=true` derives every password and code with the cheapest Argon2id cost
+  (one lane, one pass, 8 KB) instead of 600 MB and 16 lanes, for the test suite, which sets it in
+  `tests/default.runsettings`. At the production cost the suite's test process grew past the CI agent's memory
+  limit and was killed, and Command.Tests took two and a half minutes; it now takes seconds. Unset, or any value
+  but `true`, keeps the production cost. Startup refuses it in Production and Staging, since it makes every hash
+  trivial to brute-force and no hash stored under it verifies once it is removed.
+- A scope now holds at most `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (default 1000) live pending
+  self-registrations, whatever their addresses (FR-SR-15, AF-47m). `POST /auth/register` had only the per-IP limit
+  against a caller with many source addresses, and each request stored a row and mailed a link, so the table grew
+  without bound. At the cap the request is answered exactly as one that was stored, stores and mails nothing, and
+  is logged at Warning with the marker `REGISTRATION_CAP_REACHED` and the scope's public id, never the address.
+  The existing bound of three live registrations per address (FR-SR-13) is unchanged. The variable is in the
+  `docker/*.env.example` templates, the README and `operations.md` (#206).
+- A scheduled pass that fails now logs at Error with the marker `SCHEDULED_PASS_FAILED` and the pass name, where
+  it was logged at Information and no alert on Warning or above could fire; a pass that throws carries the marker
+  too. Each pass also publishes `heimdall_scheduled_pass_rows_processed_total` and
+  `heimdall_scheduled_pass_last_success_timestamp` (unix seconds, set only by a run that completed without
+  failure), labelled by `pass`, so an operator can alert on "no successful run in N hours". Both are described in
+  `operations.md` (#214).
+- `GET /api/healthcheck/ready`, anonymous, answers `200` while the database responds and `503` when it does not,
+  with only the bare status (`Healthy` or `Unhealthy`) in the body, so an orchestrator that runs more than one
+  instance can tell one that has lost its database from one that is up. The answer is cached for 5 seconds, so the
+  probe costs the database one read per window however often it is called, and its `503` costs one Warning per
+  window rather than one per request. `/healthcheck` stays the liveness probe and reads no database, and it stays
+  the one the Compose container health check calls: each environment runs a single instance, so a readiness probe
+  would take that instance out of Traefik's routing during a database outage and the public host would answer
+  Traefik 404s instead of the API's JSON `503`. `operations.md` explains which to use for what and when to switch
+  (#215).
+- Every `5xx` a handler returns is now logged at Error with the route template, the status code and the trace
+  id, and nothing of the query string, body or caller; a `503`, which is always a deliberate answer here, is
+  logged at Warning. An unhandled exception was already logged, so it is not logged twice (#227).
+
+### Fixed
+
+- Login, password recovery, registration and Google sign-in no longer read the whole `person` table to find an
+  address. They compare `LOWER(email)` without `is_deleted`, which neither the index on the raw column nor the
+  partial unique indexes could serve, so each lookup was a sequential scan before the password hash. A migration
+  builds `ix_person_lower_email` on `LOWER(email)` with `CREATE INDEX CONCURRENTLY`, so writes are not blocked,
+  and drops the unused `ix_person_email`. On 150,000 rows a lookup went from a sequential scan of about 29 ms to an
+  index scan of well under 1 ms (#207).
+- The token purge, the identity anonymisation and the audit pseudonymisation now drain a backlog: each repeats its
+  batch while the batch comes back full, up to `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` batches (default 20) per
+  table in one run, where one batch a run capped a table at 12,000 rows a day and a busy audit trail could fall
+  behind for good. Each run's log line now ends with the rows still due after it, so a backlog that is not draining
+  is visible. A run that fails part-way still counts the rows its earlier batches processed, and the
+  anonymisation's erasure ledger still names every identity the run anonymised, from every batch, even when a write
+  throws; if only counting what is still due fails afterwards, the run stays a success and its line says an unknown
+  number is still due. The retry of blocked erasure requests takes its batches the same way, each after the last
+  request of the one before, so requests still blocked can no longer keep newer ones from being retried. The
+  variable is in the `docker/*.env.example` templates and `operations.md` (#206).
+- The audit pseudonymisation pass no longer reads the whole attribution window on every run. It evaluated up to
+  four correlated subqueries for every attributed entry, so a run with nothing due still examined every entry of
+  the last eighteen months, on every instance. It now asks each ground separately, projecting ids: entries past
+  the period through two new partial indexes on `audit_log(created_at)` (over the entries that still have an
+  actor, and over those that still have a target), and entries naming an anonymised or hard-deleted identity
+  from those identities. What it clears is unchanged. On a 305,000-entry trail with nothing due the selection
+  went from 430 ms to about 80 ms, most of it the re-check of old entries whose target is not a person, which
+  keep their target for good. The `AddAuditRetentionIndexes` migration builds the indexes with
+  `CREATE INDEX CONCURRENTLY`, so audit writes are not blocked while it runs (#206).
+- One blocked erasure request that cannot be retried no longer stops every anonymisation. The retry now runs
+  best-effort: its failure is logged and reported with the run's errors, and the identities that are due are still
+  anonymised. The retry reads blocked requests `PurgeBatchSize` at a time, oldest first, where it loaded them all
+  (#210).
+- A login the saturated password-hash gate sheds with `503` (and any other command that throws instead of
+  answering) now leaves a failed audit entry, and the exception still propagates: the gate's refusal records
+  `AuthenticationTemporarilyUnavailable`, anything else a fixed reason, never the exception's text. The
+  `CREDENTIAL_VERIFICATION_SHEDDING` signal counts that reason, so it can now fire; before, nothing wrote it
+  (#201).
+- A first-time Google sign-up whose ID token carries no email claim, as when it was issued without the `email`
+  scope, is now answered with AF-25a's `401 Unauthorized` — "Google authentication failed." — and creates nothing,
+  where it used to fail with a 500 (#208). Use case 25's AF-25a now names the case.
+- `PUT /api/persons/{id}` refuses an email longer than 256 characters with the length message creation uses, where
+  it used to reach the database and fail on the index's row-size limit with a generic error (#223).
+- The master System Admin the API seeds on an empty database now has its legal basis recorded (NFR-23): contract
+  performance, the current privacy notice version and the time. A new migration records the same on System Admin
+  rows still at Unrecorded (`legal_basis = 0`). The migration cannot tell the seeded master from another System
+  Admin that predates NFR-23, so it records all of them; a row created since then is never at 0 (#213).
+- `docs/content/en/docs/operations.md` described the rolling log files as `<yyyy/MM>/log-<date>.json`, a folder per
+  month. They are `<HEIMDALL_LOG_DIRECTORY>/log-<yyyyMMdd>.json`, one per day, flat in the directory, as the
+  retention section of the same page already said (#216).
+- Confirming two-factor setup (`POST /api/auth/2fa/confirm`) checks the email code before the authenticator code,
+  so a wrong email code no longer spends a right app code's 30-second step and the caller can retry with the same
+  one (#225). Use case 37 now says so.
+- A change of an email address that differs only in case (`PUT /api/persons/{id}`) keeps `EmailVerified = true`: it
+  is the same mailbox, as sign-in, recovery and uniqueness already treat it. It is still a change for everything
+  else — it asks for the password, revokes the person's tokens and notifies the previous address (#225). Use case
+  8 now says so.
+- The personal data export (`POST /api/auth/data-export`) now includes the audit entries where the caller is the
+  target as well as those they made, such as an administrator's update of their account (#225). Each entry gains an
+  `involvement` of `Actor` or `Target`; a `Target` entry does not name who acted.
+- A single-use link or code is now spent only together with the write it unlocks. Resetting a password, verifying
+  an address, confirming a pending registration and confirming two-factor setup each spent the token, code or
+  registration first and wrote afterwards, so a database failure in between cost the caller their link and
+  answered with an error; for a pending registration, a refusal after the claim (the scope closed, the address
+  taken) lost the registration for good. Each now spends and writes in one transaction, and a failure leaves the
+  link, code or registration usable. Retiring a person's other links, or an address's other pending
+  registrations, still runs after the write, and a failure there is logged at Warning instead of turning a reset
+  or verification that happened into an error. A reset or verification refused because the person changed
+  meanwhile still spends the link (FR-PR-08). Use cases 13, 14 and 37 say so (#209).
+- Hard-deleting a person (`DELETE /api/persons/{id}/hard`) or a scope (`DELETE /api/scopes/{id}/hard`) is now all
+  or nothing. Each step — the tombstones, the applications, tokens, Google Users and Users, then the person or
+  scope — committed on its own, so a failure at the last step left the dependents gone while the person or scope
+  survived, with a tombstone for an identity that still existed. The steps now run in one transaction, and a
+  failure removes nothing; the audit entry recording the failed attempt is still written. Use cases 5 and 10 and
+  the Data Retention Schedule say so (#212).
+- Deleting a scope (`DELETE /api/scopes/{id}`) is now all or nothing, and repeating it finishes a cascade an
+  earlier attempt left unfinished. The scope was flagged deleted first and its Users, Google Users and
+  applications in separate saves after, so a failure part-way left a deleted scope with live members, and a retry,
+  finding the scope deleted, skipped the cascade and answered `200`: those members could not sign in, but still
+  showed in lists and counts, held their addresses, and never started the anonymisation window. The flag and the
+  cascade now run in one transaction, and an already-deleted scope has the cascade run again for any member not
+  yet deleted (AF-04b). The cascade is one `UPDATE … WHERE NOT is_deleted` per kind of member instead of loading
+  every member, password hash included; a hard delete of a scope reads only its members' ids and removes them
+  2,000 to a statement, inside its one transaction: the 5,000 Users of a scope are deleted in one statement, and
+  hard-deleted in three. Use cases 4 and 5 say so (#204).
+- A scope owner whose processing is restricted, or who has requested erasure, no longer counts as the co-owner
+  that lets another owner go (NFR-12). Neither can administer the scope, so removing an owner
+  (`DELETE /api/scopes/{scopeId}/owners/{personId}`), deleting or hard-deleting a person, or suspending them for
+  erasure could leave a scope whose only remaining owners could not act on it. These are now refused with `409`
+  "This change would leave a scope without an owner." (AF-22b, AF-09e, AF-10b), and an erasure request waits as
+  blocked (AF-42d), as when the co-owner is deleted. The rule is in one shared guard, and NFR-12 and the use cases
+  name it (#211).
+- Two requests that each take out one of a scope's last two owners at the same moment can no longer both succeed
+  and leave the scope with no owner (NFR-12). Removing an owner, deleting or hard-deleting a person, an erasure
+  request and the anonymisation pass's retry of a blocked one now make the last-owner check and their write in one
+  transaction that first locks the rows of the scopes concerned (`SELECT … ORDER BY id FOR NO KEY UPDATE`, in id
+  order, which does not hold up inserts of owners, members or applications into the scope), and deleting or
+  hard-deleting a scope locks its row too, so a second such request waits for the first and is then refused with
+  `409` (AF-22b, AF-09e, AF-10b) or blocked (AF-42d). The runtime login needs no new grant (#202).
+- The system now always keeps an active System Admin (NFR-32): one not deleted, not restricted and not waiting on
+  an erasure. Deleting or hard-deleting the last one (`DELETE /api/persons/{id}`, `DELETE /api/persons/{id}/hard`)
+  is refused with `409` "This change would leave the system without an active System Admin. Add another System
+  Admin first." (AF-09f, AF-10d), where two administrators deleting each other at once both succeeded. The last
+  one's erasure request (`POST /api/auth/erasure-request`) is recorded with its deadline but blocked, as a last
+  scope owner's is (AF-42e), and the anonymisation pass releases it once another active System Admin exists. Each
+  deletion and erasure holds one transaction-scoped advisory lock on the System Admin set, taken after the scope
+  row locks, and decides on the person's role and ownerships as read under the locks. A restriction on processing
+  is never refused, and `PUT /api/persons/{id}` never demotes a System Admin (#203).
+- Editing a person (`PUT /api/persons/{id}`), promoting a User to scope owner
+  (`POST /api/scopes/{scopeId}/users/{personId}/promote`), updating a scope (`PUT /api/scopes/{id}`) and deleting a
+  scope (`DELETE /api/scopes/{id}`) now write only the columns they change, where each saved the whole row it had
+  read. An edit or a promotion wrote the name back as read, over a rename made in between, and an edit still
+  renamed a person an erasure request had suspended in between; that edit is now answered `404`, as for any deleted
+  person. A scope update or deletion wrote Google sign-in, self-registration and the email links back as read,
+  undoing a change their own endpoints made in between, and a scope update revived a scope deleted in between; that
+  update is now answered `404`. A person's restriction, erasure, deletion and lockout columns were already written
+  only by their own handlers (#237); tests now interleave a restriction and an erasure request with every writer
+  that reads a person before writing it — password reset and email verification, deletion and adding an owner among
+  them — and show that both survive. Setting Google sign-in, self-registration or the email links
+  (`PUT /api/scopes/{id}/google-signin`, `…/self-registration`, `…/email-links`) likewise writes only that setting,
+  so none undoes another's or the scope update's, and a scope deleted in between is answered `404` rather than
+  revived. A name taken by another scope in between is answered with AF-03b's own `409` message. A Google User's
+  deletion, erasure-request, restriction and anonymisation columns are now written only by targeted writes, as a
+  person's are: deleting, restricting, lifting a restriction on or requesting erasure for a Google User, Google
+  sign-in's refresh of `EmailVerified`, and the anonymisation and re-erasure passes each write only their own
+  columns, under the state they read. A sign-in whose account was deleted in between is refused `401`, and the
+  anonymisation pass leaves a Google User restricted since it was selected as it stands. A name-only
+  `PUT /api/persons/{id}` is answered `409` when the person's role changed in between (#205).
+- Aborting a read request now stops its query. The controllers handed the mediator no cancellation token, and the
+  query handlers passed it on to neither validation nor EF Core (25 called `ValidateAsync` without it), so an
+  abandoned `GET /api/audit-log` with a wide filter ran to completion on the server. Every query endpoint now
+  passes `HttpContext.RequestAborted`, and the Query project's validators, lookups and pagination forward it;
+  commands stay uncancellable by design, so a write that has begun still finishes or rolls back as one unit. A
+  cancelled request is dropped quietly by the exception middleware, as before. Rule CA2016 now fails the build
+  where a method holding a token calls an overload that would take it (#219).
+
+### Changed
+
+- The target framework, `Nullable` and `ImplicitUsings` are now set once, in `src/Directory.Build.props` and
+  `tests/Directory.Build.props`, instead of in each of the twelve project files, and nullable warnings and CA2016
+  are errors. `global.json` pins the SDK band (10.0.113, `rollForward: latestFeature`), and the Dockerfile's `sdk`
+  and `aspnet` tags are pinned to the patch the floating `10.0` tag resolved to (10.0.402 and 10.0.13), so an image
+  rebuild no longer changes toolchain on its own (#230).
+- Every CI job now has a `timeout-minutes` (60 for the tests, 15 for the container build, 10 for the rest), so a
+  hung Testcontainers pull or a deadlocked test no longer holds a runner and its concurrency group for six hours.
+  `tests.yml` now declares `permissions: contents: read` at the top, and the workflows that build the code take
+  the SDK from `global.json` rather than a floating `10.0.x` (#218).
+- CI now fails a pull request whose entity or map changes were committed without a migration: `tests.yml` runs
+  `dotnet ef migrations has-pending-model-changes` after the build, with a placeholder connection string since the
+  command reads no database. A new `Data.Tests` test also migrates a PostgreSQL container to the latest migration,
+  runs every `Down` back to an empty database and applies the chain again, so a rollback that no longer runs is
+  found before it is needed (#222).
+- FluentValidation is updated from 12.1.1 to 12.2.0 and Microsoft.NET.Test.Sdk from 18.10.1 to 18.11.0 (#231).
+- The detailed health check logs the exception behind "Database: Unhealthy" at Warning, so the cause is in the log
+  and not only the status (#226).
+- Promoting a Scope Admin to System Admin (`PUT /api/persons/{id}` with `roleId` 1) keeps their scope ownerships,
+  as FR-SC-08 lets a System Admin be a named owner, and removes only a scope membership. The promotion used to
+  delete the ownership rows, so the applications the person owned were left with an owner who owned no scope, and
+  it was refused with `409` when the person was a scope's only owner (AF-08g); it is now accepted, and AF-08g is
+  retired. FR-PE-10 and UC-08 step 5 say a System Admin is a member of no scope but may own scopes (#224).
+- The WebApi functional tests seed scopes and persons through one helper, `Support/Seeds.cs`, instead of a copy in
+  each of about seventy test files, so a new required column or trigger rule on either table is fixed in one place.
+  Every seeded person shares one salted Argon2id hash of the test password, derived once per process, where each
+  had its own, which cuts the suite's time and memory. No test now sleeps to wait for a background worker: the
+  queue-drain waits poll a condition up to a deadline with `Support/Poll.cs` (the one remaining fixed wait is
+  deliberate, the scheduled-pass check that no run follows a stop), and the credential list test seeds its two
+  credentials with explicit creation times (#217, #228).
+- The operations guide now covers what an operator needs for upgrades and alerting (#220): migrating big tables
+  (`CREATE INDEX CONCURRENTLY` through `suppressTransaction`, `NOT NULL` with a default, batched backfills, and
+  what the per-row public-id triggers cost a bulk update), that the container image applies migrations on start
+  unless `HEIMDALL_RUN_MIGRATIONS=false` and how that fits the owner connection string, the retention throughput
+  ceiling with the formula and how to see a backlog, and the log lines and metrics to alert on. CONTRIBUTING.md
+  carries the matching migration rules. A "Query costs to watch" section records three data-dependent query costs
+  (name filters, the audit listing's count, the per-request liveness read) and when to act on each (#229).
+
 ## [4.1.0] - 2026-10-21
 
 ### Upgrading
@@ -776,7 +985,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/artur-rios/heimdall-api/compare/v3.0.0...v4.0.0

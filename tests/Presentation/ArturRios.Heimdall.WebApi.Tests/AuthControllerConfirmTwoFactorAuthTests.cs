@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
@@ -25,7 +26,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-2fa-Pass!";
+    private const string Password = Seeds.Password;
     private const string Base32Secret = "JBSWY3DPEHPK3PXP";
     private const string EmailCode = "123456";
 
@@ -33,24 +34,6 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
 
     private static string CurrentTotpCode(string base32Secret) =>
         new Totp(Base32Encoding.ToBytes(base32Secret)).ComputeTotp();
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedPendingAsync(Person person, bool appEnabled, bool emailEnabled)
     {
@@ -72,7 +55,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         long twoFactorAuthId, bool used = false, bool expired = false)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(EmailCode, out var salt, PasswordHashing.Configuration);
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,
@@ -130,7 +113,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     {
         // Given a pending setup for both methods, enabled for real so the TOTP secret is genuinely
         // encrypted
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppAsync("App", "Email");
         var pending = (await ConfigurationForAsync(person))!;
@@ -160,7 +143,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenOnlyAppEnabledAndValidAppCode_WhenPostConfirm2fa_ThenSetupIsActivated()
     {
         // Given, enabled for real so the TOTP secret is genuinely encrypted
-        var person = await SeedPersonAsync(Roles.User, UniqueEmail("user"));
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("user") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
         var secret = await EnableAppAsync("App");
 
@@ -177,7 +160,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenOnlyEmailEnabledAndValidEmailCode_WhenPostConfirm2fa_ThenSetupIsActivated()
     {
         // Given
-        var person = await SeedPersonAsync(Roles.ScopeAdmin, UniqueEmail("scope-admin"));
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = UniqueEmail("scope-admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.ScopeAdmin));
         var pending = await SeedPendingAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(pending.Id);
@@ -195,7 +178,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenNoPendingSetup_WhenPostConfirm2fa_ThenNotFound()
     {
         // Given — AF-37a
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -226,7 +209,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenAppEnabledAndMissingAppCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37b
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         await SeedPendingAsync(person, appEnabled: true, emailEnabled: false);
 
@@ -244,7 +227,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenAppEnabledAndIncorrectAppCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37b, enabled for real so the TOTP secret is genuinely encrypted
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         await EnableAppAsync("App");
 
@@ -260,7 +243,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenEmailEnabledAndMissingEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var pending = await SeedPendingAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(pending.Id);
@@ -279,7 +262,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenEmailEnabledAndIncorrectEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var pending = await SeedPendingAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(pending.Id);
@@ -296,7 +279,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenEmailEnabledAndExpiredEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var pending = await SeedPendingAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(pending.Id, expired: true);
@@ -313,7 +296,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenEmailEnabledAndAlreadyUsedEmailCode_WhenPostConfirm2fa_ThenUnauthorized()
     {
         // Given — AF-37c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var pending = await SeedPendingAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(pending.Id, used: true);
@@ -330,7 +313,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
     public async Task GivenAlreadyActiveConfiguration_WhenPostConfirm2fa_ThenConflict()
     {
         // Given — AF-37d
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         await using (var context = db.CreateContext())
         {

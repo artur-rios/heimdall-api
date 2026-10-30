@@ -22,7 +22,7 @@ Usage (from anywhere in the repository):
     python scripts/openapi.py --no-build      # reuse the last build (faster, and stale if src changed)
     python scripts/openapi.py --check         # fail if the committed document is out of date
 
---check is what CI runs (.github/workflows/check-openapi.yml): it regenerates into a temporary file
+--check is what CI runs (the `check` check, ci/check.sh): it regenerates into a temporary file
 and compares, so a controller change that never had its document regenerated is caught rather than
 silently published. It exits 1 when they differ.
 

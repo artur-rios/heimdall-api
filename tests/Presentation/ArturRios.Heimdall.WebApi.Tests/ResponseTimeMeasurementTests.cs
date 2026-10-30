@@ -9,7 +9,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +35,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Timing-Pass!";
+    private const string Password = Seeds.Password;
 
     /// <summary>Requests per measurement, after a warm-up that is not counted.</summary>
     private const int Samples = 12;
@@ -52,33 +51,6 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     private static readonly List<(string Endpoint, string Class, double Median, double Slowest)> Measurements = [];
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"timing-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedAdminAsync(string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Timing Admin",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task SeedUsersAsync(Scope scope, int count)
     {
@@ -192,7 +164,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     public async Task MeasureAuthenticatedRead()
     {
         // A token-authenticated read: claims parsing, the actor-liveness lookup, one indexed query.
-        var person = await SeedAdminAsync(UniqueEmail("read"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("read") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         var (median, slowest) = await MeasureAsync("GET /api/persons/{id}", "authenticated read", async () =>
@@ -207,7 +179,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     {
         // A page out of a populated table, which is where an accidental N+1 would show up: the
         // projection reaches through ScopeMembership and ScopeOwnerships for every row.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = $"timing-{Guid.NewGuid():N}" });
         await SeedUsersAsync(scope, 50);
 
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
@@ -225,7 +197,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     public async Task MeasureWrite()
     {
         // A write with validation, two uniqueness reads, an insert and an audit entry.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = $"timing-{Guid.NewGuid():N}" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var (median, slowest) = await MeasureAsync(
@@ -251,7 +223,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
         // parameters, not by this API, and pinning it would turn a deliberate security property into
         // a test that fails when it is strengthened. The figure is measured and published instead.
         var email = UniqueEmail("login");
-        await SeedAdminAsync(email);
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         var (median, slowest) = await MeasureAsync("POST /api/auth/login", "password verification", async () =>
             (await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(

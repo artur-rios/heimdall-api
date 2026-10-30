@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ArturRios.Heimdall.Data.EntityMaps;
@@ -47,6 +48,21 @@ internal static class GoogleUserDbMap
         googleUser.HasIndex(x => x.DeletedAt)
             .HasFilter("is_deleted = true AND anonymised_at IS NULL");
 
+        // The lifecycle columns, as for a person (#237, #205): whether the Google User is deleted, asked
+        // to be erased, restricted or anonymised. Each changes only through a targeted, conditional write
+        // in AtomicWrites, so a whole-row save of a copy read before the change — a sign-in's refresh
+        // racing a deletion, say, or a deletion racing a restriction — cannot put the old state back.
+        IgnoredAfterInsert(googleUser.Property(x => x.IsDeleted));
+        IgnoredAfterInsert(googleUser.Property(x => x.DeletedAt));
+        IgnoredAfterInsert(googleUser.Property(x => x.DeletionKind));
+        IgnoredAfterInsert(googleUser.Property(x => x.ErasureRequestedAt));
+        IgnoredAfterInsert(googleUser.Property(x => x.ErasureDueAt));
+        IgnoredAfterInsert(googleUser.Property(x => x.ErasureBlockedReason));
+        IgnoredAfterInsert(googleUser.Property(x => x.ProcessingRestrictedAt));
+        IgnoredAfterInsert(googleUser.Property(x => x.RestrictionGround));
+        IgnoredAfterInsert(googleUser.Property(x => x.RestrictionLiftNotifiedAt));
+        IgnoredAfterInsert(googleUser.Property(x => x.AnonymisedAt));
+
         googleUser.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
         googleUser.Property(x => x.UpdatedAt).HasDefaultValueSql("now()");
 
@@ -74,4 +90,7 @@ internal static class GoogleUserDbMap
             .IsRequired()
             .OnDelete(DeleteBehavior.Cascade);
     }
+
+    private static void IgnoredAfterInsert<T>(PropertyBuilder<T> property) =>
+        property.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 }

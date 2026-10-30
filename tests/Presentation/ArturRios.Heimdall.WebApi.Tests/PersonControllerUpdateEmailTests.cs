@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,30 +26,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Email-Change-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(string prefix, Roles role = Roles.ScopeAdmin)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Email Change",
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     An active configuration holding one recovery code, which the test returns: the App method, or
@@ -108,7 +88,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnEmailChangeWithoutPassword_WhenPutPerson_ThenUnauthorizedAndNothingChanges()
     {
         // Given — the bearer token is all the caller presents
-        var person = await SeedPersonAsync("reauth-none");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-none" });
         ActAs(person);
 
         // When
@@ -124,7 +104,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnEmailChangeWithAWrongPassword_WhenPutPerson_ThenUnauthorizedAndNothingChanges()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-wrong");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-wrong" });
         ActAs(person);
 
         // When
@@ -140,7 +120,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnEmailChangeWithThePasswordButNoCode_WhenTwoFactorIsActive_ThenUnauthorizedAndNothingChanges()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-no-code");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-no-code" });
         await SeedActiveTwoFactorAsync(person);
         ActAs(person);
 
@@ -157,7 +137,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnEmailChangeWithThePasswordAndACode_WhenTwoFactorIsActive_ThenUpdatedAndTheTokenMustBeRenewed()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-code");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-code" });
         var recoveryCode = await SeedActiveTwoFactorAsync(person);
         ActAs(person);
         var newEmail = UniqueEmail("reauth-code-new");
@@ -184,7 +164,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnEmailChangeWithThePassword_WhenTwoFactorIsNotActive_ThenUpdated()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-password");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-password" });
         ActAs(person);
         var newEmail = UniqueEmail("reauth-password-new");
 
@@ -200,7 +180,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenALiveResetLink_WhenTheOwnEmailChanges_ThenTheLinkNoLongerSetsAPassword()
     {
         // Given a reset link mailed to the current address (FR-PE-17), of a person who could use it
-        var person = await SeedPersonAsync("reset-link", Roles.SystemAdmin);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reset-link" });
         var plaintext = $"token-{Guid.NewGuid():N}";
 
         await using (var context = db.CreateContext())
@@ -227,15 +207,15 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         Assert.Equal(HttpStatusCode.BadRequest, reset.StatusCode);
         Assert.Contains(AuthMessages.TokenAlreadyUsed, reset.Body!.Errors);
         var stored = await ReloadAsync(person);
-        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt));
+        Assert.True(Hash.TextMatches(Password, stored.PasswordHash, stored.Salt, PasswordHashing.Configuration));
     }
 
     [FunctionalFact]
     public async Task GivenSystemAdminChangingAnotherPersonsEmailWithoutAPassword_WhenPutPerson_ThenUpdated()
     {
         // Given — the administrator's own authorisation covers it, as before
-        var admin = await SeedPersonAsync("reauth-admin", Roles.SystemAdmin);
-        var target = await SeedPersonAsync("reauth-target");
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reauth-admin" });
+        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-target" });
         await SeedActiveTwoFactorAsync(target);
         ActAs(admin);
         var newEmail = UniqueEmail("reauth-target-new");
@@ -252,7 +232,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenSelfNameOnlyChangeWithoutAPassword_WhenPutPerson_ThenUpdatedAndTheTokenStillWorks()
     {
         // Given
-        var person = await SeedPersonAsync("reauth-name");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-name" });
         ActAs(person);
 
         // When
@@ -270,7 +250,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenSystemAdminChangingTheirOwnEmailWithoutPassword_WhenPutPerson_ThenUnauthorizedAndNothingChanges()
     {
         // Given — the role grants nothing here: an administrator's own address is theirs to prove
-        var admin = await SeedPersonAsync("reauth-own-admin", Roles.SystemAdmin);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reauth-own-admin" });
         ActAs(admin);
 
         // When
@@ -286,7 +266,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenSystemAdminChangingTheirOwnEmailWithPassword_WhenPutPerson_ThenUpdatedAndTheirTokensRevoked()
     {
         // Given
-        var admin = await SeedPersonAsync("reauth-own-admin-ok", Roles.SystemAdmin);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "reauth-own-admin-ok" });
         ActAs(admin);
         var newEmail = UniqueEmail("reauth-own-admin-ok-new");
 
@@ -308,7 +288,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenOwnAddressPaddedWithWhitespace_WhenPutPersonWithoutPassword_ThenNothingNewIsStored()
     {
         // Given — the same address with surrounding whitespace is no change, and is not written
-        var person = await SeedPersonAsync("reauth-padded");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-padded" });
         ActAs(person);
 
         // When
@@ -327,7 +307,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenTheEmailSignInMethodIsActive_WhenChangingOwnEmailWithThePasswordAndACode_ThenConflictAndNothingChanges()
     {
         // Given — FR-PE-18 (AF-08k): sign-in codes would go to an address nobody has proved
-        var person = await SeedPersonAsync("reauth-email-method");
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "reauth-email-method" });
         var recoveryCode = await SeedActiveTwoFactorAsync(person, emailMethod: true);
         ActAs(person);
 

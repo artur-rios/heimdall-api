@@ -18,7 +18,7 @@ style. When in doubt, copy the shape of the already-implemented reference use ca
 | **Application / Query** (`…Query`) | Read use cases: `*Query` input, `*QueryHandler` (`IQueryHandlerAsync` / `IPaginatedQueryHandlerAsync`), `*Output`. | `Handlers/GetScopeByIdQueryHandler.cs`, `Handlers/ListScopesQueryHandler.cs` |
 | **Application / Shared** (`…Shared`) | Canonical message strings and their HTTP status map. | `Messages/ScopeMessages.cs`, `Messages/ScopeMessageMap.cs` |
 | **Infrastructure / Data** (`…Data`) | EF Core `AppDbContext`, one `*DbMap` per entity (`EntityMaps/`), migrations, seeding. | `EntityMaps/ScopeDbMap.cs`, `EntityMaps/ScopeOwnerDbMap.cs` |
-| **Presentation / WebApi** (`…WebApi`) | Controllers exposing the endpoints; DI registration in `Startup.AddDependencies`. | `Controllers/ScopeController.cs`, `Startup.cs` |
+| **Presentation / WebApi** (`…WebApi`) | Controllers exposing the endpoints; DI registration in `Startup.AddDependencies`, which calls the per-layer `Add*` extensions (`Registration/`). | `Controllers/ScopeController.cs`, `Startup.cs` |
 
 ## Key conventions to follow
 
@@ -45,8 +45,8 @@ declared with `[RoleRequirement((int)Roles.X)]` (or `[AllowAnonymous]` for publi
 authorization alternative flows are enforced here and verified by functional tests.
 
 **Wire up DI.** Register new validators, command handlers (`ICommandHandlerAsync<…>`), and query
-handlers (`IQueryHandlerAsync<…>` / `IPaginatedQueryHandlerAsync<…>`) in `Startup.AddDependencies`,
-following the existing registrations for the scope use cases.
+handlers (`IQueryHandlerAsync<…>` / `IPaginatedQueryHandlerAsync<…>`) in the layer's `Registration/*ServiceCollectionExtensions.cs`
+(`AddCommandHandlers`, `AddQueryHandlers`, …), following the existing registrations for the scope use cases.
 
 **Entity mapping & schema.** New/changed persistence needs a `*DbMap` and an EF Core migration
 generated via the migration menu (`python scripts/migrations.py`) — never edit the database by hand,

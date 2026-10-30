@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Authentication runs in <c>ClaimsOnly</c> mode (<c>Startup.ConfigureSecurity</c>): the
+///         Authentication runs in <c>ClaimsOnly</c> mode (<c>TokenSecurityRegistrationExtensions.AddTokenSecurity</c>): the
 ///         caller is rebuilt from the token's claims and no data store is consulted, which is what
 ///         keeps an ordinary request free of a per-request lookup. The cost is that a token outlives
 ///         the state it describes — both the identity it names and the role it claims, for the whole

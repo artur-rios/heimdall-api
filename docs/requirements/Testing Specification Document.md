@@ -345,7 +345,7 @@ public class HealthCheckTests(EnvironmentType environment = EnvironmentType.Loca
 Functional tests **must not** use an in-memory EF provider or a developer's local database. They run
 against a real PostgreSQL instance created by Testcontainers at test time, so the environment closely
 matches production (the app uses the PostgreSQL provider — see
-[`Startup.AddDependencies`](../src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs)).
+[`Startup.AddDatabase`](../src/Presentation/ArturRios.Heimdall.WebApi/Startup.cs)).
 
 The app reads its connection from environment variables (`HEIMDALL_DATA_CONNECTIONSTRING`,
 `HEIMDALL_DATA_DATABASETYPE`) via `AddDataConfigFromEnvironment<AppDbContext>`. The functional
@@ -512,7 +512,7 @@ third party.**
 
 `WebApiTest<T>` keeps its `WebApplicationFactory` private and its `Gateway` protected-readonly, so a
 functional test cannot replace a DI registration — every substitution in this suite is chosen at
-start-up from the environment, as `Startup.AddEmailSenders` is. `PostgresFixture` therefore publishes
+start-up from the environment, as `EmailRegistrationExtensions.AddEmailSenders` is. `PostgresFixture` therefore publishes
 `HEIMDALL_GOOGLE_TEST_SIGNING_SECRET`, which makes the host under test resolve
 `LocalGoogleIdTokenVerifier`, and `TestGoogleTokens` mints ID tokens signed with the same secret.
 Without it only AF-25a and AF-25b would be reachable: the main flow, AF-25c, and AF-25d all sit
@@ -558,7 +558,7 @@ everything in it — and would be silent in a suite that only checked the delete
 The substitute is deliberately **not** a trust-anything stub — a token still needs a valid HS256
 signature, the expected issuer and audience, and an unexpired lifetime, so the suite exercises the
 same verification path a real deployment does and only the signing authority differs. Two guards keep
-it out of production: `Startup` never registers it in the Production environment, and never without
+it out of production: `GoogleSignInRegistrationExtensions.AddGoogleSignIn` never registers it in the Production environment, and never without
 that variable explicitly set. No `.env` file carries it.
 
 UC-19 added `DeleteApplicationCommandHandlerTests` to the Command.Tests project and
@@ -595,10 +595,11 @@ class. It repeats UC-21's ordering test on the inverse operation and adds two sh
   right status while still deleting the row would pass a status-only test, so each 403/404/409/401
   case reads the join row back — from the fake repository at the unit layer, from PostgreSQL at the
   functional one.
-- **The last-owner guard is tested from both sides of "live".** `GivenSoleOwner_…` covers the plain
-  NFR-12 case, and `GivenOnlyCoOwnerIsLogicallyDeleted_…` covers the one that makes the guard's
-  `!IsDeleted` filter a tested claim: a deleted co-owner does not keep a scope owned, so removing the
-  only live owner is still refused. The mirror case,
+- **The last-owner guard is tested from both sides of "active".** `GivenSoleOwner_…` covers the plain
+  NFR-12 case, and `GivenOnlyCoOwnerIsLogicallyDeleted_…` and `GivenOnlyCoOwnerIsInactive_…` cover the
+  ones that make the guard's `Person.Active` filter a tested claim: a deleted, restricted or
+  erasure-requesting co-owner does not keep a scope owned, so removing the only active owner is still
+  refused (#211). The mirror case,
   `GivenLogicallyDeletedTargetWithLiveCoOwner_…`, pins that a deleted *target* is nonetheless
   removable — the stale row this endpoint exists to clear.
 
@@ -757,7 +758,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-09 (audit trail) | Test | `AuditLoggingTests`, `AuditingCommandHandlerTests` — both outcomes | Verified |
 | NFR-10 (input validation) | Test | Every `*ValidatorTests` class, plus the 400 cases in the controller suites | Verified |
 | NFR-11 (hard delete cascades a person) | Test | `HardDeletePersonCommandHandlerTests` | Verified |
-| NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10 and UC-22 suites | Verified |
+| NFR-12 (a scope keeps an owner) | Test | UC-09, UC-10, UC-22 and UC-42 suites; `ScopeOwnerRaceTests` — two requests taking out a scope's last two owners at once, one held before its write, leave one refused and an active owner (#202) | Verified |
 | NFR-13 (Google token verification) | Test + inspection | `GoogleIdTokenValidationSettingsTests` pins the audience constraint this application supplies; `LocalGoogleIdTokenVerifierTests` requires the suite's substitute verifier to refuse a wrong signature, issuer, audience or expiry; inspection for Google's own validator | Partly verified — see 11.2 |
 | NFR-14 (hard delete cascades Google Users) | Test | `HardDeleteScopeCommandHandlerTests` | Verified |
 | NFR-15 (no internal ids exposed) | Test | `OpenApiContractTests` over the published document; `SchemaTests` on the shape | Verified |
@@ -766,6 +767,7 @@ rule about "none", for the threats behind the security requirements.
 | NFR-18 (password verification cost) | Measurement | `ResponseTimeMeasurementTests` | Measured; see SRD §6.1 |
 | NFR-30 (token issuer and audience) | Test | `TokenIssuerAndAudienceTests` — a correctly signed token under another issuer or audience is refused, and Heimdall's own is accepted, on the bearer path, the subject-rights endpoints, the challenge and UC-57; `TokenOriginTests`, `PersonTokenAudienceTests` and `JwtApplicationTokenServiceTests` for each reader | Verified |
 | NFR-31 (signing keys and secrets) | Test | `TokenSigningKeysTests` — the P-256 key, its base64 form, the empty previous key, and messages that never carry the value; `TokenAlgorithmConfusionTests` — a token's `alg` never chooses the key type, and an HS256 token signed with the retired secret is refused by every reader; `RetiredSecretTests` — with the retired secret still set, an HS256 token is `401`, the key set is served, and start-up warns once per retired variable that is set, naming it and never its value; `JwksEndpointTests` — the published key set and its headers; `TokenOriginTests` for HS256, HS384 and HS512 refused | Verified |
+| NFR-32 (an active System Admin remains) | Test | `DeletePersonCommandHandlerTests`, `HardDeletePersonCommandHandlerTests`, `RequestErasureCommandHandlerTests` and `AnonymiseExpiredDeletionsCommandHandlerTests` — the last active one is not deleted, their erasure is blocked and released once another exists; `SystemAdminRaceTests` — the only two deleting each other at once, in a database of their own, leave one (#203) | Verified |
 
 ### 11.2 What this does not cover
 

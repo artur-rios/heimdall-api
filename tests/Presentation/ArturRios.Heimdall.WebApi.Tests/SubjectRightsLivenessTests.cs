@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -27,34 +26,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Rights-Pass!";
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role = Roles.User, bool restricted = false, bool isDeleted = false, bool anonymised = false)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Rights Holder",
-            Email = $"rights-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restricted ? DateTime.UtcNow.AddDays(-1) : null,
-            RestrictionGround = restricted ? (int)RestrictionGrounds.AccuracyContested : null,
-            IsDeleted = isDeleted || anonymised,
-            DeletedAt = isDeleted || anonymised ? DateTime.UtcNow.AddDays(-1) : null,
-            AnonymisedAt = anonymised ? DateTime.UtcNow : null
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
+    private const string Password = Seeds.Password;
 
     private async Task<Person> ReloadAsync(Person person)
     {
@@ -71,7 +43,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenARestrictedPerson_WhenExportingTheirData_ThenTheCopyIsReturned()
     {
         // Given — NFR-24: "remaining reachable by its own subject's export"
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -86,7 +58,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenARestrictedPerson_WhenLiftingTheirOwn_ThenItIsLiftedWithoutNotification()
     {
         // Given — UC-45: the subject lifts their own, and needs no Art. 18(3) notice to do it
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -107,7 +79,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenARestrictedPerson_WhenRestrictingAgain_ThenTheUseCasesOwnConflict()
     {
         // Given — AF-44a is reachable only if the filter lets a restricted caller through
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -124,7 +96,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given — UC-42 is self-service whatever the account's standing (DPIA R-06); the request is
         // the subject's own, so Art. 18(2)'s consent condition is met by asking
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -150,7 +122,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenARestrictedPerson_WhenCallingAnyOtherEndpoint_ThenUnauthorized()
     {
         // Given
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When — a read of their own record, a 2FA read and write, and an email send: none of them a
@@ -182,8 +154,8 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given — the lift endpoint is reachable for the caller's own restriction only. A restricted
         // System Admin is a subject like any other there, not an administrator.
-        var admin = await SeedPersonAsync(Roles.SystemAdmin, restricted: true);
-        var subject = await SeedPersonAsync(restricted: true);
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
+        var subject = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -244,7 +216,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given — UC-41: "A suspended identity can still export"; UC-44: "A suspended identity may
         // still restrict"
-        var person = await SeedPersonAsync(isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", IsDeleted = true || false, Configure = p => { p.DeletedAt = true || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -263,7 +235,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given — AF-42b: a token naming no live identity is NotEligible (403), the use case's answer
         // rather than the filter's generic 401
-        var person = await SeedPersonAsync(isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", IsDeleted = true || false, Configure = p => { p.DeletedAt = true || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -279,7 +251,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     public async Task GivenAnAnonymisedPerson_WhenExporting_ThenUnauthorized()
     {
         // Given an identity already anonymised (NFR-20): there is no subject left to serve
-        var person = await SeedPersonAsync(anonymised: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", IsDeleted = false || true, Configure = p => { p.DeletedAt = false || true ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = true ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.User));
 
         // When
@@ -295,7 +267,7 @@ public class SubjectRightsLivenessTests(PostgresFixture db) : WebApiTest<Program
     {
         // Given a restricted User whose token claims System Admin: the exception covers liveness, not
         // TH-08's role check, which still runs on every endpoint
-        var person = await SeedPersonAsync(restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = "Rights Holder", EmailPrefix = "rights", RestrictedAt = DateTime.UtcNow.AddDays(-1), IsDeleted = false || false, Configure = p => { p.DeletedAt = false || false ? DateTime.UtcNow.AddDays(-1) : null; p.AnonymisedAt = false ? DateTime.UtcNow : null; } });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When

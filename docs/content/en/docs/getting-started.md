@@ -21,11 +21,8 @@ Building from source, running the test suites and the other contributor tooling 
 
 ## Clone
 
-The documentation site's theme is a git submodule, so clone with submodules (or initialise them
-afterwards):
-
 ```bash
-git clone --recurse-submodules https://github.com/artur-rios/heimdall-api.git
+git clone https://git.techcraftsmen.net/artur-rios/heimdall-api.git
 ```
 
 ## Configure
@@ -106,8 +103,8 @@ start rather than logging tokens in plaintext.
 
 ## Apply migrations
 
-The schema is managed with **EF Core migrations, applied explicitly**. The API never migrates on
-startup, and **refuses to start when migrations are pending** — so this step comes before the first
+The schema is managed with **EF Core migrations, applied explicitly**. The API process never migrates
+(the container entrypoint does by default; see [Operations](../operations/#migrations)), and **refuses to start when migrations are pending** — so this step comes before the first
 run:
 
 ```bash

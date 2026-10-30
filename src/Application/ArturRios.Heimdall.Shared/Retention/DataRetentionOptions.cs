@@ -32,6 +32,9 @@ public sealed record DataRetentionOptions
     /// <summary>Environment variable holding the maximum rows removed from one table per run.</summary>
     public const string PurgeBatchSizeVariable = "HEIMDALL_RETENTION_PURGE_BATCH_SIZE";
 
+    /// <summary>Environment variable holding the most batches a pass takes from one table per run.</summary>
+    public const string MaxBatchesPerTickVariable = "HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK";
+
     /// <summary>Environment variable switching the scheduled purge off (<c>false</c> disables it).</summary>
     public const string PurgeEnabledVariable = "HEIMDALL_RETENTION_PURGE_ENABLED";
 
@@ -73,6 +76,9 @@ public sealed record DataRetentionOptions
 
     /// <summary>Rows removed from one table in one run, by default.</summary>
     public const int DefaultPurgeBatchSize = 500;
+
+    /// <summary>Batches a pass takes from one table in one run, by default: 10,000 rows at the default batch size.</summary>
+    public const int DefaultMaxBatchesPerTick = 20;
 
     /// <summary>Thirty days — the outer limit GDPR Art. 12(3) allows, not a chosen period.</summary>
     public static readonly TimeSpan DefaultSubjectErasureDeadline = TimeSpan.FromDays(30);
@@ -187,6 +193,26 @@ public sealed record DataRetentionOptions
     public int PurgeBatchSize { get; init; } = DefaultPurgeBatchSize;
 
     /// <summary>
+    ///     The most batches of <see cref="PurgeBatchSize" /> a pass takes from any one table in a single
+    ///     run: it repeats a batch while the last one came back full, and stops here (#206).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         One batch per run capped a pass at 12,000 rows a day per table at the defaults, which a
+    ///         busy deployment's audit trail outgrows: the backlog then never drains, and attribution
+    ///         outlives the published period. Repeating the batch lets a backlog clear in a few runs
+    ///         while each batch stays its own short transaction, so the reason for bounding the batch
+    ///         still holds.
+    ///     </para>
+    ///     <para>
+    ///         The cap is what keeps a run finite: a backlog larger than it is left for the next run,
+    ///         and the run's summary says how much was left, so a backlog that is not draining is
+    ///         visible rather than silent.
+    ///     </para>
+    /// </remarks>
+    public int MaxBatchesPerTick { get; init; } = DefaultMaxBatchesPerTick;
+
+    /// <summary>
     ///     Whether the scheduled purge is registered at start-up. On by default: a deployment that
     ///     sets nothing still enforces the schedule.
     /// </summary>
@@ -294,6 +320,7 @@ public sealed record DataRetentionOptions
                 PurgeIntervalMinutesVariable, DefaultPurgeInterval, TimeSpan.FromMinutes,
                 MinimumIntervalMinutes, MaximumIntervalMinutes, invalid),
             PurgeBatchSize = ReadPositiveInt(PurgeBatchSizeVariable, DefaultPurgeBatchSize, invalid),
+            MaxBatchesPerTick = ReadPositiveInt(MaxBatchesPerTickVariable, DefaultMaxBatchesPerTick, invalid),
             PurgeEnabled = ReadBool(PurgeEnabledVariable, defaultValue: true, invalid),
             SubjectErasureDeadline = ReadBoundedTimeSpan(
                 SubjectErasureDeadlineDaysVariable, DefaultSubjectErasureDeadline, TimeSpan.FromDays,

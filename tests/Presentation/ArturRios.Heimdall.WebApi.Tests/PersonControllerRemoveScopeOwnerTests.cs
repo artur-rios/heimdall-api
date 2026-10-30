@@ -27,58 +27,6 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
         Guid scopeId, Guid personId) =>
         Gateway.DeleteAsync<DataOutput<RemoveScopeOwnerCommandOutput?>>(Route(scopeId, personId));
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true, IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<int> OwnershipCountAsync(Scope scope, Person person)
     {
         await using var context = db.CreateContext();
@@ -89,9 +37,9 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenSystemAdmin_WhenDeleteScopeOwner_ThenOkAndRowIsGone()
     {
         // Given a scope with two owners (UC-22 main flow)
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        var coOwner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -112,9 +60,9 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenCoOwner_WhenDeleteScopeOwner_ThenOkAndRowIsGone()
     {
         // Given a Scope Admin removing a co-owner of a scope they own (FR-SC-10)
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        var actor = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -130,11 +78,11 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenScopeAdminOfAnotherScope_WhenDeleteScopeOwner_ThenForbidden()
     {
         // Given a Scope Admin who owns some other scope (AF-22c)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: scope);
-        var actor = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -149,10 +97,10 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenUserRole_WhenDeleteScopeOwner_ThenForbidden()
     {
         // Given a caller holding the User role — refused by the attribute, before any handler runs
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: scope);
-        var user = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(user.PublicId, (int)Roles.User));
 
         // When
@@ -167,8 +115,8 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenUnknownScope_WhenDeleteScopeOwner_ThenNotFound()
     {
         // AF-22a
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await RemoveOwnerAsync(Guid.NewGuid(), person.PublicId);
@@ -182,9 +130,9 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenLogicallyDeletedScope_WhenDeleteScopeOwner_ThenNotFound()
     {
         // AF-22a treats a logically deleted scope as absent
-        var scope = await SeedScopeAsync(isDeleted: true);
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await RemoveOwnerAsync(scope.PublicId, person.PublicId);
@@ -198,8 +146,8 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenUnknownPerson_WhenDeleteScopeOwner_ThenNotFound()
     {
         // AF-22a
-        var scope = await SeedScopeAsync();
-        await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await RemoveOwnerAsync(scope.PublicId, Guid.NewGuid());
@@ -213,10 +161,10 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     {
         // AF-22a — a ScopeAdmin who owns a different scope holds no row here; the target answer is a
         // 404 distinct from the caller-facing 403 of AF-22c
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        await SeedScopeAdminAsync(ownedScope: scope);
-        var person = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await RemoveOwnerAsync(scope.PublicId, person.PublicId);
@@ -230,8 +178,8 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     public async Task GivenSoleOwner_WhenDeleteScopeOwner_ThenConflictAndRowSurvives()
     {
         // AF-22b, NFR-12: the scope's only owner may not be removed
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await RemoveOwnerAsync(scope.PublicId, person.PublicId);
@@ -246,9 +194,9 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     {
         // The removal is not idempotent: the repeat finds no ownership row and answers AF-22a, the
         // same contrast UC-19 and UC-20 pin between the logical and the hard application deletion
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -265,9 +213,9 @@ public class PersonControllerRemoveScopeOwnerTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenNoToken_WhenDeleteScopeOwner_ThenUnauthorized()
     {
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
 
         var response = await RemoveOwnerAsync(scope.PublicId, person.PublicId);
 

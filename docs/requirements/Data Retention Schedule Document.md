@@ -128,8 +128,9 @@ as UC-10 for the cases that genuinely want the row gone.
 ### 4.4 How the anonymisation runs
 
 `IdentityAnonymisationService` dispatches `AnonymiseExpiredDeletionsCommand` on the same interval as
-the token purge, and the pass shares that one's properties: bounded to a batch per run, needing no
-coordination between instances, audited so each run leaves the evidence that erasure happened, and
+the token purge, and the pass shares that one's properties: taken a batch at a time, repeating the
+batch while it comes back full up to `MaxBatchesPerTick` batches a run and reporting what is still due
+when it stops at that cap (§6), needing no coordination between instances, audited so each run leaves the evidence that erasure happened, and
 treating a run with nothing due as a success.
 
 Three things are specific to it.
@@ -211,10 +212,15 @@ A hosted service (`TokenRetentionService`) dispatches `PurgeExpiredTokensCommand
 hourly by default. Three properties are worth stating, because each is a decision rather than an
 implementation detail.
 
-**It is bounded.** Each run removes at most `PurgeBatchSize` rows from any one table, oldest first.
-SRD §6.3.2 measured the write path degrading with the size of the table under sustained insert
-pressure, and a purge is sustained *delete* pressure on tables the login and recovery paths write
-to. A backlog drains over several runs instead of one long transaction competing with live traffic.
+**It is bounded.** Each run takes a table `PurgeBatchSize` rows at a time, oldest first, repeating
+the batch while it comes back full, for at most `MaxBatchesPerTick` batches (#206). SRD §6.3.2
+measured the write path degrading with the size of the table under sustained insert pressure, and a
+purge is sustained *delete* pressure on tables the login and recovery paths write to, so each batch is
+its own short delete rather than one long transaction competing with live traffic. One batch a run
+held a table to 12,000 rows a day at the defaults, which a backlog could outgrow for good; at 20
+batches the ceiling is 240,000. A backlog larger than a run's cap is left for the next, and the run
+reports how many rows are still due, so a backlog that is not draining is visible. The anonymisation
+and audit passes drain the same way.
 
 **It needs no coordination between instances.** NFR-06 requires that no instance assume it is alone,
 and every instance runs its own copy. Nothing is claimed or locked: a run selects a batch, and the
@@ -357,8 +363,10 @@ of the deletion, held for one purpose — to let §7.1 clear the targets that st
 it goes once that purpose is spent.
 
 **Written first.** UC-10, UC-29 and UC-05 (for each member person and Google User it removes) write
-the tombstone before they delete anything. If the delete then fails, the tombstone names a live row,
-which neither the pass nor the trigger acts on. The write is idempotent: a retried hard delete
+the tombstone before they delete anything. UC-10 and UC-05 write it in the same transaction as the
+deletes, so a delete that fails takes the tombstone with it (#212). UC-29's is a single row before a
+single delete; if that delete fails, the tombstone names a live row, which neither the pass nor the
+trigger acts on. The write is idempotent: a retried hard delete
 records the id again without error, keeping one row and moving its `created_at` to the retry. The
 table accepts a row only for a person or Google User that exists when it is written (#195, R1), so a
 tombstone cannot be planted for any other id to make its targets clearable; the Threat Model, §6.1,
@@ -461,7 +469,8 @@ Backup encryption belongs to the same issue and is not restated here.
 | --- | --- | --- | --- |
 | `HEIMDALL_RETENTION_TOKEN_GRACE_DAYS` | `7` | more than 0, up to 3650 | Days a single-use token is kept past expiry |
 | `HEIMDALL_RETENTION_PURGE_INTERVAL_MINUTES` | `60` | 1 to 10080 (7 days) | Interval between purge runs |
-| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Most rows removed from one table per run |
+| `HEIMDALL_RETENTION_PURGE_BATCH_SIZE` | `500` | any positive integer | Rows a pass takes from one table per batch |
+| `HEIMDALL_RETENTION_MAX_BATCHES_PER_TICK` | `20` | any positive integer | Most batches a pass takes from one table per run |
 | `HEIMDALL_RETENTION_PURGE_ENABLED` | `true` | `true` / `false` | Set `false` to stop scheduling the purge |
 | `HEIMDALL_RETENTION_ERASURE_DEADLINE_DAYS` | `30` | more than 0, up to 30 | Days before a requested erasure is anonymised |
 | `HEIMDALL_RETENTION_DELETION_WINDOW_DAYS` | `90` | more than 0, up to 730 | Days before an administrative deletion is anonymised |

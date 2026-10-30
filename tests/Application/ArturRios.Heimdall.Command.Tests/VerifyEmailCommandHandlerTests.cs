@@ -1,3 +1,4 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -5,10 +6,13 @@ using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace ArturRios.Heimdall.Command.Tests;
@@ -31,7 +35,8 @@ public class VerifyEmailCommandHandlerTests
             IValidator<VerifyEmailCommand>? validator = null,
             IPendingRegistrationConfirmer? pendingRegistrations = null) =>
             new(validator ?? PassingValidator(), Tokens, Tokens, InMemoryAtomicWrites.Instance,
-                pendingRegistrations ?? Confirming(PendingRegistrationOutcome.NotFound));
+                pendingRegistrations ?? Confirming(PendingRegistrationOutcome.NotFound),
+                InMemoryWriteTransactions.Instance, NullLogger<VerifyEmailCommandHandler>.Instance);
     }
 
     private sealed class StubConfirmer(PendingRegistrationConfirmation answer) : IPendingRegistrationConfirmer
@@ -174,6 +179,35 @@ public class VerifyEmailCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(second.Used);
         Assert.True(first.Used);
+    }
+
+    [UnitFact]
+    public async Task GivenTheOtherTokensCannotBeRetired_WhenHandlingVerifyEmail_ThenTheVerificationStillSucceeds()
+    {
+        // Given two live links, and a store that refuses to retire the one not clicked (#209)
+        var fixture = await FixtureAsync();
+        var tokens = new FailingUpdateTokens();
+        await TokenForAsync(tokens, fixture.Person, "first-token");
+        var clicked = await TokenForAsync(tokens, fixture.Person, "second-token");
+        var transactions = new InMemoryWriteTransactions();
+        var logger = new RecordingLogger<VerifyEmailCommandHandler>();
+        var handler = new VerifyEmailCommandHandler(PassingValidator(), tokens, tokens, InMemoryAtomicWrites.Instance,
+            Confirming(PendingRegistrationOutcome.NotFound), transactions, logger);
+
+        // When
+        var output = await handler.HandleAsync(Command("second-token"));
+
+        // Then the address was verified with the clicked token, and that is reported as the success it is
+        Assert.True(output.Success);
+        Assert.Contains(AuthMessages.EmailVerifiedSuccessfully, output.Messages);
+        Assert.True(clicked.Used);
+        Assert.True(fixture.Person.EmailVerified);
+
+        // Then — the verification's own transaction committed, the clean-up's did not, and the failure
+        // was logged
+        Assert.Equal(2, transactions.Begun);
+        Assert.Equal(1, transactions.Committed);
+        Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
     [UnitFact]
@@ -371,7 +405,8 @@ public class VerifyEmailCommandHandlerTests
         };
         var handler = new VerifyEmailCommandHandler(
             PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites,
-            Confirming(PendingRegistrationOutcome.NotFound));
+            Confirming(PendingRegistrationOutcome.NotFound),
+            InMemoryWriteTransactions.Instance, NullLogger<VerifyEmailCommandHandler>.Instance);
 
         // When
         var output = await handler.HandleAsync(Command("race-token"));
@@ -507,5 +542,15 @@ public class VerifyEmailCommandHandlerTests
 
         Assert.False(output.Success);
         Assert.Contains("store failed", output.Errors);
+    }
+
+    // A token store whose updates fail as they do when the database is unavailable; reading, creating
+    // and the atomic consumption (InMemoryAtomicWrites) are unaffected.
+    private sealed class FailingUpdateTokens
+        : AsyncFakeRepository<EmailVerificationToken, long>, IAsyncRepository<EmailVerificationToken, long>
+    {
+        Task<DataOutput<EmailVerificationToken>> IAsyncRepository<EmailVerificationToken, long>.UpdateAsync(
+            EmailVerificationToken entity, CancellationToken cancellationToken) =>
+            Task.FromResult(DataOutput<EmailVerificationToken>.New.WithError("The update was refused."));
     }
 }

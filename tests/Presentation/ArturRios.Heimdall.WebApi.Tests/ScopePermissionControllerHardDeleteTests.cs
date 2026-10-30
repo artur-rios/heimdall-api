@@ -21,58 +21,6 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
 {
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/permissions/{id}/hard";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<ScopePermission> SeedScopePermissionAsync(Scope scope, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -100,7 +48,7 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     public async Task GivenSystemAdmin_WhenHardDeleteScopePermission_ThenOkAndRowIsGone()
     {
         // Given an active scope permission (UC-35 main flow)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -119,7 +67,7 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     {
         // Given a permission already logically deleted by UC-34, sitting in a logically deleted
         // scope — neither flag is consulted by the lookup, so a cleanup pass can purge it
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
         var permission = await SeedScopePermissionAsync(scope, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -137,8 +85,8 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     {
         // Given a permission whose foreign key points outward at its scope: removing it cascades to
         // neither the scope nor any scope-owner link
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -162,8 +110,8 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     {
         // Given the Scope Admin who owns the scope: UC-34 lets them logically delete a permission,
         // UC-35 does not let them purge it — permanent removal is a System Admin operation
-        var scope = await SeedScopeAsync();
-        var admin = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var admin = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.For(admin.PublicId, (int)Roles.ScopeAdmin));
 
@@ -180,9 +128,9 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     public async Task GivenUserRole_WhenHardDeleteScopePermission_ThenForbidden()
     {
         // Given a caller holding the User role (UC-35's actor is the System Admin alone)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
-        var caller = await SeedUserAsync(scope);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -198,7 +146,7 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     public async Task GivenUnknownScopePermission_WhenHardDeleteScopePermission_ThenNotFound()
     {
         // Given a permission id nobody holds (AF-35a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -213,8 +161,8 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     public async Task GivenScopePermissionOfAnotherScope_WhenHardDeleteScopePermission_ThenNotFound()
     {
         // Given the permission exists, but under a different scope than the path addresses (AF-35a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(otherScope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -232,7 +180,7 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     {
         // Given the endpoint called twice: the removal leaves nothing to find, so UC-35 has no
         // idempotent path — unlike UC-34's AF-34b
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var permission = await SeedScopePermissionAsync(scope);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -251,7 +199,7 @@ public class ScopePermissionControllerHardDeleteTests(PostgresFixture db) : WebA
     public async Task GivenNoToken_WhenHardDeleteScopePermission_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeleteScopePermissionCommandOutput?>>(

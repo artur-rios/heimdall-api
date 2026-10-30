@@ -33,7 +33,10 @@ public static class OwnedScopeVisibility
     ///     can no longer authenticate, so a token issued before the deletion reveals nothing.
     /// </remarks>
     public static async Task<IReadOnlyCollection<long>?> ScopesVisibleToAsync(
-        IAsyncReadOnlyRepository<Person, long> personReader, int actingRole, Guid actingPersonId)
+        IAsyncReadOnlyRepository<Person, long> personReader,
+        int actingRole,
+        Guid actingPersonId,
+        CancellationToken cancellationToken = default)
     {
         if (actingRole == (int)Roles.SystemAdmin)
         {
@@ -43,6 +46,6 @@ public static class OwnedScopeVisibility
         return await personReader.Query()
             .Where(x => x.PublicId == actingPersonId && !x.IsDeleted)
             .SelectMany(x => x.ScopeOwnerships.Select(ownership => ownership.ScopeId))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 }

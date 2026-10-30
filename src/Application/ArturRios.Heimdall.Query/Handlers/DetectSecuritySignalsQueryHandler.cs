@@ -69,7 +69,7 @@ public class DetectSecuritySignalsQueryHandler(
             .GroupBy(entry => entry.ActorPersonId)
             .Select(group => new { ActorId = group.Key, Count = group.Count() })
             .Where(group => group.Count >= options.RefusalThreshold)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         signals.AddRange(refusalsByActor.Select(group => new SecuritySignal
         {
@@ -85,7 +85,7 @@ public class DetectSecuritySignalsQueryHandler(
         // ordinary, and the thing worth knowing is many at once, which is what credential stuffing
         // against a list of addresses produces.
         var lockedOut = await personReader.Query()
-            .CountAsync(person => person.LockedOutUntil != null && person.LockedOutUntil > now);
+            .CountAsync(person => person.LockedOutUntil != null && person.LockedOutUntil > now, cancellationToken);
 
         if (lockedOut >= options.LockoutThreshold)
         {
@@ -103,7 +103,7 @@ public class DetectSecuritySignalsQueryHandler(
         // describes is detectable without instrumenting the gate itself.
         var shedding = await auditReader.Query()
             .CountAsync(entry => entry.CreatedAt >= since
-                                 && entry.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable);
+                                 && entry.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable, cancellationToken);
 
         if (shedding >= options.RefusalThreshold)
         {

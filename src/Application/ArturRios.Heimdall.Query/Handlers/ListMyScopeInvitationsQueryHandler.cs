@@ -64,6 +64,6 @@ public class ListMyScopeInvitationsQueryHandler(
                 ExpiresAt = x.ExpiresAt
             });
 
-        return await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        return await projected.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
     }
 }

@@ -5,8 +5,8 @@ namespace ArturRios.Heimdall.WebApi.Security;
 /// <summary>
 ///     A person-token lifetime read from <c>HEIMDALL_AUTH_TOKEN_EXPIRATION_IN_SECONDS</c>: the seconds
 ///     to use, and the configured text when it was present but unusable and the default applied in its
-///     place. Pulled out of <c>Startup.BuildJwtConfiguration</c> so the parse can be tested and the
-///     fallback reported.
+///     place. Pulled out of <c>JwtConfigurationBuilder.BuildJwtConfiguration</c> so the parse can be tested
+///     and the fallback reported.
 /// </summary>
 /// <param name="Seconds">The lifetime to use.</param>
 /// <param name="RejectedValue">

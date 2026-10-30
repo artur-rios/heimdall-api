@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,31 +26,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-2fa-Pass!";
+    private const string Password = Seeds.Password;
     private const string EmailCode = "123456";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string CurrentTotpCode(string base32Secret) =>
         new Totp(Base32Encoding.ToBytes(base32Secret)).ComputeTotp();
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedActiveAsync(Person person, bool appEnabled, bool emailEnabled,
         byte[]? totpSecretEncrypted = null)
@@ -71,7 +54,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     private async Task SeedEmailCodeAsync(long twoFactorAuthId, string code, bool used = false)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt, PasswordHashing.Configuration);
         context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,
@@ -160,7 +143,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     {
         // Given an App-only configuration enabled and confirmed for real, plus an extra pre-existing
         // recovery code seeded directly (on top of the ten UC-37's confirm already issued)
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("app-regenerate"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("app-regenerate") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppSecretAsync(person);
         var twoFactorAuth = (await ConfigurationForAsync(person))!;
@@ -188,7 +171,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenValidEmailCode_WhenPostRegenerate_ThenTenNewRecoveryCodesAreIssued()
     {
         // Given an active email-only configuration, a live email code, and one pre-existing recovery code
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("email-regenerate"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("email-regenerate") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
         await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -207,7 +190,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenValidRecoveryCode_WhenPostRegenerate_ThenOldRecoveryCodesNoLongerValidate()
     {
         // Given an active configuration and one of the person's recovery codes
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("recovery-regenerate"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("recovery-regenerate") });
         var twoFactorAuth = await SeedActiveAsync(
             person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -237,7 +220,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenTwoFactorNeverEnabled_WhenPostRegenerate_ThenNotFound()
     {
         // Given — AF-40a: no TWO_FACTOR_AUTH row at all
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("never-enabled-regen"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("never-enabled-regen") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -252,7 +235,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenPendingNotYetActiveConfiguration_WhenPostRegenerate_ThenNotFound()
     {
         // Given — AF-40a: a row exists (UC-36 initiated it) but was never confirmed by UC-37
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("pending-only-regen"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("pending-only-regen") });
         await using (var context = db.CreateContext())
         {
             context.TwoFactorAuths.Add(new TwoFactorAuth
@@ -275,7 +258,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenWrongCode_WhenPostRegenerate_ThenUnauthorizedAndOldCodesSurvive()
     {
         // Given — AF-40b
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("wrong-factor-regen"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("wrong-factor-regen") });
         var twoFactorAuth = await SeedActiveAsync(
             person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -294,7 +277,7 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
     public async Task GivenAlreadyUsedRecoveryCode_WhenPostRegenerate_ThenUnauthorized()
     {
         // Given — AF-40b's recovery-code shape
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("used-recovery-regen"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("used-recovery-regen") });
         var twoFactorAuth = await SeedActiveAsync(
             person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id, used: true);

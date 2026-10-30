@@ -16,70 +16,15 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Member",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, string name = "Admin")
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = name,
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
     [FunctionalFact]
     public async Task GivenSystemAdmin_WhenGetScopeOwners_ThenReturnsOnlyThatScopesOwners()
     {
         // Given a scope with one owner and one User, plus an owner of another scope
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
-        await SeedScopeAdminAsync(ownedScope: otherScope);
-        var member = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [otherScope] });
+        var member = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", EmailVerified = false, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -99,9 +44,9 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
     public async Task GivenOwnerScopeAdmin_WhenGetScopeOwners_ThenReturnsCoOwners()
     {
         // Given two ScopeAdmins owning the same scope
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope, name: "Ana");
-        await SeedScopeAdminAsync(ownedScope: scope, name: "Bruno");
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Ana", EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Bruno", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -117,9 +62,9 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
     public async Task GivenNameFilter_WhenGetScopeOwners_ThenReturnsMatchingOwnerOnly()
     {
         // Given two owners of the scope
-        var scope = await SeedScopeAsync();
-        var ana = await SeedScopeAdminAsync(ownedScope: scope, name: "Ana");
-        await SeedScopeAdminAsync(ownedScope: scope, name: "Bruno");
+        var scope = await Seeds.ScopeAsync(db);
+        var ana = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Ana", EmailPrefix = "admin", Owns = [scope] });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Bruno", EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -135,9 +80,9 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
     public async Task GivenScopeAdminNotOwningScope_WhenGetScopeOwners_ThenForbidden()
     {
         // Given a ScopeAdmin who does not own the scope (AF-07b)
-        var scope = await SeedScopeAsync();
-        await SeedScopeAdminAsync(ownedScope: scope);
-        var outsider = await SeedScopeAdminAsync();
+        var scope = await Seeds.ScopeAsync(db);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var outsider = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         Authorize(TestTokens.For(outsider.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -166,7 +111,7 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
     public async Task GivenPlainUserCaller_WhenGetScopeOwners_ThenForbidden()
     {
         // Given a User, whom the role gate rejects before the handler runs
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -181,7 +126,7 @@ public class PersonControllerListScopeOwnersTests(PostgresFixture db) : WebApiTe
     public async Task GivenNoToken_WhenGetScopeOwners_ThenUnauthorized()
     {
         // Given a scope but no bearer token on the gateway
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(

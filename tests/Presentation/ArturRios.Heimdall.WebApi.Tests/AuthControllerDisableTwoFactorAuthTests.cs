@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,31 +26,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-2fa-Pass!";
+    private const string Password = Seeds.Password;
     private const string EmailCode = "123456";
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string CurrentTotpCode(string base32Secret) =>
         new Totp(Base32Encoding.ToBytes(base32Secret)).ComputeTotp();
-
-    private async Task<Person> SeedPersonAsync(Roles role, string email)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedActiveAsync(Person person, bool appEnabled, bool emailEnabled,
         byte[]? totpSecretEncrypted = null)
@@ -71,7 +54,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     private async Task SeedEmailCodeAsync(long twoFactorAuthId, string code, bool used = false)
     {
         await using var context = db.CreateContext();
-        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt);
+        var codeHash = Hash.EncodeWithRandomSalt(code, out var salt, PasswordHashing.Configuration);
         context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
         {
             TwoFactorAuthId = twoFactorAuthId,
@@ -126,7 +109,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     {
         // Given an App-only configuration enabled and confirmed for real, so the stored TOTP secret
         // is genuinely Data-Protection-encrypted, plus a recovery code issued alongside it
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("app-disable"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("app-disable") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
         var secret = await EnableAppSecretAsync(person);
         var twoFactorAuth = (await ConfigurationForAsync(person))!;
@@ -184,7 +167,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenValidPasswordAndEmailCode_WhenPostDisable_ThenTwoFactorAuthIsRemoved()
     {
         // Given an active email-only configuration and a live email code
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("email-disable"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("email-disable") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
         await SeedEmailCodeAsync(twoFactorAuth.Id, EmailCode);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
@@ -202,7 +185,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenValidPasswordAndRecoveryCode_WhenPostDisable_ThenTwoFactorAuthAndRecoveryCodesAreRemoved()
     {
         // Given an active configuration and one of the person's recovery codes
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("recovery-disable"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("recovery-disable") });
         var twoFactorAuth = await SeedActiveAsync(
             person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
@@ -226,7 +209,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenTwoFactorNeverEnabled_WhenPostDisable_ThenNotFound()
     {
         // Given — AF-39a: no TWO_FACTOR_AUTH row at all
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("never-enabled"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("never-enabled") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -241,7 +224,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenPendingNotYetActiveConfiguration_WhenPostDisable_ThenNotFound()
     {
         // Given — AF-39a: a row exists (UC-36 initiated it) but was never confirmed by UC-37
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("pending-only"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("pending-only") });
         await using (var context = db.CreateContext())
         {
             context.TwoFactorAuths.Add(new TwoFactorAuth
@@ -264,7 +247,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenWrongPassword_WhenPostDisable_ThenUnauthorizedAndRowSurvives()
     {
         // Given — AF-39b
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("wrong-password"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("wrong-password") });
         await SeedActiveAsync(person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -281,7 +264,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenCorrectPasswordAndWrongCode_WhenPostDisable_ThenUnauthorizedAndRowSurvives()
     {
         // Given — AF-39c
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("wrong-factor"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("wrong-factor") });
         await SeedActiveAsync(person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
@@ -298,7 +281,7 @@ public class AuthControllerDisableTwoFactorAuthTests(PostgresFixture db) : WebAp
     public async Task GivenCorrectPasswordAndAlreadyUsedRecoveryCode_WhenPostDisable_ThenUnauthorized()
     {
         // Given — AF-39c's recovery-code shape
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("used-recovery-disable"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("used-recovery-disable") });
         var twoFactorAuth = await SeedActiveAsync(
             person, appEnabled: true, emailEnabled: false, totpSecretEncrypted: [1, 2, 3, 4]);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id, used: true);

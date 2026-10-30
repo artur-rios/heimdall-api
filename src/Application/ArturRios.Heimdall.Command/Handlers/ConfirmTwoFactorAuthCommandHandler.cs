@@ -29,13 +29,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         inventing a second refusal UC-37 does not define.
 ///     </para>
 ///     <para>
-///         The App and Email checks both run, in that order, and a request that fails either one
+///         The Email and App checks both run, in that order, and a request that fails either one
 ///         activates nothing — the pending row stays pending and can be confirmed by a later attempt.
-///         One thing does change on the way through, though: an app code that verified is spent, so
-///         a request whose App check passed and whose Email check then failed has to be retried with
-///         a <em>fresh</em> app code. That is the single-use rule working as intended
-///         (<see cref="ITotpCodeVerifier" />), not an accident of ordering — a code presented to this
-///         endpoint has been presented, whatever the rest of the request went on to do.
+///         The email code goes first because checking it spends nothing, where an app code that
+///         verified is spent (<see cref="ITotpCodeVerifier" />): a wrong email code therefore leaves
+///         the app code usable for the retry. A request whose Email check passed and whose App check
+///         then failed leaves the email code unspent too, since it is consumed only once every check
+///         has passed.
 ///     </para>
 ///     <para>
 ///         <b>One refusal, one budget.</b> A missing or wrong code for either method answers the one
@@ -45,16 +45,17 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         the pending factor's codes without bound, nor learn which of the two codes was wrong.
 ///     </para>
 ///     <para>
-///         <b>Write order.</b> The recovery codes are persisted <em>before</em>
-///         <see cref="TwoFactorAuth.IsActive" /> is set, and in a single
-///         <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" /> rather than ten separate inserts. The
-///         repository layer exposes no transaction, so ordering is what stands in for one: the
-///         dangerous half-write is "two-factor is active but the caller holds no recovery codes",
-///         which would lock a caller out of their own account on the strength of a request this
-///         handler reported as failed. Writing the codes first makes the surviving failure modes
-///         harmless — codes stored against a configuration that never activated, which the next
-///         attempt replaces, and which authenticate nothing on their own while
-///         <see cref="TwoFactorAuth.IsActive" /> is <c>false</c>.
+///         <b>One transaction</b> (#209). Spending the email code, clearing the re-authentication
+///         budget, replacing the security stamp, storing the recovery codes and activating the
+///         configuration share one <see cref="IWriteTransactions" /> transaction, so a failure among
+///         them keeps none of it: the email code can be presented again, no session is revoked and no
+///         codes are left that nobody was shown. The half-write that mattered most — "two-factor is
+///         active but the caller holds no recovery codes", which would lock a caller out on the strength
+///         of a request reported as failed — cannot happen at all. The codes are still written before
+///         the activation, in one <see cref="IAsyncRepository{T, TKey}.CreateRangeAsync" />, as before.
+///         An accepted app code is the exception: <see cref="ITotpCodeVerifier" /> spends its time step
+///         before the transaction opens, with the budget's charge, so a failed confirmation still costs
+///         the caller that code and they present the next one.
 ///     </para>
 /// </remarks>
 public class ConfirmTwoFactorAuthCommandHandler(
@@ -65,7 +66,8 @@ public class ConfirmTwoFactorAuthCommandHandler(
     IAtomicWrites atomicWrites,
     IAsyncReadOnlyRepository<TwoFactorRecoveryCode, long> recoveryCodeReader,
     IAsyncRepository<TwoFactorRecoveryCode, long> recoveryCodeWriter,
-    ITotpCodeVerifier totpCodeVerifier)
+    ITotpCodeVerifier totpCodeVerifier,
+    IWriteTransactions transactions)
     : ICommandHandlerAsync<ConfirmTwoFactorAuthCommand, ConfirmTwoFactorAuthCommandOutput>
 {
     public async Task<DataOutput<ConfirmTwoFactorAuthCommandOutput?>> HandleAsync(
@@ -99,15 +101,9 @@ public class ConfirmTwoFactorAuthCommandHandler(
         // still has the codes compared, and refuses them whatever the result.
         var admitted = await ReauthenticationBudget.TryChargeAsync(atomicWrites, person);
 
-        // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
-        // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
-        // ITwoFactorFactorVerifier.
-        if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
-        {
-            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
-        }
-
-        // AF-37c: the Email method's code, if the method was selected.
+        // AF-37c: the Email method's code, if the method was selected. Checked first, because looking
+        // an email code up spends nothing but its guess budget, where an app code that verifies is
+        // spent (FR-2F-14): the other order let a wrong email code burn a right app code.
         TwoFactorEmailCode? consumedEmailCode = null;
 
         if (twoFactorAuth.EmailEnabled)
@@ -120,6 +116,14 @@ public class ConfirmTwoFactorAuthCommandHandler(
             }
         }
 
+        // AF-37b: the App method's code, if the method was selected. ITotpCodeVerifier owns the
+        // secret, the clock-drift window, and the single-use rule, shared with UC-38/39/40's
+        // ITwoFactorFactorVerifier.
+        if (twoFactorAuth.AppEnabled && !await totpCodeVerifier.VerifyAsync(twoFactorAuth, command.AppCode))
+        {
+            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+        }
+
         // Only now is the pause decided, so that it answers as a wrong code does, and before the
         // email code is spent, so a paused request leaves it for the account holder.
         if (!admitted)
@@ -127,42 +131,49 @@ public class ConfirmTwoFactorAuthCommandHandler(
             return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
         }
 
-        // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write only
-        // one request can win, so two confirmations racing on the same code cannot both issue a set
-        // of recovery codes and activate.
-        if (consumedEmailCode is not null && !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
-        {
-            return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
-        }
-
-        await ReauthenticationBudget.ClearAsync(atomicWrites, person);
-
-        // FR-AU-11: every token issued before the second factor was required is revoked — including
-        // the one confirming it, so the caller signs in again, this time through UC-38. A token that
-        // predates the factor proves only the password, which is what the factor guards against.
-        // Before the writes that activate it, so a failure among them costs one extra sign-in at most.
-        await atomicWrites.RotateSecurityStampAsync(person);
-
-        // UC-37 steps 4-5 (FR-2F-05, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
-        // once — written before the activation below, per the write-order note in the remarks.
         var recoveryCodes = RecoveryCodes.Issue();
 
-        var issuance = await IssueRecoveryCodesAsync(twoFactorAuth.Id, recoveryCodes);
-
-        if (issuance is not null)
+        // Everything from spending the email code to the activation lands together or not at all
+        // (#209): leaving the transaction by any return or exception before the commit rolls it back.
+        await using (var transaction = await transactions.BeginAsync())
         {
-            return output.WithErrors(issuance);
-        }
+            // UC-37 step 7, brought forward: the code is spent before anything is issued, in a write
+            // only one request can win, so two confirmations racing on the same code cannot both issue
+            // a set of recovery codes and activate.
+            if (consumedEmailCode is not null && !await atomicWrites.TryConsumeEmailCodeAsync(consumedEmailCode))
+            {
+                return output.WithError(AuthMessages.PasswordOrCodeIncorrect);
+            }
 
-        // UC-37 step 3: every required check passed and the caller now holds their recovery codes,
-        // so the configuration can be activated.
-        twoFactorAuth.IsActive = true;
+            await ReauthenticationBudget.ClearAsync(atomicWrites, person);
 
-        var activation = await twoFactorWriter.UpdateAsync(twoFactorAuth);
+            // FR-AU-11: every token issued before the second factor was required is revoked —
+            // including the one confirming it, so the caller signs in again, this time through UC-38.
+            // A token that predates the factor proves only the password, which is what the factor
+            // guards against.
+            await atomicWrites.RotateSecurityStampAsync(person);
 
-        if (!activation.Success)
-        {
-            return output.WithErrors(activation.Errors);
+            // UC-37 steps 4-5 (FR-2F-05, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
+            // once — written before the activation below.
+            var issuance = await IssueRecoveryCodesAsync(twoFactorAuth.Id, recoveryCodes);
+
+            if (issuance is not null)
+            {
+                return output.WithErrors(issuance);
+            }
+
+            // UC-37 step 3: every required check passed and the caller now holds their recovery
+            // codes, so the configuration can be activated.
+            twoFactorAuth.IsActive = true;
+
+            var activation = await twoFactorWriter.UpdateAsync(twoFactorAuth);
+
+            if (!activation.Success)
+            {
+                return output.WithErrors(activation.Errors);
+            }
+
+            await transaction.CommitAsync();
         }
 
         return output
@@ -190,10 +201,10 @@ public class ConfirmTwoFactorAuthCommandHandler(
     ///     persistence errors, or <c>null</c> on success.
     /// </summary>
     /// <remarks>
-    ///     The delete is what makes a retry after a failed attempt safe: a prior run that stored its
-    ///     codes and then failed to activate left ten rows nobody was ever told about, and without
-    ///     this the next attempt would leave them in place alongside the ten it does return — the
-    ///     same "old codes valid alongside new ones" UC-40 exists to prevent.
+    ///     The delete keeps the set at exactly the ten this attempt returns, whatever is stored against
+    ///     the configuration — such as codes a run before #209's transaction stored and then failed to
+    ///     activate, which nobody was ever told about — so old codes are never valid alongside new ones,
+    ///     what UC-40 exists to prevent.
     /// </remarks>
     private async Task<IEnumerable<string>?> IssueRecoveryCodesAsync(
         long twoFactorAuthId, IReadOnlyCollection<IssuedRecoveryCode> recoveryCodes)

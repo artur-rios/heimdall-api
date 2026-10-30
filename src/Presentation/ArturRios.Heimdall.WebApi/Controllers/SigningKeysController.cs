@@ -32,7 +32,7 @@ public class SigningKeysController(TokenSigningKeys keys) : Controller
     /// </remarks>
     [HttpGet("jwks.json")]
     [AllowAnonymous]
-    [EnableRateLimiting(Startup.AuthEndpointRateLimitPolicy)]
+    [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
     [ProducesResponseType<JsonWebKeySetDocument>(StatusCodes.Status200OK, "application/json")]
     public ContentResult KeySet()
     {

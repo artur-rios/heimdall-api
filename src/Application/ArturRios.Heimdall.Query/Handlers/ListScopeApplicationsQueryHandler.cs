@@ -33,7 +33,7 @@ public class ListScopeApplicationsQueryHandler(
         var output = PaginatedOutput<ApplicationOutput>.New;
 
         // NFR-10: page number/size bounds and filter length, validated before any query runs.
-        var validation = await validator.ValidateAsync(query);
+        var validation = await validator.ValidateAsync(query, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -42,7 +42,7 @@ public class ListScopeApplicationsQueryHandler(
 
         // AF-17a: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == query.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == query.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -52,7 +52,8 @@ public class ListScopeApplicationsQueryHandler(
         // AF-17b: a Scope Admin may only list a scope they own; a System Admin bypasses. The gate is
         // not redundant with the owner narrowing below: without it, an actor probing an unrelated
         // scope would get an empty 200, indistinguishable from a scope that is genuinely empty.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(query.ActingRole, query.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(
+                query.ActingRole, query.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ApplicationMessages.NotScopeOwner);
         }
@@ -105,7 +106,7 @@ public class ListScopeApplicationsQueryHandler(
         // through a list sees every row exactly once.
         var ordered = projected.OrderBy(x => x.Name).ThenBy(x => x.Id);
 
-        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null);
+        var page = await ordered.PaginateAsync(query.PageNumber, query.PageSize, orderBy: null, cancellationToken: cancellationToken);
 
         return page.WithMessage(ApplicationMessages.ApplicationsRetrievedSuccessfully);
     }

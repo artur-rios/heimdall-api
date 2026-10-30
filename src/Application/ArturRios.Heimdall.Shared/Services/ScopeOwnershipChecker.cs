@@ -11,7 +11,8 @@ namespace ArturRios.Heimdall.Shared.Services;
 /// </summary>
 public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person, long> personReader) : IScopeOwnershipChecker
 {
-    public async Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId)
+    public async Task<bool> ActorMayManageScopeAsync(int actingRole, Guid actingPersonId, long scopeId,
+        CancellationToken cancellationToken = default)
     {
         // A System Admin bypasses the ownership check entirely (no query needed).
         if (actingRole == (int)Roles.SystemAdmin)
@@ -24,6 +25,6 @@ public class ScopeOwnershipChecker(IAsyncReadOnlyRepository<Person, long> person
         // keep working until it expires.
         return await personReader.Query().AnyAsync(person =>
             person.PublicId == actingPersonId && !person.IsDeleted &&
-            person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scopeId));
+            person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scopeId), cancellationToken);
     }
 }

@@ -24,7 +24,7 @@ public class ListApplicationCredentialsQueryHandler(
 
         // AF-54a, then AF-54b.
         var access = await ApplicationManagementAccess.ResolveAsync(
-            applicationReader.Query(), query.ScopeId, query.Id, query.ActingRole, query.ActingPersonId);
+            applicationReader.Query(), query.ScopeId, query.Id, query.ActingRole, query.ActingPersonId, cancellationToken);
 
         switch (access.Access)
         {

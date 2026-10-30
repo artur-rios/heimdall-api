@@ -133,7 +133,7 @@ graph LR
 | FR-PE-07 | The system shall allow **hard deletion** of a person, permanently removing the record | High |
 | FR-PE-08 | Logically deleted persons shall not appear in default query results unless explicitly requested | Medium |
 | FR-PE-09 | A `User` person's email must be unique among the `User`s of their scope; a `ScopeAdmin` or `SystemAdmin` person's email must be unique among all `ScopeAdmin` and `SystemAdmin` persons system-wide. The two namespaces are independent: an admin address and a scoped `User` address never collide with each other, because login resolves them by different lookups (FR-AU-01/02). Comparison is case-insensitive | High |
-| FR-PE-10 | A person with the `SystemAdmin` role must not be associated with any scope, either as an owner or as a user | High |
+| FR-PE-10 | A person with the `SystemAdmin` role must not be a member of any scope (no `SCOPE_USER` row). They may be a named owner of scopes (FR-SC-08): a promotion to `SystemAdmin` removes the person's scope membership and keeps their scope ownerships, so a scope they owned, and the applications they own, keep a valid owner | High |
 | FR-PE-11 | A person with the `ScopeAdmin` role must own **at least one** scope, and must not belong to any scope as a `User`. This is an invariant the scope-assignment operations maintain (UC-01, UC-06 path c, UC-21, UC-23); removing the scope itself (UC-05) or the last ownership row (UC-22) can still leave a `ScopeAdmin` owning none — see §8 | High |
 | FR-PE-12 | The system shall allow listing the persons who may own a scope — the `ScopeAdmin` persons of the system, and for a `SystemAdmin` caller the `SystemAdmin` persons too — with pagination and optional case-insensitive name and email filters, and optional exclusion of the current owners of a named scope. Readable by a `SystemAdmin` or a `ScopeAdmin`. The projection is the person's identifier, name, and email only — no role, owned scopes, verification, two-factor state, or timestamps. When the exclusion is requested, the caller must be entitled to manage the named scope, since comparing the filtered and unfiltered results would otherwise enumerate that scope's owners | High |
 | FR-PE-13 | The system shall allow listing the `SystemAdmin` persons of the system, with pagination and optional case-insensitive name and email filters, ordered by name. Readable by a `SystemAdmin` only. Logically deleted persons and persons whose processing is restricted (NFR-24) are not listed. The projection is the person's identifier, name, and email only, as in FR-PE-12 | Medium |
@@ -264,6 +264,7 @@ graph LR
 | FR-SR-12 | The system shall allow System Admins and the scope's owners to discard one of a scope's pending self-registrations, removing it so that its link stops working. A registration of another scope shall be answered exactly as a missing one. The discard shall be audited with the registration as target | Medium |
 | FR-SR-13 | An address shall have at most three live (unexpired) pending registrations in one scope at a time, compared case-insensitively. A registration beyond that shall store nothing and mail nothing, and shall be answered exactly as any other (FR-SR-06) | Medium |
 | FR-SR-14 | An address shall be sent at most three registration-attempt notices (FR-SR-05) in a day, whichever scopes the attempts named: the first notice opens a one-day window, and the next notice after it ends opens another. A notice beyond that shall not be sent, and the registration shall be answered exactly as any other (FR-SR-06). The count shall be kept under a SHA-256 digest of the address, never the address itself, charged before the notice is sent so that simultaneous attempts cannot exceed it (NFR-27), and purged with the single-use tokens once its window has ended (NFR-19) | Medium |
+| FR-SR-15 | A scope shall have at most `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (1000 by default) live (unexpired) pending registrations at a time, whatever their addresses. A registration beyond that shall store nothing and mail nothing, shall be answered exactly as any other (FR-SR-06), and shall be logged at Warning with the marker `REGISTRATION_CAP_REACHED` and the scope's public identifier, never the address (NFR-22). The count is read before the registration is written, so instances processing registrations for one scope at the same moment may each exceed it by one | Medium |
 
 ### 3.9 Scope Permission Management
 
@@ -537,28 +538,33 @@ scope it implies, the login lockout, and the deletion, erasure-request, restrict
 columns — are written only by targeted, conditional writes of the columns each change concerns, like
 the password, the security stamp and the budgets above, never by a whole-row save. A save of a copy
 read before one of those changes therefore cannot put the earlier value back; what a whole-row save
-still writes is the plain profile, `Name` and the recorded basis among it, and `UpdatedAt` (#237).
+could still write is the plain profile, `Name` and the recorded basis among it, and `UpdatedAt` (#237).
+UC-08 and UC-23, the last writers that saved a person row whole, no longer do: UC-08 writes the name and
+`UpdatedAt` by a targeted write that requires the person not to be logically deleted, and a role change
+(UC-08, UC-23) removes the `SCOPE_USER` row beside the role rather than through a save of the person
+(#205). A scope's details (UC-03), its deletion flag (UC-04) and each of its settings with an endpoint
+of its own — Google sign-in (UC-24), self-registration (FR-SR-02), the email links — are written the same
+way, each by a targeted write of its own columns and `UpdatedAt` that requires the scope not to be
+logically deleted, so none of them writes back another's, and none can revive a scope deleted meanwhile.
 
-Two residuals are recorded rather than closed:
+One residual is recorded rather than closed:
 
-- **`Name` is still written whole-row.** A save of a copy read before an anonymisation could put the
-  real name back over the placeholder. Anonymisation reaches only rows deleted for the whole retention
-  window, which no profile edit spans (UC-08 reads live persons only), so the one overlap is an
-  operator running `ReapplyErasures` after a restore, racing a name edit or another save that has the
-  person tracked, within one request's duration. Writing the name by a targeted write that requires
-  the person live and not anonymised would close it.
-- **Two removals of a scope's last two owners at the same moment can both succeed.** Removing an
-  owner (UC-22) deletes the `SCOPE_OWNER` row only while another live owner remains, checked in the
-  same statement, but under `READ COMMITTED` each of two simultaneous removals can still see the
-  other's row. The same check-then-act gap is in the other last-owner checks (UC-08's role change,
-  UC-09, UC-42's block decision). The scope is then left with no live owner until a System Admin adds
-  one (UC-21). Locking the scope row in one check that all four share would close it.
+- **An ownership gained while its holder is taken out is not guarded.** Every writer that can take an
+  owner out of a scope — removing an ownership (UC-22), deleting a person (UC-09, UC-10), suspending
+  one for erasure (UC-42 and the anonymisation pass's retry) — asks NFR-12's guard and writes in one
+  transaction that first locks the rows of the scopes in question (`SELECT … ORDER BY id FOR NO KEY
+  UPDATE`), and the scope deletions (UC-04, UC-05) lock their scope too, so two of them on one scope
+  run one after the other and the second reads what the first wrote (#202). The writers that add an
+  owner (UC-03, UC-21, UC-23, an accepted invitation) take no lock, since adding one cannot leave a
+  scope ownerless. A scope created naming, or an ownership granted to, a person in the moment that
+  person is deleted is therefore not seen by the deletion's guard, and the scope can be left with only
+  that deleted owner until a System Admin adds one (UC-21).
 
 A person's relationship to scopes is derived from its role:
 
 - `User`: exactly one row in `SCOPE_USER`.
 - `ScopeAdmin`: one or more rows in `SCOPE_OWNER`.
-- `SystemAdmin`: no rows in either `SCOPE_OWNER` or `SCOPE_USER`.
+- `SystemAdmin`: no row in `SCOPE_USER`, and any number of rows in `SCOPE_OWNER` (FR-SC-08, FR-PE-10).
 
 The person row also carries a `ScopeId` column: a copy of a `User`'s `SCOPE_USER` scope, `null` for an
 admin, and not a second source of truth. It exists so that FR-PE-09's per-scope uniqueness of an
@@ -636,6 +642,13 @@ At most one row per `(ScopeId, InviteePersonId)` has a null `EndedAt` (a partial
 | ScopeId | BigInt | Foreign key to Scope.Id (internal), required |
 | CreatedAt | DateTime | Auto-set on creation |
 | UpdatedAt | DateTime | Auto-set on update |
+
+A Google User's lifecycle columns — the deletion, erasure-request, restriction and anonymisation columns
+— are written as a person's are: only by targeted, conditional writes of the columns each change
+concerns (UC-28, UC-42, UC-44, UC-45, the anonymisation and re-erasure passes), never by a whole-row
+save, so a write of a copy read before one of those changes cannot put the earlier state back. UC-25's
+refresh of `EmailVerified` (FR-GO-19) is targeted too, and is made only while the account may still sign
+in as it was found (#205).
 
 `GOOGLE_USER` is a separate table from `PERSON`. Unlike `PERSON`, it has a direct `ScopeId` column rather than going through `SCOPE_USER`, because a Google User always represents the `User` role and single-scope membership — it never needs the ownership/multi-scope semantics that `SCOPE_OWNER` exists for. It has no `PasswordHash`, `Salt`, or `RoleId`: authentication is delegated to Google, and the role is implicitly `User`.
 
@@ -809,15 +822,15 @@ where a control is narrower than the threat it appears to cover.
 | NFR-01 | Technology | The API shall be built using ASP.NET Core on the .NET platform (specific framework/language versions and libraries: see the [Technology Stack Document](Technology%20Stack%20Document.md)) |
 | NFR-02 | Security | Passwords shall be hashed using a strong algorithm (e.g., bcrypt, Argon2) combined with a per-person random `Salt`, both stored as byte arrays |
 | NFR-03 | Security | Authentication tokens shall be signed and have configurable expiration |
-| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification, UC-47 self-registration) and the public liveness check (FR-HC-01). Each is marked `AllowAnonymous`; no other endpoint may be |
+| NFR-04 | Security | Every endpoint shall require a valid authentication token, except those a caller cannot yet hold one for or is not expected to: the authentication endpoints themselves (UC-11 login, UC-12/UC-13 password recovery and reset, UC-14 email verification, UC-25 Google sign-in, UC-38 second-factor verification, UC-47 self-registration), the public liveness check (FR-HC-01) and the public readiness check (FR-HC-08). Each is marked `AllowAnonymous`; no other endpoint may be |
 | NFR-05 | Performance | Every endpoint except those that verify a password shall complete within **100 ms at the median and 250 ms at the tail** — the slowest of a single caller's samples (§6.1), the 99th percentile under load (§6.3) — and shall hold that while **128 callers are in flight at once**, answering all of them without a failed or 5xx response. Both conditions are measured on the reference configuration. The write path meets the load condition with the least margin and is sensitive to how many rows the table already holds (§6.3.2). Password-verifying endpoints are governed by NFR-18 |
 | NFR-06 | Availability | The API shall hold no state in a process or on a local filesystem that a second instance would need: authentication is validated from token claims with no server-side session, and the Data Protection key ring that TOTP secrets are encrypted with (NFR-16) is kept in the database. The per-IP rate limiter's window is the one deliberate exception, and is per instance by design (§6.2) |
 | NFR-07 | Data Integrity | After any logical deletion, including UC-04's cascade across a scope's Users, Google Users and applications, every foreign key in the schema shall still resolve to an existing row. Logical deletion removes no rows, so the rows it leaves behind must remain reachable |
 | NFR-08 | Data Integrity | Hard deletion of a scope must cascade to its `SCOPE_USER`/`SCOPE_OWNER` rows, its Users, and its Applications |
-| NFR-09 | Logging | Every attempted write shall produce one audit entry, whether it succeeded or was refused, recording the acting identity, the operation, the affected entity where one was resolved, the outcome, and — on a refusal — the reason. The reason is drawn from the application's own messages, never from caller-supplied input |
+| NFR-09 | Logging | Every attempted write shall produce one audit entry, whether it succeeded, was refused or failed with an exception (the exception continues to the caller; its text is never recorded, and a refusal by the password-hash gate records its canonical message), recording the acting identity, the operation, the affected entity where one was resolved, the outcome, and — on a refusal — the reason. The reason is drawn from the application's own messages, never from caller-supplied input |
 | NFR-10 | Validation | All inputs shall be validated before processing. An input that cannot be bound — a body that is not JSON, or a value of the wrong type in the body or query string — is refused with `400 Bad Request` and the message "The request is malformed.", before the action runs. Authentication and role checks come first, so an unauthenticated caller still receives `401` and a caller of the wrong role `403`; refusals that depend on data, made in a handler, come after |
 | NFR-11 | Data Integrity | Hard deletion of a person must cascade to the applications they own |
-| NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected |
+| NFR-12 | Data Integrity | A scope must always retain at least one owner; removing the last owner or hard-deleting the last owning person must be rejected. Only an *active* owner keeps a scope owned: one not logically deleted, with no erasure requested and whose processing is not restricted — none of the others can administer the scope (#211). So removing an owner (UC-22), logically or permanently deleting a person (UC-09, UC-10) or suspending them for erasure (UC-42, whose request is then recorded but blocked) is refused when it would leave one of their scopes with no other active owner. Each such decision is made, and written, holding the rows of the scopes it concerns, so two of them on one scope at the same moment cannot both pass (#202) |
 | NFR-13 | Security | Google ID tokens must be verified (signature, issuer `accounts.google.com`/`https://accounts.google.com`, audience matching the configured OAuth client ID, and expiration) before their claims are trusted |
 | NFR-14 | Data Integrity | Hard deletion of a scope must also cascade to its Google Users |
 | NFR-15 | Security | Internal `bigint` primary/foreign keys must never appear in API responses, API paths, or token claims; only `PublicId` (GUID) values may be exposed to callers |
@@ -837,6 +850,7 @@ where a control is narrower than the threat it appears to cover.
 | NFR-29 | Security | The API shall run as a database role that owns no schema object. Migrations shall be applicable with a different connection — the container entrypoint uses `HEIMDALL_MIGRATIONS_CONNECTIONSTRING` for its migration bundle when it is set, and the API's own connection string otherwise — and the repository shall carry the scripts (`scripts/sql`) that create the two roles for a new database, move a database the API's login owns to a separate owner, and give the API's role the grants that let it do everything it does at runtime and nothing else: no `DELETE` on the audit trail, no `TRUNCATE`, no `CREATE`, and no ownership of a table, a trigger or a trigger function (Threat Model TH-18), with default privileges so that tables later migrations add are granted too. The roles are created and the scripts run by the operator; without the migrations connection the API migrates and runs as one login, as before |
 | NFR-30 | Security | Every token the API reads — a bearer token, a two-factor challenge token, an application token at UC-57 — shall be accepted only when, besides its signature and lifetime, it names the configured `HEIMDALL_AUTH_TOKEN_ISSUER` as its issuer (no issuer when none is configured) and exactly one audience, one the reader accepts: the person, challenge and subject-rights-only audiences on a bearer token, the challenge audience on a challenge token, the application audience on an application token. Any other token shall be refused as an invalid token, `401 Unauthorized`, however correct its signature (Threat Model TH-43) |
 | NFR-31 | Security | The token signing key `HEIMDALL_AUTH_SIGNING_KEY`, and `HEIMDALL_AUTH_SIGNING_KEY_PREVIOUS` when it is set, shall each be the base64 of a P-256 PKCS#8 PEM, or start-up shall fail with a message that names the variable and never its value. A previous key that is unset, blank or two double quotes (`""`) shall mean no previous key. Tokens shall be signed ES256 with the current key and carry its `kid`; each key shall verify its own algorithm only, and no HS256 token shall be accepted. The retired HS256 secret `HEIMDALL_AUTH_TOKEN_SECRET` and its `_PREVIOUS` shall not be read; while either is set, start-up shall log a warning that names the variable and never its value (Threat Model TH-22, TH-43) |
+| NFR-32 | Availability | The system shall keep at least one *active* System Admin: one not logically deleted, with no erasure requested and whose processing is not restricted (the definition NFR-12 uses for owners). Logically or permanently deleting a System Admin (UC-09, UC-10) shall be refused when no other active System Admin would remain, and that one's erasure request (UC-42) shall be recorded but blocked, as NFR-12 blocks a last owner's, until another active System Admin exists. UC-08 changes a role only to `SystemAdmin`, so it never demotes one. A restriction on processing (UC-44) is the subject's right and is never refused, even for the last one. Each such decision is made, and written, holding one transaction-scoped advisory lock on the System Admin set — taken after any scope row locks the same command takes (NFR-12), by every deletion and erasure whatever the person's role, since the role is read again under the lock — so two administrators removing each other at the same moment cannot both pass, and neither can a person promoted while being removed (#203) |
 
 ### 6.1 The reference configuration
 

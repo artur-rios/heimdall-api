@@ -46,7 +46,7 @@ public class GetTwoFactorStatusQueryHandler(
         var personId = await personReader.Query()
             .Where(person => person.PublicId == query.ActingPersonId && !person.IsDeleted)
             .Select(person => (long?)person.Id)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (personId is null)
         {
@@ -64,7 +64,7 @@ public class GetTwoFactorStatusQueryHandler(
                 x.AppEnabled,
                 x.EmailEnabled
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (configuration is null)
         {
@@ -74,7 +74,7 @@ public class GetTwoFactorStatusQueryHandler(
         }
 
         var remainingRecoveryCodes = await recoveryCodeReader.Query()
-            .CountAsync(code => code.TwoFactorAuthId == configuration.Id && !code.Used);
+            .CountAsync(code => code.TwoFactorAuthId == configuration.Id && !code.Used, cancellationToken);
 
         return output
             .WithData(new TwoFactorStatusOutput

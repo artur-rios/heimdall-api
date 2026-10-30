@@ -4,7 +4,11 @@
 # built here because applying migrations needs the SDK and the dotnet-ef tool, neither of which the
 # runtime image carries -- the bundle is a plain executable that the entrypoint can run before the
 # API starts, so the deployed container never needs the SDK.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# The sdk and aspnet tags are pinned to the exact patch the floating 10.0 tag resolved to when they were
+# pinned (the digests of 10.0 and of these tags matched on mcr.microsoft.com), so a rebuild gets the same
+# toolchain and runtime until someone bumps them on purpose. global.json is not copied in: the SDK
+# the image carries is the one it builds with.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2 AS build
 WORKDIR /source
 
 # Restored first and on their own so the tool and package layers survive a source-only change.
@@ -16,6 +20,12 @@ RUN dotnet tool restore
 # sources below for the same reason the csproj files do — a source-only change must not invalidate
 # the restore cache, and a version change should.
 COPY Directory.Packages.props ./
+
+# The shared build settings (target framework, nullable, warnings as errors) are imported by every
+# project, so restore cannot evaluate a project without them: Directory.Build.shared.props at the root
+# and the src/Directory.Build.props that imports it. Same layer rule as above.
+COPY Directory.Build.shared.props ./
+COPY src/Directory.Build.props src/
 
 COPY src/Presentation/ArturRios.Heimdall.WebApi/ArturRios.Heimdall.WebApi.csproj src/Presentation/ArturRios.Heimdall.WebApi/
 COPY src/Application/ArturRios.Heimdall.Command/ArturRios.Heimdall.Command.csproj src/Application/ArturRios.Heimdall.Command/
@@ -47,7 +57,7 @@ RUN HEIMDALL_DATA_CONNECTIONSTRING="Host=localhost;Port=5432;Database=heimdall;U
         --force
 
 # Runtime stage.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca AS final
 WORKDIR /app
 
 # curl is installed for the container health check alone: the runtime image ships neither curl nor

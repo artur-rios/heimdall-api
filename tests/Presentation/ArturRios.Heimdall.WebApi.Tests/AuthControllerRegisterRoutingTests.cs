@@ -34,6 +34,6 @@ public class AuthControllerRegisterRoutingTests
         var limiting = Register.GetCustomAttribute<EnableRateLimitingAttribute>();
 
         Assert.NotNull(limiting);
-        Assert.Equal(Startup.AuthEndpointRateLimitPolicy, limiting.PolicyName);
+        Assert.Equal(RateLimitingConfiguration.AuthEndpointRateLimitPolicy, limiting.PolicyName);
     }
 }

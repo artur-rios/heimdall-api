@@ -44,7 +44,8 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         PurgeBatchSize = 500
     };
 
-    internal static AnonymiseExpiredDeletionsCommandHandler Handler(AppDbContext context)
+    internal static AnonymiseExpiredDeletionsCommandHandler Handler(
+        AppDbContext context, DataRetentionOptions? retention = null)
     {
         var persons = new EfRepository<Person, long>(context);
         var googleUsers = new EfRepository<GoogleUser, long>(context);
@@ -53,16 +54,18 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         var twoFactorAuths = new EfRepository<TwoFactorAuth, long>(context);
 
         return new AnonymiseExpiredDeletionsCommandHandler(
-            persons, googleUsers, googleUsers,
+            persons, googleUsers,
             passwordResetTokens,
             emailVerificationTokens,
             twoFactorAuths,
-            Retention,
+            retention ?? Retention,
             new AtomicWrites(context),
             new ScopeOwnerInvitations(context),
             new EfRepository<ScopeOwnerInvitation, long>(context),
             AuditLog(context),
-            NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance);
+            NullLogger<AnonymiseExpiredDeletionsCommandHandler>.Instance,
+            new WriteTransactions(context),
+            new InvariantLocks(context));
     }
 
     /// <summary>The real audit writer, actorless as the scheduled pass is.</summary>
@@ -75,7 +78,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         var googleUsers = new EfRepository<GoogleUser, long>(context);
 
         return new ReapplyErasuresCommandHandler(
-            persons, googleUsers, googleUsers,
+            persons, googleUsers,
             new EfRepository<PasswordResetToken, long>(context),
             new EfRepository<EmailVerificationToken, long>(context),
             new EfRepository<TwoFactorAuth, long>(context),
@@ -102,6 +105,46 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
         DeletedAt = deletedAt,
         DeletionKind = (int)kind
     };
+
+    [FunctionalFact]
+    public async Task GivenMoreFullBatchesThanTheCap_WhenAnonymising_ThenPostgreSqlCountsTheIdentitiesStillDue()
+    {
+        // Given nothing else due, then seven persons and five Google Users past their window
+        await using (var drain = fixture.CreateContext())
+        {
+            for (var run = 0; run < 20 && (await Handler(drain).HandleAsync(new AnonymiseExpiredDeletionsCommand()))
+                     .Data!.TotalAnonymised > 0; run++)
+            {
+            }
+        }
+
+        await using var context = fixture.CreateContext();
+        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"Backlog {Guid.NewGuid():N}" };
+        context.Scopes.Add(scope);
+        await context.SaveChangesAsync();
+
+        context.Persons.AddRange(Enumerable.Range(0, 7)
+            .Select(i => DeletedPerson(DateTime.UtcNow.AddDays(-200 - i), DeletionKinds.Administrative)));
+        context.GoogleUsers.AddRange(Enumerable.Range(0, 5).Select(i => new GoogleUser
+        {
+            PublicId = Guid.NewGuid(), GoogleId = Guid.NewGuid().ToString("N"), Name = "Grace",
+            Email = $"backlog-{Guid.NewGuid():N}@functional.test", ScopeId = scope.Id, IsDeleted = true,
+            DeletedAt = DateTime.UtcNow.AddDays(-200 - i), DeletionKind = (int)DeletionKinds.Administrative
+        }));
+        await context.SaveChangesAsync();
+
+        // When — a batch of two, two batches
+        await using var runContext = fixture.CreateContext();
+        var output = await Handler(runContext, Retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
+            .HandleAsync(new AnonymiseExpiredDeletionsCommand());
+
+        // Then — four of each anonymised, and the database counted what is left of both: three persons and
+        // one Google User
+        Assert.True(output.Success, string.Join("; ", output.Errors));
+        Assert.Equal(4, output.Data!.PersonsAnonymised);
+        Assert.Equal(4, output.Data.GoogleUsersAnonymised);
+        Assert.Equal(4, output.Data.Backlog);
+    }
 
     [FunctionalFact]
     public async Task GivenRecordsPastTheirWindow_WhenAnonymising_ThenTheDatabaseHoldsNoIdentifyingValue()

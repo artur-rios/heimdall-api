@@ -22,58 +22,6 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
 {
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/applications/{id}/hard";
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "User",
-            Email = $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<Application> SeedApplicationAsync(Scope scope, Person owner, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -100,8 +48,8 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenSystemAdmin_WhenHardDeleteApplication_ThenOkAndRowIsGone()
     {
         // Given an active application (UC-20 main flow)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -120,8 +68,8 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     {
         // Given an application already logically deleted by UC-19 or by UC-04's scope cascade — the
         // lookup finds it regardless, so a cleanup pass can purge it
-        var scope = await SeedScopeAsync(isDeleted: true);
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner, isDeleted: true);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -139,8 +87,8 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     {
         // Given an application whose foreign keys point outward at its scope and owner: removing it
         // cascades to neither
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -164,8 +112,8 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     {
         // Given the Scope Admin who owns the application: UC-19 lets them logically delete it, UC-20
         // does not let them purge it — permanent removal is a System Admin operation
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
@@ -182,10 +130,10 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenUserRole_WhenHardDeleteApplication_ThenForbidden()
     {
         // Given a caller holding the User role (UC-20's actor is the System Admin alone)
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
-        var caller = await SeedUserAsync(scope);
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -201,7 +149,7 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenUnknownApplication_WhenHardDeleteApplication_ThenNotFound()
     {
         // Given an application id nobody holds (AF-20a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -216,9 +164,9 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenApplicationOfAnotherScope_WhenHardDeleteApplication_ThenNotFound()
     {
         // Given the application exists, but under a different scope than the path addresses (AF-20a)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
         var application = await SeedApplicationAsync(otherScope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -236,8 +184,8 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     {
         // Given the endpoint called twice: the removal leaves nothing to find, so UC-20 has no
         // idempotent path — unlike UC-19's AF-19b
-        var scope = await SeedScopeAsync();
-        var owner = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         var application = await SeedApplicationAsync(scope, owner);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
@@ -256,7 +204,7 @@ public class ApplicationControllerHardDeleteTests(PostgresFixture db) : WebApiTe
     public async Task GivenNoToken_WhenHardDeleteApplication_ThenUnauthorized()
     {
         // Given no bearer token (precondition: the actor is authenticated)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<HardDeleteApplicationCommandOutput?>>(

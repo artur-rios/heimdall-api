@@ -61,37 +61,9 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     private static string InsertStatement(Guid id, ErasedSubjectKinds kind) =>
         $"INSERT INTO heimdall.erased_subject (public_id, kind) VALUES ('{id}', {(int)kind})";
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = fixture.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"erased-subject-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
-    private async Task<Guid> SeedPersonAsync()
-    {
-        await using var context = fixture.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Erased Subject",
-            Email = $"erased-subject-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1],
-            Salt = [2],
-            RoleId = (long)Roles.User
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person.PublicId;
-    }
-
     private async Task<Guid> SeedGoogleUserAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"erased-subject-{Guid.NewGuid():N}" });
 
         await using var context = fixture.CreateContext();
         var googleUser = new GoogleUser
@@ -112,7 +84,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenNewIds_WhenRecorded_ThenEachIsStoredOnceWithItsKind()
     {
         // Given a person and a Google User about to be removed in one hard delete
-        var person = await SeedPersonAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
         var googleUser = await SeedGoogleUserAsync();
         var now = DateTime.UtcNow;
 
@@ -137,7 +109,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenAnIdAlreadyRecorded_WhenRecordedAgain_ThenItIsNotAnErrorAndOneRowRemains()
     {
         // Given a tombstone left by an attempt that then failed to delete the row, which is still there
-        var person = await SeedPersonAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
         var earlier = DateTime.UtcNow.AddDays(-3);
 
         await using (var context = fixture.CreateContext())
@@ -165,7 +137,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenTheSameIdTwiceInOneCall_WhenRecorded_ThenOneRowIsStored()
     {
         // Given — ON CONFLICT cannot touch one row twice in a statement, so duplicates must not reach it
-        var person = await SeedPersonAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
         var now = DateTime.UtcNow;
 
         // When
@@ -186,7 +158,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenALivePerson_WhenATombstoneIsInserted_ThenTheDatabasePermitsIt()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
 
         // When
         var failure = await RunAsync(InsertStatement(person, ErasedSubjectKinds.Person));
@@ -214,7 +186,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenALiveScopesId_WhenATombstoneIsInserted_ThenTheDatabaseRefuses()
     {
         // Given — the attack R1 closes: tombstone a scope, then clear every target naming it
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"erased-subject-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(InsertStatement(scope.PublicId, ErasedSubjectKinds.Person));
@@ -242,7 +214,7 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenALivePersonsTombstone_WhenItIsUpsertedAgain_ThenTheDatabasePermitsIt()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
         Assert.Null(await RunAsync(InsertStatement(person, ErasedSubjectKinds.Person)));
 
         // When — the statement ErasedSubjects issues on a retry
@@ -259,8 +231,8 @@ public class ErasedSubjectsTests(PostgresFixture fixture)
     public async Task GivenATombstone_WhenItsIdIsRewrittenToAScopes_ThenTheDatabaseRefuses()
     {
         // Given a legitimate tombstone, and a scope whose targets somebody wants to clear
-        var person = await SeedPersonAsync();
-        var scope = await SeedScopeAsync();
+        var person = (await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { EmailPrefix = "erased-subject", EmailVerified = false })).PublicId;
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"erased-subject-{Guid.NewGuid():N}" });
         Assert.Null(await RunAsync(InsertStatement(person, ErasedSubjectKinds.Person)));
 
         // When

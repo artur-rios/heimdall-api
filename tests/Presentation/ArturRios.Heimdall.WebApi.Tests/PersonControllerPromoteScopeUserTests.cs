@@ -33,58 +33,6 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     private Task<HttpOutput<DataOutput<PromoteScopeUserCommandOutput?>?>> PromoteAsync(Guid scopeId, Guid personId) =>
         Gateway.PostAsync<DataOutput<PromoteScopeUserCommandOutput?>>(Route(scopeId, personId), new { });
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", IsDeleted = isDeleted };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedScopeAdminAsync(Scope? ownedScope = null, string? email = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Admin",
-            Email = email ?? $"admin-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, EmailVerified = true
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (ownedScope is not null)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = ownedScope.Id, PersonId = person.Id });
-            await context.SaveChangesAsync();
-        }
-
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, bool isDeleted = false, string? email = null)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(), Name = "Member",
-            Email = email ?? $"user-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)Roles.User, EmailVerified = true, IsDeleted = isDeleted
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<long> RoleOfAsync(Person person)
     {
         await using var context = db.CreateContext();
@@ -115,8 +63,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenSystemAdmin_WhenPostPromote_ThenOkAndRowsAreMoved()
     {
         // Given a scope and a User belonging to it (UC-23 main flow)
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -139,9 +87,9 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenExistingOwner_WhenPostPromote_ThenOkAndRowsAreMoved()
     {
         // Given a Scope Admin who already owns the scope promoting one of its Users (FR-SC-13)
-        var scope = await SeedScopeAsync();
-        var actor = await SeedScopeAdminAsync(ownedScope: scope);
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -158,10 +106,10 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenScopeAdminOfAnotherScope_WhenPostPromote_ThenForbidden()
     {
         // Given a Scope Admin who owns some other scope (AF-23c)
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var actor = await SeedScopeAdminAsync(ownedScope: otherScope);
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [otherScope] });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -176,9 +124,9 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenUserRole_WhenPostPromote_ThenForbidden()
     {
         // Given a caller holding the User role — refused by the attribute, before any handler runs
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
-        var caller = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
+        var caller = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.For(caller.PublicId, (int)Roles.User));
 
         // When
@@ -193,8 +141,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenUnknownScope_WhenPostPromote_ThenNotFound()
     {
         // AF-23a
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(Guid.NewGuid(), person.PublicId);
@@ -208,8 +156,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenLogicallyDeletedScope_WhenPostPromote_ThenNotFound()
     {
         // AF-23a treats a logically deleted scope as absent
-        var scope = await SeedScopeAsync(isDeleted: true);
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { IsDeleted = true });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
@@ -223,7 +171,7 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenUnknownPerson_WhenPostPromote_ThenBadRequest()
     {
         // AF-23b
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, Guid.NewGuid());
@@ -236,8 +184,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenLogicallyDeletedUser_WhenPostPromote_ThenBadRequest()
     {
         // AF-23b — a deleted person can no longer authenticate, so the ownership would be unusable
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, isDeleted: true);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", IsDeleted = true, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
@@ -251,9 +199,9 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenUserOfAnotherScope_WhenPostPromote_ThenBadRequest()
     {
         // AF-23b — the person is a User, but not of the scope named in the route
-        var scope = await SeedScopeAsync();
-        var otherScope = await SeedScopeAsync();
-        var person = await SeedUserAsync(otherScope);
+        var scope = await Seeds.ScopeAsync(db);
+        var otherScope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = otherScope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
@@ -268,8 +216,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     public async Task GivenScopeAdminPerson_WhenPostPromote_ThenConflict()
     {
         // AF-23d — there is no role left to promote them to
-        var scope = await SeedScopeAsync();
-        var person = await SeedScopeAdminAsync(ownedScope: scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
@@ -285,8 +233,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
         // AF-23d is what a repeated call meets: the first promotion made them a ScopeAdmin. The
         // promotion is not idempotent the way UC-21 is — there the second call finds nothing to do,
         // here it finds the role already held — and the ownership row is never written twice.
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -306,10 +254,10 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     {
         // FR-PE-09 — the promotion would move the address into the admin namespace, where it is
         // already taken. UC-23 defines no flow of its own for this, so the mapped 409 is reused.
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db);
         var email = $"shared-{Guid.NewGuid():N}@test.local";
-        await SeedScopeAdminAsync(email: email);
-        var person = await SeedUserAsync(scope, email: email);
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Email = email });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = email, MemberOf = scope });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
@@ -322,8 +270,8 @@ public class PersonControllerPromoteScopeUserTests(PostgresFixture db) : WebApiT
     [FunctionalFact]
     public async Task GivenNoToken_WhenPostPromote_ThenUnauthorized()
     {
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope);
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope });
 
         var response = await PromoteAsync(scope.PublicId, person.PublicId);
 

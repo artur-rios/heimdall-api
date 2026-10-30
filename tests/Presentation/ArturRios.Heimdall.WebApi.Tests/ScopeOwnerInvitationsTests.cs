@@ -75,9 +75,9 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
 
     private async Task<(Scope Scope, Person Inviter, Person Invitee)> SeedAsync()
     {
-        var scope = await SeedScopeAsync(db);
-        var inviter = await SeedScopeAdminAsync(db, scope);
-        var invitee = await SeedScopeAdminAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var invitee = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
         return (scope, inviter, invitee);
     }
 
@@ -435,10 +435,10 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
     public async Task GivenAnErasedInviteeAndInviter_WhenForgotten_ThenTheInviteesInvitationIsVoidedAndTheInviterCleared()
     {
         // Given — invitee A's open invitation, and an invitation A made to B
-        var scope = await SeedScopeAsync(db);
-        var erased = await SeedScopeAdminAsync(db, scope);
-        var other = await SeedScopeAdminAsync(db);
-        var otherScope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var erased = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var other = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var otherScope = await Seeds.ScopeAsync(db);
         var toErased = await InsertAsync(New(otherScope, erased, other));
         var fromErased = await InsertAsync(New(scope, other, erased));
         await using var context = db.CreateContext();
@@ -458,10 +458,10 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
     public async Task GivenEndedInvitationsToAndFromAnErasedPerson_WhenForgotten_ThenNoneIsVoidedAndTheInviterIsCleared()
     {
         // Given — one the erased person declined, and one they made that was withdrawn
-        var scope = await SeedScopeAsync(db);
-        var erased = await SeedScopeAdminAsync(db, scope);
-        var other = await SeedScopeAdminAsync(db);
-        var otherScope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
+        var erased = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin", Owns = [scope] });
+        var other = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var otherScope = await Seeds.ScopeAsync(db);
         var declinedAt = OneMinuteAgo();
         var toErased = New(otherScope, erased, other);
         toErased.EndedAt = declinedAt;
@@ -512,10 +512,10 @@ public class ScopeOwnerInvitationsTests(PostgresFixture db)
     public async Task GivenAWithdrawalCommittedJustBeforeTheVoid_WhenForgotten_ThenItsIdIsNotReturned()
     {
         // Given — two open invitations to the erased person; one is withdrawn just before the void is sent
-        var erased = await SeedScopeAdminAsync(db);
-        var inviter = await SeedScopeAdminAsync(db);
-        var voidable = await InsertAsync(New(await SeedScopeAsync(db), erased, inviter));
-        var withdrawn = await InsertAsync(New(await SeedScopeAsync(db), erased, inviter));
+        var erased = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var inviter = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = "Admin", EmailPrefix = "admin" });
+        var voidable = await InsertAsync(New(await Seeds.ScopeAsync(db), erased, inviter));
+        var withdrawn = await InsertAsync(New(await Seeds.ScopeAsync(db), erased, inviter));
         await using var context = db.CreateContext(new BeforeFirstUpdate(() => WithdrawAsync(withdrawn)));
 
         // When

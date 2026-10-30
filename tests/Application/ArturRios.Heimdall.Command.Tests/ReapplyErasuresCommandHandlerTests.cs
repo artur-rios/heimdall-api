@@ -31,7 +31,7 @@ public class ReapplyErasuresCommandHandlerTests
         AsyncFakeRepository<ScopeOwnerInvitation, long>? invitations = null,
         IAtomicWrites? atomicWrites = null,
         IAuditLogWriter? auditLog = null) =>
-        new(persons, googleUsers, googleUsers,
+        new(persons, googleUsers,
             passwordResetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
             emailVerificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             twoFactorAuths ?? new AsyncFakeRepository<TwoFactorAuth, long>(),
@@ -315,11 +315,15 @@ public class ReapplyErasuresCommandHandlerTests
         // When
         var thrown = await Record.ExceptionAsync(() => handler.HandleAsync(Command(person.PublicId)));
 
-        // Then
+        // Then — the void is audited, and the decorator records the command that threw as a refusal
+        // after it (#201)
         Assert.IsType<InvalidOperationException>(thrown);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
         Assert.Equal(
-            [(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)],
+            [
+                (ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true),
+                (nameof(ReapplyErasuresCommand), (Guid?)null, false)
+            ],
             auditLog.Entries);
     }
 }

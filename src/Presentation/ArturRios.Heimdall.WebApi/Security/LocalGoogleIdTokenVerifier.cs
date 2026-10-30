@@ -15,7 +15,7 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///         <b>Why this exists.</b> <c>WebApiTest&lt;T&gt;</c> keeps its <c>WebApplicationFactory</c>
 ///         private and its <c>Gateway</c> protected-readonly, so a functional test cannot replace a
 ///         DI registration; every substitution in this suite is therefore chosen at start-up from the
-///         environment, as <c>Startup.AddEmailSenders</c> does for Mailgun. Without a substitute only
+///         environment, as <c>EmailRegistrationExtensions.AddEmailSenders</c> does for Mailgun. Without a substitute only
 ///         AF-25a and AF-25b would be reachable — the main flow, AF-25c, and AF-25d all sit behind
 ///         token verification — and the Testing Specification §7.4 asks for every alternative flow.
 ///     </para>
@@ -27,7 +27,7 @@ namespace ArturRios.Heimdall.WebApi.Security;
 ///     </para>
 ///     <para>
 ///         <b>What keeps it out of production.</b> Two independent guards in
-///         <c>Startup.AddGoogleSignIn</c>: it is never registered in the Production environment, and
+///         <c>GoogleSignInRegistrationExtensions.AddGoogleSignIn</c>: it is never registered in the Production environment, and
 ///         it is never registered unless <see cref="GoogleSignInOptions.TestSigningSecretVariable" />
 ///         is explicitly set. That variable is absent from every <c>.env</c> file and is set only by
 ///         the functional suite's <c>PostgresFixture</c>.

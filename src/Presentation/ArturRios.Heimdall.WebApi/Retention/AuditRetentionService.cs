@@ -16,12 +16,14 @@ public class AuditRetentionService(
     ILogger<AuditRetentionService> logger)
     : ScheduledPassService(scopeFactory, retention.PurgeInterval, logger)
 {
+    public override string PassName => "audit-retention";
+
     protected override string StartupDescription =>
         $"Audit attribution pseudonymisation scheduled every {retention.PurgeInterval}, clearing " +
         $"attributions and person targets after {retention.AuditActorRetention} and immediately " +
         "for erased identities";
 
-    protected override async Task<string?> RunAsync(IServiceProvider scope)
+    protected override async Task<ScheduledPassResult> RunAsync(IServiceProvider scope)
     {
         var mediator = scope.GetRequiredService<CommandMediator>();
 
@@ -31,16 +33,25 @@ public class AuditRetentionService(
 
         if (!result.Success)
         {
-            return $"Audit attribution pseudonymisation failed: {string.Join("; ", result.Errors)}";
+            return ScheduledPassResult.Failure(
+                "Audit attribution pseudonymisation", result.Errors, result.Data is { } done ? Rows(done) : 0);
         }
 
         var pseudonymised = result.Data!;
+        var rows = Rows(pseudonymised);
 
-        return pseudonymised.EntriesPseudonymised == 0 && pseudonymised.TargetsCleared == 0
-               && pseudonymised.TombstonesRemoved == 0
-            ? null
-            : $"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
-              $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
-              $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities";
+        // The rows still due are what the run left at its batch cap (#206): a number that does not fall
+        // from run to run is a backlog that is not draining.
+        return rows == 0 && pseudonymised.Backlog == 0
+            ? ScheduledPassResult.Quiet
+            : new ScheduledPassResult(
+                $"Cleared the actor attribution from {pseudonymised.EntriesPseudonymised} audit entries " +
+                $"and the person target from {pseudonymised.TargetsCleared}, and removed " +
+                $"{pseudonymised.TombstonesRemoved} tombstones of hard-deleted identities; " +
+                $"{pseudonymised.Backlog} still due after this run",
+                false, rows);
     }
+
+    private static long Rows(PseudonymiseAuditActorsCommandOutput pseudonymised) =>
+        (long)pseudonymised.EntriesPseudonymised + pseudonymised.TargetsCleared + pseudonymised.TombstonesRemoved;
 }

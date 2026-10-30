@@ -75,40 +75,9 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
                  'identity-public-id-{Guid.NewGuid():N}@functional.test', {scopeId})
          """;
 
-    private async Task<Scope> SeedScopeAsync(bool isDeleted = false)
-    {
-        await using var context = fixture.CreateContext();
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"identity-public-id-{Guid.NewGuid():N}", IsDeleted = isDeleted
-        };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync()
-    {
-        await using var context = fixture.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Identity Public Id",
-            Email = $"identity-public-id-{Guid.NewGuid():N}@functional.test",
-            PasswordHash = [1],
-            Salt = [2],
-            RoleId = (long)Roles.User
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         await using var context = fixture.CreateContext();
         var googleUser = new GoogleUser
@@ -127,8 +96,8 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
 
     private async Task<Application> SeedApplicationAsync()
     {
-        var scope = await SeedScopeAsync();
-        var owner = await SeedPersonAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
+        var owner = await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { Name = "Identity Public Id", EmailPrefix = "identity-public-id", EmailVerified = false });
 
         await using var context = fixture.CreateContext();
         var application = new Application
@@ -148,8 +117,8 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAPerson_WhenItsPublicIdIsRewritten_ThenTheDatabaseRefuses()
     {
         // Given — a scope whose id somebody wants a person to hold
-        var person = await SeedPersonAsync();
-        var scope = await SeedScopeAsync();
+        var person = await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { Name = "Identity Public Id", EmailPrefix = "identity-public-id", EmailVerified = false });
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(
@@ -166,7 +135,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     {
         // Given
         var googleUser = await SeedGoogleUserAsync();
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(
@@ -182,7 +151,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAPerson_WhenItsNameEmailAndAnonymisedAtAreUpdated_ThenTheDatabasePermitsIt()
     {
         // Given
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { Name = "Identity Public Id", EmailPrefix = "identity-public-id", EmailVerified = false });
         var email = $"identity-public-id-renamed-{Guid.NewGuid():N}@functional.test";
 
         // When — every column but public_id may change, as anonymisation and a soft delete change them
@@ -208,7 +177,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAPerson_WhenUpdatedThroughEfWithEveryColumnMarked_ThenTheDatabasePermitsIt()
     {
         // Given — Update() marks every property modified, so the statement writes public_id back as it was
-        var person = await SeedPersonAsync();
+        var person = await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { Name = "Identity Public Id", EmailPrefix = "identity-public-id", EmailVerified = false });
         person.Name = "Updated Through EF";
 
         // When
@@ -256,7 +225,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenALiveScopesId_WhenAPersonIsInsertedWithIt_ThenTheDatabaseRefuses()
     {
         // Given — the attack #199 closes: a person holding a scope's id makes its targets clearable
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(InsertPersonStatement(scope.PublicId));
@@ -270,7 +239,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenASoftDeletedScopesId_WhenAPersonIsInsertedWithIt_ThenTheDatabaseRefuses()
     {
         // Given — a soft-deleted scope is still there, and so are the entries naming it
-        var scope = await SeedScopeAsync(isDeleted: true);
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}", IsDeleted = true });
 
         // When
         var failure = await RunAsync(InsertPersonStatement(scope.PublicId));
@@ -312,8 +281,8 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     public async Task GivenAPersonsId_WhenAGoogleUserIsInsertedWithIt_ThenTheDatabaseRefuses()
     {
         // Given
-        var person = await SeedPersonAsync();
-        var scope = await SeedScopeAsync();
+        var person = await Seeds.PersonAsync(fixture, Roles.User, new PersonOptions { Name = "Identity Public Id", EmailPrefix = "identity-public-id", EmailVerified = false });
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(InsertGoogleUserStatement(person.PublicId, scope.Id));
@@ -329,7 +298,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     /// </summary>
     private async Task<Guid> HardDeletedScopeTheTrailNamesAsync()
     {
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         Assert.Null(await RunAsync(
             $"""
@@ -361,7 +330,7 @@ public class IdentityPublicIdTests(PostgresFixture fixture)
     {
         // Given
         var scopeId = await HardDeletedScopeTheTrailNamesAsync();
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(fixture, new ScopeOptions { Name = $"identity-public-id-{Guid.NewGuid():N}" });
 
         // When
         var failure = await RunAsync(InsertGoogleUserStatement(scopeId, scope.Id));

@@ -8,10 +8,12 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Before the delete, not after.</b> Each hard delete records its ids first. If the delete
-///         then fails, a tombstone for a live row is harmless: the retention pass and the trigger act
-///         only on an id that no longer resolves to any <c>person</c> or <c>google_user</c> row.
-///         The other order could leave a removed person with no tombstone, named in the trail for good.
+///         <b>Before the delete, not after.</b> Each hard delete records its ids first. UC-10 and UC-05
+///         do so inside the transaction of their deletes (#212), so a failed delete keeps no tombstone.
+///         Where one is kept for a live row — UC-29's, written before its single delete — it is
+///         harmless: the retention pass and the trigger act only on an id that no longer resolves to any
+///         <c>person</c> or <c>google_user</c> row. The other order could leave a removed person with no
+///         tombstone, named in the trail for good.
 ///     </para>
 ///     <para>
 ///         <b>Idempotent.</b> A retried hard delete records the same ids again, and that is not an

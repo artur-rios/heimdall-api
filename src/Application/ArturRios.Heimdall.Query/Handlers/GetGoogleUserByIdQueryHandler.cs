@@ -60,7 +60,7 @@ public class GetGoogleUserByIdQueryHandler(
                     UpdatedAt = x.UpdatedAt
                 }
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         // AF-27a: no such Google User under this scope (or it is logically deleted and was not
         // explicitly requested). Checked before authorization, so both alternative flows stay
@@ -78,7 +78,7 @@ public class GetGoogleUserByIdQueryHandler(
         // User this read only as self, and a person is never a Google User's self.
         if (query.ActingPersonId != googleUser.Output.Id &&
             !await scopeOwnership.ActorMayManageScopeAsync(
-                query.ActingRole, query.ActingPersonId, googleUser.ScopeInternalId))
+                query.ActingRole, query.ActingPersonId, googleUser.ScopeInternalId, cancellationToken))
         {
             return output.WithError(GoogleUserMessages.NotAuthorizedToViewGoogleUser);
         }

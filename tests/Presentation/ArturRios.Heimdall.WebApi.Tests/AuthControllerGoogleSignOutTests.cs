@@ -25,23 +25,6 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Scope> SeedScopeAsync(bool googleSignInEnabled = true)
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"scope-{Guid.NewGuid():N}",
-            GoogleSignInEnabled = googleSignInEnabled
-        };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private async Task<GoogleUser> SeedGoogleUserAsync(Scope scope, bool isDeleted = false)
     {
         await using var context = db.CreateContext();
@@ -83,7 +66,7 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
     public async Task GivenLiveGoogleUser_WhenPostGoogleSignOut_ThenSucceeds()
     {
         // Given a Google User holding a token UC-25 issued them (UC-26 main flow)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -101,7 +84,7 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a caller who signed in through UC-25 and holds exactly what that call returned —
         // UC-26's precondition, proved end to end rather than assumed
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var signIn = await Gateway.PostAsync<DataOutput<GoogleSignInCommandOutput?>>(
             "/api/auth/google",
             new { ScopeId = scope.PublicId, IdToken = TestGoogleTokens.For() });
@@ -122,7 +105,7 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a Google User who signs out (UC-26 step 2: nothing is revoked and nothing is
         // written — signing out is not a deletion)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -152,7 +135,7 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a token that outlived UC-28's logical deletion — reachable because authentication
         // runs in ClaimsOnly mode (AF-26a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var googleUser = await SeedGoogleUserAsync(scope, isDeleted: true);
         Authorize(TestTokens.For(googleUser.PublicId, (int)Roles.User, scope.PublicId));
 
@@ -171,7 +154,7 @@ public class AuthControllerGoogleSignOutTests(PostgresFixture db) : WebApiTest<P
     {
         // Given a User-role token whose id belongs to no Google User — a password User signed in
         // through UC-11, or a Google User UC-29 hard deleted (AF-26a)
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         Authorize(TestTokens.For(Guid.NewGuid(), (int)Roles.User, scope.PublicId));
 
         // When

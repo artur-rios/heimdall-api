@@ -8,7 +8,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -27,54 +26,11 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Verify-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string UniqueToken() => $"token-{Guid.NewGuid():N}";
-
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(
-        Roles role, string email, bool isDeleted = false, bool emailVerified = false)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)role,
-            EmailVerified = emailVerified,
-            IsDeleted = isDeleted
-        };
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-        return person;
-    }
-
-    private async Task<Person> SeedUserAsync(Scope scope, string email)
-    {
-        var person = await SeedPersonAsync(Roles.User, email);
-
-        await using var context = db.CreateContext();
-        context.ScopeUsers.Add(new ScopeUser { ScopeId = scope.Id, PersonId = person.Id });
-        // Person.ScopeId mirrors the membership row, as the application writes it — without
-        // it the seeded User sits outside the per-scope uniqueness index.
-        person.ScopeId = scope.Id;
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     Writes a verification token directly rather than going through person creation: these
@@ -127,7 +83,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenLiveToken_WhenPostVerifyEmail_ThenEmailIsVerifiedAndTokenConsumed()
     {
         // Given an admin holding a verification token
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -148,8 +104,8 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     {
         // Given a User, whose login needs a scope id but whose verification does not — the token
         // identifies them on its own, which is the whole reason UC-06 made it long and random
-        var scope = await SeedScopeAsync();
-        var person = await SeedUserAsync(scope, UniqueEmail("user"));
+        var scope = await Seeds.ScopeAsync(db);
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Email = UniqueEmail("user"), EmailVerified = false, MemberOf = scope });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -164,7 +120,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenLiveToken_WhenPostVerifyEmail_ThenUpdatedAtIsStamped()
     {
         // Given no database trigger maintains UpdatedAt — the handler does
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -181,7 +137,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     {
         // Given someone issued a token at creation and another later, so two links work. Once one has
         // verified the address, the others verify an address that is already verified.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var first = await SeedTokenAsync(person);
         var second = await SeedTokenAsync(person);
 
@@ -203,7 +159,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     {
         // Given a token already dead by AF-14a. Rewriting it would only make it report a different
         // reason for being dead.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var expired = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
         var live = await SeedTokenAsync(person);
 
@@ -224,8 +180,8 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenAnotherPersonHoldsALiveToken_WhenPostVerifyEmail_ThenTheirTokenSurvives()
     {
         // Given the boundary of the rule above: invalidation reaches the person's own tokens and stops
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
-        var other = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("other"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
+        var other = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("other"), EmailVerified = false });
         await SeedTokenAsync(other);
 
         // When
@@ -240,7 +196,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenExpiredToken_WhenPostVerifyEmail_ThenBadRequestAndEmailStaysUnverified()
     {
         // Given — AF-14a (FR-EV-02)
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var token = await SeedTokenAsync(person, expiresAt: DateTime.UtcNow.AddHours(-1));
 
         // When
@@ -259,7 +215,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenUsedToken_WhenPostVerifyEmail_ThenBadRequestAndEmailStaysUnverified()
     {
         // Given — AF-14b
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var token = await SeedTokenAsync(person, used: true);
 
         // When
@@ -288,7 +244,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     {
         // Given — AF-14c. The lookup is case-sensitive, unlike every email comparison in this system:
         // the token is a random secret, and folding its case would throw away part of its alphabet.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
         var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
 
         // When
@@ -320,7 +276,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     {
         // Given an address verified before this link was clicked. UC-14 defines no alternative flow
         // for it — AF-15a rejects a *request* for another email, a different thing.
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("admin"), emailVerified: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin") });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -385,7 +341,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenAPersonRestrictedSinceTheLinkWasMailed_WhenPostVerifyEmail_ThenInvalidTokenAndNothingIsWritten()
     {
         // Given
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("restricted"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("restricted"), EmailVerified = false });
         var token = await SeedTokenAsync(person);
 
         await using (var context = db.CreateContext())
@@ -411,7 +367,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenAPersonDeletedSinceTheLinkWasMailed_WhenPostVerifyEmail_ThenInvalidTokenAndNothingIsWritten()
     {
         // Given
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("deleted"), isDeleted: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("deleted"), EmailVerified = false, IsDeleted = true });
         var token = await SeedTokenAsync(person);
 
         // When
@@ -428,7 +384,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenTheAddressChangedAfterThePersonWasRead_WhenMarkedVerified_ThenNothingIsWritten()
     {
         // Given a person read, as UC-14 reads them with the token, and an address change saved after
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("raced"), EmailVerified = false });
 
         await using var reading = db.CreateContext();
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);
@@ -452,7 +408,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
     public async Task GivenARestrictionAfterThePersonWasRead_WhenMarkedVerified_ThenNothingIsWritten()
     {
         // Given a person read, as UC-14 reads them with the token, and then restricted
-        var person = await SeedPersonAsync(Roles.SystemAdmin, UniqueEmail("raced-restricted"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("raced-restricted"), EmailVerified = false });
 
         await using var reading = db.CreateContext();
         var read = await reading.Persons.SingleAsync(x => x.Id == person.Id);

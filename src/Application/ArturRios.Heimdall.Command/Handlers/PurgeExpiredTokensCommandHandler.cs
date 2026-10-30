@@ -61,6 +61,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         a run.
 ///     </para>
 ///     <para>
+///         <b>Draining a backlog (#206).</b> Each table is taken a batch at a time, and the batch is
+///         repeated while it comes back full, up to <see cref="DataRetentionOptions.MaxBatchesPerTick" />
+///         batches a run. One batch a run held a table to 12,000 rows a day at the defaults, which a
+///         backlog could outgrow for good; each batch is still its own short delete. A run that stops
+///         at the cap counts what is left and reports it as <c>Backlog</c>.
+///     </para>
+///     <para>
 ///         <b>Running on more than one instance.</b> NFR-06 requires that no instance assume it is
 ///         alone, and two purges may overlap. Nothing is claimed or locked: each run selects a
 ///         batch, and <c>DeleteRangeAsync</c> re-reads those ids and removes what still exists, so
@@ -165,55 +172,88 @@ public class PurgeExpiredTokensCommandHandler(
             .Concat(scopeOwnerInvitations.Errors)
             .ToList();
 
+        var purged = new PurgeExpiredTokensCommandOutput
+        {
+            PasswordResetTokensPurged = passwordResetTokens.Count,
+            EmailVerificationTokensPurged = emailVerificationTokens.Count,
+            TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
+            PendingRegistrationsPurged = pendingRegistrations.Count,
+            ApplicationCredentialsPurged = applicationCredentials.Count,
+            AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count,
+            GoogleIdTokenUsesPurged = googleIdTokenUses.Count,
+            ScopeOwnerInvitationsPurged = scopeOwnerInvitations.Count,
+            Backlog = passwordResetTokens.Backlog + emailVerificationTokens.Backlog +
+                      twoFactorEmailCodes.Backlog + pendingRegistrations.Backlog +
+                      applicationCredentials.Backlog + attemptNoticeBudgets.Backlog +
+                      googleIdTokenUses.Backlog + scopeOwnerInvitations.Backlog
+        };
+
+        // The counts ride along with the errors: batches removed before a failure are gone, and the run's
+        // record should say so rather than claim nothing happened.
         if (errors.Count > 0)
         {
-            return output.WithErrors(errors);
+            return output.WithData(purged).WithErrors(errors);
         }
 
         // A run that removed nothing is a success: most runs find nothing to do, and a failed
         // outcome would fill the audit trail with refusals that never happened.
         return output
-            .WithData(new PurgeExpiredTokensCommandOutput
-            {
-                PasswordResetTokensPurged = passwordResetTokens.Count,
-                EmailVerificationTokensPurged = emailVerificationTokens.Count,
-                TwoFactorEmailCodesPurged = twoFactorEmailCodes.Count,
-                PendingRegistrationsPurged = pendingRegistrations.Count,
-                ApplicationCredentialsPurged = applicationCredentials.Count,
-                AttemptNoticeBudgetsPurged = attemptNoticeBudgets.Count,
-                GoogleIdTokenUsesPurged = googleIdTokenUses.Count,
-                ScopeOwnerInvitationsPurged = scopeOwnerInvitations.Count
-            })
+            .WithData(purged)
             .WithMessage(RetentionMessages.ExpiredTokensPurged);
     }
 
     /// <summary>
-    ///     Removes at most <c>PurgeBatchSize</c> of the candidates and reports how many rows were
-    ///     actually removed, or the persistence errors if the delete failed.
+    ///     Removes the candidates <c>PurgeBatchSize</c> at a time, repeating while a batch comes back
+    ///     full, for at most <c>MaxBatchesPerTick</c> batches. Reports how many rows were actually
+    ///     removed, how many are still due when the run stopped with a full batch, and the persistence
+    ///     errors if a delete failed — which ends the table's run, keeping what earlier batches removed.
     /// </summary>
-    private async Task<(int Count, IEnumerable<string> Errors)> PurgeAsync<T, TKey>(
+    private async Task<(int Count, int Backlog, IEnumerable<string> Errors)> PurgeAsync<T, TKey>(
         IQueryable<T> candidates,
         IAsyncRepository<T, TKey> writer)
         where T : Entity<TKey>
         where TKey : IEquatable<TKey>
     {
-        var ids = await candidates
-            .Take(retention.PurgeBatchSize)
-            .Select(entity => entity.Id)
-            .ToListAsync();
+        var removed = 0;
 
-        if (ids.Count == 0)
+        for (var batch = 0; batch < retention.MaxBatchesPerTick; batch++)
         {
-            return (0, []);
+            var ids = await candidates
+                .Take(retention.PurgeBatchSize)
+                .Select(entity => entity.Id)
+                .ToListAsync();
+
+            if (ids.Count == 0)
+            {
+                return (removed, 0, []);
+            }
+
+            var deletion = await writer.DeleteRangeAsync(ids);
+
+            if (!deletion.Success)
+            {
+                return (removed, 0, deletion.Errors);
+            }
+
+            // The count comes from what the delete reported removing, not from what was selected: they
+            // differ when another instance got there first, and the trail should record what this run
+            // did rather than what it intended.
+            var count = deletion.Data?.Count() ?? 0;
+            removed += count;
+
+            // A batch that was not full took everything due. One that removed nothing made no progress
+            // — another instance is deleting the same rows — so it is not repeated either.
+            if (ids.Count < retention.PurgeBatchSize)
+            {
+                return (removed, 0, []);
+            }
+
+            if (count == 0)
+            {
+                break;
+            }
         }
 
-        var deletion = await writer.DeleteRangeAsync(ids);
-
-        // The count comes from what the delete reported removing, not from what was selected: they
-        // differ when another instance got there first, and the trail should record what this run
-        // did rather than what it intended.
-        return deletion.Success
-            ? (deletion.Data?.Count() ?? 0, [])
-            : (0, deletion.Errors);
+        return (removed, await candidates.CountAsync(), []);
     }
 }

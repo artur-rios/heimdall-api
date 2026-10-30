@@ -3,7 +3,6 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
-using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
@@ -62,15 +61,30 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         request is made. Recomputing it from the current configuration on every read would let a
 ///         later change move an obligation that had already attached.
 ///     </para>
+///     <para>
+///         <b>Why the last System Admin is blocked too</b> (#203). NFR-32 keeps an active System Admin, and
+///         suspending the last one would leave nobody able to create a scope, change a role or run the
+///         retention tooling. The request is recorded and blocked exactly as the last owner's is, and the
+///         anonymisation pass carries it out once another active System Admin exists.
+///     </para>
+///     <para>
+///         <b>Why the block is decided under a lock</b> (#202, #203). The guards and the write they decide
+///         run in one transaction holding the rows of the scopes the person owns and the System Admin set
+///         (<see cref="IInvariantLocks" />), on the person as read under them (<see cref="LockedPerson" />),
+///         as every writer that can take an owner or a System Admin out does. Otherwise two co-owners, or two administrators, asking at once would
+///         each see the other still there, and both be suspended. The password is checked before the
+///         transaction opens, so no lock waits on Argon2.
+///     </para>
 /// </remarks>
 public class RequestErasureCommandHandler(
     IValidator<RequestErasureCommand> validator,
     IAsyncReadOnlyRepository<Person, long> personReader,
     IAsyncReadOnlyRepository<GoogleUser, long> googleUserReader,
-    IAsyncRepository<GoogleUser, long> googleUserWriter,
     IGoogleIdTokenVerifier tokenVerifier,
     DataRetentionOptions retention,
-    IAtomicWrites atomicWrites)
+    IAtomicWrites atomicWrites,
+    IWriteTransactions transactions,
+    IInvariantLocks locks)
     : ICommandHandlerAsync<RequestErasureCommand, RequestErasureCommandOutput>
 {
     public async Task<DataOutput<RequestErasureCommandOutput?>> HandleAsync(RequestErasureCommand command, CancellationToken cancellationToken = default)
@@ -94,7 +108,6 @@ public class RequestErasureCommandHandler(
         // generic AF-42b. The endpoint admits such a caller because it is a data subject right; any
         // other deleted identity is refused with AF-42b once AF-42c has been ruled out.
         var person = await personReader.Query()
-            .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
 
         if (person is not null)
@@ -146,16 +159,37 @@ public class RequestErasureCommandHandler(
 
         var restrictionLifted = person.ProcessingRestrictedAt is not null;
 
-        // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
-        // ownerless, so the suspension waits — but the request and its deadline do not.
-        var blocked = await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person, personReader);
-        var blockedReason = blocked ? ErasureMessages.BlockedByLastScopeOwnership : null;
+        // The decision and the write under the locks of the person's scopes (#202): leaving this block
+        // before the commit rolls back.
+        await using var transaction = await transactions.BeginAsync();
 
-        // The request, the lifted restriction (see LiftRestriction), and the suspension or the
-        // reason it waits, as one targeted write of those columns alone (#237) — made only while no
-        // request is recorded and the person is live. A request recorded since the read refuses this
-        // one as AF-42c, and a deletion as AF-42b, as either would have a moment earlier; the row is
-        // read again, past the tracked copy, to tell which.
+        // The person as they stand under the locks (#202, #203): the guards decide on this.
+        var locked = await LockedPerson.LockAsync(locks, personReader, person.Id);
+
+        if (locked is null)
+        {
+            return output.WithError(ErasureMessages.NotEligible);
+        }
+
+        // AF-42d (NFR-12): a scope must keep an owner. Suspending the last one would leave it
+        // ownerless, so the suspension waits — but the request and its deadline do not. AF-42e
+        // (NFR-32): likewise the last active System Admin.
+        var blockedReason =
+            await LastScopeOwnerGuard.WouldStripLastOwnerAsync(person.Id, locked.OwnedScopeIds, personReader)
+                ? ErasureMessages.BlockedByLastScopeOwnership
+                : locked.IsLiveSystemAdmin && await LastSystemAdminGuard.WouldLeaveNoneAsync(person.Id, personReader)
+                    ? ErasureMessages.BlockedByLastSystemAdmin
+                    : null;
+        var blocked = blockedReason is not null;
+
+        // The request, the lifted restriction, and the suspension or the reason it waits, as one
+        // targeted write of those columns alone (#237). The restriction is lifted as UC-45 lifts a
+        // subject's own, whether or not NFR-12 blocks the suspension (AF-42d): a blocked subject is then
+        // neither restricted nor suspended, which lets them take part in the ownership transfer (UC-21)
+        // that unblocks their own request. Made only while no request is recorded and the person is
+        // live. A request recorded since the read refuses this one as AF-42c, and a deletion as AF-42b,
+        // as either would have a moment earlier; the row is read again, past the tracked copy, to tell
+        // which.
         if (!await atomicWrites.TryRecordErasureRequestAsync(person, requestedAt, dueAt, blockedReason))
         {
             var requestedSince = await personReader.Query()
@@ -167,6 +201,8 @@ public class RequestErasureCommandHandler(
                 ? ErasureMessages.ErasureAlreadyRequested
                 : ErasureMessages.NotEligible);
         }
+
+        await transaction.CommitAsync();
 
         return Recorded(
             output, person.PublicId, requestedAt, dueAt, blocked, person.ErasureBlockedReason,
@@ -208,66 +244,30 @@ public class RequestErasureCommandHandler(
 
         var requestedAt = DateTime.UtcNow;
         var dueAt = requestedAt + retention.SubjectErasureDeadline;
+        var restrictionLifted = googleUser.ProcessingRestrictedAt is not null;
 
-        googleUser.ErasureRequestedAt = requestedAt;
-        googleUser.ErasureDueAt = dueAt;
-        googleUser.UpdatedAt = requestedAt;
-
-        var restrictionLifted = LiftRestriction(googleUser);
-
-        // Nothing can block a Google User's erasure: FR-GO-04 makes them permanently User-equivalent,
-        // so they own no scope and NFR-12 has nothing to protect.
-        Suspend(googleUser, requestedAt);
-
-        var update = await googleUserWriter.UpdateAsync(googleUser);
-
-        return !update.Success
-            ? output.WithErrors(update.Errors)
-            : Recorded(
-                output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null,
-                restrictionLifted);
-    }
-
-    /// <summary>
-    ///     Lifts the subject's restriction on processing, if they have one, exactly as UC-45 does
-    ///     when a subject lifts their own: the restriction and its ground are cleared, and no
-    ///     notification is recorded because none is owed.
-    /// </summary>
-    /// <returns>Whether there was a restriction to lift.</returns>
-    /// <remarks>
-    ///     Done whether or not NFR-12 blocks the suspension (AF-42d). A blocked subject is then
-    ///     neither restricted nor suspended, which is what lets them take part in the ownership
-    ///     transfer (UC-21) that unblocks their own request.
-    /// </remarks>
-    private static bool LiftRestriction(GoogleUser googleUser)
-    {
-        if (googleUser.ProcessingRestrictedAt is null)
+        // The request, the lifted restriction — as UC-45 lifts a subject's own, with no notice owed —
+        // and the suspension, as one targeted write of those columns alone (#205), made only while no
+        // request is recorded and the Google User is live. Nothing can block a Google User's erasure:
+        // FR-GO-04 makes them permanently User-equivalent, so they own no scope and NFR-12 has nothing
+        // to protect. The suspension is immediate and deliberate: a subject who has asked to be erased
+        // has withdrawn the basis the account operates on, and IsDeleted stops every path — sign-in
+        // refuses it, and ActorLivenessFilter refuses an unexpired token. A request recorded since the
+        // read refuses this one as AF-42c, and a deletion as AF-42b; the row is read again to tell which.
+        if (!await atomicWrites.TryRecordErasureRequestAsync(googleUser, requestedAt, dueAt))
         {
-            return false;
+            var requestedSince = await googleUserReader.Query()
+                .Where(x => x.Id == googleUser.Id)
+                .Select(x => x.ErasureRequestedAt)
+                .FirstOrDefaultAsync();
+
+            return output.WithError(requestedSince is not null
+                ? ErasureMessages.ErasureAlreadyRequested
+                : ErasureMessages.NotEligible);
         }
 
-        googleUser.ProcessingRestrictedAt = null;
-        googleUser.RestrictionGround = null;
-        googleUser.RestrictionLiftNotifiedAt = null;
-
-        return true;
-    }
-
-    /// <summary>
-    ///     Suspends the identity: the same logical deletion UC-09 and UC-28 perform, carrying the
-    ///     kind that gives it the statutory deadline rather than the administrative window.
-    /// </summary>
-    /// <remarks>
-    ///     Suspension is immediate and deliberate. A subject who has asked to be erased has
-    ///     withdrawn the basis on which the account operates, so continuing to authenticate them
-    ///     while the deadline runs would be processing they have objected to. `IsDeleted` already
-    ///     stops every path: login refuses it, and `ActorLivenessFilter` refuses an unexpired token.
-    /// </remarks>
-    private static void Suspend(GoogleUser googleUser, DateTime at)
-    {
-        googleUser.IsDeleted = true;
-        googleUser.DeletedAt = at;
-        googleUser.DeletionKind = (int)DeletionKinds.SubjectRequested;
+        return Recorded(
+            output, googleUser.PublicId, requestedAt, dueAt, blocked: false, blockedReason: null, restrictionLifted);
     }
 
     private static DataOutput<RequestErasureCommandOutput?> Recorded(

@@ -28,7 +28,8 @@ Every other document in this folder **references this document** for technical c
 | --- | --- | --- |
 | Runtime / framework | **.NET 10** (`net10.0`) | Every project targets `net10.0`. The Web API uses the `Microsoft.NET.Sdk.Web` SDK; libraries use `Microsoft.NET.Sdk`. |
 | Language | **C# 14** | C# 14 is the default language version for `net10.0`, so it is used implicitly — no explicit `<LangVersion>` is set, which keeps the language pinned to the target framework's default. |
-| Language features | `Nullable` **enabled**, `ImplicitUsings` **enabled** | Applied consistently across all production and test projects. |
+| Language features | `Nullable` **enabled**, `ImplicitUsings` **enabled** | Applied consistently across all production and test projects, and stated once: the target framework, `Nullable` and `ImplicitUsings` live in `src/Directory.Build.props` and `tests/Directory.Build.props`, not in the project files. `nullable` and `CA2016` (forward the `CancellationToken`) warnings are errors. |
+| SDK | **.NET SDK 10.0.113**, `rollForward: latestFeature` | `global.json` at the root pins the SDK band; CI reads it through `actions/setup-dotnet`, and the Dockerfile pins the `sdk` and `aspnet` image tags to an exact patch. |
 
 **Why explicit:** C# 14 ships with and is the default for .NET 10. New code may freely use C# 14 features (collection expressions, primary constructors — already used e.g. in `Startup`, etc.). Do **not** pin an older `<LangVersion>`; let it track the .NET 10 default.
 
@@ -84,14 +85,14 @@ The data access pattern is **repository-based**: application handlers depend on 
 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
-| Input validation | **FluentValidation** | `12.1.1` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
+| Input validation | **FluentValidation** | `12.2.0` | Command inputs have `IValidator<TCommand>` implementations (e.g. `CreateScopeCommandValidator`), registered in DI and invoked inside the handlers. |
 | Logging | **Serilog** (`Serilog`, `Serilog.AspNetCore`) | `4.4.0` / `10.0.0` | Structured logging wired through `Host.UseSerilog()`, with JSON formatting; the log directory and the retention period are configurable via environment variables (NFR-22). |
 | Authentication / authorization | **JWT** via `ArturRios.Util.WebApi` and `ArturRios.Jwt` | (see §3) | Signed bearer tokens; issuer, audience, secret, and expiration are supplied via `HEIMDALL_AUTH_*` environment variables. Role-based authorization and an `AuthenticationMiddleware` gate the endpoints. |
 | Google ID token verification | **Google.Apis.Auth** | `1.77.0` | UC-25's `GoogleIdTokenVerifier` calls `GoogleJsonWebSignature.ValidateAsync` to check an incoming ID token's signature, issuer, audience, and expiration (FR-GO-11, NFR-13) before its claims are trusted. Arrives transitively through `ArturRios.Util.WebApi` and is declared explicitly on the WebApi project because that project uses its types directly. **Why not the library's own verifier:** `ArturRios.Util.WebApi` ships `IGoogleTokenVerifier`, but its `GoogleTokenPayload` carries only `sub`, `email`, and `email_verified` — it cannot supply the `name` and `picture` claims a Google User is populated from (FR-GO-05), so UC-25 declares `IGoogleIdTokenVerifier` in the application layer and implements it here. |
 | Local token validation | **Microsoft.IdentityModel.JsonWebTokens** | `8.23.0` | `JsonWebTokenHandler`, used by UC-25's `LocalGoogleIdTokenVerifier` — the functional suite's stand-in for Google, which validates locally signed ID tokens (see the Testing Specification §10). Also transitive, via `ArturRios.Jwt`; the explicit reference must match the version that package resolves, since a lower one fails restore with `NU1605`. |
 | Result / error model | `DataOutput<T>` (namespace `ArturRios.Output`, from the `ArturRios.Util` family) | (see §3) | Handlers return success/errors/messages/data on a `DataOutput<T>` instead of throwing; `ToActionResult` maps it to an HTTP response. |
 | API documentation | **Swagger / OpenAPI** (via `ArturRios.Util.WebApi`) | — | Generated and served by the standard sequence in the environments it allows, described by `SwaggerConfiguration` (`options.Swagger.ConfigureGenerator`), which also defines the bearer scheme. |
-| Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `Startup.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
+| Outbound email | **Mailgun** via `ArturRios.Messaging` | (see §3) | Verification (UC-06) and password reset (UC-12) emails. `EmailRegistrationExtensions.AddEmailSenders` registers the Mailgun-backed senders only when `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are both set, and logging senders otherwise — so local runs and the functional suite work without credentials and never reach the network. Delivery failures are logged, never thrown: an anonymous caller's response must not vary with whether the mail went out. |
 | Metrics | **OpenTelemetry** (`OpenTelemetry.Extensions.Hosting`, `.Instrumentation.AspNetCore`, `.Instrumentation.Http`, `.Exporter.Prometheus.AspNetCore`) | `1.19.1` (instrumentation `1.19.0`) / exporter `1.19.1-beta.1` | ASP.NET Core, `HttpClient`, `System.Runtime`, Kestrel, EF Core and Npgsql meters, served for Prometheus at `/metrics` on the private port `HEIMDALL_METRICS_PORT` (9464) only. The exporter has never had a stable release; it is accepted as a beta because it only formats what the stable SDK collected, on a port that is never published. |
 | Configuration | `.env.<environment>` files + environment variables | — | Loaded by the `ArturRios.Util.WebApi` configuration loader; `.env*` files are copied next to the built assembly. |
 
@@ -104,7 +105,7 @@ These are the technologies mandated for tests. **How** they are applied to each 
 | Concern | Technology | Version | How it is used |
 | --- | --- | --- | --- |
 | Test framework | **xUnit v3** (`xunit.v3.mtp-off`, `xunit.runner.visualstudio`) | `4.0.2` / `4.0.1` | The test framework for every test project. The `mtp-off` flavour runs through VSTest, so `dotnet test`, its `--filter` and the `.trx` logger work as before. |
-| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.10.1` | Test host/runner integration for `dotnet test` and IDEs. |
+| Test SDK / runner | `Microsoft.NET.Test.Sdk` | `18.11.0` | Test host/runner integration for `dotnet test` and IDEs. |
 | Coverage | `coverlet.collector` | `10.1.0` | Collects code coverage during test runs. |
 | Test helpers & doubles | **`ArturRios.Util.Test`** | `5.0.0` | Category attributes (`[UnitFact]`/`[FunctionalFact]`, which stamp a `Category` trait), the `WebApiTest<TEntryPoint>` functional base class (spins up the host via `WebApplicationFactory<T>` and exposes an `HttpGateway` + authentication helpers), `FakeRepository<T, long>`, `AsyncFakeRepository<T, long>` (async repository fake whose `Query()` is async-capable, for unit-testing handlers that depend on `IAsyncReadOnlyRepository<T, long>`/`IAsyncRepository<T, long>`), `FakeScheduler`, and `CustomAssert`. |
 | Mocking | **Moq** | `4.21.0` | The single mocking library for stubbing non-repository collaborators (validators, mediators, services). Do not introduce a second mocking framework. |
@@ -134,7 +135,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Data | EFCore.NamingConventions | `10.0.1` |
 | Authentication | Google.Apis.Auth | `1.77.0` |
 | Authentication | Microsoft.IdentityModel.JsonWebTokens | `8.23.0` |
-| Validation | FluentValidation | `12.1.1` |
+| Validation | FluentValidation | `12.2.0` |
 | Logging | Serilog | `4.4.0` |
 | Logging | Serilog.AspNetCore | `10.0.0` |
 | Metrics | OpenTelemetry.Extensions.Hosting | `1.19.1` |
@@ -143,7 +144,7 @@ Tests are split by **category** — unit tests exercise Command/Query handlers a
 | Metrics | OpenTelemetry.Exporter.Prometheus.AspNetCore | `1.19.1-beta.1` |
 | Testing | xunit.v3.mtp-off | `4.0.2` |
 | Testing | xunit.runner.visualstudio | `4.0.1` |
-| Testing | Microsoft.NET.Test.Sdk | `18.10.1` |
+| Testing | Microsoft.NET.Test.Sdk | `18.11.0` |
 | Testing | coverlet.collector | `10.1.0` |
 | Testing | Testcontainers.PostgreSql | `4.16.0` |
 | Testing | Moq | `4.21.0` |

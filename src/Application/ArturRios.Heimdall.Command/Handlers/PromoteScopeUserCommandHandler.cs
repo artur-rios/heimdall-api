@@ -18,14 +18,13 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///     the target scope exists and is active (AF-23a), enforces scope ownership for a Scope Admin
 ///     actor (AF-23c), refuses a person who already holds <c>ScopeAdmin</c> (AF-23d), verifies the
 ///     named person is a non-deleted <c>User</c> of that scope (AF-23b), then promotes them — role to
-///     <c>ScopeAdmin</c>, <c>SCOPE_USER</c> row removed, <c>SCOPE_OWNER</c> row added — in one write,
+///     <c>ScopeAdmin</c>, <c>SCOPE_USER</c> row removed, <c>SCOPE_OWNER</c> row added — in one transaction,
 ///     so FR-PE-11 is never observably violated. A System Admin actor bypasses the ownership check.
 ///     All failures are returned as errors on the <see cref="DataOutput{T}" /> rather than thrown.
 /// </summary>
 public class PromoteScopeUserCommandHandler(
     IAsyncReadOnlyRepository<Scope, long> scopeReader,
     IAsyncReadOnlyRepository<Person, long> personReader,
-    IAsyncRepository<Person, long> personWriter,
     IScopeOwnershipChecker scopeOwnership,
     IAtomicWrites atomicWrites)
     : ICommandHandlerAsync<PromoteScopeUserCommand, PromoteScopeUserCommandOutput>
@@ -53,11 +52,10 @@ public class PromoteScopeUserCommandHandler(
         }
 
         // The person must exist and not be logically deleted (AF-23b): a deleted person can no longer
-        // authenticate, so the ownership granted could never be exercised. Both scope navigations are
-        // included because severing one and adding to the other is how the join rows move below.
+        // authenticate, so the ownership granted could never be exercised. The membership is included
+        // because AF-23b reads it.
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
-            .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x => x.PublicId == command.PersonId && !x.IsDeleted);
 
         if (person is null)
@@ -97,35 +95,25 @@ public class PromoteScopeUserCommandHandler(
             return output.WithError(PersonMessages.EmailAlreadyExists);
         }
 
-        // UC-23 steps 4-5, together. The role — with ScopeId, the membership's copy, cleared beside
-        // it — is a targeted write (#237), made only while the person is still the User they were
-        // read as, so a promotion, deletion or role change that landed since is never overwritten.
-        // Neither join entity has a repository of its own, so both rows move through the person
-        // aggregate, in the same transaction: severing the required ScopeMembership deletes the
-        // SCOPE_USER row (as UC-08's role change does) and adding to ScopeOwnerships writes the
-        // SCOPE_OWNER row (as UC-21 does). UpdatedAt is stamped by hand — no trigger maintains it.
-        DataOutput<Person>? save = null;
-
+        // UC-23 steps 4-5, together, and both targeted (#237, #205): the role — with ScopeId, the
+        // membership's copy, and the SCOPE_USER row removed beside it — made only while the person is
+        // still the User they were read as, so a promotion, deletion or role change that landed since is
+        // never overwritten; then, in the same transaction, the SCOPE_OWNER row, as UC-21 writes it. Not
+        // a save of the person aggregate, which would write the profile back as read here, over a rename
+        // made meanwhile. UpdatedAt is stamped by hand — no trigger maintains it.
         var change = await atomicWrites.TryChangeEmailAndRoleAsync(
             person, person.Email, (long)Roles.ScopeAdmin, DateTime.UtcNow,
-            async () =>
-            {
-                person.ScopeMembership = null;
-                person.ScopeOwnerships.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
-
-                save = await personWriter.UpdateAsync(person);
-
-                return save.Success;
-            });
+            () => atomicWrites.TryAddScopeOwnerAsync(person, scope.Id));
 
         switch (change)
         {
+            // Not expected — the change has just made them a live Scope Admin in the same transaction —
+            // but a refused ownership means the person is not as read, which a stale change answers.
             case AccountChangeOutcome.SaveFailed:
-                return output.WithErrors(save!.Errors);
-            case AccountChangeOutcome.AddressTaken:
-                return output.WithError(RelationalErrors.UniqueViolationMessage);
             case AccountChangeOutcome.Stale:
                 return output.WithError(RelationalErrors.ConcurrencyMessage);
+            case AccountChangeOutcome.AddressTaken:
+                return output.WithError(RelationalErrors.UniqueViolationMessage);
         }
 
         // UC-23 step 6: return the updated person. The scope just granted is the whole of what they

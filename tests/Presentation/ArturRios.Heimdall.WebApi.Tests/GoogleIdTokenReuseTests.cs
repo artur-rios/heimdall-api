@@ -22,21 +22,6 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-
-        var scope = new Scope
-        {
-            PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}", GoogleSignInEnabled = true
-        };
-
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-
-        return scope;
-    }
-
     private Task<HttpOutput<DataOutput<GoogleSignInCommandOutput?>?>> SignInAsync(Guid scopeId, string idToken) =>
         Gateway.PostAsync<DataOutput<GoogleSignInCommandOutput?>>(
             "/api/auth/google", new GoogleSignInCommand { ScopeId = scopeId, IdToken = idToken });
@@ -52,7 +37,7 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenATokenThatSignedSomebodyUp_WhenPresentedAgain_ThenUnauthorizedAndNothingMoreIsCreated()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var token = TestGoogleTokens.For();
         var first = await SignInAsync(scope.PublicId, token);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
@@ -71,8 +56,8 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenAUsedToken_WhenPresentedToAnotherScope_ThenNoAccountIsCreatedThere()
     {
         // Given a token already used to sign up in one scope
-        var used = await SeedScopeAsync();
-        var other = await SeedScopeAsync();
+        var used = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
+        var other = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var token = TestGoogleTokens.For();
         Assert.Equal(HttpStatusCode.OK, (await SignInAsync(used.PublicId, token)).StatusCode);
 
@@ -88,7 +73,7 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTokensWithoutAnId_WhenEachIsPresented_ThenEachIsAcceptedOnceByItsSignedPart()
     {
         // Given two tokens for one Google account that carry no jti, differing only in their expiry
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = $"no-jti-{Guid.NewGuid():N}@gmail.test";
         var first = TestGoogleTokens.For(subject, email, expiresIn: TimeSpan.FromMinutes(10), withTokenId: false);
@@ -113,7 +98,7 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTheSameTokenPresentedTwiceAtOnce_WhenBothArrive_ThenExactlyOneSucceeds()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var token = TestGoogleTokens.For();
 
         // When
@@ -153,7 +138,7 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenTheTokenThatSignedAGoogleUserIn_WhenPresentedForTheirErasureRequest_ThenNotAccepted()
     {
         // Given a Google User signed in with a token, and holding the bearer token it bought
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var token = TestGoogleTokens.For();
         var signIn = await SignInAsync(scope.PublicId, token);
         Assert.Equal(HttpStatusCode.OK, signIn.StatusCode);
@@ -175,7 +160,7 @@ public class GoogleIdTokenReuseTests(PostgresFixture db) : WebApiTest<Program>(E
     public async Task GivenAFreshTokenForTheSameAccount_WhenPresentedForTheirErasureRequest_ThenItIsRecorded()
     {
         // Given
-        var scope = await SeedScopeAsync();
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { GoogleSignInEnabled = true });
         var subject = $"google-sub-{Guid.NewGuid():N}";
         var email = $"erase-{Guid.NewGuid():N}@gmail.test";
         var signIn = await SignInAsync(scope.PublicId, TestGoogleTokens.For(subject, email));

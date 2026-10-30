@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.WebApi.Retention;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 
@@ -39,6 +40,10 @@ public static class MetricsConfiguration
     ///             <c>Npgsql</c> — connection pool usage, command duration and failures: the first
     ///             place a saturated or unreachable database shows.
     ///         </item>
+    ///         <item>
+    ///             <c>ArturRios.Heimdall.ScheduledPasses</c> — this API's own: rows processed and the time
+    ///             of the last successful run, per scheduled pass (#214).
+    ///         </item>
     ///     </list>
     /// </remarks>
     private static readonly string[] BuiltInMeters =
@@ -46,7 +51,8 @@ public static class MetricsConfiguration
         "System.Runtime",
         "Microsoft.AspNetCore.Server.Kestrel",
         "Microsoft.EntityFrameworkCore",
-        "Npgsql"
+        "Npgsql",
+        ScheduledPassMetrics.MeterName
     ];
 
     /// <summary>

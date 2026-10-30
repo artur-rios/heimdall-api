@@ -1,6 +1,7 @@
 using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArturRios.Heimdall.Query.HealthChecks;
 
@@ -10,7 +11,14 @@ namespace ArturRios.Heimdall.Query.HealthChecks;
 ///     database being unreachable throws on execution) is treated as unhealthy rather than
 ///     propagated, so the detailed health check can still report the aggregate status (AF-30c).
 /// </summary>
-public class DatabaseHealthCheck(IAsyncReadOnlyRepository<Role, long> roleReader) : IServiceHealthCheck
+/// <remarks>
+///     The exception is swallowed so the endpoint keeps answering, but it is logged at Warning: the
+///     response says only "Unhealthy", and without the cause in the log nobody reading it has a
+///     reason to go on.
+/// </remarks>
+public class DatabaseHealthCheck(
+    IAsyncReadOnlyRepository<Role, long> roleReader,
+    ILogger<DatabaseHealthCheck> logger) : IServiceHealthCheck
 {
     public string ServiceName => "Database";
 
@@ -23,8 +31,10 @@ public class DatabaseHealthCheck(IAsyncReadOnlyRepository<Role, long> roleReader
 
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            logger.LogWarning(exception, "The database health check failed");
+
             return false;
         }
     }

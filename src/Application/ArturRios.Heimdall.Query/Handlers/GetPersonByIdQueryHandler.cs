@@ -78,7 +78,7 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person, long> pe
                     UpdatedAt = x.UpdatedAt
                 }
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         // AF-07a: no such person (or it is logically deleted and was not explicitly requested).
         if (person is null)
@@ -90,7 +90,8 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person, long> pe
         // the scopes they own (FR-PE-19).
         var visibleScopeIds = query.ActingPersonId == person.PublicId
             ? null
-            : await OwnedScopeVisibility.ScopesVisibleToAsync(personReader, query.ActingRole, query.ActingPersonId);
+            : await OwnedScopeVisibility.ScopesVisibleToAsync(
+                personReader, query.ActingRole, query.ActingPersonId, cancellationToken);
 
         // AF-07b: the caller is not allowed to see this person.
         if (!MayView(query, person, visibleScopeIds))

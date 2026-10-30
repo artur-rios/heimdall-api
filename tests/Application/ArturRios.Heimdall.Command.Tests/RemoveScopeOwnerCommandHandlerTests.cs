@@ -67,9 +67,11 @@ public class RemoveScopeOwnerCommandHandlerTests
 
     private static RemoveScopeOwnerCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, AsyncFakeRepository<Person, long> persons, bool allowed = true,
-        IAtomicWrites? atomicWrites = null) =>
+        IAtomicWrites? atomicWrites = null, InMemoryWriteTransactions? transactions = null,
+        InMemoryInvariantLocks? locks = null) =>
         new(scopes, persons, OwnershipChecker(allowed),
-            atomicWrites ?? new InMemoryAtomicWrites { Persons = persons.Query() });
+            atomicWrites ?? new InMemoryAtomicWrites { Persons = persons.Query() },
+            transactions ?? InMemoryWriteTransactions.Instance, locks ?? InMemoryInvariantLocks.Instance);
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);
@@ -279,6 +281,29 @@ public class RemoveScopeOwnerCommandHandlerTests
         Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships);
     }
 
+    [UnitTheory]
+    [InlineData(InactiveOwner.Restricted)]
+    [InlineData(InactiveOwner.ErasureRequested)]
+    public async Task GivenOnlyCoOwnerIsInactive_WhenHandlingRemoveScopeOwner_ThenScopeWouldLoseLastOwnerIsReported(
+        InactiveOwner how)
+    {
+        // Given the only co-owner is restricted, or waiting on their erasure: neither can administer
+        // the scope, so neither keeps it owned (AF-22b, #211)
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        InactiveOwners.Make(await SeedPersonAsync(persons, ownedScopes: scope), how);
+        var handler = Handler(scopes, persons);
+
+        // When
+        var output = await handler.HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
     [UnitFact]
     public async Task GivenLogicallyDeletedTargetWithLiveCoOwner_WhenHandlingRemoveScopeOwner_ThenStaleOwnershipIsRemoved()
     {
@@ -409,5 +434,82 @@ public class RemoveScopeOwnerCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
         Assert.Equal(scope.Id, Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships).ScopeId);
+    }
+
+    // #202: the guard and the removal run under the scope's lock, in one transaction.
+
+    [UnitFact]
+    public async Task GivenACoOwnedScope_WhenHandlingRemoveScopeOwner_ThenTheScopeIsLockedAndTheRemovalCommitted()
+    {
+        // Given
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        await SeedPersonAsync(persons, ownedScopes: scope);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+
+        // When
+        var output = await Handler(scopes, persons, transactions: transactions, locks: locks)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then
+        Assert.True(output.Success);
+        Assert.Equal([scope.Id], Assert.Single(locks.ScopeLocks));
+        Assert.Equal(1, transactions.Committed);
+    }
+
+    [UnitFact]
+    public async Task GivenTheSoleOwner_WhenHandlingRemoveScopeOwner_ThenRefusedUnderTheLockAndNothingCommitted()
+    {
+        // Given
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        var transactions = new InMemoryWriteTransactions();
+        var locks = new InMemoryInvariantLocks();
+
+        // When
+        var output = await Handler(scopes, persons, transactions: transactions, locks: locks)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then
+        Assert.Equal([PersonMessages.ScopeWouldLoseLastOwner], output.Errors);
+        Assert.Equal([scope.Id], Assert.Single(locks.ScopeLocks));
+        Assert.Equal(0, transactions.Committed);
+        Assert.Equal(1, transactions.RolledBack);
+    }
+
+    [UnitFact]
+    public async Task GivenTheScopeDeletedOnceLocked_WhenHandlingRemoveScopeOwner_ThenScopeNotFound()
+    {
+        // Given a scope another request deletes between this one's first read and its lock
+        var scopes = new AsyncFakeRepository<Scope, long>();
+        var persons = new AsyncFakeRepository<Person, long>();
+        var scope = await SeedScopeAsync(scopes);
+        var person = await SeedPersonAsync(persons, ownedScopes: scope);
+        await SeedPersonAsync(persons, ownedScopes: scope);
+        var locks = new DeletingOnLock(scope);
+
+        // When
+        var output = await new RemoveScopeOwnerCommandHandler(scopes, persons, OwnershipChecker(),
+                new InMemoryAtomicWrites { Persons = persons.Query() }, InMemoryWriteTransactions.Instance, locks)
+            .HandleAsync(Command(scope.PublicId, person.PublicId));
+
+        // Then — AF-22a, and the ownership stands
+        Assert.Equal([PersonMessages.ScopeNotFound], output.Errors);
+        Assert.Single((await StoredAsync(persons, person)).ScopeOwnerships);
+    }
+
+    /// <summary>Deletes the scope as the lock is taken: the competing deletion the lock waited for.</summary>
+    private sealed class DeletingOnLock(Scope scope) : IInvariantLocks
+    {
+        public Task LockAsync(IReadOnlyCollection<long> scopeIds, bool systemAdmins = false)
+        {
+            scope.IsDeleted = true;
+            return Task.CompletedTask;
+        }
     }
 }

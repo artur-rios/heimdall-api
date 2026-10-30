@@ -40,7 +40,7 @@ public class UpdatePersonCommandHandlerTests
     /// </summary>
     private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
     {
-        var hash = Hash.EncodeWithRandomSalt(Password, out var salt);
+        var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
 
         return (hash, salt);
     });
@@ -71,6 +71,18 @@ public class UpdatePersonCommandHandlerTests
         RoleId = (long)Roles.ScopeAdmin,
         EmailVerified = true,
         ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList()
+    };
+
+    private static Person SystemAdmin(long id, string email) => new()
+    {
+        Id = id,
+        PublicId = Guid.NewGuid(),
+        Name = $"system-admin-{id}",
+        Email = email,
+        PasswordHash = Credential.Value.Hash,
+        Salt = Credential.Value.Salt,
+        RoleId = (long)Roles.SystemAdmin,
+        EmailVerified = true
     };
 
     private static IValidator<UpdatePersonCommand> PassingValidator()
@@ -178,7 +190,6 @@ public class UpdatePersonCommandHandlerTests
             PassingValidator(),
             persons,
             googleUsers ?? new AsyncFakeRepository<GoogleUser, long>(),
-            persons,
             Ownership(ownershipAllowed),
             verificationTokens ?? new AsyncFakeRepository<EmailVerificationToken, long>(),
             resetTokens ?? new AsyncFakeRepository<PasswordResetToken, long>(),
@@ -250,6 +261,26 @@ public class UpdatePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(RelationalErrors.ConcurrencyMessage, output.Errors);
         Assert.Equal("other-change@test.local", target.Email);
+    }
+
+    [UnitFact]
+    public async Task GivenThePersonDeletedSinceTheRead_WhenRenamingThem_ThenNotFoundAndTheNameStays()
+    {
+        // Given another request that suspends the person — an erasure request, say — between this one's
+        // checks and its write (#205)
+        var target = User(10, Scope(1));
+        var persons = await PersonsWith(target);
+        var atomicWrites = new InMemoryAtomicWrites { BeforeConditionalWrite = row => row.IsDeleted = true };
+        var handler = HandlerFor(persons, atomicWrites: atomicWrites);
+        var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
+        command.Name = "Renamed";
+
+        // When
+        var output = await handler.HandleAsync(command);
+
+        // Then AF-08a answers, and the name is not written
+        Assert.Equal([PersonMessages.PersonNotFound], output.Errors);
+        Assert.Equal("user-10", target.Name);
     }
 
     [UnitFact]
@@ -500,7 +531,7 @@ public class UpdatePersonCommandHandlerTests
     [UnitFact]
     public async Task GivenAnEmailChange_WhenTheNewAddressIsSaved_ThenTheResetAndVerificationLinksWereAlreadyRetired()
     {
-        // Given a writer that records the links' state at the moment the new address is saved
+        // Given a write that records the links' state at the moment the new address is saved
         var target = User(10, Scope(1));
         var persons = await PersonsWith(target);
         var reset = new PasswordResetToken
@@ -516,22 +547,18 @@ public class UpdatePersonCommandHandlerTests
         bool? resetUsedDuringSave = null;
         bool? verificationUsedDuringSave = null;
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns((Person person, CancellationToken ct) =>
+        // An administrator's change makes no conditional write before the address's own (#237).
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = _ =>
             {
-                resetUsedDuringSave = reset.Used;
-                verificationUsedDuringSave = verification.Used;
-                return persons.UpdateAsync(person, ct);
-            });
+                resetUsedDuringSave ??= reset.Used;
+                verificationUsedDuringSave ??= verification.Used;
+            }
+        };
 
-        var twoFactor = new TwoFactorState();
-        var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
-            Ownership(true), verificationTokens, await ResetTokensAsync(reset),
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
+        var handler = HandlerFor(persons, verificationTokens: verificationTokens,
+            resetTokens: await ResetTokensAsync(reset), atomicWrites: atomicWrites);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -562,15 +589,23 @@ public class UpdatePersonCommandHandlerTests
             PersonId = target.Id, TokenHash = "late-verify", ExpiresAt = DateTime.UtcNow.AddHours(1)
         };
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns(async (Person person, CancellationToken ct) =>
+        // Issued as the address is written: an administrator's change makes no conditional write before
+        // the address's own (#237).
+        var issued = false;
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = _ =>
             {
-                await resetTokens.CreateAsync(lateReset, ct);
-                await verificationTokens.CreateAsync(lateVerification, ct);
-                return await persons.UpdateAsync(person, ct);
-            });
+                if (issued)
+                {
+                    return;
+                }
+
+                issued = true;
+                resetTokens.CreateAsync(lateReset).GetAwaiter().GetResult();
+                verificationTokens.CreateAsync(lateVerification).GetAwaiter().GetResult();
+            }
+        };
 
         bool? resetUsedAtNotice = null;
         var sender = new Mock<IEmailChangeNoticeSender>();
@@ -581,9 +616,9 @@ public class UpdatePersonCommandHandlerTests
 
         var twoFactor = new TwoFactorState();
         var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
+            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(),
             Ownership(true), verificationTokens, resetTokens,
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
+            atomicWrites, twoFactor.Configurations, twoFactor.Verifier(),
             sender.Object, new AdminEmailOptions(), twoFactor.RetryAfter);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
@@ -900,9 +935,10 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenScopeWithAnotherOwner_WhenPromotingOwnerToSystemAdmin_ThenOwnershipsAreCleared()
+    public async Task GivenScopeWithAnotherOwner_WhenPromotingOwnerToSystemAdmin_ThenOwnershipsAreKept()
     {
-        // Given a scope with two owners, so losing one leaves it owned (NFR-12 satisfied)
+        // Given a Scope Admin co-owning a scope. FR-SC-08 lets a System Admin be a named owner, so the
+        // promotion takes no ownership away (#224).
         var scope = Scope(1);
         var target = ScopeAdmin(10, "first@test.local", scope);
         var coOwner = ScopeAdmin(11, "second@test.local", scope);
@@ -917,14 +953,15 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal((int)Roles.SystemAdmin, output.Data!.Role);
-        Assert.Empty(output.Data.OwnedScopeIds);
-        Assert.Empty(target.ScopeOwnerships);
+        Assert.Equal([scope.PublicId], output.Data.OwnedScopeIds);
+        Assert.Equal([scope.Id], target.ScopeOwnerships.Select(x => x.ScopeId));
     }
 
     [UnitFact]
-    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenReturnsScopeWouldLoseLastOwner()
+    public async Task GivenSoleOwner_WhenPromotingToSystemAdmin_ThenPromotedAndStillTheOwner()
     {
-        // Given a scope whose only owner is the target (NFR-12)
+        // Given a scope whose only owner is the target. Keeping the ownership is what keeps the scope —
+        // and the applications whose owner the target is — owned (NFR-12, #224).
         var scope = Scope(1);
         var target = ScopeAdmin(10, "only@test.local", scope);
         var persons = await PersonsWith(target);
@@ -936,33 +973,29 @@ public class UpdatePersonCommandHandlerTests
         var output = await handler.HandleAsync(command);
 
         // Then
-        Assert.False(output.Success);
-        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
+        Assert.True(output.Success);
+        Assert.Equal((long)Roles.SystemAdmin, target.RoleId);
+        Assert.Equal([scope.PublicId], output.Data!.OwnedScopeIds);
+        Assert.Single(target.ScopeOwnerships);
     }
 
     [UnitFact]
-    public async Task GivenOnlyCoOwnerIsDeleted_WhenPromotingOwnerToSystemAdmin_ThenReturnsScopeWouldLoseLastOwner()
+    public async Task GivenTheOnlySystemAdmin_WhenChangingTheirOwnRoleToScopeAdmin_ThenUnsupportedAndStillSystemAdmin()
     {
-        // Given a scope owned by the target and one logically deleted co-owner. A soft-deleted owner
-        // can no longer authenticate, so the scope would be left effectively ownerless — the same
-        // reading UC-09 AF-09e and UC-10 AF-10b apply (NFR-12).
-        var scope = Scope(1);
-        var target = ScopeAdmin(10, "first@test.local", scope);
-        var deletedCoOwner = ScopeAdmin(11, "second@test.local", scope);
-        deletedCoOwner.IsDeleted = true;
-        var persons = await PersonsWith(target, deletedCoOwner);
+        // Given the only System Admin, demoting themselves. UC-08 changes a role only to SystemAdmin
+        // (AF-08f), so it can never leave the system without one (#203).
+        var target = SystemAdmin(10, "only-admin@test.local");
+        var persons = await PersonsWith(target);
         var handler = HandlerFor(persons);
-        var command = CommandFor(target, (int)Roles.SystemAdmin, Guid.NewGuid());
-        command.RoleId = (int)Roles.SystemAdmin;
+        var command = CommandFor(target, (int)Roles.SystemAdmin, target.PublicId);
+        command.RoleId = (int)Roles.ScopeAdmin;
 
         // When
         var output = await handler.HandleAsync(command);
 
         // Then
-        Assert.False(output.Success);
-        Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
-        Assert.Equal((long)Roles.ScopeAdmin, target.RoleId);
-        Assert.Single(target.ScopeOwnerships);
+        Assert.Equal([PersonMessages.UnsupportedRoleTransition], output.Errors);
+        Assert.Equal((long)Roles.SystemAdmin, target.RoleId);
     }
 
     [UnitFact]
@@ -1024,10 +1057,12 @@ public class UpdatePersonCommandHandlerTests
     }
 
     [UnitFact]
-    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenItCountsAsAChange()
+    public async Task GivenAnEmailChangeOnlyInCase_WhenHandlingUpdate_ThenItCountsAsAChangeButStaysVerified()
     {
         // Given — a change is detected ordinally, as stored, so a different casing is a different
-        // address: it fails closed, revoking and notifying rather than letting a variant slip through
+        // address: it fails closed, revoking and notifying rather than letting a variant slip through.
+        // The mailbox is the same one, though — addresses compare case-insensitively everywhere else —
+        // so the verification it earned stands (#225)
         var target = User(10, Scope(1), email: "user@test.local");
         var stamp = target.SecurityStamp;
         var twoFactor = new TwoFactorState();
@@ -1041,7 +1076,8 @@ public class UpdatePersonCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.NotEqual(stamp, target.SecurityStamp);
-        Assert.False(target.EmailVerified);
+        Assert.Equal("USER@test.local", target.Email);
+        Assert.True(target.EmailVerified);
         Assert.Equal(["user@test.local"], twoFactor.NoticesSentTo);
     }
 
@@ -1422,28 +1458,19 @@ public class UpdatePersonCommandHandlerTests
     [UnitFact]
     public async Task GivenAnEmailChange_WhenHandlingUpdate_ThenTheStampInPlaceDuringTheSaveIsReplacedToo()
     {
-        // Given a writer that records the stamp a concurrent sign-in would have read during the save
+        // Given a write that records the stamp a concurrent sign-in would have read during the save
         var target = User(10, Scope(1));
         var original = target.SecurityStamp;
         var persons = await PersonsWith(target);
         Guid? duringSave = null;
 
-        var writer = new Mock<ArturRios.Data.Relational.Core.Interfaces.IAsyncRepository<Person, long>>();
-        writer
-            .Setup(x => x.UpdateAsync(It.IsAny<Person>(), It.IsAny<CancellationToken>()))
-            .Returns((Person person, CancellationToken ct) =>
-            {
-                duringSave = person.SecurityStamp;
-                return persons.UpdateAsync(person, ct);
-            });
+        // An administrator's change makes no conditional write before the address's own (#237).
+        var atomicWrites = new InMemoryAtomicWrites
+        {
+            BeforeConditionalWrite = person => duringSave ??= person.SecurityStamp
+        };
 
-        var twoFactor = new TwoFactorState();
-        var handler = new UpdatePersonCommandHandler(
-            PassingValidator(), persons, new AsyncFakeRepository<GoogleUser, long>(), writer.Object,
-            Ownership(true), new AsyncFakeRepository<EmailVerificationToken, long>(),
-            new AsyncFakeRepository<PasswordResetToken, long>(),
-            InMemoryAtomicWrites.Instance, twoFactor.Configurations, twoFactor.Verifier(),
-            twoFactor.NoticeSender(), new AdminEmailOptions(), twoFactor.RetryAfter);
+        var handler = HandlerFor(persons, atomicWrites: atomicWrites);
         var command = CommandFor(target, (int)Roles.SystemAdmin, actingPersonId: Guid.NewGuid());
         command.Email = "moved@test.local";
 
@@ -1542,7 +1569,7 @@ public class UpdatePersonCommandHandlerTests
         var emailCode = new TwoFactorEmailCode
         {
             TwoFactorAuthId = configuration.Id,
-            CodeHash = Hash.EncodeWithRandomSalt("123456", out var salt),
+            CodeHash = Hash.EncodeWithRandomSalt("123456", out var salt, PasswordHashing.Configuration),
             Salt = salt,
             ExpiresAt = DateTime.UtcNow.AddMinutes(10)
         };

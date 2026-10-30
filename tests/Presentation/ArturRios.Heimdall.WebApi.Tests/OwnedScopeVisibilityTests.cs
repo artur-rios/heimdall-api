@@ -24,52 +24,12 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
 {
     private sealed record Tenancy(Scope Shared, Scope Elsewhere, Person Reader, Person CoOwner);
 
-    private async Task<Scope> SeedScopeAsync()
-    {
-        await using var context = db.CreateContext();
-        var scope = new Scope { PublicId = Guid.NewGuid(), Name = $"scope-{Guid.NewGuid():N}" };
-        context.Scopes.Add(scope);
-        await context.SaveChangesAsync();
-        return scope;
-    }
-
-    private async Task<Person> SeedPersonAsync(Roles role, Scope? memberOf, params Scope[] owns)
-    {
-        await using var context = db.CreateContext();
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = $"{role}-{Guid.NewGuid():N}",
-            Email = $"{role.ToString().ToLowerInvariant()}-{Guid.NewGuid():N}@test.local",
-            RoleId = (long)role,
-            EmailVerified = true
-        };
-        // Set before the insert: a whole-row save ignores it once the row exists (#237).
-        person.ScopeId = memberOf?.Id;
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        if (memberOf is not null)
-        {
-            context.ScopeUsers.Add(new ScopeUser { ScopeId = memberOf.Id, PersonId = person.Id });
-        }
-
-        foreach (var scope in owns)
-        {
-            context.ScopeOwners.Add(new ScopeOwner { ScopeId = scope.Id, PersonId = person.Id });
-        }
-
-        await context.SaveChangesAsync();
-
-        return person;
-    }
-
     private async Task<Tenancy> SeedTenancyAsync()
     {
-        var shared = await SeedScopeAsync();
-        var elsewhere = await SeedScopeAsync();
-        var reader = await SeedPersonAsync(Roles.ScopeAdmin, null, shared);
-        var coOwner = await SeedPersonAsync(Roles.ScopeAdmin, null, shared, elsewhere);
+        var shared = await Seeds.ScopeAsync(db);
+        var elsewhere = await Seeds.ScopeAsync(db);
+        var reader = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"{Roles.ScopeAdmin}-{Guid.NewGuid():N}", EmailPrefix = $"{Roles.ScopeAdmin.ToString().ToLowerInvariant()}", Owns = [shared] });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"{Roles.ScopeAdmin}-{Guid.NewGuid():N}", EmailPrefix = $"{Roles.ScopeAdmin.ToString().ToLowerInvariant()}", Owns = [shared, elsewhere] });
 
         return new Tenancy(shared, elsewhere, reader, coOwner);
     }
@@ -161,7 +121,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
         // Given — no endpoint makes a User an owner (FR-SC-08); the row is written directly, so the
         // listing is shown to trim whatever the data holds
         var tenancy = await SeedTenancyAsync();
-        var user = await SeedPersonAsync(Roles.User, tenancy.Shared, tenancy.Elsewhere);
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = $"{Roles.User}-{Guid.NewGuid():N}", EmailPrefix = $"{Roles.User.ToString().ToLowerInvariant()}", MemberOf = tenancy.Shared, Owns = [tenancy.Elsewhere] });
         Authorize(TestTokens.For(tenancy.Reader.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -179,7 +139,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
     {
         // Given
         var tenancy = await SeedTenancyAsync();
-        var user = await SeedPersonAsync(Roles.User, tenancy.Shared, tenancy.Elsewhere);
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = $"{Roles.User}-{Guid.NewGuid():N}", EmailPrefix = $"{Roles.User.ToString().ToLowerInvariant()}", MemberOf = tenancy.Shared, Owns = [tenancy.Elsewhere] });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -197,7 +157,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
     {
         // Given — as above, the ownership row is written directly
         var tenancy = await SeedTenancyAsync();
-        var user = await SeedPersonAsync(Roles.User, tenancy.Shared, tenancy.Elsewhere);
+        var user = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { Name = $"{Roles.User}-{Guid.NewGuid():N}", EmailPrefix = $"{Roles.User.ToString().ToLowerInvariant()}", MemberOf = tenancy.Shared, Owns = [tenancy.Elsewhere] });
         Authorize(TestTokens.For(tenancy.Reader.PublicId, (int)Roles.ScopeAdmin));
 
         // When

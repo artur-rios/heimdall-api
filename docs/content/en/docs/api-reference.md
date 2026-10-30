@@ -80,8 +80,8 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /` | System Admin; Scope Admin (the scopes they own) | UC-02 — list scopes (paginated, filterable); a Scope Admin's page and total count their own scopes only |
 | `GET /{id}` | Any authenticated | UC-02 — read one scope |
 | `PUT /{id}` | System Admin | UC-03 — update name and description |
-| `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications) |
-| `DELETE /{id}/hard` | System Admin | UC-05 — hard delete (also purges permissions and join rows) |
+| `DELETE /{id}` | System Admin | UC-04 — logical delete (cascades to Users, Google Users, applications, all or nothing; repeating it finishes a cascade left unfinished) |
+| `DELETE /{id}/hard` | System Admin | UC-05 — hard delete (also purges permissions and join rows), all or nothing |
 | `PUT /{id}/google-signin` | System Admin + Scope Admin | UC-24 — turn Google Sign-In on or off |
 | `GET /{id}/pending-registrations` | System Admin + Scope Admin | UC-49 — the self-registrations awaiting confirmation, newest first: name, address, expiry, guesses left; never the hash, salt or token |
 | `DELETE /{id}/pending-registrations/{registrationId}` | System Admin + Scope Admin | UC-50 — discard one; its link then answers "Invalid token" and the registrant may sign up again |
@@ -102,7 +102,7 @@ even after the restriction is lifted, when the subject signs in again for a full
 | `GET /persons/system-admins` | System Admin | UC-07 read e — list the System Admins: who else holds full access |
 | `PUT /persons/{id}` | Any authenticated | UC-08 — update name and email; only a System Admin may change the role. Changing your **own** email needs `currentPassword`, and `twoFactorCode` when your 2FA is active (`401` otherwise); any email change revokes the person's tokens and notifies the previous address. An address or role change answers `409` "Concurrency conflict: the record was modified or removed by another process." when the person was changed or deleted after the request read them (AF-08l) — read them again before retrying |
 | `DELETE /persons/{id}` | System Admin + Scope Admin | UC-09 — logical delete |
-| `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows |
+| `DELETE /persons/{id}/hard` | System Admin | UC-10 — hard delete, cascading to owned applications, tokens, 2FA and join rows, all or nothing |
 | `POST /persons/{id}/verification-email` | System Admin + Scope Admin | UC-51 — mail a fresh verification link to the person's own address; a Scope Admin only for Users of scopes they own; 429 within the cooldown |
 | `POST /persons/{id}/password-reset` | System Admin + Scope Admin | UC-52 — mail a password-reset link to the person's own address, with UC-12's eligibility; 429 within the cooldown |
 | `DELETE /scopes/{scopeId}/owners/{personId}` | System Admin + Scope Admin | UC-22 — remove an owner (rejected if it would be the last one) |

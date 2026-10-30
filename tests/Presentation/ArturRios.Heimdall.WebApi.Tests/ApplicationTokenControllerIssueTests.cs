@@ -183,7 +183,7 @@ public class ApplicationTokenControllerIssueTests(PostgresFixture db) : WebApiTe
     public async Task GivenAMalformedApplicationId_WhenExchanging_ThenBadRequest()
     {
         // Given
-        var scope = await SeedScopeAsync(db);
+        var scope = await Seeds.ScopeAsync(db);
         var json = $$"""{"applicationId":"abc","scopeId":"{{scope.PublicId}}","secret":"hds_x"}""";
 
         // When

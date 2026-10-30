@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -25,32 +26,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
     : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Resend-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
-
-    private async Task<Person> SeedPersonAsync(string email, bool restricted = false, bool deleted = false)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Resend",
-            Email = email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true,
-            IsDeleted = deleted,
-            ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     private async Task<TwoFactorAuth> SeedActiveAsync(Person person, bool appEnabled, bool emailEnabled)
     {
@@ -126,7 +104,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
     /// </summary>
     private async Task<(Person Person, string ChallengeToken)> LoggedInChallengeAsync(string prefix)
     {
-        var person = await SeedPersonAsync(UniqueEmail(prefix));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail(prefix) });
         await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
 
         var login = await LoginAsync(person.Email);
@@ -191,7 +169,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         // The challenge token is minted the same way UC-11 would.
         const string FirstCode = "135790";
 
-        var person = await SeedPersonAsync(UniqueEmail("resend-retires"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("resend-retires") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
 
         await using (var context = db.CreateContext())
@@ -199,7 +177,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
             context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = Hash.EncodeWithRandomSalt(FirstCode, out var salt),
+                CodeHash = Hash.EncodeWithRandomSalt(FirstCode, out var salt, PasswordHashing.Configuration),
                 Salt = salt,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                 Used = false
@@ -269,7 +247,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         // needs no equivalent of UC-11's decoy hash.
         var (_, valid) = await LoggedInChallengeAsync("resend-same-valid");
 
-        var appOnlyPerson = await SeedPersonAsync(UniqueEmail("resend-same-app"));
+        var appOnlyPerson = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("resend-same-app") });
         await SeedActiveAsync(appOnlyPerson, appEnabled: true, emailEnabled: false);
         var appOnly = TestTokens.ForMfaPending(appOnlyPerson.PublicId, (int)Roles.SystemAdmin);
 
@@ -374,7 +352,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
     {
         // AF-46b (NFR-24): a restricted person signs in for their own rights (UC-11 AF-11i), and the
         // code finishing that login goes out at their own request — the consent Art. 18(2) asks for.
-        var person = await SeedPersonAsync(UniqueEmail("resend-restricted"), restricted: true);
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("resend-restricted"), RestrictedAt = DateTime.UtcNow });
         await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
 
         var challengeToken = TestTokens.ForMfaPending(person.PublicId, (int)Roles.SystemAdmin);
@@ -406,7 +384,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
     {
         // AF-46e: this endpoint refuses a full authentication token in the challenge's place, the
         // mirror of the guard above — and refuses it the same silent way as everything else.
-        var person = await SeedPersonAsync(UniqueEmail("resend-bearer"));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("resend-bearer") });
         await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
 
         var fullToken = TestTokens.For(person.PublicId, (int)Roles.SystemAdmin);

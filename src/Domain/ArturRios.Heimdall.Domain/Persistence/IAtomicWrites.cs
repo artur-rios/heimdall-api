@@ -37,6 +37,14 @@ namespace ArturRios.Heimdall.Domain.Persistence;
 ///         still live.
 ///     </para>
 ///     <para>
+///         <b>Writes of plain details</b> (#205). A person's name, or a scope's name and description, races
+///         nothing single-use, but a whole-row save of them would still write every other column back as
+///         the request read it: a restriction or an erasure request made meanwhile, a scope deleted
+///         meanwhile, or the scope settings that have endpoints of their own. So those are targeted too,
+///         writing their own columns and <c>UpdatedAt</c> only, under the condition the caller read — the
+///         row not deleted.
+///     </para>
+///     <para>
 ///         Every method takes the entity the caller already holds and, when the write succeeds,
 ///         brings that instance's changed properties in line with what was written, so the caller
 ///         and anything it saves later see the same values the database does.
@@ -272,19 +280,19 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     UC-08 and UC-23: writes the person's address and role — the email, <c>EmailVerified</c>
-    ///     cleared when the address changes (AF-08b), the role with <c>ScopeId</c> cleared when the role
-    ///     changes (FR-PE-10), and <c>UpdatedAt</c> — while the person still holds the address and role
-    ///     they were read with and is neither logically deleted nor anonymised. Then, in the same
-    ///     transaction, runs <paramref name="saveAlongside" />: the caller's own save of what the change
-    ///     brings with it, the membership and ownership rows and the plain profile columns.
+    ///     cleared when the address changes (AF-08b), the role with <c>ScopeId</c> cleared and the
+    ///     <c>SCOPE_USER</c> row removed when the role changes (FR-PE-10), and <c>UpdatedAt</c> — while
+    ///     the person still holds the address and role they were read with and is neither logically
+    ///     deleted nor anonymised. Then, in the same transaction, runs <paramref name="saveAlongside" />:
+    ///     the caller's own writes of what the change brings with it, the ownership row or the name.
     /// </summary>
     /// <param name="person">The person as the caller read them.</param>
     /// <param name="email">The address to hold; the one read for no address change.</param>
     /// <param name="roleId">The role to hold; the one read for no role change.</param>
     /// <param name="now">The time stamped as <c>UpdatedAt</c>.</param>
     /// <param name="saveAlongside">
-    ///     Runs only once the change is written, and returns whether its save succeeded. When it did
-    ///     not, the change is rolled back with it.
+    ///     Runs only once the change is written, and returns whether its writes succeeded. When they did
+    ///     not, the change is rolled back with them.
     /// </param>
     /// <remarks>
     ///     <para>
@@ -300,9 +308,133 @@ public interface IAtomicWrites
     ///         the caller's tracked entities, so a later save of anything else in the same unit of
     ///         work cannot write half of the change.
     ///     </para>
+    ///     <para>
+    ///         The <c>SCOPE_USER</c> row is deleted here, beside <c>ScopeId</c>, rather than by a save of the
+    ///         person aggregate (#205): that save would write the person's plain profile back as the caller
+    ///         read it, over a rename made meanwhile. No role a change can reach has a membership.
+    ///     </para>
     /// </remarks>
     Task<AccountChangeOutcome> TryChangeEmailAndRoleAsync(
         Person person, string email, long roleId, DateTime now, Func<Task<bool>> saveAlongside);
+
+    /// <summary>
+    ///     UC-08: renames the person — <c>Name</c> and <c>UpdatedAt</c>, and no other column — while they
+    ///     are not logically deleted (AF-08a) and still hold the role they were read with. <c>false</c>
+    ///     means one of those changed, possibly since the caller read them, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted rather than a whole-row save (#205), so a restriction, an erasure request or any other
+    ///     change made after the caller read the person stands beside the new name. The role is in the
+    ///     condition because it decided who may rename them (UC-08 step 3): a Scope Admin's rename of a
+    ///     User must not land on a System Admin that User became meanwhile.
+    /// </remarks>
+    Task<bool> TryRenameAsync(Person person, string name, DateTime now);
+
+    /// <summary>
+    ///     UC-03: writes the scope's details — its name, description, default legal basis and privacy
+    ///     notice URI, and <c>UpdatedAt</c>, and no other column — while it is not logically deleted
+    ///     (AF-03a).
+    /// </summary>
+    /// <remarks>
+    ///     Targeted rather than a whole-row save (#205): Google sign-in, self-registration and the email
+    ///     links have endpoints of their own (UC-24, FR-SR-02, the email-links one), and a save of the
+    ///     copy read here would write them back as read, over a change one of those made meanwhile — and
+    ///     the deletion flag with them, reviving a scope deleted meanwhile.
+    /// </remarks>
+    Task<ScopeUpdateOutcome> TryUpdateScopeDetailsAsync(Scope scope, string name, string? description,
+        int? defaultLegalBasis, string? privacyNoticeUri, DateTime now);
+
+    /// <summary>
+    ///     UC-04: logically deletes the scope — <c>IsDeleted</c> and <c>UpdatedAt</c>, and no other column —
+    ///     unless it already is. <c>false</c> means it was, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted for the reason <see cref="TryUpdateScopeDetailsAsync" /> is (#205): the copy the
+    ///     deletion read can be older than a settings change made before it took its lock.
+    /// </remarks>
+    Task<bool> TryMarkScopeDeletedAsync(Scope scope, DateTime at);
+
+    /// <summary>
+    ///     UC-24: sets the scope's <c>GoogleSignInEnabled</c> and <c>UpdatedAt</c>, and no other column,
+    ///     while it is not logically deleted (AF-24a). <c>false</c> means it was deleted, possibly since the
+    ///     caller read it, and nothing was written.
+    /// </summary>
+    /// <remarks>
+    ///     Targeted for the reason <see cref="TryUpdateScopeDetailsAsync" /> is (#205), and so are
+    ///     <see cref="TrySetSelfRegistrationAsync" /> and <see cref="TrySetEmailLinksAsync" />: each setting
+    ///     has an endpoint of its own, and none may write back what another, or UC-03, or UC-04, wrote.
+    /// </remarks>
+    Task<bool> TrySetGoogleSignInAsync(Scope scope, bool enabled, DateTime now);
+
+    /// <summary>
+    ///     FR-SR-02: sets the scope's <c>SelfRegistrationEnabled</c> and <c>UpdatedAt</c>, and no other
+    ///     column, while it is not logically deleted. <c>false</c> means nothing was written.
+    /// </summary>
+    Task<bool> TrySetSelfRegistrationAsync(Scope scope, bool enabled, DateTime now);
+
+    /// <summary>
+    ///     Sets the scope's email links — <c>EmailVerificationUrl</c> and <c>PasswordResetUrl</c> — and
+    ///     <c>UpdatedAt</c>, and no other column, while it is not logically deleted. <c>false</c> means
+    ///     nothing was written.
+    /// </summary>
+    Task<bool> TrySetEmailLinksAsync(Scope scope, string? emailVerificationUrl, string? passwordResetUrl, DateTime now);
+
+    /// <summary>
+    ///     UC-28: logically deletes the Google User — <c>IsDeleted</c>, <c>DeletedAt</c>,
+    ///     <c>DeletionKind</c> and <c>UpdatedAt</c>, and no other column — unless they already are.
+    ///     <c>false</c> means they were, possibly since the caller read them, and the first deletion's time
+    ///     and kind stand.
+    /// </summary>
+    /// <remarks>
+    ///     A Google User's lifecycle columns — deletion, erasure request, restriction and anonymisation —
+    ///     are written only by the targeted writes for Google Users here, as a person's are (#237, #205):
+    ///     the mapping keeps every whole-row save off them, so a save of a copy read before one of those
+    ///     changes cannot put the earlier state back.
+    /// </remarks>
+    Task<bool> TryMarkDeletedAsync(GoogleUser googleUser, DeletionKinds kind, DateTime at);
+
+    /// <summary>
+    ///     UC-44 for a Google User, as <see cref="TryRestrictProcessingAsync(Person, int, DateTime)" /> is
+    ///     for a person: only while processing is not already restricted and the record is not anonymised.
+    /// </summary>
+    Task<bool> TryRestrictProcessingAsync(GoogleUser googleUser, int ground, DateTime at);
+
+    /// <summary>
+    ///     UC-45 for a Google User, as <see cref="TryLiftRestrictionAsync(Person, DateTime?, DateTime)" />
+    ///     is for a person: only the restriction the caller read.
+    /// </summary>
+    Task<bool> TryLiftRestrictionAsync(GoogleUser googleUser, DateTime? notifiedAt, DateTime now);
+
+    /// <summary>
+    ///     UC-42 for a Google User: records the request and its deadline, lifts any restriction as UC-45
+    ///     does for a subject lifting their own, and suspends them — nothing can block a Google User's
+    ///     erasure (FR-GO-04) — only while no request was recorded and they are neither deleted nor
+    ///     anonymised. <c>false</c> means one of those changed after the caller read them.
+    /// </summary>
+    Task<bool> TryRecordErasureRequestAsync(GoogleUser googleUser, DateTime requestedAt, DateTime dueAt);
+
+    /// <summary>
+    ///     FR-GO-19: sets the Google User's <c>EmailVerified</c> to what the token just verified says, and
+    ///     <c>UpdatedAt</c>, only while they may sign in as the caller found them: not deleted, not
+    ///     restricted (NFR-24) and not anonymised. <c>false</c> means one of those changed since.
+    /// </summary>
+    Task<bool> TryRefreshEmailVerifiedAsync(GoogleUser googleUser, bool emailVerified, DateTime now);
+
+    /// <summary>
+    ///     NFR-20 for a Google User: the placeholder name, address and Google subject, the picture and the
+    ///     verification flag cleared, <c>AnonymisedAt</c> and <c>UpdatedAt</c> stamped — while they are
+    ///     still deleted, not yet anonymised, and not restricted (NFR-24). <c>false</c> means one of those
+    ///     changed after the caller selected them, and nothing was written.
+    /// </summary>
+    Task<bool> TryAnonymiseAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at);
+
+    /// <summary>
+    ///     NFR-25 for a Google User a restore brought back: anonymised as <see cref="TryAnonymiseAsync(GoogleUser,
+    ///     string, string, string, DateTime)" /> does and marked a subject-requested deletion — dated when they
+    ///     were deleted, or <paramref name="at" /> if the restored row is live — whatever their state, so long
+    ///     as they are not anonymised already.
+    /// </summary>
+    Task<bool> TryReapplyErasureAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at);
 
     /// <summary>
     ///     UC-09 and UC-04's cascade: logically deletes the person — <c>IsDeleted</c>, <c>DeletedAt</c>,
@@ -384,9 +516,9 @@ public interface IAtomicWrites
 
     /// <summary>
     ///     UC-22: removes the person's <c>SCOPE_OWNER</c> row for scope <paramref name="scopeId" /> —
-    ///     writing nothing on the person — while another live person owns the scope (AF-22b, NFR-12).
-    ///     <c>false</c> means the row was already gone, or no live co-owner is left, and nothing was
-    ///     removed.
+    ///     writing nothing on the person — while another active person (<see cref="Person.Active" />) owns
+    ///     the scope (AF-22b, NFR-12). <c>false</c> means the row was already gone, or no active co-owner is
+    ///     left, and nothing was removed.
     /// </summary>
     /// <remarks>
     ///     The co-owner condition is evaluated by the same statement that deletes, so a co-owner deleted

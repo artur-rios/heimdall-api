@@ -11,7 +11,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -28,35 +27,12 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = "Str0ng-Audience-Pass!";
+    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string AudienceOf(string token) =>
         Assert.Single(new JwtSecurityTokenHandler().ReadJwtToken(token).Audiences);
-
-    private async Task<Person> SeedPersonAsync(string prefix, DateTime? restrictedAt = null)
-    {
-        await using var context = db.CreateContext();
-
-        var person = new Person
-        {
-            PublicId = Guid.NewGuid(),
-            Name = "Audience",
-            Email = UniqueEmail(prefix),
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
-            Salt = salt,
-            RoleId = (long)Roles.SystemAdmin,
-            EmailVerified = true,
-            ProcessingRestrictedAt = restrictedAt,
-            RestrictionGround = restrictedAt is null ? null : (int)RestrictionGrounds.AccuracyContested
-        };
-
-        context.Persons.Add(person);
-        await context.SaveChangesAsync();
-
-        return person;
-    }
 
     /// <summary>
     ///     An active Email configuration, so a login mails a code and the resend has one to retire,
@@ -122,7 +98,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenATwoFactorLogin_WhenResentAndRedeemed_ThenOnlyTheFinalTokenCarriesThePersonAudience()
     {
         // Given a 2FA-gated person who signs in with their password
-        var person = await SeedPersonAsync("audience-2fa");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-2fa" });
         var recoveryCode = await SeedTwoFactorWithRecoveryCodeAsync(person);
 
         var login = await LoginAsync(person.Email);
@@ -157,7 +133,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenALoginChallenge_WhenUsedAsABearerElsewhere_ThenTheGuardStillRefusesIt()
     {
         // Given a challenge from a real login
-        var person = await SeedPersonAsync("audience-guard");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-guard" });
         await SeedTwoFactorWithRecoveryCodeAsync(person);
         var login = await LoginAsync(person.Email);
         ActAs(login.Body!.Data!.ChallengeToken!);
@@ -177,7 +153,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenARestrictedSignIn_WhenItsTokenIsUsed_ThenItCarriesItsOwnAudienceAndServesOnlyTheRights()
     {
         // Given a restricted identity (NFR-24) signing in
-        var person = await SeedPersonAsync("audience-rights", restrictedAt: DateTime.UtcNow.AddDays(-30));
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-rights", RestrictedAt = DateTime.UtcNow.AddDays(-30) });
 
         var login = await LoginAsync(person.Email);
 
@@ -204,7 +180,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     {
         // Given an outstanding challenge, and a token naming it with mfaPending under the full token's
         // audience — not what the challenge issuer writes
-        var person = await SeedPersonAsync("audience-crafted-pending");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-crafted-pending" });
         var recoveryCode = await SeedTwoFactorWithRecoveryCodeAsync(person);
 
         var crafted = TestTokens.WithAudience(
@@ -230,7 +206,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     public async Task GivenARestrictedMarkUnderThePersonAudience_WhenExporting_ThenUnauthorized()
     {
         // Given a token marked subject-rights-only under the full token's audience
-        var person = await SeedPersonAsync("audience-crafted-rights");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-crafted-rights" });
 
         ActAs(TestTokens.WithAudience(
             new IdentityUser(person.PublicId, (int)Roles.SystemAdmin) { SubjectRightsOnly = true },
@@ -251,7 +227,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
     {
         // Given a token with no mark at all, under the challenge or the subject-rights audience: the
         // audience says it is not a sign-in, so it is not read as one
-        var person = await SeedPersonAsync("audience-crafted-unmarked");
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { EmailPrefix = "audience-crafted-unmarked" });
 
         ActAs(TestTokens.WithAudience(
             new IdentityUser(person.PublicId, (int)Roles.SystemAdmin),

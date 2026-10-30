@@ -1,5 +1,6 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Input.Validation;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -39,7 +40,8 @@ public class SetSelfRegistrationCommandHandlerTests
 
     private static SetSelfRegistrationCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes, bool ownershipAllowed = true) =>
-        new(new SetSelfRegistrationCommandValidator(), scopes, scopes, OwnershipChecker(ownershipAllowed));
+        new(new SetSelfRegistrationCommandValidator(), scopes, InMemoryAtomicWrites.Instance,
+            OwnershipChecker(ownershipAllowed));
 
     private static SetSelfRegistrationCommand Command(Guid scopeId, bool? enabled) => new()
     {

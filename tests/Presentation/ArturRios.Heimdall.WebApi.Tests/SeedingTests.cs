@@ -1,4 +1,5 @@
 using ArturRios.Configuration.Enums;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Tests.Support;
@@ -51,7 +52,21 @@ public class SeedingTests(PostgresFixture fixture) : WebApiTest<Program>(Environ
         Assert.NotEmpty(master.Salt);
 
         // The password is stored hashed, not in the clear, and the stored hash verifies.
-        Assert.True(Hash.TextMatches(PostgresFixture.MasterUserPassword, master.PasswordHash, master.Salt));
+        Assert.True(Hash.TextMatches(PostgresFixture.MasterUserPassword, master.PasswordHash, master.Salt, PasswordHashing.Configuration));
+    }
+
+    [FunctionalFact]
+    public async Task GivenApiStarted_WhenTheMasterUserIsRead_ThenItsLegalBasisIsRecorded()
+    {
+        await using var context = fixture.CreateContext();
+
+        var master = await context.Persons.SingleAsync(
+            x => x.Email == PostgresFixture.MasterUserEmail && !x.IsDeleted);
+
+        // NFR-23: the seeded master is no exception to a recorded basis.
+        Assert.Equal((int)LegalBasisRecorder.DefaultBasis, master.LegalBasis);
+        Assert.Equal(LegalBasisRecorder.CurrentPrivacyNoticeVersion, master.PrivacyNoticeVersion);
+        Assert.NotNull(master.BasisRecordedAt);
     }
 
     [FunctionalFact]

@@ -257,7 +257,10 @@ sequenceDiagram
 1. System Admin sends an update request with the scope ID and new field values.
 2. The system validates the input.
 3. The system verifies the scope exists and is not logically deleted.
-4. The system applies the updates and sets `UpdatedAt`.
+4. The system applies the updates and sets `UpdatedAt` — the name, description, default legal basis and
+   privacy notice URI, and nothing else of the scope (#205). Google sign-in (UC-24), self-registration
+   (FR-SR-02) and the email links have endpoints of their own and are left as they stand, whatever this
+   request read; a scope deleted since step 3 is not revived, and is answered as AF-03a.
 5. The system returns the updated scope.
 
 **Alternative Flows:**
@@ -302,15 +305,17 @@ sequenceDiagram
 1. System Admin sends a delete request for a scope.
 2. The system locates the scope.
 3. The system sets `IsDeleted = true` on the scope.
-4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope. Scope Admins who own the scope are not modified.
+4. The system sets `IsDeleted = true` on all Users belonging to the scope (via `SCOPE_USER`), all Google Users in the scope, and all applications in the scope that are not already deleted; one already deleted keeps the time and kind of its own deletion. Scope Admins who own the scope are not modified.
 5. The system returns success, including the scope's identifier and the total number of Users, Google Users, and applications belonging to the scope (counted regardless of their individual deletion state).
+
+Steps 3 and 4 are one transaction (#204): if either fails, the scope and every member are left as they were. Step 4 is one statement per kind of member, so no member is loaded, however large the scope.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-04a | Scope not found | Return `404 Not Found` |
-| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent); the scope and its Users/Google Users/applications are left unchanged, and the response still reports the scope's identifier and its User/Google User/application totals |
+| AF-04b | Scope already logically deleted | Return `200 OK` (idempotent); the scope is left unchanged, and step 4 runs again, so any of its Users/Google Users/applications not yet deleted — left live by an earlier attempt that did not finish — are deleted, and those already deleted are left unchanged. The response still reports the scope's identifier and its User/Google User/application totals |
 
 ---
 
@@ -334,6 +339,10 @@ sequenceDiagram
 5. The system removes all `SCOPE_OWNER` and `SCOPE_USER` rows referencing the scope, and cascade-deletes any remaining scope permissions.
 6. The system permanently deletes the scope record.
 7. The system returns success, including the count of scope permissions removed.
+
+Steps 3 to 6 are one transaction (#212): if any of them fails, nothing is removed — the scope keeps every
+member, and no tombstone is left for an identity that still exists. Only the members' ids are read, and they are removed
+2,000 to a statement (#204), so the request's memory does not grow with the scope.
 
 **Alternative Flows:**
 
@@ -571,7 +580,10 @@ sequenceDiagram
      for nothing.
    - The system checks uniqueness per FR-PE-09 — among the scope's `User`s for a `User`, among all
      `ScopeAdmin`/`SystemAdmin` persons for an admin, evaluated against the role the person will hold
-     after this update — and resets `EmailVerified = false`. No verification email is sent — issuing a
+     after this update — and resets `EmailVerified = false`, **unless the new address differs from the old
+     one only in case**: addresses compare case-insensitively everywhere in the system (sign-in,
+     recovery, uniqueness), so it is the same mailbox and keeps its verification. Everything else in this
+     step still applies to it. No verification email is sent — issuing a
      fresh token is UC-14 / UC-15's responsibility.
    - The system retires every live password-reset link and verification link the person holds
      (FR-PE-17): they were mailed to the address being replaced. It does so before the new address
@@ -590,12 +602,21 @@ sequenceDiagram
      and if that was not the person, they should contact an administrator. The notice names neither the
      new address nor any link. A failed delivery is logged and does not fail the update.
 5. If `RoleId` changes (System Admin only), the system supports **only a change to `SystemAdmin`**,
-   and removes the person's `SCOPE_USER` or `SCOPE_OWNER` rows so that a System Admin holds no scope
-   association (FR-PE-10). Any other target role is refused: making someone a `ScopeAdmin` requires
+   and removes the person's `SCOPE_USER` row, since a System Admin is a member of no scope (FR-PE-10).
+   Their `SCOPE_OWNER` rows are kept: a System Admin may be a named owner (FR-SC-08), and keeping them
+   is what keeps a scope the person owned, and the applications they own, with a valid owner. So the
+   promotion never strips a scope of an owner and NFR-12 does not refuse it. No change made here
+   demotes a System Admin, so none can leave the system without an active one (NFR-32): the last
+   System Admin changing their own role is refused by AF-08f like anyone else. Any other target role is
+   refused: making someone a `ScopeAdmin` requires
    naming the scope they will own (FR-PE-11) and making someone a `User` requires naming the scope
    they will join (FR-PE-02), neither of which this request carries. Those transitions belong to
    UC-21 (Add Scope Owner) and UC-23 (Promote User to Scope Owner).
-6. The system applies updates and sets `UpdatedAt`.
+6. The system applies updates and sets `UpdatedAt`. The name is written with `UpdatedAt` alone, and only
+   while the person is not logically deleted and still holds the role step 3 authorised against (#205):
+   nothing else of the person as read is written back, so a restriction (UC-44) or an erasure request
+   (UC-42) made since step 3 stands, a person suspended meanwhile is answered as AF-08a, and one whose role
+   changed meanwhile as AF-08l.
 7. The system returns the updated person (excluding `PasswordHash` and `Salt`), its scope ownerships reported as UC-07 read a reports them (FR-PE-19).
 
 > **On re-authenticating an email change.** An address change requires proof of identity, because
@@ -618,12 +639,12 @@ sequenceDiagram
 | AF-08d | Actor not authorized to update the person at all | Return `403 Forbidden` |
 | AF-08e | Invalid input | Return `400 Bad Request` |
 | AF-08f | Role change to a role that would require naming a target scope | Return `400 Bad Request` |
-| AF-08g | Role change would leave a scope with no owner (NFR-12) | Return `409 Conflict` |
+| AF-08g | *Retired (#224).* A role change used to remove the person's scope ownerships and was refused when that left a scope with no owner (NFR-12). The promotion now keeps them (step 5), so no role change can leave a scope without an owner | — |
 | AF-08h | Actor changes their own email and `currentPassword` is missing or wrong (FR-PE-14), or their re-authentication budget is paused (FR-AU-13) | Return `401 Unauthorized` — "The password or code is incorrect." (UC-39's AF-39b). Nothing is changed |
 | AF-08i | Actor changes their own email, their two-factor authentication is active, and `twoFactorCode` is missing, wrong, expired or already used (FR-PE-14) | Return `401 Unauthorized` — "The password or code is incorrect.", the same answer as AF-08h (UC-39's AF-39c). Nothing is changed |
 | AF-08j | Actor changes their own email (which mails the previous address, FR-PE-15) and their account-email budget refuses it (FR-PE-16): one such email within the cooldown, or five in the current day-long window. Checked once the password and second factor are accepted, and before a recovery or email code is spent | Return `429 Too Many Requests` — "An email of this kind was sent to you recently. Try again in a few minutes." inside the cooldown, or "You have reached the limit for account emails. Try again later." Nothing is changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code |
 | AF-08k | Actor changes their own email while their email two-factor method is enabled, active or pending (FR-PE-18). Checked once the password and second factor are accepted | Return `409 Conflict` — "Turn off the email sign-in method before changing your email address." Nothing is charged, changed or sent, and no recovery or email code is spent; an authenticator-app code was accepted, so its time step is recorded as any accepted one's is (FR-2F-14) and a retry needs the next code. The person disables the method (UC-39), or re-initiates a pending setup without it (UC-36), changes the address, and sets the method up again at the new one |
-| AF-08l | The email or role changes, and the person no longer holds the address and role the request read — another request changed, deleted or anonymised them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when the new address was taken meanwhile (FR-PE-09). Neither the change nor the name is written. As for a failed save, the steps before the write stand: the person's tokens are revoked and their reset and verification links retired, and for an own change the account-email budget is charged and any recovery or email code presented is spent. The client reads the person again before retrying |
+| AF-08l | The email or role changes, and the person no longer holds the address and role the request read — or only the name changes, and the person no longer holds the role the request read — another request changed, deleted or anonymised them meanwhile (#237) | Return `409 Conflict` — "Concurrency conflict: the record was modified or removed by another process."; or "Conflict: a record with the same unique value already exists." when the new address was taken meanwhile (FR-PE-09). Neither the change nor the name is written. As for a failed save, the steps before the write stand: the person's tokens are revoked and their reset and verification links retired, and for an own change the account-email budget is charged and any recovery or email code presented is spent. The client reads the person again before retrying |
 
 ---
 
@@ -656,12 +677,20 @@ sequenceDiagram
 | AF-09b | Already logically deleted | Return `200 OK` (idempotent) |
 | AF-09c | Actor not authorized to delete the person (a Scope Admin targeting a person who is not a `User` of a scope they own) | Return `403 Forbidden` |
 | AF-09d | Actor is the person being deleted | Return `403 Forbidden` |
-| AF-09e | Person is the sole owner of one or more scopes, whatever their role (NFR-12) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-09e | Person is the only active owner of one or more scopes, whatever their role: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
+| AF-09f | Person is the last active System Admin: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is written |
 
 > **On AF-09e.** NFR-12 names only *removing* an owner (UC-22) and *hard*-deleting the last owning
 > person (UC-10). It is applied to a logical deletion too because a soft-deleted `ScopeAdmin` can no
 > longer authenticate, so a scope whose only owner is soft-deleted is effectively ownerless — the
-> state NFR-12 exists to prevent. UC-08 resolves the same tension the same way for its role change.
+> state NFR-12 exists to prevent. For the same reason a co-owner who is restricted (UC-44) or has
+> requested erasure (UC-42) does not count: neither can administer the scope (#211).
+>
+> **On AF-09f.** AF-09d keeps an administrator from deleting themselves, but not from deleting the
+> other one: two System Admins deleting each other at once each passed AF-09d, and no administrator was
+> left. The check and the deletion hold the System Admin set's lock (NFR-32, #203), so the second of
+> two such requests waits for the first and is refused. A restricted or erasure-requesting
+> administrator does not count as the one that remains, since neither can administer the system.
 >
 > **On the order of AF-09b and AF-09e.** An already-deleted person is answered before the last-owner
 > check runs. Such an owner is already out of the scope, so re-checking would turn the idempotent
@@ -697,13 +726,17 @@ sequenceDiagram
 8. The system permanently deletes the person record.
 9. The system returns success, reporting how many applications and tokens went with the person.
 
+Steps 4 to 8 are one transaction (#212): if any of them fails, nothing is removed — the person keeps every
+application and token, and no tombstone is left for a person who still exists.
+
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-10a | Person not found | Return `404 Not Found` |
-| AF-10b | Person is the sole owner of one or more scopes | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-10b | Person is the only active owner of one or more scopes: no other owner is live, unrestricted and without an erasure request (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
 | AF-10c | Actor is the person being deleted | Return `403 Forbidden` |
+| AF-10d | Person is a live System Admin and the last active one: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | Return `409 Conflict` — "This change would leave the system without an active System Admin. Add another System Admin first." Nothing is removed. A logically deleted System Admin is no longer one of the set, so hard-deleting them is not refused |
 
 > **On AF-10c.** UC-10 grants a System Admin the right to remove a person, which would literally include
 > themselves. Self-deletion is refused so a single, irreversible call cannot destroy the caller's own
@@ -900,7 +933,10 @@ requests; a person who receives nothing asks again, as for any email that does n
    full, challenge and subject-rights-only alike. It is one conditional write that repeats step 2's
    checks on the person and requires the address they were read with, so no sign-in can read the new
    password beside the old stamp, and a write refused because the person changed meanwhile leaves the
-   person, stamp included, as it was (answered as AF-13e).
+   person, stamp included, as it was (answered as AF-13e). Marking the token and writing the password
+   are one transaction: if the write fails, neither is kept, and the same link can be followed again
+   (#209). The person's other live reset tokens are then marked as used too; that is clean-up after the
+   reset, so a failure there is logged and does not change the answer.
 5. The system returns success. The person signs in again with the new password; a session opened with
    the old one, by them or by anybody else, ends at its next request.
 
@@ -950,7 +986,10 @@ sequenceDiagram
    now (FR-EV-08, AF-14d).
 3. The system sets `EmailVerified = true` on the person record, in one conditional write that repeats
    step 2's checks and requires the address the person was read with.
-4. The system marks the token as used.
+4. The system marks the token as used — in the same transaction as step 3, so if the write fails neither
+   is kept and the same link can be followed again (#209) — and then marks the person's other live
+   verification tokens as used, which is clean-up: a failure there is logged and does not change the
+   answer.
 5. The system returns success.
 
 **Alternative Flows:**
@@ -962,7 +1001,7 @@ sequenceDiagram
 | AF-14c | Token not found | Return `400 Bad Request` — "Invalid token" |
 | AF-14d | The token's person may no longer be acted on, as UC-13's AF-13e (FR-EV-08) | As AF-14c: `400 Bad Request` — "Invalid token". Nothing is written, the token included |
 
-> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
+> **A token may name a pending registration.** A token that matches no verification token is looked up among pending registrations (UC-47). If one matches, the request must also carry `password`, the one chosen at sign-up (FR-SR-09), and with it the confirmation creates the account: the system checks the password, claims the row, re-checks that the scope is still open and the address still free, creates the `User` with its address verified, and removes the address's other pending registrations. The claim, the re-checks and the creation are one transaction: a refusal or a failed creation puts the registration back, so the link can be followed again until it expires (#209). An expired one answers AF-14a. Without a password the answer is `422 Unprocessable Entity`, and with a wrong one `401 Unauthorized`; neither consumes the registration, so the registrant may try again, but each guess is charged before it is compared, and after 10 wrong passwords the registration is discarded and the token answers AF-14c. A link followed again once the account exists finds no registration and answers AF-14c — "Invalid token" — not AF-14b, which here means only a concurrent request that claimed the registration first. One the system refuses to act on, because the scope closed or the address was taken, also answers AF-14c. `password` is ignored for an ordinary verification token.
 
 ---
 
@@ -1250,8 +1289,14 @@ sequenceDiagram
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
 | AF-22a | Scope not found, or person is not an owner of it | Return `404 Not Found` |
-| AF-22b | Scope has only one owner (this one) | Return `409 Conflict` — "Cannot remove the last owner of a scope" |
+| AF-22b | No other active owner of the scope remains: every other owner, if any, is logically deleted, restricted or has requested erasure (NFR-12) | Return `409 Conflict` — "This change would leave a scope without an owner. Add another owner first." |
 | AF-22c | Actor not authorized (not System Admin nor an existing owner) | Return `403 Forbidden` |
+
+> **On AF-22b under concurrency.** The check and the removal hold the scope's row (NFR-12, #202), as
+> does every other request that can take an owner out of the scope — a deletion of an owner (UC-09,
+> UC-10), an erasure request (UC-42), the scope's own deletion (UC-04, UC-05). Two requests taking out
+> the scope's last two owners at once therefore run one after the other: the second sees the first's
+> outcome and is refused with AF-22b, and the scope keeps an active owner.
 
 ---
 
@@ -1291,6 +1336,8 @@ sequenceDiagram
 3. The system verifies the person exists, is not logically deleted, and is currently a `User` belonging to that scope.
 4. The system changes the person's `RoleId` to `ScopeAdmin`.
 5. The system removes the person's `SCOPE_USER` row and inserts a `SCOPE_OWNER` row linking them to the scope.
+   Steps 4 and 5 write those rows and columns only, in one transaction (#205): nothing else of the person
+   as read is written back, so a rename, restriction or erasure request made meanwhile stands.
 6. The system returns the updated person.
 
 **Alternative Flows:**
@@ -1343,7 +1390,10 @@ sequenceDiagram
 2. The system validates the input fields.
 3. The system verifies the scope exists.
 4. The system checks authorization: System Admin, or an existing owner of the scope.
-5. The system sets `GoogleSignInEnabled` to the requested value.
+5. The system sets `GoogleSignInEnabled` to the requested value — that flag and `UpdatedAt` alone, and only
+   while the scope is not logically deleted (#205): the scope's name, description and other settings are
+   left as they stand, and a scope deleted since step 3 is answered as AF-24a. Self-registration (FR-SR-02)
+   and the email links are written the same way by their own endpoints.
 6. The system returns the updated scope.
 
 **Alternative Flows:**
@@ -1411,14 +1461,14 @@ sequenceDiagram
 4. The system verifies the target scope exists, is not logically deleted, and has `GoogleSignInEnabled = true`.
 5. The system looks up a Google User by `GoogleId` (the token's `sub` claim) within the scope.
 6. If none exists: the system requires the token's `email_verified` claim to be `true` (AF-25f), verifies the token's `email` is unique within the scope (jointly with `User` persons' emails), then creates a new Google User populated from the token's claims (`Name`, `Email`, `EmailVerified`, `ProfilePictureUrl`).
-7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands.
+7. If one exists: the system confirms it is not under a restriction on processing (AF-25e) and not logically deleted, and refreshes the stored `EmailVerified` from the token's claims when the two differ (FR-GO-19). A token carrying no `email_verified` claim asserts nothing about the address, so the stored value is left as it stands. The refresh writes the flag and `UpdatedAt` alone, and only while the account is still neither deleted, restricted nor anonymised (#205); one that became so since this step's checks is answered as AF-25d.
 8. The system issues an authentication token containing the Google User's ID, display name, `role = User`, and the scope ID. When Google supplied no name, the verified email is used as the display name.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification | Return `401 Unauthorized` |
+| AF-25a | ID token invalid, expired, already used (FR-GO-21), or fails verification; or, for a first sign-in that would create a Google User, the token carries a missing or blank `email` claim (as when it was issued without the `email` scope) | Return `401 Unauthorized` — "Google authentication failed.". Nothing is created |
 | AF-25b | Scope not found, logically deleted, or `GoogleSignInEnabled = false` | Return `403 Forbidden` |
 | AF-25c | Email from the token already used by another Google User or `User` person in the scope | Return `409 Conflict` |
 | AF-25d | Existing Google User is logically deleted, and not under a restriction on processing | Return `401 Unauthorized` |
@@ -1498,7 +1548,9 @@ sequenceDiagram
 
 1. Actor sends a delete request for a Google User.
 2. The system checks authorization: System Admin, or an owner of the Google User's scope.
-3. The system sets `IsDeleted = true` on the Google User record.
+3. The system sets `IsDeleted = true` on the Google User record, with `DeletedAt` and `DeletionKind`, and
+   writes nothing else of it (#205): a restriction or an erasure request made since step 1 stands, and a
+   Google User deleted since — by their own erasure request, say — is answered as AF-28b.
 4. The system returns success.
 
 **Alternative Flows:**
@@ -1789,8 +1841,8 @@ sequenceDiagram
 
     P->>API: POST /api/auth/2fa/confirm { appCode?, emailCode? }
     API->>DB: Load the pending TWO_FACTOR_AUTH row
-    API->>API: Verify appCode against the TOTP secret, if AppEnabled
     API->>API: Verify emailCode against the stored hash, if EmailEnabled
+    API->>API: Verify appCode against the TOTP secret, if AppEnabled
     API->>DB: Set IsActive = true
     API->>API: Generate 10 recovery codes, hashing each
     API->>DB: Store the 10 hashed recovery codes
@@ -1798,10 +1850,12 @@ sequenceDiagram
 ```
 
 1. Caller sends `POST /api/auth/2fa/confirm` with a code for every method they selected in UC-36 (an `appCode` if `AppEnabled`, an `emailCode` if `EmailEnabled` — both, if both).
-2. The system verifies each provided code against its method: the TOTP code against the stored secret, the email code against its stored hash and expiry.
+2. The system verifies each provided code against its method: the email code against its stored hash and expiry, then the TOTP code against the stored secret. The email code goes first because an accepted TOTP code is spent (FR-2F-14) and a wrong email code must not burn it: the caller retries with the same app code while its 30-second step lasts.
 3. Only once every required code checks out, the system replaces the person's security stamp, which
    revokes every token issued before the second factor was required, the caller's own included
-   (FR-AU-11).
+   (FR-AU-11). Spending the email code, this step, step 4 and step 5 are one transaction: if any of
+   them fails, none is kept, the email code can be presented again, and no recovery codes are left
+   that nobody was shown (#209). An accepted app code stays spent.
 4. The system generates ten random recovery codes, hashes each, and stores the hashes. Each is 80 bits, sixteen characters of Crockford's base32 shown as `XXXX-XXXX-XXXX-XXXX` (FR-2F-20).
 5. The system sets `IsActive = true`.
 6. The system returns the ten recovery codes in plaintext. This is the only response that will ever contain them — they are not retrievable again (only regenerable, via UC-40). The client keeps them, then signs in again; that login now goes through UC-38.
@@ -2082,6 +2136,7 @@ sequenceDiagram
 | AF-47j | The link is followed again after the account exists | UC-14 AF-14c: `400 Bad Request` — "Invalid token". The registration was removed when the account was created, so there is nothing to claim and nothing is created |
 | AF-47k | The address already has three live pending registrations in the scope (FR-SR-13) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; the three links already sent keep working |
 | AF-47l | The address is held (AF-47b), and three attempt notices have gone to it within the current day, whichever scopes they were for (FR-SR-14) | `202 Accepted`, identical to the main flow. Nothing is created and no notice is sent |
+| AF-47m | The address is free, but the scope already holds `HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE` (1000 by default) live pending registrations, whatever their addresses (FR-SR-15) | `202 Accepted`, identical to the main flow. Nothing is stored or mailed; a Warning with the marker `REGISTRATION_CAP_REACHED` and the scope's id is logged, never the address |
 
 > **On the single answer.** As UC-12 and UC-46 do, this anonymous route answers a free and a taken address alike, in content and in time (FR-SR-06). Everything whose cost depends on the answer runs after the response. The scope check stays on the request path because it says nothing about any address.
 
@@ -2089,8 +2144,10 @@ sequenceDiagram
 > cannot see whether it did, so the bound has to be on the recipient rather than the caller: the
 > per-IP rate limit does nothing against a sender with many source addresses. AF-47k bounds the
 > confirmation mail to three live links per scope; AF-47l bounds the notices to three a day per
-> address across every scope. Both are applied after the response, like everything else that depends
-> on the address, so they change nothing the caller sees.
+> address across every scope; AF-47m bounds the scope, whatever the addresses, since many source
+> addresses outpace the per-IP limit and a pending registration is purged only once it expires. All
+> three are applied after the response, like everything else that depends on the address, so they
+> change nothing the caller sees.
 
 ---
 
@@ -2108,7 +2165,7 @@ sequenceDiagram
 **Main flow**
 
 1. The system resolves the subject from the authentication token — never from the request, which carries no identifier for one.
-2. The system assembles the identity, the security state — whether a password and second factor are set, and the counters and locks of the login lockout (FR-AU-09), the second-factor budget (FR-AU-12) and the re-authentication budget (FR-AU-13) — the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject.
+2. The system assembles the identity, the security state — whether a password and second factor are set, and the counters and locks of the login lockout (FR-AU-09), the second-factor budget (FR-AU-12) and the re-authentication budget (FR-AU-13) — the lawful basis and notice version, the deletion and erasure state, scope memberships and ownerships, owned applications, and the audit entries still attributed to the subject — those the subject made (`involvement` `Actor`) and those another identity made about them (`Target`), the second without naming who acted.
 3. The system adds the context Art. 15 requires alongside the data: who else receives it, how long each category is kept, and what is held but not reproduced.
 4. The system returns the document with `Cache-Control: no-store`.
 
@@ -2126,6 +2183,7 @@ sequenceDiagram
 - **Secret material is named, not reproduced.** Art. 15(4) says the right to a copy must not adversely affect others' rights, and reproducing a password hash or a TOTP secret would hand whoever holds the document the material to attack the account. Each is listed with the reason, so the subject learns what exists.
 - **A suspended identity can still export.** The lookups omit the `!IsDeleted` filter most handlers apply: somebody suspended pending erasure has more reason to want a copy than anyone, and Art. 15 is not conditional on the account being in good standing.
 - **So can a restricted one** (NFR-24: "remaining reachable by its own subject's export"). The liveness check that refuses a restricted or suspended identity's token everywhere else steps aside for this endpoint and for UC-42, UC-44 and UC-45; an anonymised identity is still refused.
+- **Entries about the subject are included.** Art. 15 covers data about them, whoever acted: an administrator's update of their account is one. Each entry says which it is, and a `Target` entry carries no identifier of the actor, whose data Art. 15(4) protects.
 - **Cleared audit attributions cannot appear.** Once NFR-21 clears an attribution, nothing connects the entry to the person; reporting it would itself be a re-identification.
 
 ---
@@ -2158,7 +2216,8 @@ sequenceDiagram
 | AF-42a | The credential is absent, wrong, unverifiable, a Google ID token already used (FR-GO-21), or names a different Google account — or, for a person, their re-authentication budget is paused (FR-AU-13) | 401. A person's password is refused with "The password or code is incorrect.", the answer every re-authentication shares; a Google User's ID token with `CredentialNotAccepted`. Nothing is recorded. A bearer token alone must not be able to trigger an irreversible operation. |
 | AF-42b | The token names no live person and no live Google User | `NotEligible` (403), answered alike for every such condition. |
 | AF-42c | An erasure has already been requested | `ErasureAlreadyRequested` (409). Checked before the credential, so a repeat costs no password derivation — and before AF-42b, so a subject whose first request suspended them is told it exists rather than that they are not eligible. |
-| AF-42d | The caller is the last owner of a scope (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
+| AF-42d | The caller is the only active owner of a scope: no other owner is live, unrestricted and without an erasure request (NFR-12) | `ErasureRequestedButBlocked` (200). The request is recorded and the deadline runs; the identity is **not** suspended, and the reason is stored for UC-43. A restriction is still lifted (step 5). The anonymisation pass retries it once an owner has been transferred (UC-21). |
+| AF-42e | The caller is the last active System Admin: no other System Admin is live, unrestricted and without an erasure request (NFR-32) | As AF-42d, with the reason "The account is the last active System Admin; another System Admin must be added first." The anonymisation pass retries it once another active System Admin exists (UC-08 promotes one, UC-06 creates one). AF-42d's reason is recorded when both apply; the retry checks both |
 
 **Notes**
 
@@ -2199,6 +2258,7 @@ sequenceDiagram
 
 **Notes**
 
+- **Never refused for the last System Admin** (NFR-32). A restriction is the subject's right, so the last active System Admin may restrict their own processing, leaving none active until they lift it (UC-45) or another is added.
 - **Restriction is not deletion, and the two are independent states.** `IsDeleted` means the identity is on its way out — excluded from reads, cascaded by UC-04, eventually anonymised by NFR-20. A restriction means the opposite: the record is disputed and must be preserved exactly as it stands. Reusing the flag would start an erasure clock on data the subject has specifically asked be kept.
 - **No credential is required, unlike UC-42.** Erasure is irreversible and demands proof the person is present. A restriction destroys nothing and is liftable, and somebody asking for one may be doing so precisely because they believe the account is compromised — demanding the password of a person in that position would be the wrong way round.
 - **A suspended identity may still restrict.** Art. 18 does not require the account to be in good standing, and a person pending erasure may well want to contest what is held about them. Such a restriction holds the erasure until it is lifted (UC-45), because it is the subject's later instruction; the reverse order differs — an erasure request lifts a restriction already in place (UC-42).
@@ -2928,7 +2988,7 @@ sequenceDiagram
 | UC-39: Disable Two-Factor Authentication | FR-2F-11, FR-AU-11, FR-AU-13 |
 | UC-40: Regenerate Recovery Codes | FR-2F-12, FR-2F-20, FR-AU-11, FR-AU-13, NFR-27 |
 | UC-46: Resend Second-Factor Email Code | FR-2F-03, FR-2F-13, FR-2F-16, FR-AU-11, NFR-27 |
-| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
+| UC-47: Register a Password User | FR-SR-01 through FR-SR-10, FR-SR-13 through FR-SR-15, FR-EV-01, FR-EV-02, NFR-23, NFR-24 |
 | UC-48: List the Audit Trail | FR-AT-01, FR-AT-02, NFR-09, NFR-21 |
 | UC-49: List Pending Registrations | FR-SR-11 |
 | UC-50: Discard a Pending Registration | FR-SR-12, NFR-09 |

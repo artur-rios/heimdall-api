@@ -35,7 +35,7 @@ public class LoginLockoutAtTheLimitTests
             PublicId = Guid.NewGuid(),
             Name = "person-10",
             Email = Email,
-            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt),
+            PasswordHash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration),
             Salt = salt,
             RoleId = (long)Roles.SystemAdmin,
             FailedLoginAttempts = failedAttempts

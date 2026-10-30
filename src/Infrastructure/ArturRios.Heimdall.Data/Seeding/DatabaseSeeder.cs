@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
@@ -98,9 +99,9 @@ public class DatabaseSeeder(
                 $"{MasterUserOptions.PasswordVariable} before starting the API.");
         }
 
-        var passwordHash = Hash.EncodeWithRandomSalt(masterUser.Password, out var salt);
+        var passwordHash = Hash.EncodeWithRandomSalt(masterUser.Password, out var salt, PasswordHashing.Configuration);
 
-        context.Persons.Add(new Person
+        var master = new Person
         {
             Name = masterUser.Name,
             Email = masterUser.Email,
@@ -108,7 +109,14 @@ public class DatabaseSeeder(
             Salt = salt,
             EmailVerified = true,
             RoleId = systemAdminRoleId
-        });
+        };
+
+        // NFR-23: the master is an identity like any other, and the one that exists before any
+        // handler can run, so the seeder has to record its basis itself. The master belongs to no
+        // scope, so the default basis applies.
+        LegalBasisRecorder.Record(master, null, DateTime.UtcNow);
+
+        context.Persons.Add(master);
 
         await context.SaveChangesAsync(cancellationToken);
 
