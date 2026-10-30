@@ -1,19 +1,11 @@
 # Heimdall API
 
-> [!NOTE]
-> This is the real, open-source code of heimdall-api. Its home is Forgejo, at
-> https://git.techcraftsmen.net/artur-rios/heimdall-api; the copy on GitHub is a read-only mirror, for viewing only, and
-> its issues and pull requests are not followed. If you want to contribute, email me at
-> arturdev@duck.com.
-
 [![Docs](https://img.shields.io/badge/docs-website-blue)](https://docs.artur-rios.tech/heimdall-api/)
 [![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](./LICENSE)
 
 📖 **[Read the documentation website](https://docs.artur-rios.tech/heimdall-api/)** — overview,
 run and test instructions, architecture and class diagrams, sequence diagrams for the main flows,
 the API reference, and the full requirements specification.
-
-This repository lives at <https://git.techcraftsmen.net/artur-rios/heimdall-api>. The GitHub repository is a read-only mirror of it.
 
 A centralized **identity management API** built with ASP.NET Core (.NET 10). It provides person
 management, application (non-human identity) management, authentication and authorization,
@@ -635,6 +627,9 @@ Notable changes in each release are recorded in [CHANGELOG.md](./CHANGELOG.md).
 
 Building from source, running the tests, authoring migrations, regenerating the OpenAPI document, the
 branching model and the release process are described in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+The GitHub repository is a read-only mirror for the real, open-source code of heimdall-api. Its home is Forgejo, at
+https://git.techcraftsmen.net/artur-rios/heimdall-api. If you want to contribute, e-mail me at arturdev@duck.com.
 
 ## Legal
 
