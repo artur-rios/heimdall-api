@@ -18,7 +18,7 @@ set -euo pipefail
 
 # Renovate follows this version (the comment below); it is a tool, so there is no checksum to update with it.
 # renovate: datasource=nuget depName=dotnet-reportgenerator-globaltool
-REPORTGENERATOR_VERSION=5.5.11
+REPORTGENERATOR_VERSION=5.5.12
 SOLUTION=src/ArturRios.Heimdall.sln
 
 # The repository's root, wherever this is run from.
