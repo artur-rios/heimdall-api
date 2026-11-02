@@ -17,12 +17,12 @@
   <!-- The author's own libraries the API is built on. -->
   <ItemGroup>
     <PackageVersion Include="ArturRios.Data.PostgreSql" Version="3.0.2" />
-    <PackageVersion Include="ArturRios.Data.Relational.Core" Version="5.0.0" />
-    <PackageVersion Include="ArturRios.Jwt" Version="1.4.0" />
-    <PackageVersion Include="ArturRios.Mediator" Version="2.0.0" />
-    <PackageVersion Include="ArturRios.Messaging" Version="1.4.0" />
-    <PackageVersion Include="ArturRios.Util" Version="2.1.0" />
-    <PackageVersion Include="ArturRios.Util.WebApi" Version="5.1.0" />
+    <PackageVersion Include="ArturRios.Data.Relational.Core" Version="5.0.1" />
+    <PackageVersion Include="ArturRios.Jwt" Version="1.4.1" />
+    <PackageVersion Include="ArturRios.Mediator" Version="2.0.1" />
+    <PackageVersion Include="ArturRios.Messaging" Version="1.4.1" />
+    <PackageVersion Include="ArturRios.Util" Version="2.2.0" />
+    <PackageVersion Include="ArturRios.Util.WebApi" Version="5.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13" />
   </ItemGroup>
   <!--
@@ -79,7 +79,7 @@
     Testcontainers downgrade from silently reintroducing the advisory.
   -->
   <ItemGroup>
-    <PackageVersion Include="ArturRios.Util.Test" Version="5.0.0" />
+    <PackageVersion Include="ArturRios.Util.Test" Version="5.0.1" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />
