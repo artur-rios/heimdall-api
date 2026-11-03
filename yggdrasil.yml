@@ -53,4 +53,5 @@ sync:
     - { from: docs/coverage-report, to: static/api/coverage-report }
     # Generated, and kept up to date by the `check` check:
     - { from: docs/openapi/heimdall.json, to: static/api/openapi/heimdall.json }
+    # Written here, by hand:
     - { from: docs/requirements, to: content/en/docs/api/requirements/documents }
