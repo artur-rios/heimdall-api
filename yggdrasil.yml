@@ -4,15 +4,12 @@
 # the names of Jenkins credentials. The commands are scripts under ci/ that run from the repository's root, so you can
 # run them on your own machine too.
 #
-# One file, two catalog entries (docs/catalog.md, "One repository, several entries"): the API (`heimdall-api`:
-# checks test, docker, check) and its docs site (`heimdall-api-docs`: no checks of its own). Each job runs only its
-# entry's checks. The docs site's job runs `test` too when it deploys, because deploy.inputs names it: the docs embed
-# the coverage report that `test` makes, so its entry allows `test`'s credential as well. The docs site's image is
-# docs.Dockerfile; the repository's Dockerfile is the API's.
+# One catalog entry, the API (`heimdall-api`: checks test, docker, check). The documentation site is not built from
+# this repository: it lives in heimdall-docs, which shows this repository's requirements, OpenAPI document and
+# coverage report as copies.
 #
 # Check it where the catalog is, in the yggdrasil checkout:
 #   python3 scripts/pipeline_config.py describe heimdall-api <this repository's checkout>
-#   python3 scripts/pipeline_config.py describe heimdall-api-docs <this repository's checkout>
 
 checks:
   test:                                  # Python helper tests, restore, vulnerability scan, build, migrations, tests, coverage (ci/test.sh)
@@ -22,7 +19,7 @@ checks:
     credentials:
       # ReportGenerator's PRO license. Not bound on renovate/* builds, nor when missing: the free report is made.
       REPORTGENERATOR_LICENSE: reportgenerator-license
-    # The coverage report the docs site is built with (deploy.inputs), and the .trx results of every test project.
+    # The coverage report, which goes to heimdall-docs, and the .trx results of every test project.
     archive: "docs/coverage-report/**,**/TestResults/*.trx"
   docker:                                # the API's container image can still be built (ci/docker.sh)
     image: docker:29.7.2-cli@sha256:3f4743208d2338c934d7b8bcfbe1bb54c0b2355c510ad5e0f31c0c4a54bd704e
@@ -40,6 +37,3 @@ checks:
       - "docs/openapi/**"
       - "ci/check.sh"
       - "ci/python.sh"
-
-deploy:
-  inputs: [test]                         # the docs site embeds the coverage report: its deploy runs test and copies its archive in

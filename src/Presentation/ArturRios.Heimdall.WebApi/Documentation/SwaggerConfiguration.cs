@@ -14,7 +14,7 @@ namespace ArturRios.Heimdall.WebApi.Documentation;
 ///     <c>Startup</c> hands it to ArturRios.Util.WebApi as the Swagger generator's configuration, so
 ///     the running API's Swagger UI shows the controllers' own summaries and marks which endpoints
 ///     need a token. tools/ArturRios.Heimdall.OpenApiGen applies the same method to produce
-///     docs/openapi/heimdall.json, the document the documentation site publishes. One definition, so
+///     docs/openapi/heimdall.json, the document heimdall-docs publishes. One definition, so
 ///     the published page and the running API cannot describe the same endpoint differently.
 /// </summary>
 public static class SwaggerConfiguration

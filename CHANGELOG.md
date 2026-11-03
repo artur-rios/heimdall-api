@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation site moved to heimdall-docs, at <https://docs.artur-rios.tech/heimdall-docs/>. The old address,
+  `docs.artur-rios.tech/heimdall-api`, will redirect to it. The README, `CONTRIBUTING.md`, `api-client/README.md` and
+  the requirements documents link to the new pages. This repository no longer holds the site's source (`docs/hugo.toml`,
+  `content`, `layouts`, `assets`, `i18n`, the npm files) or its image (`docs.Dockerfile`), and `yggdrasil.yml` no
+  longer has a second catalog entry for it or `deploy.inputs`. `docs/requirements`, `docs/openapi/heimdall.json`
+  (still generated and checked by the `check` check) and the coverage report the `test` check archives stay here, and
+  heimdall-docs shows them as copies.
+
 ## [4.2.0] - 2026-10-29
 
 ### Added
