@@ -7,7 +7,7 @@ using Swashbuckle.AspNetCore.Swagger;
 namespace ArturRios.Heimdall.OpenApiGen;
 
 /// <summary>
-///     Writes the OpenAPI document the documentation site publishes at /openapi/heimdall.json.
+///     Writes the OpenAPI document heimdall-docs publishes (docs/openapi/heimdall.json).
 ///
 ///     The document is produced by reflecting over the Web API's controllers — the same ApiExplorer
 ///     metadata a running instance exposes — without starting the Web API itself. Nothing here
