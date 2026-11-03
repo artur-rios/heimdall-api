@@ -272,7 +272,7 @@ everything: LGPD Art. 33 IX with Art. 7 V, GDPR Art. 45 adequacy, and EDPB Recom
 Use Case 1 as the supplementary measure that survives an adequacy decision being withdrawn. The
 alert-routing half is closed by `scripts/security_signals.py`, which collects `SECURITY_SIGNAL`
 lines on a schedule and mails what is new — see
-[Security signals](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/). Until it existed the detection built for
+[Security signals](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/#security-signal-detection--nfr-26). Until it existed the detection built for
 NFR-26 wrote warnings nobody read, which for Art. 33's purpose is not detection at all: **both
 notification clocks run from awareness**.
 
