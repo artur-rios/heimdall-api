@@ -37,3 +37,20 @@ checks:
       - "docs/openapi/**"
       - "ci/check.sh"
       - "ci/python.sh"
+
+# What heimdall-docs shows of this repository. On a push to main whose checks passed, the pipeline copies each
+# `from` into heimdall-docs and pushes the commit straight to its main, so the copies there stay current without a
+# pull request. Each `to` is replaced as a whole: a file removed here is removed there, and an edit made by hand
+# under one is overwritten by the next sync, so change these files here, not there.
+sync:
+  repository: heimdall-docs              # a repository of the catalog, never this one
+  # The checks whose archives hold some of the files: here the coverage report, which the `test` check archives
+  # (the .trx files archived beside it are not listed under `paths`, so they are not copied). The archive is
+  # unpacked over the checkout before anything is copied, so a `from` below can name a file of the archive.
+  inputs: [test]
+  paths:
+    # From the `test` archive:
+    - { from: docs/coverage-report, to: static/api/coverage-report }
+    # Generated, and kept up to date by the `check` check:
+    - { from: docs/openapi/heimdall.json, to: static/api/openapi/heimdall.json }
+    - { from: docs/requirements, to: content/en/docs/api/requirements/documents }
