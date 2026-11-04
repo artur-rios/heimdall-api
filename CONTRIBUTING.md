@@ -168,11 +168,11 @@ The documentation site lives in heimdall-docs, at <https://git.techcraftsmen.net
 repository is a read-only mirror, like this one's), and is published at <https://docs.artur-rios.tech/heimdall-docs/>.
 Its pages are changed there, with a pull request to that repository; this repository holds no site source.
 
-What reaches the site from here is a set of copies, taken on each push to `main` (once the sync that does it is in
-place): `docs/requirements`, the committed `docs/openapi/heimdall.json`, and the coverage report the `test` check
-archives. Edit those at their source in this repository, never in heimdall-docs. The changelog and this file are
-not site pages: the site links to them as files in the repository. Build, test and release material belongs in this
-file; the site keeps the usage, reference and architecture pages.
+What reaches the site from here is a set of copies, taken on each push to `main`: `docs/requirements`, the committed
+`docs/openapi/heimdall.json`, and the coverage report the `test` check archives. Edit those at their source in this
+repository, never in heimdall-docs. The changelog and this file are not site pages: the site links to them as files in
+the repository. Build, test and release material belongs in this file; the site keeps the usage, reference and
+architecture pages.
 
 ## Branching model
 

@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `yggdrasil.yml` has a `sync` section: on a push to `main` whose checks pass, the pipeline copies `docs/requirements`,
+  `docs/openapi/heimdall.json` and the coverage report the `test` check archives into heimdall-docs and pushes the
+  commit to its `main`, replacing the copies made by hand until now. The copies start with the first release after
+  yggdrasil's sync is in place.
+
 ### Changed
 
 - The documentation site moved to heimdall-docs, at <https://docs.artur-rios.tech/heimdall-docs/>. The old address,
