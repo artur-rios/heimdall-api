@@ -7,8 +7,8 @@
 # suite runs first so a broken unit test is reported before the functional suite spends minutes pulling and starting
 # PostgreSQL. No path filter: a test suite runs for every change.
 #
-# The coverage report is written to docs/coverage-report (scripts/coverage.py), which the check archives and the
-# docs site is built with (`deploy.inputs: [test]`, docs.Dockerfile). The report is written before the minimum is
+# The coverage report is written to docs/coverage-report (scripts/coverage.py), which the check archives and
+# heimdall-docs publishes. The report is written before the minimum is
 # evaluated, so a build that fails the minimum still has the report that shows why.
 #
 # REPORTGENERATOR_LICENSE, when set and not empty, is ReportGenerator's PRO license (yggdrasil.yml binds the Jenkins

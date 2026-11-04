@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The `check` check: the committed OpenAPI document (docs/openapi/heimdall.json) is up to date. It is a generated file
 # that is committed, so it can go stale: a change to a controller, a command, a query output or the Roles enum
-# changes what the document should say, and the docs site only rebuilds on a push to main -- a stale document would
+# changes what the document should say, and heimdall-docs only takes a copy on a push to main -- a stale document would
 # keep being published as if it were right.
 #
 # scripts/openapi.py --check builds the generator (and so the Web API it reflects over), regenerates the document into

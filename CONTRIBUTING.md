@@ -23,11 +23,9 @@ To run the API locally, configure it first as described under
 api-client/                                     Ready-to-send requests for every endpoint
   http/                                         JetBrains HTTP Client (.http) files
   bruno/                                        Bruno collection
-docs/                                           Hugo (Docsy) documentation site — see Documentation site
+docs/                                           Requirements and the generated OpenAPI document — the site is in heimdall-docs
   requirements/                                 Vision, requirements, use cases, tech stack, data protection, testing
-  content/en/                                   The site's own pages (overview, architecture, flows…)
-  openapi/                                      Generated OpenAPI document, published by the site
-  package.json                                  The site theme (Docsy), installed with npm
+  openapi/                                      Generated OpenAPI document, published by heimdall-docs
 scripts/                                        Tooling (EF Core migrations, coverage, OpenAPI)
   sql/                                          The database roles: setup, switch-over and check (psql)
 tools/ArturRios.Heimdall.OpenApiGen/            Writes docs/openapi/heimdall.json (not in the solution)
@@ -114,8 +112,7 @@ report; the key is never echoed. CI reads it from the Jenkins credential `report
 build of a `renovate/*` branch, which binds no credential — generation still succeeds with the free version.
 
 The published report is not committed. Jenkins's `test` check writes it to `docs/coverage-report` and archives it,
-and the build that deploys the docs site (a push to `main`) runs that check and builds the site's image
-(`docs.Dockerfile`) with the report, so a change under `src/` moves the published numbers once it reaches
+and heimdall-docs publishes that report, so a change under `src/` moves the published numbers once it reaches
 `main`. The report itself is the only statement of the current numbers; figures quoted in prose go stale.
 
 ## Migrations
@@ -144,7 +141,7 @@ column nullable, or `NOT NULL` with a constant default; never `NOT NULL` without
 batches rather than one `UPDATE`, and remember that the public-id triggers on `person`, `google_user`,
 `scope` and the other tables fire for every updated row. Give the migration a `<remarks>` saying which of
 this it relies on. The operator's side of it, and `HEIMDALL_RUN_MIGRATIONS`, is in the
-[operations guide](https://docs.artur-rios.tech/heimdall-api/docs/operations/#migrating-big-tables).
+[operations guide](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/#migrating-big-tables).
 
 A migration grants nothing. The API runs as a login that owns nothing (NFR-29), and the default
 privileges `scripts/sql/runtime-grants.sql` sets give it rows on every table the owner creates. A new
@@ -162,27 +159,20 @@ python scripts/openapi.py
 ```
 
 The `check` check ([`ci/check.sh`](./ci/check.sh)) fails the build if it is out of date —
-otherwise a controller change would keep being published with the old document, since the docs site
+otherwise a controller change would keep being published with the old document, since heimdall-docs
 publishes the committed file and nothing else regenerates it.
 
-## Documentation site
+## Documentation
 
-The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme from
-`docs/`. To preview it locally — Hugo Extended 0.160.1+, Node.js 24+, and
-[Dart Sass](https://sass-lang.com/install/) 1.95.0+ (the `sass` CLI on `PATH`, which Docsy 0.17+ compiles its
-stylesheets with) required:
+The documentation site lives in heimdall-docs, at <https://git.techcraftsmen.net/artur-rios/heimdall-docs> (its GitHub
+repository is a read-only mirror, like this one's), and is published at <https://docs.artur-rios.tech/heimdall-docs/>.
+Its pages are changed there, with a pull request to that repository; this repository holds no site source.
 
-```bash
-npm ci --prefix docs
-```
-
-```bash
-hugo -s docs server
-```
-
-The site's Changelog and Contributing pages render this file and [CHANGELOG.md](./CHANGELOG.md) from the repository
-root (mounted in `docs/hugo.toml`), so they are edited here, never copied into `docs/content/`. Build, test and
-release material belongs in this file; the site keeps the usage, reference and architecture pages.
+What reaches the site from here is a set of copies, taken on each push to `main`: `docs/requirements`, the committed
+`docs/openapi/heimdall.json`, and the coverage report the `test` check archives. Edit those at their source in this
+repository, never in heimdall-docs. The changelog and this file are not site pages: the site links to them as files in
+the repository. Build, test and release material belongs in this file; the site keeps the usage, reference and
+architecture pages.
 
 ## Branching model
 
@@ -244,7 +234,7 @@ is the document's name, not the release version, and does not change with it.
 ## Releasing
 
 Four environments, described in
-[Environments and deployment](https://docs.artur-rios.tech/heimdall-api/docs/environments-and-deployment/):
+[Environments and deployment](https://docs.artur-rios.tech/heimdall-docs/docs/installation/environments-and-deployment/):
 `local` is the developer's own Docker Desktop, deployed by hand; `development`, `homologation` and
 `production` share one VPS and are deployed by Jenkins.
 

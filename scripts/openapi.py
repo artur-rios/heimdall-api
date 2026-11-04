@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate the OpenAPI document the documentation site publishes.
+"""Regenerate the OpenAPI document heimdall-docs publishes.
 
-The document lives at docs/openapi/heimdall.json and is served by the documentation site at
-/openapi/heimdall.json, where docs/content/en/docs/api-explorer.md renders it as a Swagger UI page.
-So regenerating it and committing the result is how the published API reference moves.
+The document lives at docs/openapi/heimdall.json; heimdall-docs takes a copy of it and renders it as a
+Swagger UI page (its API explorer). So regenerating it and committing the result is how the published API
+reference moves.
 
 It is produced by tools/ArturRios.Heimdall.OpenApiGen, which reflects over the Web API's controllers
 without starting the Web API: no database, no environment file, no port.
@@ -110,7 +110,7 @@ def main():
     generate(DOCUMENT)
 
     print(f"\nWrote {DOCUMENT.relative_to(REPO_ROOT)}")
-    print("Commit it to publish the change: the documentation site serves this file as-is.")
+    print("Commit it to publish the change: heimdall-docs publishes this file as-is.")
 
     return 0
 

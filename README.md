@@ -1,19 +1,11 @@
 # Heimdall API
 
-> [!NOTE]
-> This is the real, open-source code of heimdall-api. Its home is Forgejo, at
-> https://git.techcraftsmen.net/artur-rios/heimdall-api; the copy on GitHub is a read-only mirror, for viewing only, and
-> its issues and pull requests are not followed. If you want to contribute, email me at
-> arturdev@duck.com.
-
-[![Docs](https://img.shields.io/badge/docs-website-blue)](https://docs.artur-rios.tech/heimdall-api/)
+[![Docs](https://img.shields.io/badge/docs-website-blue)](https://docs.artur-rios.tech/heimdall-docs/docs/)
 [![License: Attribution](https://img.shields.io/badge/License-Attribution-blue.svg)](./LICENSE)
 
-📖 **[Read the documentation website](https://docs.artur-rios.tech/heimdall-api/)** — overview,
+📖 **[Read the documentation website](https://docs.artur-rios.tech/heimdall-docs/docs/)** — overview,
 run and test instructions, architecture and class diagrams, sequence diagrams for the main flows,
 the API reference, and the full requirements specification.
-
-This repository lives at <https://git.techcraftsmen.net/artur-rios/heimdall-api>. The GitHub repository is a read-only mirror of it.
 
 A centralized **identity management API** built with ASP.NET Core (.NET 10). It provides person
 management, application (non-human identity) management, authentication and authorization,
@@ -41,33 +33,31 @@ see [Documentation](#documentation).
 ## Documentation
 
 The full documentation is published as a website:
-**<https://docs.artur-rios.tech/heimdall-api/>**
+**<https://docs.artur-rios.tech/heimdall-docs/docs/>**
 
 | Section | What it covers |
 | --- | --- |
-| [Overview](https://docs.artur-rios.tech/heimdall-api/docs/overview/) | The domain vocabulary — scopes, persons, roles, applications, permissions — and the rules that bind them |
-| [Getting started](https://docs.artur-rios.tech/heimdall-api/docs/getting-started/) | Prerequisites, configuration, migrations, and running the API |
-| [Architecture](https://docs.artur-rios.tech/heimdall-api/docs/architecture/) | Layers, CQRS, the auditing decorator, and the request pipeline — with class diagrams |
-| [Domain model](https://docs.artur-rios.tech/heimdall-api/docs/domain-model/) | Entities, relationships, and deletion cascades — with a class diagram |
-| [API reference](https://docs.artur-rios.tech/heimdall-api/docs/api-reference/) | Every endpoint, who may call it, and the use case it implements |
-| [API explorer](https://docs.artur-rios.tech/heimdall-api/docs/api-explorer/) | Swagger UI over the generated OpenAPI document — parameters, schemas, and responses |
-| [Flows](https://docs.artur-rios.tech/heimdall-api/docs/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
-| [Operations](https://docs.artur-rios.tech/heimdall-api/docs/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
-| [Environments and deployment](https://docs.artur-rios.tech/heimdall-api/docs/environments-and-deployment/) | Local on Docker Desktop, and development, homologation and production on the VPS — env files and each PostgreSQL database |
-| [Changelog](https://docs.artur-rios.tech/heimdall-api/docs/changelog/) | This repository's CHANGELOG.md, rendered |
-| [Contributing](https://docs.artur-rios.tech/heimdall-api/docs/contributing/) | This repository's CONTRIBUTING.md, rendered |
+| [Overview](https://docs.artur-rios.tech/heimdall-docs/docs/overview/) | The domain vocabulary — scopes, persons, roles, applications, permissions — and the rules that bind them |
+| [Getting started](https://docs.artur-rios.tech/heimdall-docs/docs/installation/) | Prerequisites, configuration, migrations, and running the API |
+| [Architecture](https://docs.artur-rios.tech/heimdall-docs/docs/architecture/) | Layers, CQRS, the auditing decorator, and the request pipeline — with class diagrams |
+| [Domain model](https://docs.artur-rios.tech/heimdall-docs/docs/architecture/domain-model/) | Entities, relationships, and deletion cascades — with a class diagram |
+| [API reference](https://docs.artur-rios.tech/heimdall-docs/docs/api/reference/) | Every endpoint, who may call it, and the use case it implements |
+| [API explorer](https://docs.artur-rios.tech/heimdall-docs/docs/api/explorer/) | Swagger UI over the generated OpenAPI document — parameters, schemas, and responses |
+| [Flows](https://docs.artur-rios.tech/heimdall-docs/docs/api/flows/) | Sequence diagrams for login, two-factor, Google Sign-In, onboarding, and audit logging |
+| [Operations](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/) | Migrations, health checks, logging, rate limiting, and the integrations |
+| [Environments and deployment](https://docs.artur-rios.tech/heimdall-docs/docs/installation/environments-and-deployment/) | Local on Docker Desktop, and development, homologation and production on the VPS — env files and each PostgreSQL database |
+| [Changelog](./CHANGELOG.md) | Every release, and what is unreleased |
+| [Contributing](./CONTRIBUTING.md) | Building, testing, branching, commits and releasing |
 
-The site is built with [Hugo](https://gohugo.io/) and the [Docsy](https://www.docsy.dev/) theme from
-`docs/`, and built into the image [`docs.Dockerfile`](./docs.Dockerfile) describes, which Jenkins deploys on
-every push to `main` together with the coverage report of that build's `test` check.
-Regenerating the OpenAPI document it publishes and previewing the site locally are covered in
-[CONTRIBUTING.md](./CONTRIBUTING.md#openapi-document).
+The site lives in [heimdall-docs](https://github.com/artur-rios/heimdall-docs), which shows this repository's
+requirements, OpenAPI document and coverage report as copies; how to change it is in
+[CONTRIBUTING.md](./CONTRIBUTING.md#documentation).
 
 ### Requirements documents
 
 These are the specification, and they remain plain Markdown under
-[`docs/requirements`](docs/requirements) — the website renders those same files rather than a copy,
-so either place is authoritative:
+[`docs/requirements`](docs/requirements) — the website shows copies of those files,
+and this is where they are authoritative:
 
 - [Vision Document](docs/requirements/Vision%20Document.md) — product vision, stakeholders, and goals.
 - [System Requirements Document](docs/requirements/System%20Requirements%20Document.md) — functional
@@ -282,7 +272,7 @@ everything: LGPD Art. 33 IX with Art. 7 V, GDPR Art. 45 adequacy, and EDPB Recom
 Use Case 1 as the supplementary measure that survives an adequacy decision being withdrawn. The
 alert-routing half is closed by `scripts/security_signals.py`, which collects `SECURITY_SIGNAL`
 lines on a schedule and mails what is new — see
-[Security signals](docs/content/en/docs/operations.md). Until it existed the detection built for
+[Security signals](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/#security-signal-detection--nfr-26). Until it existed the detection built for
 NFR-26 wrote warnings nobody read, which for Art. 33's purpose is not detection at all: **both
 notification clocks run from awareness**.
 
@@ -365,10 +355,10 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |
 | `HEIMDALL_TRUSTED_PROXIES` | Empty — `X-Forwarded-For` and `X-Forwarded-Proto` are ignored, and start-up warns. Behind a reverse proxy, set it to the proxy's addresses or CIDR networks (comma separated) so the rate limiter and the request log see the real caller |
-| `HEIMDALL_TRUSTED_CALLER_KEYS` | Empty — no client system may name its users' addresses to the anonymous-auth rate limiter. Comma-separated secrets of at least 32 characters (shorter ones stop start-up); a request with one in `X-Heimdall-Caller-Key` is counted under the address in `X-Heimdall-Client-Address` (see [Operations](docs/content/en/docs/operations.md)) |
+| `HEIMDALL_TRUSTED_CALLER_KEYS` | Empty — no client system may name its users' addresses to the anonymous-auth rate limiter. Comma-separated secrets of at least 32 characters (shorter ones stop start-up); a request with one in `X-Heimdall-Caller-Key` is counted under the address in `X-Heimdall-Client-Address` (see [Operations](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/)) |
 
 The data retention, security monitoring and database TLS settings are listed with their defaults under
-[Environment variables at a glance](https://docs.artur-rios.tech/heimdall-api/docs/operations/#environment-variables-at-a-glance)
+[Environment variables at a glance](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/#environment-variables-at-a-glance)
 on the documentation site.
 
 ### Email delivery
@@ -497,7 +487,7 @@ so no identifier has to be copied by hand — see [`api-client/README.md`](api-c
 Swagger UI is at <http://localhost:5177/swagger>, with JWT wired in — press **Authorize**, paste a
 token, and call any endpoint. It is built from the same `SwaggerConfiguration` that
 `python scripts/openapi.py` writes to `docs/openapi/heimdall.json`, so the
-[API explorer](https://docs.artur-rios.tech/heimdall-api/docs/api-explorer/) publishes byte-for-byte
+[API explorer](https://docs.artur-rios.tech/heimdall-docs/docs/api/explorer/) publishes byte-for-byte
 what a running instance serves.
 
 ## Deploy with Docker
@@ -546,7 +536,7 @@ homologation run only while they are used: a deploy leaves a stopped environment
 
 For the full walkthrough — every command, what each host's Postgres has to allow, and the errors each
 misconfiguration produces — see
-[Environments and deployment](https://docs.artur-rios.tech/heimdall-api/docs/environments-and-deployment/).
+[Environments and deployment](https://docs.artur-rios.tech/heimdall-docs/docs/installation/environments-and-deployment/).
 
 ### What the container does at start-up
 
@@ -575,7 +565,7 @@ therefore controls. Publishing the port would undo that.
 `HEIMDALL_METRICS_PORT` moves the endpoint (blank = 9464) or, set to `0`, switches metrics off. A
 port other than 9464 must also be added to `ASPNETCORE_HTTP_PORTS` (the image sets `8080;9464`).
 What is collected, and the rules for keeping the port private behind Traefik, are in
-[Operations → Metrics](https://docs.artur-rios.tech/heimdall-api/docs/operations/#metrics--prometheus).
+[Operations → Metrics](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/#metrics--prometheus).
 
 ### What the host's Postgres needs
 
@@ -635,6 +625,9 @@ Notable changes in each release are recorded in [CHANGELOG.md](./CHANGELOG.md).
 
 Building from source, running the tests, authoring migrations, regenerating the OpenAPI document, the
 branching model and the release process are described in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+The GitHub repository is a read-only mirror for the real, open-source code of heimdall-api. Its home is Forgejo, at
+https://git.techcraftsmen.net/artur-rios/heimdall-api. If you want to contribute, e-mail me at arturdev@duck.com.
 
 ## Legal
 

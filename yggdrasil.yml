@@ -4,15 +4,12 @@
 # the names of Jenkins credentials. The commands are scripts under ci/ that run from the repository's root, so you can
 # run them on your own machine too.
 #
-# One file, two catalog entries (docs/catalog.md, "One repository, several entries"): the API (`heimdall-api`:
-# checks test, docker, check) and its docs site (`heimdall-api-docs`: no checks of its own). Each job runs only its
-# entry's checks. The docs site's job runs `test` too when it deploys, because deploy.inputs names it: the docs embed
-# the coverage report that `test` makes, so its entry allows `test`'s credential as well. The docs site's image is
-# docs.Dockerfile; the repository's Dockerfile is the API's.
+# One catalog entry, the API (`heimdall-api`: checks test, docker, check). The documentation site is not built from
+# this repository: it lives in heimdall-docs, which shows this repository's requirements, OpenAPI document and
+# coverage report as copies.
 #
 # Check it where the catalog is, in the yggdrasil checkout:
 #   python3 scripts/pipeline_config.py describe heimdall-api <this repository's checkout>
-#   python3 scripts/pipeline_config.py describe heimdall-api-docs <this repository's checkout>
 
 checks:
   test:                                  # Python helper tests, restore, vulnerability scan, build, migrations, tests, coverage (ci/test.sh)
@@ -22,7 +19,7 @@ checks:
     credentials:
       # ReportGenerator's PRO license. Not bound on renovate/* builds, nor when missing: the free report is made.
       REPORTGENERATOR_LICENSE: reportgenerator-license
-    # The coverage report the docs site is built with (deploy.inputs), and the .trx results of every test project.
+    # The coverage report, which goes to heimdall-docs, and the .trx results of every test project.
     archive: "docs/coverage-report/**,**/TestResults/*.trx"
   docker:                                # the API's container image can still be built (ci/docker.sh)
     image: docker:29.7.2-cli@sha256:3f4743208d2338c934d7b8bcfbe1bb54c0b2355c510ad5e0f31c0c4a54bd704e
@@ -41,5 +38,20 @@ checks:
       - "ci/check.sh"
       - "ci/python.sh"
 
-deploy:
-  inputs: [test]                         # the docs site embeds the coverage report: its deploy runs test and copies its archive in
+# What heimdall-docs shows of this repository. On a push to main whose checks passed, the pipeline copies each
+# `from` into heimdall-docs and pushes the commit straight to its main, so the copies there stay current without a
+# pull request. Each `to` is replaced as a whole: a file removed here is removed there, and an edit made by hand
+# under one is overwritten by the next sync, so change these files here, not there.
+sync:
+  repository: heimdall-docs              # a repository of the catalog, never this one
+  # The checks whose archives hold some of the files: here the coverage report, which the `test` check archives
+  # (the .trx files archived beside it are not listed under `paths`, so they are not copied). The archive is
+  # unpacked over the checkout before anything is copied, so a `from` below can name a file of the archive.
+  inputs: [test]
+  paths:
+    # From the `test` archive:
+    - { from: docs/coverage-report, to: static/api/coverage-report }
+    # Generated, and kept up to date by the `check` check:
+    - { from: docs/openapi/heimdall.json, to: static/api/openapi/heimdall.json }
+    # Written here, by hand:
+    - { from: docs/requirements, to: content/en/docs/api/requirements/documents }

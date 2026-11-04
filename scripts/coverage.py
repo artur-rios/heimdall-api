@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Run the test suite with coverage and regenerate the HTML report the docs site publishes.
+"""Run the test suite with coverage and regenerate the HTML report heimdall-docs publishes.
 
-The report lives at docs/coverage-report and is served by the documentation site at
-/coverage-report/. It is a generated directory and is not committed: CI runs the suites, calls this
-script with --report-only, and uploads the result as an artifact that the docs workflow downloads
-into place before Hugo builds. Running this script locally regenerates the same directory for
+The report lives at docs/coverage-report. It is a generated directory and is not committed: CI runs the
+suites, calls this script with --report-only, and archives the result, which heimdall-docs takes a copy of.
+Running this script locally regenerates the same directory for
 previewing, and git ignores it.
 
 The PRO version's license is read from the REPORTGENERATOR_LICENSE environment variable when set,
@@ -249,7 +248,7 @@ def main():
     # ASCII on purpose: Python's stdout on Windows defaults to cp1252, which cannot encode an arrow
     # and raises UnicodeEncodeError — after the report has already been written, so the script would
     # fail on its very last line having done its whole job.
-    print("Preview it with: hugo -s docs server  ->  http://localhost:1313/heimdall-api/coverage-report/")
+    print("Preview it by opening docs/coverage-report/index.html; heimdall-docs publishes it.")
 
     return 0
 

@@ -7,6 +7,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-03
+
+### Added
+
+- `yggdrasil.yml` has a `sync` section: on a push to `main` whose checks pass, the pipeline copies `docs/requirements`,
+  `docs/openapi/heimdall.json` and the coverage report the `test` check archives into heimdall-docs and pushes the
+  commit to its `main`, replacing the copies made by hand until now. The copies start with the first release after
+  yggdrasil's sync is in place.
+
+### Changed
+
+- The documentation site moved to heimdall-docs, at <https://docs.artur-rios.tech/heimdall-docs/>. The old address,
+  `docs.artur-rios.tech/heimdall-api`, will redirect to it. The README, `CONTRIBUTING.md`, `api-client/README.md` and
+  the requirements documents link to the new pages. This repository no longer holds the site's source
+  (`docs/hugo.toml`, `content`, `layouts`, `assets`, `i18n`, `archetypes`, `prompts`, the npm files) or its image
+  (`docs.Dockerfile`). `yggdrasil.yml` no longer describes the site, whose `heimdall-api-docs` entry is removed from
+  yggdrasil's catalog (yggdrasil#135), and drops `deploy.inputs: [test]`, so an API deploy no longer runs `test` again
+  to collect the coverage report. `docs/requirements`, `docs/openapi/heimdall.json` (still generated and checked by
+  the `check` check) and the coverage report the `test` check archives stay here, and heimdall-docs shows them as
+  copies.
+
 ## [4.2.0] - 2026-10-29
 
 ### Added
@@ -985,7 +1006,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...v4.0.1
