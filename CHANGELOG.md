@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-03
+
 ### Added
 
 - `yggdrasil.yml` has a `sync` section: on a push to `main` whose checks pass, the pipeline copies `docs/requirements`,
@@ -1004,7 +1006,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/artur-rios/heimdall-api/compare/v4.0.0...v4.0.1
