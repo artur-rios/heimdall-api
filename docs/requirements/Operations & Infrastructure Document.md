@@ -204,7 +204,7 @@ and its own master user, so nothing issued or stored in one is accepted or reada
 env files of the three VPS environments are kept on the VPS (`/etc/yggdrasil/<environment>/`), filled
 in from the repository's `docker/<environment>.env.example` templates.
 
-**Development and homologation hold no real personal data.** Development and homologation run without Mailgun, so the
+**Development and homologation hold no real personal data.** Development and homologation run without real email delivery, so the
 API logs verification tokens, reset tokens and 2FA codes instead of sending them, and EF Core logs
 parameter values outside Production — which is what TH-23 in the
 [Threat Model Document](Threat%20Model%20Document.md) accepts for non-production deployments, on the

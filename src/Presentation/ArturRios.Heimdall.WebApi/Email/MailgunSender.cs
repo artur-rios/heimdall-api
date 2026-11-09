@@ -36,7 +36,7 @@ public abstract class MailgunSender(IEmailService emailService, ILogger logger)
             if (!result.Success)
             {
                 logger.LogError(
-                    "Mailgun refused the {Purpose} email for {EmailRef}: {Errors}",
+                    "Hermes refused the {Purpose} email for {EmailRef}: {Errors}",
                     Purpose, LogSafeEmail.Reference(email), string.Join(" | ", result.Errors));
 
                 return;

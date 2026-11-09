@@ -36,7 +36,7 @@ public class MailgunRestrictionLiftNotifier(
             if (!result.Success)
             {
                 logger.LogError(
-                    "Mailgun refused the restriction lift notification for {EmailRef}: {Errors}",
+                    "Hermes refused the restriction lift notification for {EmailRef}: {Errors}",
                     LogSafeEmail.Reference(email), string.Join(" | ", result.Errors));
             }
 

@@ -14,41 +14,46 @@ namespace ArturRios.Heimdall.WebApi;
 
 public static class EmailRegistrationExtensions
 {
+    private static readonly TimeSpan HermesTimeout = TimeSpan.FromSeconds(25);
+
     /// <summary>
     ///     Chooses how the two transactional emails — UC-06's verification token and UC-12's
-    ///     password reset token — are delivered. With Mailgun credentials present, both go out for
-    ///     real through <c>ArturRios.Messaging</c>; without them, both are logged.
+    ///     password reset token — are delivered. With the Hermes settings present, both go out for
+    ///     real through Hermes; without them, both are logged.
     /// </summary>
     /// <remarks>
     ///     The fallback is deliberate rather than a failure: a developer running the API locally,
     ///     and the functional suite, both need person creation and password recovery to work without
-    ///     credentials and without reaching the network. Failing startup instead would make Mailgun
+    ///     credentials and without reaching the network. Failing startup instead would make Hermes
     ///     a prerequisite for running the tests. In Production, though, the fallback logs a
     ///     verification token, a password reset token, or a 2FA code in plaintext on every send — an
     ///     account-takeover primitive for anyone who can read the logs — so an unconfigured Production
     ///     deployment fails startup outright instead of silently degrading into that.
     /// </remarks>
-    public static IServiceCollection AddEmailSenders(this IServiceCollection services, IHostEnvironment environment)
-    {
-        var options = EmailDeliveryOptions.FromEnvironment();
+    public static IServiceCollection AddEmailSenders(this IServiceCollection services, IHostEnvironment environment) =>
+        services.AddEmailSenders(environment, EmailDeliveryOptions.FromEnvironment());
 
+    /// <inheritdoc cref="AddEmailSenders(IServiceCollection, IHostEnvironment)" />
+    public static IServiceCollection AddEmailSenders(
+        this IServiceCollection services, IHostEnvironment environment, EmailDeliveryOptions options)
+    {
         services.AddSingleton(options);
 
-        if (!options.MailgunConfigured)
+        if (!options.HermesConfigured)
         {
             if (environment.IsProduction())
             {
                 throw new InvalidOperationException(
-                    $"Mailgun is not configured ({MailgunEmailService.ApiKeyVariable} / " +
-                    $"{MailgunEmailService.DomainVariable}) in Production. Refusing to start: the " +
+                    $"Hermes is not configured ({EmailDeliveryOptions.HermesBaseUrlVariable} / " +
+                    $"{EmailDeliveryOptions.HermesApiKeyVariable}) in Production. Refusing to start: the " +
                     "fallback sender logs verification tokens, password reset tokens, and 2FA codes " +
                     "in plaintext, which must never happen outside local development and tests.");
             }
 
             Log.Warning(
-                "Mailgun is not configured ({ApiKeyVariable} / {DomainVariable}); verification and " +
+                "Hermes is not configured ({BaseUrlVariable} / {ApiKeyVariable}); verification and " +
                 "password reset tokens will be logged instead of emailed",
-                MailgunEmailService.ApiKeyVariable, MailgunEmailService.DomainVariable);
+                EmailDeliveryOptions.HermesBaseUrlVariable, EmailDeliveryOptions.HermesApiKeyVariable);
 
             services.AddScoped<IEmailVerificationSender, LoggingEmailVerificationSender>();
             services.AddScoped<IPasswordResetSender, LoggingPasswordResetSender>();
@@ -62,9 +67,9 @@ public static class EmailRegistrationExtensions
             return services;
         }
 
-        // A typed client, so the Mailgun service reuses pooled connections instead of creating an
-        // HttpClient per send.
-        services.AddHttpClient<IEmailService, MailgunEmailService>();
+        // A typed client, so the service reuses pooled connections instead of creating an HttpClient per send. Above
+        // what Hermes can take: up to 10 seconds for its owner alert, then 10 for the message.
+        services.AddHttpClient<IEmailService, HermesEmailService>(client => client.Timeout = HermesTimeout);
         services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
         services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
         services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();

@@ -479,7 +479,7 @@ Production, but `MailgunSender` wrote the recipient's address on every successfu
 Production, into files that were then kept forever.
 
 **TH-23's token control covers Production and by design does not cover anything else.** A developer or
-staging deployment without Mailgun credentials logs verification tokens, reset tokens and 2FA codes
+staging deployment without Hermes settings logs verification tokens, reset tokens and 2FA codes
 in plaintext, which is deliberate and documented: the functional suite and a local run both need
 those flows to work without credentials or network. It is listed here because a staging deployment
 with real users' addresses in it turns a convenience into an account-takeover primitive for anyone
