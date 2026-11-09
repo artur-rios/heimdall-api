@@ -141,4 +141,19 @@ public class UpdatePersonCommandValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(PersonMessages.EmailTooLong, result.Errors.Select(x => x.ErrorMessage));
     }
+
+    [UnitFact]
+    public async Task GivenAnAddressHermesCannotDeliverTo_WhenValidating_ThenReturnsEmailInvalid()
+    {
+        // Given
+        var validator = new UpdatePersonCommandValidator();
+        var command = Valid();
+        command.Email = "ana@undotted";
+
+        // When
+        var result = await validator.ValidateAsync(command);
+
+        // Then
+        Assert.Contains(PersonMessages.EmailInvalid, result.Errors.Select(x => x.ErrorMessage));
+    }
 }

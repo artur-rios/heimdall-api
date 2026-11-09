@@ -7,6 +7,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-09
+
+### Fixed
+
+- Behind Cloudflare the API's own rate limit and its request log counted a Cloudflare edge address, which unrelated
+  visitors share. With the new optional `HEIMDALL_CLOUDFLARE_PROXIED=true` they use the visitor's address, and an entry
+  a client forges in `X-Forwarded-For` changes nothing. Set it on a deployment behind Cloudflare whose reverse proxy
+  keeps that header from Cloudflare's address ranges only. The request log then holds visitors' own addresses, for the
+  same 12 months. Without it nothing changes, and a client that reaches the machine directly is still counted as itself.
+
+### Changed
+
+- All of Heimdall's email now goes through Hermes, the internal email service, with the same subjects, bodies and
+  failure handling. `HERMES_BASE_URL` and `HERMES_API_KEY` replace the `MAILGUN_*` variables, which Heimdall no longer
+  reads. Without them it logs instead of sending outside Production, and refuses to start in Production. Set them, and
+  configure Heimdall's client in Hermes with its current sender, before this release reaches an environment.
+- `scripts/security_signals.py` sends its alerts through Hermes instead of straight to Mailgun, so Heimdall holds no
+  Mailgun credentials anywhere. **Operators:** add a `heimdall-signals` client to each environment's Hermes, with the
+  sender `heimdall-signals@<mail domain>`, a fixed recipient list holding only the alert address, and limits of 5 a
+  minute and 200 a day. Give the job `HERMES_BASE_URL` and that client's key as `HEIMDALL_SIGNAL_HERMES_API_KEY`, and
+  run it in a container on the edge network, because Hermes has no published port. `HEIMDALL_SIGNAL_ALERT_FROM` and the
+  job's `MAILGUN_*` variables are no longer read. Exit codes and the watermark are unchanged. A report too long for one
+  message keeps every count, lists the newest signals that fit and says how to print the rest.
+- Creating a person or changing an address now refuses, with the existing "Email is not valid." message, any address
+  Hermes cannot deliver to: quoted local parts, display names, misplaced dots, domains with no dot and address literals.
+  Login and password recovery are unchanged, so an existing account is not refused there.
+
+### Fixed
+
+- The `HEIMDALL_RETENTION_*` periods and `HEIMDALL_MONITORING_WINDOW_MINUTES` are read the same way on every host. A
+  dot is the only decimal separator, where a host with a comma-decimal culture such as pt-BR used to read `1.5` as
+  `15`. A value containing a comma, such as `1,000`, is now refused and the default applies.
+
 ## [4.3.0] - 2026-11-03
 
 ### Added
@@ -1006,7 +1039,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...v4.1.0

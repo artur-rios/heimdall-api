@@ -299,10 +299,10 @@ Not use cases, tracked separately.
 | Project scaffolding & initial infrastructure | ✅ | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
 | Health check (liveness + detailed dependency check, UC-30) | ✅ | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |
 | Audit logging for write operations (NFR-09) | ✅ | [#78](https://github.com/artur-rios/heimdall-api/issues/78) |
-| Real email delivery (Mailgun, via `ArturRios.Messaging`) | ✅ | — |
+| Real email delivery (through Hermes) | ✅ | — |
 
 **Email delivery** closed with UC-12: both the verification and password reset emails now go through
-Mailgun (see [Email delivery](#email-delivery)). The logging senders survive as the fallback for
+Hermes (see [Email delivery](#email-delivery)), which delivers them through Mailgun. The logging senders survive as the fallback for
 environments without credentials, which is what keeps the functional suite off the network.
 
 ## Prerequisites
@@ -355,6 +355,7 @@ The rest are optional and fall back to a default:
 | `HEIMDALL_METRICS_PORT` | `9464` — the Prometheus scrape port; `0` switches metrics off (see [Metrics](#metrics)) |
 | `HEIMDALL_CORS_ALLOWED_ORIGINS` | Empty — every cross-origin request is refused. Set it to the front end's origin (comma separated for several), or a browser client cannot call the API |
 | `HEIMDALL_TRUSTED_PROXIES` | Empty — `X-Forwarded-For` and `X-Forwarded-Proto` are ignored, and start-up warns. Behind a reverse proxy, set it to the proxy's addresses or CIDR networks (comma separated) so the rate limiter and the request log see the real caller |
+| `HEIMDALL_CLOUDFLARE_PROXIED` | Empty — the last `X-Forwarded-For` entry is the caller. Set it to `true` when Cloudflare's proxy is in front of the proxy above and that proxy keeps the header from Cloudflare's address ranges only (a Traefik with `forwardedHeaders.trustedIPs`): the rate limiter and the request log then see the visitor rather than a Cloudflare edge address. A client that reaches the machine without Cloudflare is still counted as itself |
 | `HEIMDALL_TRUSTED_CALLER_KEYS` | Empty — no client system may name its users' addresses to the anonymous-auth rate limiter. Comma-separated secrets of at least 32 characters (shorter ones stop start-up); a request with one in `X-Heimdall-Caller-Key` is counted under the address in `X-Heimdall-Client-Address` (see [Operations](https://docs.artur-rios.tech/heimdall-docs/docs/api/operations/)) |
 
 The data retention, security monitoring and database TLS settings are listed with their defaults under
@@ -363,20 +364,21 @@ on the documentation site.
 
 ### Email delivery
 
-Verification (UC-06) and password reset (UC-12) emails go out through Mailgun, using
-[`ArturRios.Messaging`](https://github.com/artur-rios/dotnet-messaging). Delivery is enabled only
-when **both** credentials are present:
+Heimdall's email goes out through Hermes, the internal email service, which holds the Mailgun credentials and
+Heimdall's sender. Delivery is enabled only when **both** settings are present:
 
 | Variable | Value |
 | --- | --- |
-| `MAILGUN_API_KEY` | Your Mailgun private API key |
-| `MAILGUN_DOMAIN` | The Mailgun sending domain |
-| `MAILGUN_API_VERSION` | Optional; defaults to `v3` |
-| `MAILGUN_FROM` | Optional; the sender, as `Name <address>` or a bare address, e.g. `Heimdall <no-reply@example.com>`. Unset, mail goes out from a bare `postmaster@<MAILGUN_DOMAIN>` |
+| `HERMES_BASE_URL` | Hermes at its internal alias, e.g. `http://hermes-api.production:8080` |
+| `HERMES_API_KEY` | Heimdall's key for Hermes |
 
 Leave them unset — as local runs and the functional test suite do — and the API logs each token
 instead of emailing it, warning once at start-up. That is a supported mode, not a broken one: it
 keeps the API runnable without credentials and keeps the test suite off the network.
+
+`scripts/security_signals.py` is a separate scheduled job that also mails through Hermes, under a client of its own so
+that a flood of Heimdall's email cannot use up the limits its alerts need. It reads `HERMES_BASE_URL` and its own
+`HEIMDALL_SIGNAL_HERMES_API_KEY`, and has to run in a container on the edge network.
 
 Both emails carry a link built from these, with the token appended as a `token` query parameter. If
 a link is not configured the email carries the bare token instead, which still works — the link is
@@ -402,7 +404,7 @@ person is read from the bearer token, so a caller can only ever ask for their ow
 retires the outstanding ones before mailing a new one, so only the newest link works. An address that
 is already verified is refused: a link mailed to it could do nothing when clicked.
 
-> A Mailgun failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
+> A delivery failure is logged, never surfaced. `POST /api/auth/password-recovery` must answer
 > identically whether or not the address belongs to anyone, so an outage cannot be allowed to turn
 > into a 500 that tells an anonymous caller their guess was a real account.
 
@@ -506,7 +508,7 @@ Four environments, one Compose file, one env file each:
 | `homologation` | The VPS, on demand | Jenkins, on every push of a `release/x.y.z` branch | `Staging` | `heimdall-api-hml.example.com`, and `/api/` under `heimdall-hml.example.com` | `docker/homologation.env.example` | `heimdall_homologation`, PostgreSQL on the VPS |
 | `production` | The VPS, always on | Jenkins, on a green `release/x.y.z → main` pull request, which it then merges and tags | `Production` | `heimdall-api.example.com`, and `/api/` under `heimdall.example.com` | `docker/production.env.example` | `heimdall`, PostgreSQL on the VPS |
 
-`example.com` stands for the real domain. `Staging` keeps homologation off Mailgun — verification and
+`example.com` stands for the real domain. `Staging` keeps homologation off real delivery — verification and
 reset e-mails are logged, as in Development — without serving Swagger or the developer exception page.
 
 **Local** is deployed by hand. Copy the template and fill it in — it documents what each variable

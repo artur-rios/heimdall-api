@@ -7,8 +7,10 @@ notification clocks -- LGPD Art. 48 and GDPR Art. 33 -- run from awareness**, an
 receives has not been detected. See NFR-26, the Incident Response Document Sec. 6, and residual risk
 R-08 in the DPIA.
 
-Run it from cron. It reads the rolling log files, finds the lines it has not reported before, and
-sends them to one address through the same Mailgun account the API already uses.
+Run it on a schedule. It reads the rolling log files, finds the lines it has not reported before, and
+sends them to one address through Hermes, the internal email service. Hermes has no published port,
+so the job has to run in a container on the edge network, where it answers as
+hermes-api.<environment>:8080; the operations guide has the command.
 
 Usage (from anywhere in the repository):
 
@@ -19,23 +21,29 @@ Usage (from anywhere in the repository):
 
 Configuration, all environment variables:
 
-    HEIMDALL_LOG_DIRECTORY      where the API writes log-*.json  (same variable the API reads)
-    HEIMDALL_SIGNAL_ALERT_TO    the address alerts go to         (required unless --stdout)
-    HEIMDALL_SIGNAL_ALERT_FROM  the sender  (default: heimdall-signals@$MAILGUN_DOMAIN)
-    HEIMDALL_SIGNAL_STATE_FILE  the watermark  (default: <log directory>/.security-signals-state)
-    MAILGUN_API_KEY             the API's own Mailgun credentials, unchanged
-    MAILGUN_DOMAIN
-    MAILGUN_API_VERSION         default v3
-    MAILGUN_API_BASE_URL        default https://api.mailgun.net -- set the EU endpoint here if the
-                                Mailgun account is in the EU region
+    HEIMDALL_LOG_DIRECTORY          where the API writes log-*.json  (same variable the API reads)
+    HEIMDALL_SIGNAL_ALERT_TO        the address alerts go to         (required unless --stdout)
+    HEIMDALL_SIGNAL_STATE_FILE      the watermark  (default: <log directory>/.security-signals-state)
+    HERMES_BASE_URL                 Hermes at its internal alias     (required unless --stdout)
+    HEIMDALL_SIGNAL_HERMES_API_KEY  this job's own key for Hermes    (required unless --stdout)
 
 Exit codes: 0 ran and delivered whatever it found, 1 signals were found and could NOT be delivered,
 2 the collection itself could not run.
 
 The non-zero exit on a delivery failure is the point of the exit codes. This script is the thing
 that makes somebody aware; if it fails silently the failure is invisible in exactly the way the
-signals themselves were. Give cron a MAILTO, or wrap the call, so a broken collector is itself
-noticed.
+signals themselves were. Whatever schedules it has to report a non-zero exit somewhere a person
+looks, so a broken collector is itself noticed.
+
+**Why this job has its own Hermes client.** Hermes counts messages per client, and a client over a
+limit gets a 429 until the window ends, which for the daily limit means midnight UTC. Under Heimdall's
+client, the flood of password resets that raises a signal could also use up the day and refuse the
+alert about it. Its own client keeps its own count, sends as its own sender, and may only mail the
+alert address. So it reads its own key and never falls back to the API's HERMES_API_KEY.
+
+**One message per run.** Hermes refuses a body over 10,000 characters, so a long report keeps every
+count, lists the newest signals that fit, and says how to print the rest. The run still consumes all
+of them: they were reported, and the logs keep the detail.
 
 **What gets sent.** Only the marker, the kind, the count, the timestamp and the actor's PublicId --
 the fields the service logs. A PublicId is a pseudonym: it identifies an account to somebody holding
@@ -50,6 +58,7 @@ the service -- so a run reports each repetition once, and no more.
 """
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -57,7 +66,6 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import b64encode
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -72,8 +80,14 @@ DEFAULT_LOG_DIRECTORY = "logs"
 LOG_FILE_GLOB = "log-*.json"
 STATE_FILE_NAME = ".security-signals-state"
 
-DEFAULT_MAILGUN_BASE_URL = "https://api.mailgun.net"
-DEFAULT_MAILGUN_VERSION = "v3"
+HERMES_EMAILS_PATH = "/api/emails"
+
+# Hermes answers 400 to a longer body (SendEmailRequestValidator.MaximumBodyLength).
+HERMES_BODY_LIMIT = 10_000
+
+# So that one malformed line, or a log full of odd kinds, cannot use up a whole message.
+MAX_ENTRY_LENGTH = 1_000
+MAX_SUMMARY_LENGTH = 2_000
 
 # Serilog writes seven fractional digits; datetime.fromisoformat accepts three or six and rejects
 # the rest, so the tail is trimmed rather than the whole line being dropped as unparseable.
@@ -272,9 +286,80 @@ def collect(log_directory, watermark=None, digests=frozenset(), since=None):
     return found
 
 
-def describe(signals):
+def text_length(text):
+    """Length as Hermes measures it: C#'s string.Length counts UTF-16 code units, so a character
+    outside the basic plane is two. Counting Python's way could send a body Hermes refuses."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
+
+
+def clip(text, limit):
+    if text_length(text) <= limit:
+        return text
+
+    mark = "..."
+    units = text.encode("utf-16-le", "surrogatepass")[:(limit - len(mark)) * 2]
+
+    # "ignore" drops the half of a surrogate pair the cut may have split.
+    return units.decode("utf-16-le", "ignore") + mark
+
+
+def render_entry(signal):
+    stamp = signal.timestamp.isoformat() if signal.timestamp else "(no timestamp)"
+    lines = [f"  {stamp}  {signal.kind}"]
+
+    if signal.count is not None:
+        lines.append(f"      count: {signal.count}")
+
+    if signal.actor:
+        lines.append(f"      actor: {signal.actor}")
+
+    if signal.description:
+        lines.append(f"      {signal.description}")
+
+    return "\n".join(lines)
+
+
+def omission_note(signals, omitted):
+    """Says what was left out. The command ignores the watermark because delivering this message
+    moves it past these signals, so a plain --stdout would find nothing."""
+    oldest = next((signal.timestamp for signal in signals[:omitted] if signal.timestamp), None)
+    since = f" --since {oldest.isoformat()}" if oldest else ""
+
+    return (
+        f"{omitted} older signal(s) are counted above but not listed, to keep this message within "
+        f"the size Hermes accepts. To list them, run this job with: --stdout --all{since}"
+    )
+
+
+def fit_entries(signals, entries, fixed_lines, limit):
+    """Choose the newest entries that fit, and the note about the rest. Signals arrive oldest first
+    and the entries are taken from the end without gaps, so what is left out is always older than
+    everything listed."""
+    reserved = text_length(omission_note(signals, len(signals))) + 2
+    budget = limit - text_length("\n".join(fixed_lines)) - reserved
+
+    kept = 0
+
+    for entry in reversed(entries):
+        cost = text_length(entry) + 2
+
+        if cost > budget:
+            break
+
+        budget -= cost
+        kept += 1
+
+    omitted = len(entries) - kept
+
+    return entries[omitted:], omission_note(signals, omitted) if omitted else None
+
+
+def describe(signals, limit=None):
     """The body of the alert. Written to be read at three in the morning: the counts first, then
-    the lines, then what to do about it."""
+    the lines, then what to do about it.
+
+    With a limit the report fits it, keeping every count and as many of the newest lines as there is
+    room for. Without one, as on stdout and stderr, nothing is left out."""
     if not signals:
         return "No new security signals."
 
@@ -285,75 +370,96 @@ def describe(signals):
 
     summary = ", ".join(f"{kind} x{count}" for kind, count in sorted(by_kind.items()))
 
-    lines = [
+    if limit is not None:
+        summary = clip(summary, MAX_SUMMARY_LENGTH)
+
+    header = [
         f"{len(signals)} new security signal(s): {summary}",
         "",
         "A signal is not a breach. It is a reason to look.",
         "",
     ]
 
-    for signal in signals:
-        stamp = signal.timestamp.isoformat() if signal.timestamp else "(no timestamp)"
-        lines.append(f"  {stamp}  {signal.kind}")
-
-        if signal.count is not None:
-            lines.append(f"      count: {signal.count}")
-
-        if signal.actor:
-            lines.append(f"      actor: {signal.actor}")
-
-        if signal.description:
-            lines.append(f"      {signal.description}")
-
-        lines.append("")
-
-    lines.extend([
+    footer = [
         "The actor is a PublicId, not a name or an address.",
         "",
         "What follows a signal is the Incident Response Document. If this turns out to be a",
         "breach, note the time you read this message: both notification clocks run from",
         "awareness, and this is when awareness happened.",
-    ])
+    ]
+
+    entries = [render_entry(signal) for signal in signals]
+    note = None
+
+    if limit is not None:
+        entries = [clip(entry, MAX_ENTRY_LENGTH) for entry in entries]
+        entries, note = fit_entries(signals, entries, header + footer, limit)
+
+    lines = list(header)
+
+    for entry in entries:
+        lines.extend([entry, ""])
+
+    if note:
+        lines.extend([note, ""])
+
+    lines.extend(footer)
 
     return "\n".join(lines)
 
 
-def send(subject, body, recipient, sender):
-    """Send through Mailgun with the API's own credentials. Raises on any failure -- the caller
-    turns that into a non-zero exit, because a delivery failure here is indistinguishable in effect
-    from having no detection at all."""
-    key = os.environ.get("MAILGUN_API_KEY")
-    domain = os.environ.get("MAILGUN_DOMAIN")
+def hermes_emails_url(base):
+    """Where to post, or an error naming the setting. Without this a value with no scheme ends the
+    run in a ValueError instead of a delivery failure, and ftp:// would be followed."""
+    try:
+        parts = urllib.parse.urlsplit(base)
+        valid = parts.scheme in ("http", "https") and bool(parts.hostname)
+    except ValueError:
+        valid = False
 
-    if not key or not domain:
+    if not valid:
+        raise CollectionError("HERMES_BASE_URL must be an http or https address, such as http://hermes-api.production:8080.")
+
+    return f"{base.rstrip('/')}{HERMES_EMAILS_PATH}"
+
+
+def send(subject, body, recipient):
+    """Send through Hermes with this job's own key. Raises on any failure -- the caller turns that
+    into a non-zero exit, because a delivery failure here is indistinguishable in effect from having
+    no detection at all. The one attempt is deliberate: the next scheduled run is the retry, and
+    until then the watermark has not moved."""
+    base = os.environ.get("HERMES_BASE_URL")
+    key = os.environ.get("HEIMDALL_SIGNAL_HERMES_API_KEY")
+
+    if not base or not key:
         raise CollectionError(
-            "MAILGUN_API_KEY and MAILGUN_DOMAIN must be set to send alerts. Use --stdout to print."
+            "HERMES_BASE_URL and HEIMDALL_SIGNAL_HERMES_API_KEY must be set to send alerts. "
+            "Use --stdout to print."
         )
 
-    base = os.environ.get("MAILGUN_API_BASE_URL") or DEFAULT_MAILGUN_BASE_URL
-    version = os.environ.get("MAILGUN_API_VERSION") or DEFAULT_MAILGUN_VERSION
-    url = f"{base.rstrip('/')}/{version}/{domain}/messages"
-
-    payload = urllib.parse.urlencode({
-        "from": sender or f"heimdall-signals@{domain}",
-        "to": recipient,
-        "subject": subject,
-        "text": body,
-    }).encode("utf-8")
+    url = hermes_emails_url(base)
+    payload = json.dumps({"to": recipient, "subject": subject, "body": body}).encode("utf-8")
 
     request = urllib.request.Request(url, data=payload, method="POST")
-    credentials = b64encode(f"api:{key}".encode("utf-8")).decode("ascii")
-    request.add_header("Authorization", f"Basic {credentials}")
+    request.add_header("Authorization", f"Bearer {key}")
+    request.add_header("Content-Type", "application/json")
 
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status >= 300:
-                raise CollectionError(f"Mailgun answered {response.status}")
+            # 202 is the only answer that means Mailgun took the message.
+            if response.status != 202:
+                raise CollectionError(f"Hermes answered {response.status}, not 202")
     except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", "replace")[:300]
-        raise CollectionError(f"Mailgun refused the alert ({error.code}): {detail}") from error
-    except urllib.error.URLError as error:
-        raise CollectionError(f"Could not reach Mailgun: {error.reason}") from error
+        with error:
+            detail = error.read().decode("utf-8", "replace")[:300]
+
+        retry_after = error.headers.get("Retry-After") if error.headers else None
+        retry = f", retry after {retry_after} seconds" if retry_after else ""
+        raise CollectionError(f"Hermes refused the alert ({error.code}{retry}): {detail}") from error
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        # Wider than URLError: a read timeout and a dropped connection are not wrapped in one, and
+        # an uncaught one would end the run without printing the signals it was holding.
+        raise CollectionError(f"Could not reach Hermes: {error}") from error
 
 
 def main(argv=None):
@@ -421,7 +527,7 @@ def main(argv=None):
         return 1
 
     try:
-        send(subject, body, recipient, os.environ.get("HEIMDALL_SIGNAL_ALERT_FROM"))
+        send(subject, describe(signals, limit=HERMES_BODY_LIMIT), recipient)
     except CollectionError as error:
         # Printed in full on the way out. If the mail path is broken, stderr -- which cron mails, or
         # the journal keeps -- is the only place left that the signals can still reach somebody.
@@ -429,8 +535,8 @@ def main(argv=None):
         print(body, file=sys.stderr)
         return 1
 
-    # Only after delivery succeeded. Advancing first would mean a Mailgun outage silently consumed
-    # the signals it failed to send.
+    # Only after delivery succeeded. Advancing first would mean an outage or a refusal silently
+    # consumed the signals it failed to send.
     write_state(state_file, *advance(signals, watermark, digests))
 
     if not arguments.quiet:

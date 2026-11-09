@@ -34,7 +34,7 @@ services:
       # on, EF logs parameter values, and verification/reset e-mails are logged instead of sent --
       # except that the exception page and EF's logging are off on a public host (NFR-28, below).
       # Homologation runs as Staging: no Swagger and no developer exception page, but e-mails are
-      # still logged rather than sent. Production turns all of that off and requires the Mailgun
+      # still logged rather than sent. Production turns all of that off and requires the Hermes
       # variables below.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
 
@@ -93,14 +93,10 @@ services:
       HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS: ${HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS:-}
       HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE: ${HEIMDALL_REGISTRATION_MAX_PENDING_PER_SCOPE:-}
 
-      # Unset outside Production and both e-mails are logged instead of sent; in Production the API
-      # refuses to start without them (AddEmailSenders).
-      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
-      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
-      MAILGUN_API_VERSION: ${MAILGUN_API_VERSION:-}
-      # The sender, "Name <address>" or a bare address. Unset, mail goes out from a bare
-      # postmaster@$MAILGUN_DOMAIN.
-      MAILGUN_FROM: ${MAILGUN_FROM:-}
+      # Hermes at its internal alias, and Heimdall's key for it. Unset outside Production and every e-mail is logged
+      # instead of sent; in Production the API refuses to start without them (AddEmailSenders).
+      HERMES_BASE_URL: ${HERMES_BASE_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
 
       # Comma-separated Google OAuth client IDs accepted as an ID token's audience. Unset, Google
       # sign-in refuses every token rather than trusting an unverified one.
@@ -113,6 +109,11 @@ services:
       # else, so the rate limiter and the request log see the real caller. Empty by default, which
       # trusts nobody: every caller is then the proxy.
       HEIMDALL_TRUSTED_PROXIES: ${HEIMDALL_TRUSTED_PROXIES:-}
+      # true when Cloudflare's proxy is in front of that reverse proxy, which must then keep
+      # X-Forwarded-For from Cloudflare's address ranges only. The rate limiter and the request log
+      # then see the visitor rather than a Cloudflare edge address. A client reaching the machine
+      # without Cloudflare is still counted as itself.
+      HEIMDALL_CLOUDFLARE_PROXIED: ${HEIMDALL_CLOUDFLARE_PROXIED:-}
       # Comma-separated secrets (each at least 32 characters) a client system presents in
       # X-Heimdall-Caller-Key to have its end users' own addresses, sent in X-Heimdall-Client-Address,
       # counted by the anonymous-auth rate limiter. Empty by default, which trusts no caller.

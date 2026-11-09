@@ -37,7 +37,8 @@ internal static class LoggingConfiguration
     ///     <para>
     ///         <b>Every request's client IP address is logged</b>, by Util.WebApi's
     ///         <c>TraceActivityMiddleware</c>, as the address the request came from — the real caller's
-    ///         once <see cref="TrustedProxyOptions" /> names the proxy in front of the API. It is
+    ///         once <see cref="TrustedProxyOptions" /> names the proxy in front of the API and, behind
+    ///         Cloudflare, says Cloudflare is there. It is
     ///         security telemetry, kept for the same period as the rest of the log, and the Data
     ///         Retention Schedule and the Privacy Notice say so.
     ///     </para>

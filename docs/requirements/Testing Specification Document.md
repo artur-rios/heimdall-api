@@ -719,7 +719,7 @@ anti-enumeration work should follow the same shape:
   AF-12a actually states.
 
 The senders are unit-tested with a stub `IEmailService` rather than reached over the network. The
-functional suite leaves the Mailgun variables unset, so the API registers its logging senders and
+functional suite leaves the Hermes variables unset, so the API registers its logging senders and
 never makes an outbound call.
 
 ## 11. Verifying the non-functional requirements

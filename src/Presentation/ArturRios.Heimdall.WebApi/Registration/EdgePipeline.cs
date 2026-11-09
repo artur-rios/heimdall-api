@@ -12,7 +12,10 @@ namespace ArturRios.Heimdall.WebApi;
 ///     get there: ASP.NET Core wraps the application's whole pipeline in it, so what it adds runs
 ///     before anything <c>Build</c> adds.
 /// </summary>
-internal sealed class EdgePipeline(MetricsOptions metrics, SensitiveDiagnostics diagnostics) : IStartupFilter
+public sealed class EdgePipeline(
+    MetricsOptions metrics,
+    SensitiveDiagnostics diagnostics,
+    TrustedProxyOptions proxies) : IStartupFilter
 {
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
@@ -36,7 +39,9 @@ internal sealed class EdgePipeline(MetricsOptions metrics, SensitiveDiagnostics 
         // arrives as http, and only X-Forwarded-Proto says the caller used https. The standard
         // pipeline runs the same middleware again first thing; by then the trusted hop has been
         // consumed and the connection's address is no longer a proxy's, so it changes nothing.
-        app.UseForwardedHeaders();
+        // Behind Cloudflare the header holds the visitor alone by then, so it changes nothing even
+        // for a visitor whose own address is inside a trusted range.
+        app.UseTrustedForwardedHeaders(proxies);
 
         app.UseHttpsRedirection();
 

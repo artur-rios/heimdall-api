@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.WebApi.Email;
 ///     <list type="bullet">
 ///         <item>
 ///             A constant response-time floor. To hide a Mailgun round trip it would have to exceed
-///             Mailgun's worst latency — the client's timeout, a hundred seconds — or leak exactly on
+///             Hermes's worst latency — the client's timeout, twenty-five seconds — or leak exactly on
 ///             the slow sends, and it would hold every caller's connection open for that long, which
 ///             turns the endpoint into a cheap way to tie up the server.
 ///         </item>
