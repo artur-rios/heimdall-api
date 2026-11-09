@@ -1,3 +1,4 @@
+using System.Globalization;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Util.Test.Attributes;
 
@@ -33,6 +34,26 @@ public class DataRetentionOptionsTests
         foreach (var variable in AllVariables)
         {
             Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
+
+    // Built by hand rather than asked for by name: a process running with invariant globalization
+    // cannot load pt-BR, and these tests must still read through a comma-decimal culture there.
+    private static DataRetentionOptions ReadUnderACommaDecimalCulture()
+    {
+        var machineCulture = CultureInfo.CurrentCulture;
+        var commaDecimal = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        commaDecimal.NumberFormat.NumberDecimalSeparator = ",";
+        commaDecimal.NumberFormat.NumberGroupSeparator = ".";
+        CultureInfo.CurrentCulture = commaDecimal;
+
+        try
+        {
+            return DataRetentionOptions.FromEnvironment();
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = machineCulture;
         }
     }
 
@@ -143,6 +164,41 @@ public class DataRetentionOptionsTests
 
         var options = DataRetentionOptions.FromEnvironment();
 
+        Assert.Equal(DataRetentionOptions.DefaultPurgeInterval, options.PurgeInterval);
+        Assert.Contains(DataRetentionOptions.PurgeIntervalMinutesVariable, options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitFact]
+    public void GivenACommaDecimalCulture_WhenADotDecimalPeriodIsRead_ThenTheValueIsTheOneWritten()
+    {
+        // Given: the same setting must mean the same period on every host, and under a comma-decimal
+        // culture the dot is a thousands separator, so 1.5 would otherwise be read as 15
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.PurgeIntervalMinutesVariable, "1.5");
+
+        // When
+        var options = ReadUnderACommaDecimalCulture();
+
+        // Then
+        Assert.Equal(TimeSpan.FromMinutes(1.5), options.PurgeInterval);
+        Assert.DoesNotContain(DataRetentionOptions.PurgeIntervalMinutesVariable, options.InvalidVariables);
+
+        ClearAll();
+    }
+
+    [UnitFact]
+    public void GivenACommaDecimalCulture_WhenACommaDecimalPeriodIsRead_ThenTheDefaultApplies()
+    {
+        // Given: a comma is never a separator in these settings, whatever the host's culture
+        ClearAll();
+        Environment.SetEnvironmentVariable(DataRetentionOptions.PurgeIntervalMinutesVariable, "1,5");
+
+        // When
+        var options = ReadUnderACommaDecimalCulture();
+
+        // Then
         Assert.Equal(DataRetentionOptions.DefaultPurgeInterval, options.PurgeInterval);
         Assert.Contains(DataRetentionOptions.PurgeIntervalMinutesVariable, options.InvalidVariables);
 

@@ -15,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   configure Heimdall's client in Hermes with its current sender, before this release reaches an environment.
   `scripts/security_signals.py` is a separate job and still sends through Mailgun with its own variables.
 
+### Fixed
+
+- The `HEIMDALL_RETENTION_*` periods and `HEIMDALL_MONITORING_WINDOW_MINUTES` are read the same way on every host. A
+  dot is the only decimal separator, where a host with a comma-decimal culture such as pt-BR used to read `1.5` as
+  `15`. A value containing a comma, such as `1,000`, is now refused and the default applies.
+
 ## [4.3.0] - 2026-11-03
 
 ### Added
