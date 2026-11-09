@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   reads. Without them it logs instead of sending outside Production, and refuses to start in Production. Set them, and
   configure Heimdall's client in Hermes with its current sender, before this release reaches an environment.
   `scripts/security_signals.py` is a separate job and still sends through Mailgun with its own variables.
+- Creating a person or changing an address now refuses, with the existing "Email is not valid." message, any address
+  Hermes cannot deliver to: quoted local parts, display names, misplaced dots, domains with no dot and address literals.
+  Login and password recovery are unchanged, so an existing account is not refused there.
 
 ## [4.3.0] - 2026-11-03
 

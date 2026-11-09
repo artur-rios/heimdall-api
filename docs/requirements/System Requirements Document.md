@@ -514,7 +514,7 @@ erDiagram
 | Id | BigInt | Primary key, auto-increment, internal only |
 | PublicId | GUID | Required, unique, auto-generated on creation; external identifier; immutable, enforced by trigger, and never the `PublicId` of another entity's row, or one an audit entry names, when inserted (#199) |
 | Name | String | Required, max 200 characters |
-| Email | String | Required, valid email format. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
+| Email | String | Required, one address Hermes can deliver to: no display name, no quoted local part, a domain with a dot and no address literal. Login and password recovery keep a looser check so existing accounts are not refused. Unique among the `User`s of the same scope (via `SCOPE_USER`); unique among all `ScopeAdmin`/`SystemAdmin` persons system-wide. See FR-PE-09 — the two namespaces are independent |
 | PasswordHash | Byte array | Required, stores the hash computed from the password and `Salt` |
 | Salt | Byte array | Required, randomly generated per person, used to hash the password |
 | SecurityStamp | GUID | Required, random, generated on creation (`gen_random_uuid()` for rows inserted without one). Carried by every token issued to the person and replaced, by a write of this column alone, on a password reset, an email change, a two-factor activation or removal, or a recovery-code regeneration, which revokes every earlier token (FR-AU-11). Never written by a whole-row save |
