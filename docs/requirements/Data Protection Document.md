@@ -323,6 +323,10 @@ sent to Google.
 
 ### 7.1 Email delivery to Mailgun
 
+Heimdall hands each email to Hermes, the controller's own internal email service on the same host, and Hermes hands
+it to Mailgun. Hermes is not a separate recipient: it keeps no message, and its logs identify a recipient only by a
+pseudonymous reference. The transfer analysed below is the same one, with the same data, to the same processor.
+
 **LGPD: Art. 33 IX, resting on Art. 7 V.** Art. 33 IX permits a transfer *"quando necessário para
 atender as hipóteses previstas nos incisos II, V e VI do art. 7º desta Lei"*, and Art. 7 V is
 *"quando necessário para a execução de contrato ou de procedimentos preliminares relacionados a
@@ -359,7 +363,7 @@ Art. 33 IX is statutory, and Sinch's SCCs are incorporated by their own terms.
 
 **The Mailgun region remains a configuration choice.** Mailgun offers an EU region; moving to it
 would not remove the transfer, since the data still leaves Brazil. It would change which second
-jurisdiction is involved. Recorded next to `MAILGUN_API_KEY` in the operations guide so the choice
+jurisdiction is involved. It is made where the credentials now live, in Hermes's `MAILGUN_API_KEY` setting, so the choice
 is made deliberately rather than inherited.
 
 > **Review trigger.** If the ANPD publishes a Resolution recognising the EU SCCs as equivalent, Art.

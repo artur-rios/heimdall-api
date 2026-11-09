@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- All of Heimdall's email now goes through Hermes, the internal email service, with the same subjects, bodies and
+  failure handling. `HERMES_BASE_URL` and `HERMES_API_KEY` replace the `MAILGUN_*` variables, which Heimdall no longer
+  reads. Without them it logs instead of sending outside Production, and refuses to start in Production. Set them, and
+  configure Heimdall's client in Hermes with its current sender, before this release reaches an environment.
+  `scripts/security_signals.py` is a separate job and still sends through Mailgun with its own variables.
+
 ## [4.3.0] - 2026-11-03
 
 ### Added
