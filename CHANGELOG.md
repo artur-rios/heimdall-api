@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-09
+
 ### Fixed
 
 - Behind Cloudflare the API's own rate limit and its request log counted a Cloudflare edge address, which unrelated
@@ -1037,7 +1039,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/artur-rios/heimdall-api/compare/v4.0.1...v4.1.0
