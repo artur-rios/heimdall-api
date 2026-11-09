@@ -134,26 +134,41 @@ SECURITY_SIGNAL REPEATED_REFUSALS: One identity had 23 writes refused in the las
 ### What collects them
 
 `scripts/security_signals.py`, on a schedule. It reads the log files, finds the signals it has not
-reported before, and mails them to one address through the Mailgun account the API already uses.
-Setup — the environment variables, the cron line, and what to do about the log directory living in a
-Docker volume — is in the operations guide, under *Security signal detection*. This section records
-what the job means for §4.
+reported before, and mails them to one address through Hermes, the internal email service. Setup —
+the environment variables, the schedule, and what to do about the log directory living in a Docker
+volume — is in the operations guide, under *Security signal detection*. This section records what
+the job means for §4.
+
+**It has its own Hermes client**, decided by the controller on 8 November 2026 so that Heimdall holds
+no Mailgun credentials, FR-HE-04 in the Hermes specifications, with no exception. The client is
+called `heimdall-signals`. It is separate because Hermes counts messages per client and answers 429
+over a limit, until midnight UTC for the daily one. Under Heimdall's own client, the flood of email
+that raises a signal could use up the day and refuse the alert about it, delaying the awareness this
+job exists to create. Its own client keeps its own count, sends as `heimdall-signals@` the mail
+domain, and may mail only the alert address. Hermes has no published port, so the job runs in a
+container on the edge network, on the same Docker engine as the API.
 
 **It is the thing that makes somebody aware**, which is the moment every deadline in §4 starts. The
 alert says so in its own body, because the timestamp that goes in the register is when a person read
 the message — not when the signal was raised, and not when the job ran.
 
-Three properties are worth knowing before an incident rather than during one:
+Four properties are worth knowing before an incident rather than during one:
 
 - **Each signal is reported once.** The job keeps a watermark. Signals repeat on every monitoring
   tick while a condition persists — deliberately, per above — and without a watermark every run
   would resend the history until the alerts were filtered into a folder, which is the same
   non-detection this closes, wearing a different hat.
 - **A delivery failure is loud.** The job exits non-zero and prints the signals it was holding to
-  stderr, so a broken collector announces itself. Give cron a `MAILTO`, or the failure of the thing
-  that catches failures is itself uncaught.
-- **The watermark only advances after delivery succeeds.** A Mailgun outage delays signals; it does
-  not consume them.
+  stderr, so a broken collector announces itself — but only to something that is listening. Whatever
+  schedules the job has to report a non-zero exit somewhere a person looks, or the failure of the
+  thing that catches failures is itself uncaught.
+- **The watermark only advances after delivery succeeds.** Anything but Hermes's `202` — a refusal, a
+  limit, an outage of Hermes or Mailgun — delays signals; it does not consume them. The next run is
+  the retry.
+- **One message per run, and it may not list everything.** Hermes refuses a body over 10,000
+  characters. A longer report keeps every count, lists the newest signals that fit, and gives the
+  command that prints the rest. Those signals count as reported, so read the counts as well as the
+  list.
 
 **What is in the alert.** The marker, the kind, the count, the timestamp and the actor's `PublicId`.
 A `PublicId` is a pseudonym — it names an account to somebody holding the database and to nobody
