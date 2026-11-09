@@ -21,7 +21,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   failure handling. `HERMES_BASE_URL` and `HERMES_API_KEY` replace the `MAILGUN_*` variables, which Heimdall no longer
   reads. Without them it logs instead of sending outside Production, and refuses to start in Production. Set them, and
   configure Heimdall's client in Hermes with its current sender, before this release reaches an environment.
-  `scripts/security_signals.py` is a separate job and still sends through Mailgun with its own variables.
+- `scripts/security_signals.py` sends its alerts through Hermes instead of straight to Mailgun, so Heimdall holds no
+  Mailgun credentials anywhere. **Operators:** add a `heimdall-signals` client to each environment's Hermes, with the
+  sender `heimdall-signals@<mail domain>`, a fixed recipient list holding only the alert address, and limits of 5 a
+  minute and 200 a day. Give the job `HERMES_BASE_URL` and that client's key as `HEIMDALL_SIGNAL_HERMES_API_KEY`, and
+  run it in a container on the edge network, because Hermes has no published port. `HEIMDALL_SIGNAL_ALERT_FROM` and the
+  job's `MAILGUN_*` variables are no longer read. Exit codes and the watermark are unchanged. A report too long for one
+  message keeps every count, lists the newest signals that fit and says how to print the rest.
 - Creating a person or changing an address now refuses, with the existing "Email is not valid." message, any address
   Hermes cannot deliver to: quoted local parts, display names, misplaced dots, domains with no dot and address literals.
   Login and password recovery are unchanged, so an existing account is not refused there.

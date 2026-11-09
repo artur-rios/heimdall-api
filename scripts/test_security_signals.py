@@ -11,21 +11,32 @@ its failure modes are bad in different ways: too eager and every run resends the
 operator filters the alerts away; too greedy and a real signal is consumed and never seen again.
 """
 
+import contextlib
+import http.client
+import io
 import json
+import os
 import tempfile
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
+from email.message import Message
 from pathlib import Path
+from unittest import mock
 
 from security_signals import (
+    HERMES_BODY_LIMIT,
     MARKER,
+    CollectionError,
     advance,
     collect,
     describe,
     is_new,
+    main,
     parse_line,
     parse_timestamp,
     read_state,
+    send,
     write_state,
 )
 
@@ -325,6 +336,314 @@ class DescribeTests(unittest.TestCase):
 
     def test_given_no_signals_then_the_report_says_nothing_happened(self):
         self.assertEqual("No new security signals.", describe([]))
+
+    def test_given_room_for_everything_then_a_limit_changes_nothing(self):
+        signals = [parse_line(log_line("2026-09-10T12:00:00.0000000+00:00"))]
+
+        self.assertEqual(describe(signals), describe(signals, limit=HERMES_BODY_LIMIT))
+
+
+def many_signals(number):
+    start = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+    return [
+        parse_line(log_line((start + timedelta(minutes=index)).isoformat(), count=index))
+        for index in range(number)
+    ]
+
+
+def utf16_length(text):
+    """How Hermes measures a body: C#'s string.Length counts UTF-16 code units."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
+
+
+class DescribeWithinALimitTests(unittest.TestCase):
+    def test_given_too_many_signals_then_the_report_fits_hermess_limit(self):
+        report = describe(many_signals(500), limit=HERMES_BODY_LIMIT)
+
+        self.assertLessEqual(utf16_length(report), HERMES_BODY_LIMIT)
+
+    def test_given_too_many_signals_then_every_one_is_still_counted(self):
+        report = describe(many_signals(500), limit=HERMES_BODY_LIMIT)
+
+        self.assertIn("500 new security signal(s)", report)
+        self.assertIn("REPEATED_REFUSALS x500", report)
+
+    def test_given_too_many_signals_then_the_newest_are_the_ones_listed(self):
+        report = describe(many_signals(500), limit=HERMES_BODY_LIMIT)
+
+        self.assertIn("count: 499", report)
+        self.assertNotIn("count: 0\n", report)
+
+    def test_given_too_many_signals_then_it_says_how_to_list_the_rest(self):
+        # The watermark moves once this is delivered, so a bare --stdout would find nothing: the
+        # command has to ignore the watermark and start at the oldest signal left out.
+        report = describe(many_signals(500), limit=HERMES_BODY_LIMIT)
+
+        self.assertRegex(report, r"\d+ older signal\(s\) are counted above but not listed")
+        self.assertIn("--stdout --all --since 2026-09-10T12:00:00+00:00", report)
+
+    def test_given_too_many_signals_then_the_report_still_says_when_awareness_happened(self):
+        self.assertIn("awareness", describe(many_signals(500), limit=HERMES_BODY_LIMIT))
+
+    def test_given_one_enormous_line_then_it_is_clipped_rather_than_refused(self):
+        huge = parse_line(log_line("2026-09-10T12:00:00.0000000+00:00", description="x" * 50_000))
+
+        report = describe([huge], limit=HERMES_BODY_LIMIT)
+
+        self.assertLessEqual(utf16_length(report), HERMES_BODY_LIMIT)
+        self.assertIn("1 new security signal(s)", report)
+
+    def test_given_characters_outside_the_bmp_then_they_count_as_hermes_counts_them(self):
+        # One emoji is one Python character and two C# ones. Counting Python's way would send a
+        # body Hermes answers 400 to, and the alert would never leave.
+        wide = [
+            parse_line(log_line(f"2026-09-10T12:{minute:02d}:00+00:00", description="\U0001F525" * 400))
+            for minute in range(60)
+        ]
+
+        self.assertLessEqual(utf16_length(describe(wide, limit=HERMES_BODY_LIMIT)), HERMES_BODY_LIMIT)
+
+    def test_given_only_unplaceable_lines_left_out_then_the_command_has_no_since(self):
+        lines = [parse_line(f"{MARKER} not json {index} " + "y" * 900) for index in range(40)]
+
+        report = describe(lines, limit=HERMES_BODY_LIMIT)
+
+        self.assertIn("--stdout --all", report)
+        self.assertNotIn("--since", report)
+
+
+class FakeResponse:
+    def __init__(self, status=202):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def http_error(code, headers=None, body=b"refused"):
+    message = Message()
+
+    for name, value in (headers or {}).items():
+        message[name] = value
+
+    return urllib.error.HTTPError("http://hermes", code, "refused", message, io.BytesIO(body))
+
+
+HERMES_ENVIRONMENT = {
+    "HERMES_BASE_URL": "http://hermes-api.production:8080",
+    "HEIMDALL_SIGNAL_HERMES_API_KEY": "signals-key",
+    "HEIMDALL_SIGNAL_ALERT_TO": "owner@example.com",
+}
+
+
+class SendTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.dict(os.environ, HERMES_ENVIRONMENT, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse())
+    def test_given_a_202_then_it_posts_to_hermes_with_this_jobs_key(self, urlopen):
+        send("subject", "body", "owner@example.com")
+
+        request = urlopen.call_args.args[0]
+
+        self.assertEqual("http://hermes-api.production:8080/api/emails", request.full_url)
+        self.assertEqual("POST", request.get_method())
+        self.assertEqual("Bearer signals-key", request.get_header("Authorization"))
+        self.assertEqual("application/json", request.get_header("Content-type"))
+
+    @mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse())
+    def test_given_a_message_then_it_never_names_a_sender(self, urlopen):
+        # Hermes fixes the sender per client and does not accept one in a request (FR-PO-02).
+        send("subject", "body", "owner@example.com")
+
+        self.assertEqual(
+            {"to": "owner@example.com", "subject": "subject", "body": "body"},
+            json.loads(urlopen.call_args.args[0].data))
+
+    @mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse())
+    def test_given_a_trailing_slash_then_the_path_stays_single(self, urlopen):
+        os.environ["HERMES_BASE_URL"] = "http://hermes-api.production:8080/"
+
+        send("subject", "body", "owner@example.com")
+
+        self.assertEqual("http://hermes-api.production:8080/api/emails", urlopen.call_args.args[0].full_url)
+
+    @mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse(200))
+    def test_given_a_success_that_is_not_202_then_it_is_not_delivery(self, _):
+        # 202 is the one answer that means Mailgun took the message.
+        with self.assertRaises(CollectionError):
+            send("subject", "body", "owner@example.com")
+
+    def test_given_a_429_then_the_error_says_when_to_try_again(self):
+        with mock.patch("security_signals.urllib.request.urlopen",
+                        side_effect=http_error(429, {"Retry-After": "120"})):
+            with self.assertRaisesRegex(CollectionError, "429.*120"):
+                send("subject", "body", "owner@example.com")
+
+    def test_given_any_refusal_then_it_is_a_delivery_failure(self):
+        for code in (400, 401, 403, 413, 502):
+            with self.subTest(code=code), mock.patch(
+                    "security_signals.urllib.request.urlopen", side_effect=http_error(code)):
+                with self.assertRaisesRegex(CollectionError, str(code)):
+                    send("subject", "body", "owner@example.com")
+
+    def test_given_hermes_cannot_be_reached_then_it_is_a_delivery_failure(self):
+        # A read timeout and a dropped connection are not URLError: uncaught, they would end the
+        # run without printing the signals it was holding.
+        failures = [
+            urllib.error.URLError("no route"),
+            TimeoutError("timed out"),
+            http.client.RemoteDisconnected("closed"),
+        ]
+
+        for failure in failures:
+            with self.subTest(failure=failure), mock.patch(
+                    "security_signals.urllib.request.urlopen", side_effect=failure):
+                with self.assertRaises(CollectionError):
+                    send("subject", "body", "owner@example.com")
+
+    def test_given_only_heimdalls_own_key_then_it_refuses_to_borrow_it(self):
+        # Heimdall's client shares its limits with Heimdall's mail, so a flood could refuse the
+        # alert it caused. Falling back to that key would bring the problem back silently.
+        del os.environ["HEIMDALL_SIGNAL_HERMES_API_KEY"]
+        os.environ["HERMES_API_KEY"] = "heimdalls-key"
+
+        with self.assertRaisesRegex(CollectionError, "HEIMDALL_SIGNAL_HERMES_API_KEY"):
+            send("subject", "body", "owner@example.com")
+
+    def test_given_no_base_url_then_it_says_so(self):
+        del os.environ["HERMES_BASE_URL"]
+
+        with self.assertRaisesRegex(CollectionError, "HERMES_BASE_URL"):
+            send("subject", "body", "owner@example.com")
+
+    def test_given_an_address_that_cannot_be_called_then_it_says_so(self):
+        for address in ("hermes-api.production:8080", "ftp://hermes", "http://["):
+            os.environ["HERMES_BASE_URL"] = address
+
+            with self.subTest(address=address), self.assertRaisesRegex(CollectionError, "HERMES_BASE_URL"):
+                send("subject", "body", "owner@example.com")
+
+
+class RunTests(unittest.TestCase):
+    """The whole run: the two promises the DPIA's rating of R-08 rests on."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.state = self.directory / ".security-signals-state"
+
+        patcher = mock.patch.dict(os.environ, HERMES_ENVIRONMENT, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _logs(self, lines):
+        (self.directory / "log-20260910.json").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _run(self, *arguments):
+        stdout, stderr = io.StringIO(), io.StringIO()
+
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = main(["--log-directory", str(self.directory), "--quiet", *arguments])
+
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _many_logs(self):
+        self._logs([log_line(s.timestamp.isoformat(), count=s.count) for s in many_signals(500)])
+
+    def test_given_a_delivered_alert_then_it_exits_zero_and_is_not_sent_twice(self):
+        self._logs([log_line("2026-09-10T12:00:00.0000000+00:00")])
+
+        with mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
+            first = self._run()
+            second = self._run()
+
+        self.assertEqual((0, 0), (first[0], second[0]))
+        self.assertEqual(1, urlopen.call_count)
+
+    def test_given_any_delivery_failure_then_it_exits_one_and_keeps_the_watermark(self):
+        self._logs([log_line("2026-09-10T12:00:00.0000000+00:00")])
+
+        failures = [http_error(429, {"Retry-After": "60"}), http_error(403), http_error(502),
+                    urllib.error.URLError("no route"), TimeoutError("timed out")]
+
+        for failure in failures:
+            with self.subTest(failure=failure), mock.patch(
+                    "security_signals.urllib.request.urlopen", side_effect=failure):
+                code, _, stderr = self._run()
+
+                self.assertEqual(1, code)
+                self.assertIn("REPEATED_REFUSALS", stderr)
+                self.assertFalse(self.state.exists())
+
+    def test_given_a_failure_then_the_next_run_still_delivers_it(self):
+        self._logs([log_line("2026-09-10T12:00:00.0000000+00:00")])
+
+        with mock.patch("security_signals.urllib.request.urlopen", side_effect=http_error(429)):
+            self.assertEqual(1, self._run()[0])
+
+        with mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
+            self.assertEqual(0, self._run()[0])
+
+        self.assertEqual(1, urlopen.call_count)
+        self.assertTrue(self.state.exists())
+
+    def test_given_too_many_signals_then_one_message_goes_and_all_are_consumed(self):
+        self._many_logs()
+
+        with mock.patch("security_signals.urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
+            first = self._run()
+            second = self._run()
+
+        self.assertEqual((0, 0), (first[0], second[0]))
+        self.assertEqual(1, urlopen.call_count)
+        self.assertLessEqual(
+            utf16_length(json.loads(urlopen.call_args.args[0].data)["body"]), HERMES_BODY_LIMIT)
+
+    def test_given_a_failure_with_too_many_signals_then_stderr_holds_all_of_them(self):
+        self._many_logs()
+
+        with mock.patch("security_signals.urllib.request.urlopen", side_effect=http_error(502)):
+            _, _, stderr = self._run()
+
+        self.assertIn("count: 0\n", stderr)
+        self.assertIn("count: 499\n", stderr)
+
+    def test_given_stdout_then_nothing_is_capped_or_sent(self):
+        self._many_logs()
+
+        with mock.patch("security_signals.urllib.request.urlopen") as urlopen:
+            code, stdout, _ = self._run("--stdout")
+
+        self.assertEqual(0, code)
+        self.assertIn("count: 0\n", stdout)
+        self.assertEqual(0, urlopen.call_count)
+        self.assertFalse(self.state.exists())
+
+    def test_given_no_settings_then_signals_found_are_a_delivery_failure(self):
+        self._logs([log_line("2026-09-10T12:00:00.0000000+00:00")])
+        del os.environ["HEIMDALL_SIGNAL_HERMES_API_KEY"]
+
+        code, _, stderr = self._run()
+
+        self.assertEqual(1, code)
+        self.assertIn("REPEATED_REFUSALS", stderr)
+        self.assertFalse(self.state.exists())
+
+    def test_given_a_missing_log_directory_then_it_exits_two(self):
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = main(["--log-directory", str(self.directory / "absent"), "--quiet"])
+
+        self.assertEqual(2, code)
 
 
 if __name__ == "__main__":

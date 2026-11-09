@@ -376,8 +376,9 @@ Leave them unset — as local runs and the functional test suite do — and the 
 instead of emailing it, warning once at start-up. That is a supported mode, not a broken one: it
 keeps the API runnable without credentials and keeps the test suite off the network.
 
-`scripts/security_signals.py` is a separate scheduled job and does not use this path. It still mails its security
-alerts straight through Mailgun, from its own environment, so the host that runs it keeps those variables.
+`scripts/security_signals.py` is a separate scheduled job that also mails through Hermes, under a client of its own so
+that a flood of Heimdall's email cannot use up the limits its alerts need. It reads `HERMES_BASE_URL` and its own
+`HEIMDALL_SIGNAL_HERMES_API_KEY`, and has to run in a container on the edge network.
 
 Both emails carry a link built from these, with the token appended as a `token` query parameter. If
 a link is not configured the email carries the bare token instead, which still works — the link is

@@ -7,10 +7,11 @@ description: "The risks this system creates for the people in it, and what is do
 
 # Data Protection Impact Assessment — Heimdall API
 
-**Version 1.3 — 10 September 2026** · Assessed by Artur Rios, controller and Encarregado
+**Version 1.4 — 8 November 2026** · Assessed by Artur Rios, controller and Encarregado
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.4 | 8 November 2026 | R-08: security alerts delivered through Hermes under a client of their own, instead of straight to Mailgun. Rating unchanged |
 | 1.3 | 10 September 2026 | Backup location and transfer ground established (MEGA — §7.3 of the Data Protection Document). R-08 re-rated Medium → Low: the signals are now collected and mailed. No open actions remain |
 | 1.2 | 10 September 2026 | GDPR confirmed to apply. R-01 re-rated Medium → Low on confirmation of encryption at rest, for the volume and the backups. EEA hosting resolved: direct sign-up is not a Chapter V transfer, and an EEA tenant's is covered by SCCs now incorporated in the DPA |
 | 1.1 | 10 September 2026 | R-07 re-rated High → Low: the Google transfer was found not to exist, and the email transfer's ground established under LGPD Art. 33 IX |
@@ -216,8 +217,15 @@ Controls: signal detection (NFR-26), collection and alerting (`scripts/security_
 the Art. 33(5) register.
 
 **Closed, 10 September 2026.** `scripts/security_signals.py` collects the signals on a schedule and
-e-mails whatever is new to a named address, through the Mailgun account the API already uses. The
-detection now reaches a person, which is what Art. 33's clock needs it to do.
+e-mails whatever is new to a named address. The detection now reaches a person, which is what
+Art. 33's clock needs it to do.
+
+**Delivery moved to Hermes, 8 November 2026, by the controller's decision.** The alert no longer goes
+straight to Mailgun: it goes through Hermes, the controller's internal email service, under a client
+of its own. The recipient, the content and the processor are unchanged. The client is separate
+because Hermes limits messages per client, and sharing Heimdall's would let the volume of email an
+attack causes refuse the alert about that attack, for up to a day. A client of its own cannot be
+exhausted that way, and it may mail only the alert address.
 
 Two properties of the collector matter to this rating rather than to its operation. It keeps a
 **watermark**, so each signal is reported once and the alert stays readable — an alert that resends
@@ -225,10 +233,12 @@ its whole history is one that gets filtered, and a filtered alert is the same no
 different costume. And it **exits non-zero when it cannot deliver**, printing the signals it was
 holding to stderr, so a broken collector is itself noticed rather than looking like a quiet week.
 
-**Residual, and why it is not zero.** Delivery depends on Mailgun and on somebody reading the
-mailbox. The first is visible — a failure exits non-zero where cron reports it. The second is not:
-nothing here can tell whether the message was opened. That is a control the controller operates, not
-one this repository can enforce, which is what keeps the residual at Low rather than removing it.
+**Residual, and why it is not zero.** Delivery depends on Hermes, on Mailgun and on somebody reading
+the mailbox. The first two can be seen failing — the job exits non-zero and the watermark holds, so
+an outage delays an alert without consuming it, provided the schedule reports that exit somewhere a
+person looks. The last cannot: nothing here can tell whether the message was opened. Both the schedule
+and the mailbox are controls the controller operates, not ones this repository can enforce, which is
+what keeps the residual at Low rather than removing it.
 
 ## 5. Summary
 
