@@ -162,6 +162,21 @@ public class AuthControllerRegisterTests(PostgresFixture db) : WebApiTest<Progra
     }
 
     [FunctionalFact]
+    public async Task GivenAnAddressHermesCannotDeliverTo_WhenRegistering_ThenBadRequestAndNothingIsCreated()
+    {
+        var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });
+        var email = $"undotted-{Guid.NewGuid():N}@localdomain";
+
+        var response = await RegisterAsync(email, scope.PublicId);
+        await SettleAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(PersonMessages.EmailInvalid, response.Body!.Errors);
+        Assert.Empty(await PendingForAsync(scope, email));
+        Assert.Empty(await PersonsWithEmailAsync(scope, email));
+    }
+
+    [FunctionalFact]
     public async Task GivenAShortPassword_WhenRegistering_ThenBadRequestAndNothingIsCreated()
     {
         var scope = await Seeds.ScopeAsync(db, new ScopeOptions { SelfRegistrationEnabled = true });

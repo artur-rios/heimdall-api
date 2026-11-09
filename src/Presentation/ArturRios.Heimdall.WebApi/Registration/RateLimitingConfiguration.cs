@@ -172,8 +172,9 @@ public static class RateLimitingConfiguration
     /// <remarks>
     ///     Partitioned by <see cref="HttpContext.Connection" />'s remote IP (an IPv6 caller by its /56 —
     ///     see <see cref="RateLimitPartitionKey" />), which is the caller's own
-    ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API; otherwise
-    ///     every caller shares the proxy's partition. A client system that is itself one caller to
+    ///     only when <see cref="TrustedProxyOptions" /> names the proxy in front of the API, and says
+    ///     so when Cloudflare is in front of that proxy; otherwise every caller shares the proxy's
+    ///     partition, or a Cloudflare edge's. A client system that is itself one caller to
     ///     Heimdall for many end users may instead name each user's address, with a key from
     ///     <see cref="TrustedCallerOptions" /> (see <see cref="AuthRateLimitPartition" />). Either way
     ///     this is a per-instance, defense-in-depth throttle, not a substitute for a WAF or an API

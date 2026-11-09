@@ -94,4 +94,19 @@ public class LoginCommandValidatorTests
         // Then
         Assert.True(result.IsValid);
     }
+
+    // Login stays on the looser shape check so an account created before the Hermes rule can still sign in.
+    [UnitFact]
+    public async Task GivenAnAddressHermesCannotDeliverTo_WhenValidating_ThenNoErrors()
+    {
+        // Given
+        var command = Valid();
+        command.Email = "person@undotted";
+
+        // When
+        var result = await new LoginCommandValidator().ValidateAsync(command);
+
+        // Then
+        Assert.True(result.IsValid);
+    }
 }

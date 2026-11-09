@@ -99,4 +99,13 @@ public class RegisterCommandValidatorTests
 
         Assert.Contains(AuthMessages.ScopeRequired, ErrorsFor(command));
     }
+
+    [UnitFact]
+    public void GivenAnAddressHermesCannotDeliverTo_WhenValidating_ThenEmailInvalid()
+    {
+        var command = Valid();
+        command.Email = "new@undotted";
+
+        Assert.Contains(PersonMessages.EmailInvalid, ErrorsFor(command));
+    }
 }

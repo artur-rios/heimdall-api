@@ -142,7 +142,7 @@ public class Startup : WebApiStartup
 
         AddMetrics();
 
-        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, _diagnostics));
+        builder.Services.AddSingleton<IStartupFilter>(new EdgePipeline(_metrics, _diagnostics, TrustedProxyOptions.FromEnvironment()));
 
         // The insecure test cost is for the test suite: deployed, in Production or in homologation's
         // Staging, it would leave every password hash trivial to brute-force, so start-up refuses it

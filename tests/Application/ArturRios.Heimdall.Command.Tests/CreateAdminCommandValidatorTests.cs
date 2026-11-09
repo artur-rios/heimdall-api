@@ -50,4 +50,13 @@ public class CreateAdminCommandValidatorTests
         var result = await new CreateAdminCommandValidator().ValidateAsync(command);
         Assert.Contains(result.Errors, e => e.ErrorMessage == PersonMessages.EmailInvalid);
     }
+
+    [UnitFact]
+    public async Task GivenAnAddressHermesCannotDeliverTo_WhenValidating_ThenEmailInvalidError()
+    {
+        var command = Valid();
+        command.Email = "admin@undotted";
+        var result = await new CreateAdminCommandValidator().ValidateAsync(command);
+        Assert.Contains(result.Errors, e => e.ErrorMessage == PersonMessages.EmailInvalid);
+    }
 }

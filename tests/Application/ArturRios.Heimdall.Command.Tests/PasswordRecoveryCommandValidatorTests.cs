@@ -93,4 +93,19 @@ public class PasswordRecoveryCommandValidatorTests
         // Then
         Assert.True(result.IsValid);
     }
+
+    // Recovery stays on the looser shape check for the same reason login does: existing accounts keep working.
+    [UnitFact]
+    public async Task GivenAnAddressHermesCannotDeliverTo_WhenValidating_ThenNoErrors()
+    {
+        // Given
+        var command = Valid();
+        command.Email = "person@undotted";
+
+        // When
+        var result = await new PasswordRecoveryCommandValidator().ValidateAsync(command);
+
+        // Then
+        Assert.True(result.IsValid);
+    }
 }
