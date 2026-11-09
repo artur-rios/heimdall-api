@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Behind Cloudflare the API's own rate limit and its request log counted a Cloudflare edge address, which unrelated
+  visitors share. With the new optional `HEIMDALL_CLOUDFLARE_PROXIED=true` they use the visitor's address, and an entry
+  a client forges in `X-Forwarded-For` changes nothing. Set it on a deployment behind Cloudflare whose reverse proxy
+  keeps that header from Cloudflare's address ranges only. The request log then holds visitors' own addresses, for the
+  same 12 months. Without it nothing changes, and a client that reaches the machine directly is still counted as itself.
+
 ### Changed
 
 - All of Heimdall's email now goes through Hermes, the internal email service, with the same subjects, bodies and
