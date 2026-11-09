@@ -7,7 +7,7 @@ namespace ArturRios.Heimdall.WebApi.Email;
 ///     Fallback <see cref="ITwoFactorEmailSender" /> for environments without Mailgun credentials:
 ///     logs the recipient and code instead of delivering a real email. Registered in place of
 ///     <see cref="MailgunTwoFactorEmailSender" /> when
-///     <see cref="EmailDeliveryOptions.MailgunConfigured" /> is false.
+///     <see cref="EmailDeliveryOptions.HermesConfigured" /> is false.
 /// </summary>
 public class LoggingTwoFactorEmailSender(ILogger<LoggingTwoFactorEmailSender> logger)
     : ITwoFactorEmailSender

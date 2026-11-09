@@ -34,7 +34,7 @@ services:
       # on, EF logs parameter values, and verification/reset e-mails are logged instead of sent --
       # except that the exception page and EF's logging are off on a public host (NFR-28, below).
       # Homologation runs as Staging: no Swagger and no developer exception page, but e-mails are
-      # still logged rather than sent. Production turns all of that off and requires the Mailgun
+      # still logged rather than sent. Production turns all of that off and requires the Hermes
       # variables below.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
 

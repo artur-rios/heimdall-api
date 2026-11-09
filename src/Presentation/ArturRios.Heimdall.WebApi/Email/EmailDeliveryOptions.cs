@@ -30,17 +30,23 @@ public class EmailDeliveryOptions
     public string HermesApiKey { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Whether both Hermes settings are present. False in any environment that has not been given them —
-    ///     notably the functional test suite, which must never reach the network.
+    ///     Whether Hermes can be called: an absolute http or https address, and a key. False in any environment that
+    ///     has not been given them — notably the functional test suite, which must never reach the network. An
+    ///     address that is not one would otherwise pass the Production check and fail every send.
     /// </summary>
-    public bool HermesConfigured => !string.IsNullOrWhiteSpace(HermesBaseUrl) && !string.IsNullOrWhiteSpace(HermesApiKey);
+    public bool HermesConfigured =>
+        !string.IsNullOrWhiteSpace(HermesApiKey)
+        && Uri.TryCreate(HermesBaseUrl, UriKind.Absolute, out var address)
+        && address.Scheme is "http" or "https";
 
-    public static EmailDeliveryOptions FromEnvironment() => new()
+    public static EmailDeliveryOptions FromEnvironment() => From(Environment.GetEnvironmentVariable);
+
+    public static EmailDeliveryOptions From(Func<string, string?> read) => new()
     {
-        VerificationUrl = Environment.GetEnvironmentVariable(VerificationUrlVariable) ?? string.Empty,
-        PasswordResetUrl = Environment.GetEnvironmentVariable(PasswordResetUrlVariable) ?? string.Empty,
-        HermesBaseUrl = Environment.GetEnvironmentVariable(HermesBaseUrlVariable) ?? string.Empty,
-        HermesApiKey = Environment.GetEnvironmentVariable(HermesApiKeyVariable) ?? string.Empty
+        VerificationUrl = read(VerificationUrlVariable) ?? string.Empty,
+        PasswordResetUrl = read(PasswordResetUrlVariable) ?? string.Empty,
+        HermesBaseUrl = read(HermesBaseUrlVariable) ?? string.Empty,
+        HermesApiKey = read(HermesApiKeyVariable) ?? string.Empty
     };
 
     /// <summary>

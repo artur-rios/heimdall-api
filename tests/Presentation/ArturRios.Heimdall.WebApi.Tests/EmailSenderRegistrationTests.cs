@@ -22,6 +22,14 @@ public class EmailSenderRegistrationTests
     private static IHostEnvironment EnvironmentNamed(string name) =>
         new Microsoft.Extensions.Hosting.Internal.HostingEnvironment { EnvironmentName = name };
 
+    private static ServiceCollection Descriptors(EmailDeliveryOptions options, string environment)
+    {
+        var services = new ServiceCollection();
+        services.AddEmailSenders(EnvironmentNamed(environment), options);
+
+        return services;
+    }
+
     private static ServiceProvider Build(EmailDeliveryOptions options, string environment)
     {
         var services = new ServiceCollection();
@@ -42,13 +50,36 @@ public class EmailSenderRegistrationTests
         Assert.IsType<HermesEmailService>(provider.GetRequiredService<IEmailService>());
     }
 
-    [UnitFact]
-    public void GivenHermesSettings_WhenRegistering_ThenTheSendersAreTheOnesThatDeliver()
+    public static TheoryData<Type, Type, Type> Senders => new()
     {
-        using var provider = Build(Configured, "Production");
-        using var scope = provider.CreateScope();
+        { typeof(IEmailVerificationSender), typeof(MailgunEmailVerificationSender), typeof(LoggingEmailVerificationSender) },
+        { typeof(IPasswordResetSender), typeof(MailgunPasswordResetSender), typeof(LoggingPasswordResetSender) },
+        { typeof(ITwoFactorEmailSender), typeof(MailgunTwoFactorEmailSender), typeof(LoggingTwoFactorEmailSender) },
+        { typeof(IRestrictionLiftNotifier), typeof(MailgunRestrictionLiftNotifier), typeof(LoggingRestrictionLiftNotifier) },
+        { typeof(IRegistrationAttemptSender), typeof(MailgunRegistrationAttemptSender), typeof(LoggingRegistrationAttemptSender) },
+        { typeof(IRegistrationLinkSender), typeof(MailgunRegistrationLinkSender), typeof(LoggingRegistrationLinkSender) },
+        { typeof(IEmailChangeNoticeSender), typeof(MailgunEmailChangeNoticeSender), typeof(LoggingEmailChangeNoticeSender) },
+        { typeof(IScopeInvitationNoticeSender), typeof(MailgunScopeInvitationNoticeSender), typeof(LoggingScopeInvitationNoticeSender) }
+    };
 
-        Assert.IsType<MailgunPasswordResetSender>(scope.ServiceProvider.GetRequiredService<IPasswordResetSender>());
+    [UnitTheory]
+    [MemberData(nameof(Senders))]
+    public void GivenHermesSettings_WhenRegistering_ThenEverySenderDelivers(Type service, Type delivering, Type logging)
+    {
+        _ = logging;
+        var descriptor = Descriptors(Configured, "Production").Single(entry => entry.ServiceType == service);
+
+        Assert.Equal(delivering, descriptor.ImplementationType);
+    }
+
+    [UnitTheory]
+    [MemberData(nameof(Senders))]
+    public void GivenNoHermesSettingsOutsideProduction_WhenRegistering_ThenEverySenderLogs(Type service, Type delivering, Type logging)
+    {
+        _ = delivering;
+        var descriptor = Descriptors(new EmailDeliveryOptions(), "Development").Single(entry => entry.ServiceType == service);
+
+        Assert.Equal(logging, descriptor.ImplementationType);
     }
 
     [UnitFact]
@@ -65,6 +96,11 @@ public class EmailSenderRegistrationTests
     [InlineData("", "")]
     [InlineData("http://hermes-api.test:8080", "")]
     [InlineData("", "key")]
+    [InlineData("   ", "key")]
+    [InlineData("http://hermes-api.test:8080", "   ")]
+    [InlineData("hermes-api.production:8080", "key")]
+    [InlineData("[[hermes-base-url]]", "key")]
+    [InlineData("ftp://hermes-api.test", "key")]
     public void GivenNoCompleteHermesSettingsOutsideProduction_WhenRegistering_ThenTheLoggingSendersAreUsed(string baseUrl, string apiKey)
     {
         var options = new EmailDeliveryOptions { HermesBaseUrl = baseUrl, HermesApiKey = apiKey };
@@ -80,6 +116,11 @@ public class EmailSenderRegistrationTests
     [InlineData("", "")]
     [InlineData("http://hermes-api.test:8080", "")]
     [InlineData("", "key")]
+    [InlineData("   ", "key")]
+    [InlineData("http://hermes-api.test:8080", "   ")]
+    [InlineData("hermes-api.production:8080", "key")]
+    [InlineData("[[hermes-base-url]]", "key")]
+    [InlineData("ftp://hermes-api.test", "key")]
     public void GivenNoCompleteHermesSettingsInProduction_WhenRegistering_ThenItRefusesToStartNamingThem(string baseUrl, string apiKey)
     {
         var options = new EmailDeliveryOptions { HermesBaseUrl = baseUrl, HermesApiKey = apiKey };
@@ -91,9 +132,28 @@ public class EmailSenderRegistrationTests
     }
 
     [UnitFact]
-    public void GivenTheEnvironmentVariablesNames_WhenRead_ThenTheyAreTheDocumentedOnes()
+    public void GivenTheDocumentedVariables_WhenRead_ThenEachReachesItsOwnSetting()
     {
-        Assert.Equal("HERMES_BASE_URL", EmailDeliveryOptions.HermesBaseUrlVariable);
-        Assert.Equal("HERMES_API_KEY", EmailDeliveryOptions.HermesApiKeyVariable);
+        var variables = new Dictionary<string, string?>
+        {
+            ["HERMES_BASE_URL"] = "http://hermes-api.production:8080",
+            ["HERMES_API_KEY"] = "the-key"
+        };
+
+        var options = EmailDeliveryOptions.From(name => variables.GetValueOrDefault(name));
+
+        Assert.Equal("http://hermes-api.production:8080", options.HermesBaseUrl);
+        Assert.Equal("the-key", options.HermesApiKey);
+        Assert.True(options.HermesConfigured);
+    }
+
+    [UnitTheory]
+    [InlineData("http://hermes-api.production:8080")]
+    [InlineData("https://hermes.example.com")]
+    public void GivenAnAbsoluteHttpAddress_WhenChecked_ThenHermesIsConfigured(string baseUrl)
+    {
+        var options = new EmailDeliveryOptions { HermesBaseUrl = baseUrl, HermesApiKey = "key" };
+
+        Assert.True(options.HermesConfigured);
     }
 }

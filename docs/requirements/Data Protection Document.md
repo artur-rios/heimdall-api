@@ -361,10 +361,10 @@ leg is therefore covered by Art. 46(2)(c) safeguards already in force.
 **Nothing needs to be signed.** Neither ground requires negotiating or executing an agreement:
 Art. 33 IX is statutory, and Sinch's SCCs are incorporated by their own terms.
 
-**The Mailgun region remains a configuration choice.** Mailgun offers an EU region; moving to it
-would not remove the transfer, since the data still leaves Brazil. It would change which second
-jurisdiction is involved. It is made where the credentials now live, in Hermes's `MAILGUN_API_KEY` setting, so the choice
-is made deliberately rather than inherited.
+**The Mailgun region remains a choice.** Mailgun offers an EU region; moving to it would not remove
+the transfer, since the data still leaves Brazil. It would change which second jurisdiction is
+involved. Hermes uses Mailgun's US endpoint today, and moving region needs a change to Hermes or to
+its email library, so the choice is made deliberately rather than inherited.
 
 > **Review trigger.** If the ANPD publishes a Resolution recognising the EU SCCs as equivalent, Art.
 > 33 II becomes available through Sinch's existing DPA with nothing to sign, and is the stronger
