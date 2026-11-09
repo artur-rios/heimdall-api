@@ -17,7 +17,7 @@ public class CreateScopeOwnerCommandValidator : AbstractValidator<CreateScopeOwn
 
         RuleFor(command => command.Email)
             .NotEmpty().WithMessage(PersonMessages.EmailRequired)
-            .EmailAddress().WithMessage(PersonMessages.EmailInvalid);
+            .DeliverableEmail();
 
         RuleFor(command => command.Password)
             .NotEmpty().WithMessage(PersonMessages.PasswordRequired)
