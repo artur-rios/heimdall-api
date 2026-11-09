@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace ArturRios.Heimdall.Shared.Retention;
 
 /// <summary>
@@ -379,8 +381,10 @@ public sealed record DataRetentionOptions
         }
 
         // A zero or negative period would purge rows the moment they expire, or run continuously;
-        // both are mistakes rather than policies.
-        if (!double.TryParse(raw, out var value) || value <= 0 || value < minimum || value > maximum)
+        // both are mistakes rather than policies. The value means the same on every host: a dot is
+        // the only decimal separator, and thousands separators are refused so 1,5 cannot read as 15.
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            || value <= 0 || value < minimum || value > maximum)
         {
             invalid.Add(variable);
 
@@ -399,7 +403,7 @@ public sealed record DataRetentionOptions
             return defaultValue;
         }
 
-        if (!int.TryParse(raw, out var value) || value <= 0)
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) || value <= 0)
         {
             invalid.Add(variable);
 
