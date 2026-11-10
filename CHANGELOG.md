@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-11-10
+
 ### Upgrading from 5.x to 6.0
 
 - **API clients:** `GET /api/healthcheck/detailed` and its root alias `/healthcheck/detailed` are gone. With a token
@@ -1067,7 +1069,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v6.0.0...HEAD
+[6.0.0]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0
