@@ -307,41 +307,44 @@ The concrete technologies, libraries, and versions behind this foundation (.NET 
 
 ## 3. Health & Monitoring
 
-> Corresponds to issue [#32](https://github.com/artur-rios/heimdall-api/issues/32). **Status: Implemented** (delivered via PR #39 — `feature/uc-30-check-api-health`). Both the public liveness endpoint and the System Admin-only detailed health check are in place.
+> Corresponds to issue [#32](https://github.com/artur-rios/heimdall-api/issues/32). **Status: Implemented** (delivered via PR #39 — `feature/uc-30-check-api-health`). The detailed report moved from a System Admin-only endpoint to the internal route on the metrics port.
 
 ### 3.1 Overview
 
-The API exposes health endpoints so that operators, load balancers, orchestrators, and uptime monitors can observe whether the API process is running and whether its dependencies are healthy. Two endpoints are provided:
+The API exposes health endpoints so that operators, load balancers, orchestrators, and uptime monitors can observe whether the API process is running and whether its dependencies are healthy. Three are provided:
 
 1. A **basic liveness ("hello world") endpoint** — a lightweight, **public** check that the API is up.
-2. A **detailed health check endpoint** — a **System Admin-only** check that reports the status of each verified service plus an aggregate general status.
+2. A **readiness endpoint** — a **public** check that the database answers, with the bare status only.
+3. An **internal health report** — on the **metrics port only**, for yggdrasil's status API: the status of each verified service plus an aggregate general status.
 
-The detailed check is intentionally **extensible**: for now the only verified service is the database connection, but new verifications (cache, email service, external identity providers, etc.) can be added later without changing the response contract.
+The report is intentionally **extensible**: it verifies the database connection and Hermes today, and new verifications (cache, external identity providers, etc.) can be added later without changing the response contract.
 
 ### 3.2 Functional Requirements
 
 | ID | Requirement | Priority |
 | ---- | ------------ | ---------- |
 | FR-HC-01 | The system shall expose a **public** liveness endpoint (`GET /api/healthcheck`) that confirms the API process is running and responding, requiring **no authentication** | High |
-| FR-HC-02 | The system shall expose a **detailed** health check endpoint (`GET /api/healthcheck/detailed`) accessible **only to System Admins** | High |
-| FR-HC-03 | The detailed health check shall verify the **database connection** | High |
-| FR-HC-04 | The detailed health check shall report the status of **each verified service individually** | High |
-| FR-HC-05 | The detailed health check shall report an **aggregate general status** of `Healthy` when all verified services are up, or `Unhealthy` when one or more verified services are down | High |
+| FR-HC-02 | The system shall expose a **detailed** health report (`GET /internal/health`) on the **metrics port only**, with no credential, the port being the access control. It shall not exist on the application port, nor when metrics are switched off | High |
+| FR-HC-03 | The report shall verify the **database connection**, which is **required**, and **Hermes**, which is not | High |
+| FR-HC-04 | The report shall give the status of **each verified service individually**, as a name, a status and optionally a reason from a fixed vocabulary: never exception text | High |
+| FR-HC-05 | The report shall give an **aggregate general status**: `Unhealthy` when any required service is not `Healthy`; otherwise `Degraded` when any other service is `Degraded` or `Unhealthy`; otherwise `Healthy`. `NotConfigured` on a service that is not required does not count | High |
 | FR-HC-06 | The health check design shall be **extensible**, allowing new service verifications to be added without changing the response contract | Medium |
-| FR-HC-07 | The detailed health check endpoint should map the aggregate status to an appropriate HTTP status (e.g., `200 OK` when `Healthy`, `503 Service Unavailable` when `Unhealthy`) | Medium |
+| FR-HC-07 | The report shall map the aggregate status to an HTTP status: `200 OK` when `Healthy` or `Degraded`, `503 Service Unavailable` when `Unhealthy`, with the same body either way | Medium |
 | FR-HC-08 | The system shall expose a **public** readiness endpoint (`GET /api/healthcheck/ready`) that answers `200 OK` when the database responds and `503 Service Unavailable` when it does not, with only the bare status (`Healthy` / `Unhealthy`) in the body and no per-service detail | Medium |
+| FR-HC-09 | The metrics port shall serve **only** the scrape path and `GET /internal/health`, and answer `404` to anything else ahead of every other middleware | High |
+| FR-HC-10 | A report shall be reused for **5 seconds** from when its checks finished, callers who arrive during a run shall share it, each check shall be bounded to **3 seconds**, and a failed check shall be logged once per change of status, with the reason word and no stack trace | Medium |
 
 ### 3.3 Endpoints
 
-| Method | Endpoint | Description | Auth Required |
-| -------- | ---------- | ------------- | --------------- |
-| GET | `/api/healthcheck` | Basic liveness check — confirms the API is on ("hello world") | **No (Public)** |
-| GET | `/api/healthcheck/ready` | Readiness check — `200` while the database answers, `503` when it does not; bare status only | **No (Public)** |
-| GET | `/api/healthcheck/detailed` | Detailed health check — reports per-service status and an aggregate `Healthy` / `Unhealthy` general status | **SystemAdmin** |
+| Method | Endpoint | Port | Description | Auth Required |
+| -------- | ---------- | ------ | ------------- | --------------- |
+| GET | `/api/healthcheck` | Application | Basic liveness check — confirms the API is on ("hello world") | **No (Public)** |
+| GET | `/api/healthcheck/ready` | Application | Readiness check — `200` while the database answers, `503` when it does not; bare status only | **No (Public)** |
+| GET | `/internal/health` | Metrics | Internal health report — per-service status and an aggregate general status | **No**: the port is the access control (§3.8) |
 
-### 3.4 Detailed Health Check — Response Contract
+### 3.4 Internal Health Report — Response Contract
 
-The detailed response reports a `status` (the aggregate general status) and a `services` array with one entry per verified service.
+The report is bare JSON, not wrapped in the API's `DataOutput` envelope. It has a `status` (the aggregate general status) and a `services` array with one entry per verified service. Every `status` is `Healthy`, `Degraded`, `Unhealthy` or `NotConfigured`.
 
 **All services up:**
 
@@ -349,23 +352,39 @@ The detailed response reports a `status` (the aggregate general status) and a `s
 {
   "status": "Healthy",
   "services": [
-    { "name": "Database", "status": "Healthy" }
+    { "name": "Database", "status": "Healthy" },
+    { "name": "Hermes", "status": "Healthy" }
   ]
 }
 ```
 
-**Database connection down:**
+**An integration down (`200 OK`):**
+
+```json
+{
+  "status": "Degraded",
+  "services": [
+    { "name": "Database", "status": "Healthy" },
+    { "name": "Hermes", "status": "Unhealthy", "reason": "connection refused" }
+  ]
+}
+```
+
+**Database connection down (`503 Service Unavailable`):**
 
 ```json
 {
   "status": "Unhealthy",
   "services": [
-    { "name": "Database", "status": "Unhealthy" }
+    { "name": "Database", "status": "Unhealthy", "reason": "connection refused" },
+    { "name": "Hermes", "status": "Healthy" }
   ]
 }
 ```
 
-The aggregate `status` is `Healthy` only when **every** entry in `services` is healthy; if **any** service is unhealthy, the aggregate is `Unhealthy` (FR-HC-05). Adding a new verification (FR-HC-06) simply appends another entry to `services` and participates in the same aggregation rule.
+`reason` is omitted when there is none. It is one of `timeout`, `connection refused`, `connection failed`, `connection reset`, `connection closed`, `name not resolved`, `host unreachable`, `tls error`, `invalid response` or `request failed`, or `HTTP <code>` for a non-2xx answer from Hermes. Containers on the internal networks can read the report, so it carries nothing else. Adding a new verification (FR-HC-06) simply appends another entry to `services` and participates in the same aggregation rule (FR-HC-05).
+
+The Hermes check is a plain `GET` of Hermes's public `/healthcheck`. It sends no key, follows no redirect, and is `NotConfigured`, with no call made, where Hermes's settings are absent.
 
 ### 3.5 Use Case — UC-30: Check API Health
 
@@ -373,9 +392,9 @@ The aggregate `status` is `Healthy` only when **every** entry in `services` is h
 | ------- | ------- |
 | **ID** | UC-30 |
 | **Name** | Check API Health |
-| **Actors** | Anonymous / Monitoring System (liveness), System Admin (detailed) |
-| **Description** | Observe whether the API is running (liveness) and whether its dependencies are healthy (detailed) |
-| **Preconditions** | For the detailed check, the actor is authenticated with the `SystemAdmin` role. The liveness check has no preconditions |
+| **Actors** | Anonymous / Monitoring System (liveness and readiness), yggdrasil's status API (internal report) |
+| **Description** | Observe whether the API is running (liveness) and whether its dependencies are healthy (internal report) |
+| **Preconditions** | For the internal report, the actor can reach the metrics port, which is never published. The liveness check has no preconditions |
 | **Postconditions** | Health information is returned; no system state is modified |
 
 **Main Flow (liveness):**
@@ -383,40 +402,41 @@ The aggregate `status` is `Healthy` only when **every** entry in `services` is h
 1. A caller (monitor, load balancer, or anonymous user) sends `GET /api/healthcheck`.
 2. The system returns a success response indicating the API is on. No authentication is required.
 
-**Main Flow (detailed):**
+**Main Flow (internal report):**
 
 ```mermaid
 sequenceDiagram
-    actor SA as System Admin
+    participant SA as Status API
     participant API as Heimdall API
     participant DB as Database
+    participant H as Hermes
 
-    SA->>API: GET /api/healthcheck/detailed
-    API->>API: Authorize (SystemAdmin only)
-    API->>DB: Verify database connection
-    alt Database reachable
-        DB-->>API: OK
-        API->>API: Aggregate = Healthy
-    else Database unreachable
-        DB-->>API: Failure
-        API->>API: Aggregate = Unhealthy
+    SA->>API: GET /internal/health (metrics port)
+    alt A report finished under 5 seconds ago
+        API-->>SA: The same report
+    else
+        API->>DB: Verify database connection
+        API->>H: GET /healthcheck
+        DB-->>API: OK or failure
+        H-->>API: Answer or failure
+        API->>API: Aggregate the statuses
+        API-->>SA: 200 OK / 503 { status, services[] }
     end
-    API-->>SA: 200 OK / 503 { status, services[] }
 ```
 
-1. A System Admin sends `GET /api/healthcheck/detailed`.
-2. The system authorizes the request; only System Admins may proceed.
-3. The system verifies each registered service (currently: the database connection).
-4. The system computes the aggregate general status (`Healthy` if all up, `Unhealthy` otherwise).
-5. The system returns the per-service statuses and the aggregate status.
+1. The status API sends `GET /internal/health` to the metrics port.
+2. The system verifies each registered service (currently: the database connection and Hermes), each within 3 seconds, unless a report finished under 5 seconds ago.
+3. The system computes the aggregate general status (FR-HC-05).
+4. The system returns the per-service statuses and the aggregate status.
 
 **Alternative Flows:**
 
 | ID | Condition | Outcome |
 | ---- | ----------- | --------- |
-| AF-30a | Detailed check requested by a caller who is not a System Admin | `403 Forbidden` |
-| AF-30b | Detailed check requested with no/invalid authentication | `401 Unauthorized` |
-| AF-30c | One or more verified services are down | `200 OK` (or `503`, per FR-HC-07) with `status = Unhealthy` and the failing service(s) marked |
+| AF-30a | Any request on the metrics port other than the scrape and `GET /internal/health` | `404 Not Found` (FR-HC-09) |
+| AF-30b | `GET /internal/health` on the application port | Not served: the API has no such route |
+| AF-30c | A required service is not healthy | `503 Service Unavailable` with `status = Unhealthy` and the failing service marked |
+| AF-30d | A service that is not required is failing | `200 OK` with `status = Degraded` and the failing service marked |
 
 ### 3.6 Authorization
 
@@ -424,11 +444,12 @@ sequenceDiagram
 | -------- | :-----------: | :----------: | :----: | :---------: |
 | Basic liveness (`GET /api/healthcheck`) | ✅ | ✅ | ✅ | ✅ |
 | Readiness (`GET /api/healthcheck/ready`) | ✅ | ✅ | ✅ | ✅ |
-| Detailed health check (`GET /api/healthcheck/detailed`) | ✅ | ❌ | ❌ | ❌ |
+
+The internal report (`GET /internal/health`) takes no token: it answers whoever reaches the metrics port, and only there (§3.8).
 
 ### 3.7 Extensibility
 
-The detailed health check is designed so that additional service verifications can be registered over time. Each new verification contributes one entry to the `services` array and is folded into the same aggregate rule (any unhealthy service ⇒ `Unhealthy`). Candidate future checks include the email delivery service, caching layer, and the Google Identity Platform integration. Adding them requires no change to the response contract or to consumers that already read `status` + `services`.
+The report is designed so that additional service verifications can be registered over time. Each new verification contributes one entry to the `services` array, says whether it is required, and is folded into the same aggregate rule (FR-HC-05). Candidate future checks include the caching layer and the Google Identity Platform integration. Adding them requires no change to the response contract or to consumers that already read `status` + `services`.
 
 ### 3.8 Metrics
 
@@ -444,7 +465,9 @@ The health endpoints answer "is it up"; metrics answer "how is it doing". The AP
 
 **Access control is the port, not the host name.** The API runs behind Traefik, which forwards the client's own `Host` header, so any check on it is a check on an attacker-chosen value. The scrape endpoint is instead answered only when the connection arrived on the metrics port (`HttpContext.Connection.LocalPort`), which the socket decides. Traefik forwards to 8080; Prometheus scrapes 9464 directly over a private Docker network; Compose never publishes 9464. A request for `/metrics` on 8080 falls through to the API, which has no such route.
 
-The endpoint is the first branch in the request pipeline, so authentication, authorization, rate limiting and CORS never apply to it, and it is not part of the OpenAPI document.
+**The port serves nothing else** (FR-HC-09). Kestrel runs one pipeline on both ports, so this is enforced there: on the metrics port only the scrape path and `GET /internal/health` are answered, and anything else gets `404` ahead of every other middleware. Left open, a container on the telemetry network could reach the whole API without Traefik's limits. `HEIMDALL_METRICS_PORT` therefore has to name a port of its own: set to the API's port, it would close the API. With `0` neither route exists and the pipeline is as if the port were never there.
+
+These branches are the first in the request pipeline, so authentication, authorization, rate limiting and CORS never apply to them, and they are not part of the OpenAPI document.
 
 ---
 
@@ -453,4 +476,4 @@ The endpoint is the first branch in the request pipeline, so authentication, aut
 | Capability | Requirements | Use Case | Issue |
 | ------------ | ------------- | ---------- | ------- |
 | Project scaffolding & initial infrastructure | IR-01 … IR-09 | — | [#31](https://github.com/artur-rios/heimdall-api/issues/31) |
-| Health & monitoring | FR-HC-01 … FR-HC-08 | UC-30 | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |
+| Health & monitoring | FR-HC-01 … FR-HC-10 | UC-30 | [#32](https://github.com/artur-rios/heimdall-api/issues/32) |

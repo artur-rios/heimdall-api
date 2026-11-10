@@ -1,15 +1,11 @@
 using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Services;
-using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.HealthChecks;
-using ArturRios.Heimdall.Query.Input;
-using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Security;
-using ArturRios.Mediator.Query.Interfaces;
 using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Security.Extensions;
 
@@ -31,19 +27,27 @@ public static class WebApiServiceCollectionExtensions
     }
 
     /// <summary>
-    ///     Registers the health checks (UC-30) and the readiness probe's cache (#215).
+    ///     Registers the health checks (UC-30), the internal report that runs them, and the readiness
+    ///     probe's cache (#215).
     /// </summary>
     public static IServiceCollection AddHealthProbes(this IServiceCollection services)
     {
-        // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the detailed
-        // handler resolves them all as IEnumerable, so new checks are added by registering another.
+        // Health checks (UC-30). Each IServiceHealthCheck is one verified dependency; the internal
+        // report resolves them all as IEnumerable, so new checks are added by registering another.
         // The readiness probe (#215) asks the database check alone, so it is also resolvable as itself.
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ReadinessCache>();
         services.AddScoped<DatabaseHealthCheck>();
         services.AddScoped<IServiceHealthCheck>(provider => provider.GetRequiredService<DatabaseHealthCheck>());
-        services
-            .AddScoped<IQueryHandlerAsync<DetailedHealthQuery, HealthCheckOutput>, GetDetailedHealthQueryHandler>();
+        services.AddScoped<IServiceHealthCheck, HermesHealthCheck>();
+        services.AddSingleton<InternalHealthEndpoint.Reports>();
+
+        // Redirects stay off so the check asks one configured host and follows no one else's answer, and
+        // the client's own logging is off because its four lines a run would be written whatever the
+        // answer: the report logs a failure once per change.
+        services.AddHttpClient(HermesHealthCheck.ClientName, client => client.Timeout = InternalHealthEndpoint.CheckTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
 
         return services;
     }

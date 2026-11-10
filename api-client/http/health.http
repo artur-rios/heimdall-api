@@ -5,13 +5,12 @@
 
 ### Liveness (UC-30) — anonymous.
 # Answers as long as the process is serving. Reads no dependency, so it stays 200 even when the
-# database is unreachable — use the detailed check below to tell those apart.
+# database is unreachable — use the readiness check below to tell those apart.
 GET {{host}}/api/healthcheck
 
-### Per-dependency status (UC-30) — System Admin.
-# Run auth.http's "Login" first. Names each dependency and its status.
-GET {{host}}/api/healthcheck/detailed
-Authorization: Bearer {{token}}
+### Readiness (#215) — anonymous.
+# 200 while the database answers, 503 when it does not. The answer is held for five seconds.
+GET {{host}}/api/healthcheck/ready
 
 ### Signing keys — anonymous.
 # The public keys Heimdall's tokens verify under, as an RFC 7517 key set: the current key first, then

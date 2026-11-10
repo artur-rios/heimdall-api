@@ -70,6 +70,41 @@ public class DatabaseHealthCheckTests
         Assert.Empty(logger.Entries);
     }
 
+    [UnitFact]
+    public void GivenTheCheck_WhenAsked_ThenTheDatabaseIsRequired()
+    {
+        var check = new DatabaseHealthCheck(new AsyncFakeRepository<Role, long>(), new RecordingLogger());
+
+        Assert.True(check.IsRequired);
+        Assert.Equal("Database", check.ServiceName);
+    }
+
+    [UnitFact]
+    public async Task GivenReachableDatabase_WhenRunningTheCheck_ThenHealthyWithNoReason()
+    {
+        // Given
+        var check = new DatabaseHealthCheck(new AsyncFakeRepository<Role, long>(), new RecordingLogger());
+
+        // When
+        var result = await check.CheckAsync(TestContext.Current.CancellationToken);
+
+        // Then
+        Assert.Equal(new ServiceHealthResult(HealthStatuses.Healthy), result);
+    }
+
+    [UnitFact]
+    public async Task GivenUnreachableDatabase_WhenRunningTheCheck_ThenTheFailureGoesToTheCallerAndIsNotLogged()
+    {
+        // Given
+        var logger = new RecordingLogger();
+        var check = new DatabaseHealthCheck(new ThrowingRoleRepository(), logger);
+
+        // When / Then the report turns it into a reason word and logs that, once per change
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => check.CheckAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(logger.Entries);
+    }
+
     // Keeps what the check logged — level and exception — so a test can assert the cause was recorded.
     private sealed class RecordingLogger : ILogger<DatabaseHealthCheck>
     {

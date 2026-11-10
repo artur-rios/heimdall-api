@@ -20,10 +20,11 @@ public sealed class EdgePipeline(
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         // First, ahead of everything else — the standard pipeline's ExceptionMiddleware and
-        // AuthenticationMiddleware included. The scrape endpoint is a terminal branch taken only on
-        // the metrics port, so Prometheus is never asked for a token, never rate limited, never
-        // subject to CORS, and the endpoint never reaches the OpenAPI document. Every request on
-        // the public port falls straight through, /metrics included.
+        // AuthenticationMiddleware included, and the rewrite below, so no path is turned into an API
+        // route on the metrics port. Everything on that port ends here: the scrape, the internal
+        // health report, or a 404. Prometheus is never asked for a token, never rate limited, never
+        // subject to CORS, and none of it reaches the OpenAPI document. Every request on the public
+        // port falls straight through, /metrics and /internal/health included.
         app.UseHeimdallMetrics(metrics);
 
         // The shared decision, never the environment directly: on a public host without the
@@ -50,7 +51,7 @@ public sealed class EdgePipeline(
         // here, ahead of routing and authentication, so the alias runs the same endpoint with the
         // same authorization, and stays out of the OpenAPI document.
         app.UseRewriter(new RewriteOptions()
-            .AddRewrite("(?i)^healthcheck(/detailed|/ready)?/?$", "api/healthcheck$1", skipRemainingRules: true));
+            .AddRewrite("(?i)^healthcheck(/ready)?/?$", "api/healthcheck$1", skipRemainingRules: true));
 
         next(app);
     };
