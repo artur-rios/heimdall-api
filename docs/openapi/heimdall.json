@@ -2300,7 +2300,7 @@
           "HealthCheck"
         ],
         "summary": "Readiness check (#215): `200 OK` when the database answers, `503 Service Unavailable`\nwhen it does not. Public — no authentication required.",
-        "description": "Liveness above reads no database, so an instance that has lost it stays \"healthy\" and keeps\nreceiving traffic it can only fail. This is the probe for that: an orchestrator or load\nbalancer stops routing to the instance without restarting it. It asks\n`DatabaseHealthCheck` alone and answers with the bare status, never a service\nbreakdown or a cause, which is why it can be anonymous where `detailed` cannot. The\ncause is in the log, where `DatabaseHealthCheck` writes it.\nThe answer is held for five seconds (`ReadinessCache`), so an anonymous caller\ncannot make the probe a database read per request.\n\n**Anonymous** — no bearer token required.",
+        "description": "Liveness above reads no database, so an instance that has lost it stays \"healthy\" and keeps\nreceiving traffic it can only fail. This is the probe for that: an orchestrator or load\nbalancer stops routing to the instance without restarting it. It asks\n`DatabaseHealthCheck` alone and answers with the bare status, never a service\nbreakdown or a cause, which is why it can be anonymous and reachable from the internet. The\nbreakdown is on the metrics port (`InternalHealthEndpoint`), and the cause in the log,\nwhere `DatabaseHealthCheck` writes it.\nThe answer is held for five seconds (`ReadinessCache`), so an anonymous caller\ncannot make the probe a database read per request.\n\n**Anonymous** — no bearer token required.",
         "operationId": "HealthCheck_Ready",
         "responses": {
           "200": {
@@ -2325,49 +2325,6 @@
           }
         },
         "security": [ ]
-      }
-    },
-    "/api/healthcheck/detailed": {
-      "get": {
-        "tags": [
-          "HealthCheck"
-        ],
-        "summary": "Detailed health check (UC-30, FR-HC-02…07): reports the status of each verified service\nplus an aggregate general status. Restricted to System Admins (AF-30a → 403, AF-30b → 401).\nReturns `200 OK` when healthy and `503 Service Unavailable` when any verified\nservice is down (FR-HC-07, AF-30c).",
-        "description": "**Requires role:** System Admin.",
-        "operationId": "HealthCheck_Detailed",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthCheckOutputDataOutput"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthCheckOutputDataOutput"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthCheckOutputDataOutput"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "The token is missing, malformed, expired, or is a 2FA challenge token."
-          },
-          "403": {
-            "description": "The token is valid but the caller does not hold a required role."
-          }
-        },
-        "security": [
-          {
-            "Bearer": [ ]
-          }
-        ]
       }
     },
     "/api/persons": {
@@ -7253,54 +7210,6 @@
         },
         "additionalProperties": false
       },
-      "HealthCheckOutput": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "nullable": true
-          },
-          "services": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ServiceHealthOutput"
-            },
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "HealthCheckOutputDataOutput": {
-        "type": "object",
-        "properties": {
-          "messages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          },
-          "errors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "success": {
-            "type": "boolean",
-            "readOnly": true
-          },
-          "data": {
-            "$ref": "#/components/schemas/HealthCheckOutput"
-          }
-        },
-        "additionalProperties": false
-      },
       "IssueApplicationCredentialCommand": {
         "type": "object",
         "properties": {
@@ -9093,20 +9002,6 @@
           },
           "data": {
             "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutput"
-          }
-        },
-        "additionalProperties": false
-      },
-      "ServiceHealthOutput": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "status": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
