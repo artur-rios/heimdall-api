@@ -418,12 +418,12 @@ public class InternalHealthTests
     [UnitFact]
     public async Task GivenAHungCheckThatIgnoresCancellation_WhenTheBoundPasses_ThenTheReportSaysTimeout()
     {
-        // Given Hermes never answering and not listening for cancellation, beside a healthy database
+        // Given Hermes never answering and not listening for cancellation. Alone: nothing tells a test when a
+        // second check's result is in, so a moved clock could overtake it (the next test covers the pair)
         var clock = new ManualClock();
         var never = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var hung = StubCheck.Gated("Hermes", required: false, never);
-        var database = StubCheck.Returning("Database", required: true, HealthStatuses.Healthy);
-        await using var app = await StartAsync(MetricsPort, Stubs(database, hung), clock: clock);
+        await using var app = await StartAsync(MetricsPort, Stubs(hung), clock: clock);
 
         var request = app.GetTestClient().GetAsync(Route, Token);
         await hung.Started.Task.WaitAsync(Soon, Token);
@@ -431,6 +431,27 @@ public class InternalHealthTests
         // When
         clock.Advance(InternalHealthEndpoint.CheckTimeout);
         var response = await request.WaitAsync(Soon, Token);
+        var body = await response.Content.ReadAsStringAsync(Token);
+        never.SetResult();
+
+        // Then
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            """{"status":"Degraded","services":[{"name":"Hermes","status":"Unhealthy","reason":"timeout"}]}""",
+            body);
+    }
+
+    [UnitFact]
+    public async Task GivenAHungCheckBesideAHealthyOne_WhenTheRealBoundPasses_ThenOnlyTheHungOneReadsTimeout()
+    {
+        // Given the real clock, which gives the healthy database all of its three seconds to answer
+        var never = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var database = StubCheck.Returning("Database", required: true, HealthStatuses.Healthy);
+        var hung = StubCheck.Gated("Hermes", required: false, never);
+        await using var app = await StartAsync(MetricsPort, Stubs(database, hung));
+
+        // When
+        var response = await app.GetTestClient().GetAsync(Route, Token).WaitAsync(Soon, Token);
         var body = await response.Content.ReadAsStringAsync(Token);
         never.SetResult();
 
