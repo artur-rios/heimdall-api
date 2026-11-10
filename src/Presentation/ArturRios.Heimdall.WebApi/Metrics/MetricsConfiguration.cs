@@ -1,3 +1,4 @@
+using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -78,11 +79,17 @@ public static class MetricsConfiguration
     }
 
     /// <summary>
-    ///     Mounts the scrape endpoint behind <see cref="MetricsOptions.IsScrapeRequest" />. It must be
-    ///     called before anything else in the pipeline: the endpoint is a terminal branch, so a
-    ///     request it takes never reaches CORS, rate limiting, authentication, authorization or MVC —
-    ///     and, not being a controller action, it never appears in the OpenAPI document either.
+    ///     Mounts the scrape endpoint and the internal health report, and closes the rest of the
+    ///     metrics port. It must be called before anything else in the pipeline: all three are
+    ///     terminal branches, so a request on that port never reaches CORS, rate limiting,
+    ///     authentication, authorization or MVC — and, not being controller actions, they never appear
+    ///     in the OpenAPI document either.
     /// </summary>
+    /// <remarks>
+    ///     Kestrel serves one pipeline on both ports, so without the closing branch every other
+    ///     request on this port would run the whole API, with none of the limits Traefik applies in
+    ///     front of the public one.
+    /// </remarks>
     public static IApplicationBuilder UseHeimdallMetrics(this IApplicationBuilder app, MetricsOptions options)
     {
         if (!options.Enabled)
@@ -90,6 +97,17 @@ public static class MetricsConfiguration
             return app;
         }
 
-        return app.UseOpenTelemetryPrometheusScrapingEndpoint(options.IsScrapeRequest);
+        app.UseOpenTelemetryPrometheusScrapingEndpoint(options.IsScrapeRequest);
+
+        app.MapWhen(options.IsInternalHealthRequest, health => health.Run(InternalHealthEndpoint.Handle));
+
+        app.MapWhen(options.IsMetricsPort, closed => closed.Run(context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+
+            return Task.CompletedTask;
+        }));
+
+        return app;
     }
 }

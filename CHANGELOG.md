@@ -7,6 +7,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-11-10
+
+### Upgrading from 5.x to 6.0
+
+- **API clients:** `GET /api/healthcheck/detailed` and its root alias `/healthcheck/detailed` are gone. With a token
+  they answer 404; without one, 401, like any other address the API does not have. Its only caller was the Health
+  screen in heimdall-ui, so upgrade that with this release. `/api/healthcheck`, `/api/healthcheck/ready` and their root
+  aliases are unchanged.
+- **Operators:** give `HEIMDALL_METRICS_PORT` a port of its own, as the documentation always has: set to the API's
+  port, it now closes the API. Nothing changes for Prometheus, or for a deployment on the default.
+
+### Added
+
+- `GET /internal/health` on the metrics port (9464, `HEIMDALL_METRICS_PORT`), for yggdrasil's status API: the status of
+  the database and of Hermes, an aggregate of `Healthy`, `Degraded` or `Unhealthy`, and a reason word for a failure,
+  as bare JSON. 200 unless the database is failing, then 503. It takes no credential and is not served on port 8080, or
+  at all with `HEIMDALL_METRICS_PORT=0`. A report is reused for 5 seconds and each check is bounded to 3.
+
+### Removed
+
+- `GET /api/healthcheck/detailed`, the System Admin-only report, and its `/healthcheck/detailed` alias. The report is
+  now the internal route above. Its entry in the OpenAPI document, the `api-client` samples and FR-HC-02 and 04 to 07
+  changed with it.
+
+### Security
+
+- The metrics port serves only the scrape path and `GET /internal/health`, and answers 404 to anything else ahead of
+  every other middleware. Until now every other request on it ran the whole API, without Traefik's limits, for any
+  container on the telemetry network.
+
 ## [5.0.0] - 2026-11-09
 
 ### Fixed
@@ -1039,7 +1069,8 @@ First release.
 - Deployment with Docker Compose against a host PostgreSQL, applying pending EF Core migrations at container
   start-up.
 
-[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/artur-rios/heimdall-api/compare/v6.0.0...HEAD
+[6.0.0]: https://github.com/artur-rios/heimdall-api/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/artur-rios/heimdall-api/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/artur-rios/heimdall-api/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/artur-rios/heimdall-api/compare/v4.1.0...v4.2.0

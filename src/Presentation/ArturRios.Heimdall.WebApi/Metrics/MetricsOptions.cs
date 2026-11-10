@@ -36,6 +36,9 @@ public sealed class MetricsOptions
     /// <summary>The scrape path. Fixed: Prometheus assumes it, so making it configurable buys nothing.</summary>
     public const string ScrapePath = "/metrics";
 
+    /// <summary>The detailed health report's path, on this port and no other.</summary>
+    public const string InternalHealthPath = "/internal/health";
+
     /// <summary>Metrics switched off: no exporter registered, no request ever treated as a scrape.</summary>
     public static MetricsOptions Disabled { get; } = new() { Port = 0 };
 
@@ -81,17 +84,30 @@ public sealed class MetricsOptions
     }
 
     /// <summary>
-    ///     The predicate the scrape endpoint is mounted behind: the metrics path, arriving on the
-    ///     metrics port. Anything else — the same path on the public port included — falls through
-    ///     to the rest of the pipeline, which has no such route and answers 404.
+    ///     Whether the connection arrived on the metrics port. Nothing but the scrape and the
+    ///     internal health report is served there.
     /// </summary>
     /// <remarks>
     ///     <see cref="Enabled" /> is checked first and is not redundant. An in-memory test host
     ///     reports a local port of <c>0</c>, so without it a disabled configuration (port <c>0</c>)
-    ///     would match every request for <c>/metrics</c> there.
+    ///     would match every request there.
     /// </remarks>
+    public bool IsMetricsPort(HttpContext context) => Enabled && context.Connection.LocalPort == Port;
+
+    /// <summary>
+    ///     The predicate the scrape endpoint is mounted behind: the metrics path, arriving on the
+    ///     metrics port. The same path on the public port falls through to the rest of the pipeline,
+    ///     which has no such route.
+    /// </summary>
     public bool IsScrapeRequest(HttpContext context) =>
-        Enabled
-        && context.Connection.LocalPort == Port
-        && context.Request.Path.Equals(ScrapePath, StringComparison.OrdinalIgnoreCase);
+        IsMetricsPort(context) && context.Request.Path.Equals(ScrapePath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     The predicate the health report is mounted behind: a <c>GET</c> of its path, arriving on
+    ///     the metrics port. On the public port the path is one the API does not have.
+    /// </summary>
+    public bool IsInternalHealthRequest(HttpContext context) =>
+        IsMetricsPort(context)
+        && HttpMethods.IsGet(context.Request.Method)
+        && context.Request.Path.Equals(InternalHealthPath, StringComparison.OrdinalIgnoreCase);
 }
