@@ -167,8 +167,9 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
-        // When it is presented eight times at once
-        var responses = await InParallelAsync(8, _ =>
+        // When it is presented at once by as many requests as the re-authentication budget admits —
+        // more, and a request refused by the budget can still spend the code first, leaving none to win
+        var responses = await InParallelAsync(ReauthenticationBudget.MaxFailures, _ =>
             Gateway.PostAsync<DataOutput<RegenerateRecoveryCodesCommandOutput?>>(
                 "/api/auth/2fa/recovery-codes/regenerate",
                 new RegenerateRecoveryCodesCommand { RecoveryCode = recoveryCode }));
@@ -202,8 +203,10 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
         var secret = uri[(uri.IndexOf("secret=", StringComparison.Ordinal) + "secret=".Length)..].Split('&')[0];
         var appCode = new Totp(Base32Encoding.ToBytes(secret)).ComputeTotp();
 
-        // When the one current code is presented eight times at once
-        var responses = await InParallelAsync(8, _ =>
+        // When the one current code is presented at once by as many requests as the re-authentication
+        // budget admits — more, and a request refused by the budget can still spend the code first,
+        // leaving none to win
+        var responses = await InParallelAsync(ReauthenticationBudget.MaxFailures, _ =>
             Gateway.PostAsync<DataOutput<ConfirmTwoFactorAuthCommandOutput?>>(
                 "/api/auth/2fa/confirm", new ConfirmTwoFactorAuthCommand { AppCode = appCode }));
 
