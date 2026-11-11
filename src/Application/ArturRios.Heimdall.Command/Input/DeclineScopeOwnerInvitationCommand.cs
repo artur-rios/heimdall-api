@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DeclineScopeOwnerInvitationCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public id of the invitation (UC-59's <c>id</c>).</summary>
-    public Guid InvitationId { get; set; }
+    public Guid InvitationId { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

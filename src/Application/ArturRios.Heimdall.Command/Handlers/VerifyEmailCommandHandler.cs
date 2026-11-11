@@ -73,7 +73,7 @@ public class VerifyEmailCommandHandler(
 
         // Validate input shape (NFR-10). UC-14 names no alternative flow for it; an absent token
         // would answer 400 as AF-14c anyway.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -94,7 +94,7 @@ public class VerifyEmailCommandHandler(
             .Include(x => x.Person)
             .ThenInclude(person => person.ScopeOwnerships)
             .ThenInclude(ownership => ownership.Scope)
-            .FirstOrDefaultAsync(x => x.TokenHash == presented);
+            .FirstOrDefaultAsync(x => x.TokenHash == presented, cancellationToken);
 
         // AF-14c — unless the token is a UC-47 pending registration's, in which case following the link
         // is what creates the account, already verified.

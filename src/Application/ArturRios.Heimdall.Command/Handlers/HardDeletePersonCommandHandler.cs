@@ -66,7 +66,7 @@ public class HardDeletePersonCommandHandler(
         // AF-10a: the lookup omits an !IsDeleted filter — a logically deleted person is exactly what a
         // cleanup pass starts from, so it must still be hard-deletable.
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id, cancellationToken);
 
         if (person is null)
         {
@@ -125,13 +125,13 @@ public class HardDeletePersonCommandHandler(
         // UC-10 steps 5-6: the dependents, counted regardless of individual deletion state.
         var applications = await applicationReader.Query()
             .Where(a => a.OwnerId == person.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         var passwordResetTokens = await passwordResetTokenReader.Query()
             .Where(t => t.PersonId == person.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         var emailVerificationTokens = await emailVerificationTokenReader.Query()
             .Where(t => t.PersonId == person.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // Applications and tokens reference the person, so they go first and no foreign key is ever
         // violated.
@@ -147,7 +147,7 @@ public class HardDeletePersonCommandHandler(
 
         // UC-10 steps 7-8: delete the person; its ON DELETE CASCADE foreign keys clear the SCOPE_USER
         // or SCOPE_OWNER join rows.
-        var personDelete = await personWriter.DeleteAsync(person);
+        var personDelete = await personWriter.DeleteAsync(person, cancellationToken);
 
         if (!personDelete.Success)
         {

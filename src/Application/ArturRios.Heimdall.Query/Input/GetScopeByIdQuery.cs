@@ -12,10 +12,10 @@ namespace ArturRios.Heimdall.Query.Input;
 public class GetScopeByIdQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the scope to retrieve.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>When <c>true</c>, a logically deleted scope is still returned (FR-SC-07).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

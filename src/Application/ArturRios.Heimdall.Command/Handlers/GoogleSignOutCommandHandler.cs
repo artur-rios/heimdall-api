@@ -50,7 +50,7 @@ public class GoogleSignOutCommandHandler(IAsyncReadOnlyRepository<GoogleUser, lo
         // answer distinguishes neither. The command carries no id of its own, so a caller can only
         // ever name themselves.
         var signedIn = await googleUserReader.Query()
-            .AnyAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .AnyAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted, cancellationToken);
 
         if (!signedIn)
         {

@@ -25,7 +25,6 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = Seeds.Password;
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
@@ -116,11 +115,11 @@ public class AuthControllerPasswordRecoveryTests(PostgresFixture db) : WebApiTes
     public async Task GivenEmailDifferingInCase_WhenPostPasswordRecovery_ThenTokenIsStoredForThem()
     {
         // Given a stored email in mixed case
-        var email = UniqueEmail("MiXeD").ToUpper();
+        var email = UniqueEmail("MiXeD").ToUpperInvariant();
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When recovering with the lower-case form
-        var response = await RecoverAsync(email.ToLower());
+        var response = await RecoverAsync(email.ToLowerInvariant());
 
         // Then
         AssertGenericSuccess(response);

@@ -274,13 +274,13 @@ public class Person : Entity<long>
     // Navigation properties
 
     /// <summary>The role that classifies this person.</summary>
-    public Role Role { get; set; } = null!;
+    public Role Role { get; init; } = null!;
 
     /// <summary>
     ///     Scope-ownership join rows. Non-empty for a <c>ScopeAdmin</c> (one per owned scope), empty
     ///     for a <c>User</c>; a <c>SystemAdmin</c> may hold any number (FR-SC-08, FR-PE-10).
     /// </summary>
-    public ICollection<ScopeOwner> ScopeOwnerships { get; set; } = new List<ScopeOwner>();
+    public ICollection<ScopeOwner> ScopeOwnerships { get; set; } = [];
 
     /// <summary>
     ///     Scope-membership join row. Present for a <c>User</c> (exactly one); <c>null</c> for a
@@ -289,13 +289,13 @@ public class Person : Entity<long>
     public ScopeUser? ScopeMembership { get; set; }
 
     /// <summary>Applications owned by this person.</summary>
-    public ICollection<Application> OwnedApplications { get; set; } = new List<Application>();
+    public ICollection<Application> OwnedApplications { get; init; } = [];
 
     /// <summary>Password reset tokens issued for this person.</summary>
-    public ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+    public ICollection<PasswordResetToken> PasswordResetTokens { get; init; } = [];
 
     /// <summary>Email verification tokens issued for this person.</summary>
-    public ICollection<EmailVerificationToken> EmailVerificationTokens { get; set; } = new List<EmailVerificationToken>();
+    public ICollection<EmailVerificationToken> EmailVerificationTokens { get; init; } = [];
 
     /// <summary>
     ///     This person's two-factor authentication configuration (UC-36 – UC-40). <c>null</c> until

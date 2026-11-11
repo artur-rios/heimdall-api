@@ -7,7 +7,6 @@ using ArturRios.Util.Test.Attributes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
-using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 

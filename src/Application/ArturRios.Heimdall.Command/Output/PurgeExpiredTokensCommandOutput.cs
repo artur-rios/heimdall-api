@@ -15,28 +15,28 @@ namespace ArturRios.Heimdall.Command.Output;
 public class PurgeExpiredTokensCommandOutput : CommandOutput
 {
     /// <summary>Password reset tokens removed (UC-12/UC-13).</summary>
-    public int PasswordResetTokensPurged { get; set; }
+    public int PasswordResetTokensPurged { get; init; }
 
     /// <summary>Email verification tokens removed (UC-14/UC-15).</summary>
-    public int EmailVerificationTokensPurged { get; set; }
+    public int EmailVerificationTokensPurged { get; init; }
 
     /// <summary>Two-factor email codes removed (UC-36/UC-38).</summary>
-    public int TwoFactorEmailCodesPurged { get; set; }
+    public int TwoFactorEmailCodesPurged { get; init; }
 
     /// <summary>Unconfirmed pending registrations removed (UC-47).</summary>
-    public int PendingRegistrationsPurged { get; set; }
+    public int PendingRegistrationsPurged { get; init; }
 
     /// <summary>Revoked or expired application credentials removed (UC-55).</summary>
-    public int ApplicationCredentialsPurged { get; set; }
+    public int ApplicationCredentialsPurged { get; init; }
 
     /// <summary>Registration-attempt notice budgets whose window had ended removed (FR-SR-14).</summary>
-    public int AttemptNoticeBudgetsPurged { get; set; }
+    public int AttemptNoticeBudgetsPurged { get; init; }
 
     /// <summary>Records of used Google ID tokens removed (FR-GO-21).</summary>
-    public int GoogleIdTokenUsesPurged { get; set; }
+    public int GoogleIdTokenUsesPurged { get; init; }
 
     /// <summary>Scope owner invitations that ended or expired more than 90 days ago, removed (FR-SC-18).</summary>
-    public int ScopeOwnerInvitationsPurged { get; set; }
+    public int ScopeOwnerInvitationsPurged { get; init; }
 
     /// <summary>
     ///     Rows across all eight tables still due once the run ended (#206): left because a table reached
@@ -47,7 +47,7 @@ public class PurgeExpiredTokensCommandOutput : CommandOutput
     ///     everything that was due: a run that keeps up costs no count at all, and a backlog that is not
     ///     draining shows here run after run.
     /// </remarks>
-    public int Backlog { get; set; }
+    public int Backlog { get; init; }
 
     /// <summary>Rows removed across all eight tables.</summary>
     public int TotalPurged =>

@@ -11,15 +11,15 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </remarks>
 public static class Poll
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan s_defaultTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_interval = TimeSpan.FromMilliseconds(20);
 
     /// <summary>Returns once <paramref name="condition" /> holds; fails with <paramref name="timeoutMessage" /> if it never does.</summary>
     public static async Task UntilAsync(
         Func<Task<bool>> condition, string timeoutMessage, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? DefaultTimeout);
+        var deadline = DateTime.UtcNow + (timeout ?? s_defaultTimeout);
 
         while (!await condition())
         {
@@ -28,7 +28,7 @@ public static class Poll
                 throw new TimeoutException(timeoutMessage);
             }
 
-            await Task.Delay(Interval, cancellationToken);
+            await Task.Delay(s_interval, cancellationToken);
         }
     }
 

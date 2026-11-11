@@ -121,7 +121,7 @@ public class CreateUserCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.Single(persons.Query().ToList());
+        Assert.Single([.. persons.Query()]);
     }
 
     [UnitFact]

@@ -1,7 +1,3 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
-using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
-using FluentValidation;
 using Serilog;
 
 namespace ArturRios.Heimdall.WebApi;

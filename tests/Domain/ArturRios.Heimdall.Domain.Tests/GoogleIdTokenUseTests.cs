@@ -52,7 +52,7 @@ public class GoogleIdTokenUseTests
     {
         // Given an RS256-sized signature, whose last base64url character carries four unused bits,
         // and the same signature with those bits set — one value, two spellings
-        var signature = Base64Url(Enumerable.Range(0, 256).Select(i => (byte)(i * 7)).ToArray());
+        var signature = Base64Url([.. Enumerable.Range(0, 256).Select(i => (byte)(i * 7))]);
         var respelled = signature[..^1] + Alphabet[Alphabet.IndexOf(signature[^1]) ^ 0b1111];
         var token = $"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.{signature}";
         var respelledToken = $"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.{respelled}";
@@ -81,8 +81,10 @@ public class GoogleIdTokenUseTests
         var bits = string.Concat(
             base64Url.Select(c => Convert.ToString(Alphabet.IndexOf(c), 2).PadLeft(6, '0')));
 
-        return Enumerable.Range(0, bits.Length / 8)
-            .Select(i => Convert.ToByte(bits.Substring(i * 8, 8), 2))
-            .ToArray();
+        return
+        [
+            .. Enumerable.Range(0, bits.Length / 8)
+                .Select(i => Convert.ToByte(bits.Substring(i * 8, 8), 2))
+        ];
     }
 }

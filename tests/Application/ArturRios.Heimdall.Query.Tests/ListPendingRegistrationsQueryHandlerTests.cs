@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.Query.Tests;
 // (none pending → empty page) and the page bound.
 public class ListPendingRegistrationsQueryHandlerTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private static Scope Scope(long id, bool isDeleted = false, bool open = true) => new()
     {
@@ -42,8 +42,8 @@ public class ListPendingRegistrationsQueryHandlerTests
         PasswordHash = [1],
         Salt = [2],
         TokenHash = $"hash-{id}",
-        CreatedAt = createdAt ?? Now.AddMinutes(-id),
-        ExpiresAt = expiresAt ?? Now.AddHours(1),
+        CreatedAt = createdAt ?? s_now.AddMinutes(-id),
+        ExpiresAt = expiresAt ?? s_now.AddHours(1),
         FailedAttempts = failedAttempts
     };
 
@@ -90,8 +90,8 @@ public class ListPendingRegistrationsQueryHandlerTests
         // Given two rows in the scope, created ten minutes apart, and one in another scope
         var scope = Scope(1);
         var other = Scope(2);
-        var older = Pending(1, scope, createdAt: Now.AddMinutes(-20));
-        var newer = Pending(2, scope, createdAt: Now.AddMinutes(-10));
+        var older = Pending(1, scope, createdAt: s_now.AddMinutes(-20));
+        var newer = Pending(2, scope, createdAt: s_now.AddMinutes(-10));
         var handler = Handler(await RepositoryWith(scope, other), await RepositoryWith(older, Pending(3, other), newer));
 
         // When
@@ -109,8 +109,8 @@ public class ListPendingRegistrationsQueryHandlerTests
     {
         // Given two registrations stored in the same instant
         var scope = Scope(1);
-        var first = Pending(1, scope, createdAt: Now);
-        var second = Pending(2, scope, createdAt: Now);
+        var first = Pending(1, scope, createdAt: s_now);
+        var second = Pending(2, scope, createdAt: s_now);
         var handler = Handler(await RepositoryWith(scope), await RepositoryWith(first, second));
 
         // When
@@ -125,7 +125,7 @@ public class ListPendingRegistrationsQueryHandlerTests
     {
         // Given one live registration with three wrong guesses spent
         var scope = Scope(1);
-        var row = Pending(1, scope, createdAt: Now.AddMinutes(-5), expiresAt: Now.AddHours(23), failedAttempts: 3);
+        var row = Pending(1, scope, createdAt: s_now.AddMinutes(-5), expiresAt: s_now.AddHours(23), failedAttempts: 3);
         var handler = Handler(await RepositoryWith(scope), await RepositoryWith(row));
 
         // When
@@ -178,7 +178,7 @@ public class ListPendingRegistrationsQueryHandlerTests
         // Given a row past its expiry that the purge has not yet removed
         var scope = Scope(1);
         var handler = Handler(
-            await RepositoryWith(scope), await RepositoryWith(Pending(1, scope, expiresAt: Now.AddSeconds(-1))));
+            await RepositoryWith(scope), await RepositoryWith(Pending(1, scope, expiresAt: s_now.AddSeconds(-1))));
 
         // When
         var output = await handler.HandleAsync(Query(scope));

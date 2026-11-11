@@ -11,7 +11,6 @@ using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
-using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -48,7 +47,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     /// </summary>
     private const int WarmUp = 3;
 
-    private static readonly List<(string Endpoint, string Class, double Median, double Slowest)> Measurements = [];
+    private static readonly List<(string Endpoint, string Class, double Median, double Slowest)> s_measurements = [];
 
     private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
@@ -111,7 +110,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
         var median = timings[timings.Count / 2];
         var slowest = timings[^1];
 
-        Measurements.Add((endpoint, endpointClass, median, slowest));
+        s_measurements.Add((endpoint, endpointClass, median, slowest));
         Report();
 
         return (median, slowest);
@@ -126,24 +125,26 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
         var path = Path.Combine(AppContext.BaseDirectory, "TestResults");
         Directory.CreateDirectory(path);
 
-        var lines = new List<string>
-        {
+        List<string> lines =
+        [
             "# Measured response times",
             "",
             $"Recorded by `ResponseTimeMeasurementTests` on {Environment.MachineName}, " +
             $"{Environment.ProcessorCount} logical processors, against the suite's PostgreSQL container.",
+
             "",
             $"Median and slowest of {Samples} samples, after {WarmUp} discarded warm-up requests.",
             "",
             "| Endpoint | Class | Median (ms) | Slowest (ms) |",
-            "| --- | --- | ---: | ---: |"
-        };
+            "| --- | --- | ---: | ---: |",
+            .. s_measurements
+                .OrderBy(m => m.Class, StringComparer.Ordinal)
+                .ThenBy(m => m.Endpoint, StringComparer.Ordinal)
+                .Select(m =>
+                    $"| `{m.Endpoint}` | {m.Class} | {m.Median.ToString("F1", CultureInfo.InvariantCulture)} " +
+                    $"| {m.Slowest.ToString("F1", CultureInfo.InvariantCulture)} |")
 
-        lines.AddRange(Measurements
-            .OrderBy(m => m.Class)
-            .ThenBy(m => m.Endpoint)
-            .Select(m => $"| `{m.Endpoint}` | {m.Class} | {m.Median.ToString("F1", CultureInfo.InvariantCulture)} " +
-                         $"| {m.Slowest.ToString("F1", CultureInfo.InvariantCulture)} |"));
+        ];
 
         File.WriteAllLines(Path.Combine(path, "response-times.md"), lines);
     }

@@ -15,7 +15,7 @@ public class SetSelfRegistrationCommand : BaseCommand, IActorScoped
     [JsonIgnore]
     public Guid Id { get; set; }
 
-    public bool? Enabled { get; set; }
+    public bool? Enabled { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

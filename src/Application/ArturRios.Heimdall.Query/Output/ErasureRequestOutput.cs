@@ -10,16 +10,16 @@ namespace ArturRios.Heimdall.Query.Output;
 public class ErasureRequestOutput : QueryOutput
 {
     /// <summary>Public identifier of the identity to be erased.</summary>
-    public Guid SubjectId { get; set; }
+    public Guid SubjectId { get; init; }
 
     /// <summary>Whether the subject is a Google User rather than a person.</summary>
-    public bool IsGoogleUser { get; set; }
+    public bool IsGoogleUser { get; init; }
 
     /// <summary>When the subject asked.</summary>
-    public DateTime RequestedAt { get; set; }
+    public DateTime RequestedAt { get; init; }
 
     /// <summary>The deadline the erasure must not outlive.</summary>
-    public DateTime DueAt { get; set; }
+    public DateTime DueAt { get; init; }
 
     /// <summary>Whether that deadline has already passed.</summary>
     public bool Overdue { get; set; }
@@ -28,5 +28,5 @@ public class ErasureRequestOutput : QueryOutput
     ///     Why the erasure cannot proceed, or <c>null</c> if nothing blocks it. A request with no
     ///     reason needs no action: the scheduled pass will carry it out on the deadline.
     /// </summary>
-    public string? BlockedReason { get; set; }
+    public string? BlockedReason { get; init; }
 }

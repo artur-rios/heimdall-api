@@ -1,6 +1,5 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
@@ -24,11 +23,11 @@ public class PersonControllerListSystemAdminsTests(PostgresFixture db) : WebApiT
         // Given two System Admins sharing a distinctive name fragment, and — matching it too — a Scope
         // Admin, a deleted System Admin, and a restricted System Admin, none of whom may appear
         var marker = $"root{Guid.NewGuid():N}";
-        var ana = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
-        var bruno = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Bruno {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
-        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Carla {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
-        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Diego {marker}", EmailPrefix = "admin", IsDeleted = true, Configure = p => p.DeletedAt = true ? DateTime.UtcNow : null });
-        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Eva {marker}", EmailPrefix = "admin", RestrictedAt = DateTime.UtcNow, Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
+        var ana = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin" });
+        var bruno = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Bruno {marker}", EmailPrefix = "admin" });
+        await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { Name = $"Carla {marker}", EmailPrefix = "admin" });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Diego {marker}", EmailPrefix = "admin", IsDeleted = true, Configure = p => p.DeletedAt = DateTime.UtcNow });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Eva {marker}", EmailPrefix = "admin", RestrictedAt = DateTime.UtcNow });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -46,7 +45,7 @@ public class PersonControllerListSystemAdminsTests(PostgresFixture db) : WebApiT
     public async Task GivenEmailFilter_WhenListSystemAdmins_ThenMatchesCaseInsensitiveSubstring()
     {
         // Given a System Admin whose address is searched for in upper case
-        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Root", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
+        var admin = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "Root", EmailPrefix = "admin" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -65,9 +64,9 @@ public class PersonControllerListSystemAdminsTests(PostgresFixture db) : WebApiT
     {
         // Given three matching System Admins and a page size of two
         var marker = $"root{Guid.NewGuid():N}";
-        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
-        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Bruno {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
-        var carla = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Carla {marker}", EmailPrefix = "admin", Configure = p => p.DeletedAt = false ? DateTime.UtcNow : null });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Ana {marker}", EmailPrefix = "admin" });
+        await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Bruno {marker}", EmailPrefix = "admin" });
+        var carla = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = $"Carla {marker}", EmailPrefix = "admin" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When

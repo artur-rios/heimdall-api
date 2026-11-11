@@ -92,7 +92,7 @@ public class RequestErasureCommandHandler(
         var output = DataOutput<RequestErasureCommandOutput?>.New;
 
         // NFR-10: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -108,7 +108,7 @@ public class RequestErasureCommandHandler(
         // generic AF-42b. The endpoint admits such a caller because it is a data subject right; any
         // other deleted identity is refused with AF-42b once AF-42c has been ruled out.
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         if (person is not null)
         {
@@ -118,7 +118,7 @@ public class RequestErasureCommandHandler(
         }
 
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         return googleUser is null || (googleUser.ErasureRequestedAt is null && googleUser.IsDeleted)
             ? output.WithError(ErasureMessages.NotEligible)

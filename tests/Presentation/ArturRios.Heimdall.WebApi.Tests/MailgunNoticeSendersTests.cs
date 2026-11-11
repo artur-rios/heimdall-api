@@ -58,7 +58,7 @@ public class MailgunNoticeSendersTests
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception) + exception?.ToString()));
+            Entries.Add((logLevel, formatter(state, exception) + exception));
     }
 
     // MailgunTwoFactorEmailSender

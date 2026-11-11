@@ -55,7 +55,7 @@ public class DeleteGoogleUserCommandHandler(
         // AF-28b could never fire. The route's scopeId qualifies it: a Google User that belongs to
         // another scope is not the resource this path addresses.
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (googleUser is null)
         {
@@ -67,7 +67,7 @@ public class DeleteGoogleUserCommandHandler(
         // logically deleted actor owns nothing. Runs before AF-28b so an already-deleted Google User
         // cannot be used to probe for records outside the caller's reach.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                command.ActingRole, command.ActingPersonId, googleUser.ScopeId))
+                command.ActingRole, command.ActingPersonId, googleUser.ScopeId, cancellationToken))
         {
             return output.WithError(GoogleUserMessages.NotAuthorizedToDeleteGoogleUser);
         }

@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
@@ -6,15 +5,13 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.WebApi.Email;
 using ArturRios.Messaging.Email;
-using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Serilog;
 
 namespace ArturRios.Heimdall.WebApi;
 
 public static class EmailRegistrationExtensions
 {
-    private static readonly TimeSpan HermesTimeout = TimeSpan.FromSeconds(25);
+    private static readonly TimeSpan s_hermesTimeout = TimeSpan.FromSeconds(25);
 
     /// <summary>
     ///     Chooses how the two transactional emails — UC-06's verification token and UC-12's
@@ -69,7 +66,7 @@ public static class EmailRegistrationExtensions
 
         // A typed client, so the service reuses pooled connections instead of creating an HttpClient per send. Above
         // what Hermes can take: up to 10 seconds for its owner alert, then 10 for the message.
-        services.AddHttpClient<IEmailService, HermesEmailService>(client => client.Timeout = HermesTimeout);
+        services.AddHttpClient<IEmailService, HermesEmailService>(client => client.Timeout = s_hermesTimeout);
         services.AddScoped<IEmailVerificationSender, MailgunEmailVerificationSender>();
         services.AddScoped<IPasswordResetSender, MailgunPasswordResetSender>();
         services.AddScoped<ITwoFactorEmailSender, MailgunTwoFactorEmailSender>();

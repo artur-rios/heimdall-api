@@ -18,8 +18,8 @@ namespace ArturRios.Heimdall.Command.Tests;
 // both edges of the cooldown, counting used tokens too.
 public class SendPersonPasswordResetCommandHandlerTests
 {
-    private static readonly TimeSpan Lifetime = TimeSpan.FromHours(1);
-    private static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan s_lifetime = TimeSpan.FromHours(1);
+    private static readonly TimeSpan s_cooldown = TimeSpan.FromMinutes(5);
 
     /// <summary>The one scope the acting Scope Admin owns in these tests.</summary>
     private const long OwnedScopeId = 1;
@@ -35,8 +35,8 @@ public class SendPersonPasswordResetCommandHandlerTests
             Tokens,
             Ownership.Object,
             PasswordReset.Object,
-            new PasswordResetOptions { TokenLifetime = Lifetime },
-            new AdminEmailOptions { Cooldown = Cooldown });
+            new PasswordResetOptions { TokenLifetime = s_lifetime },
+            new AdminEmailOptions { Cooldown = s_cooldown });
     }
 
     private static async Task<Fixture> FixtureWith(params Person[] persons)
@@ -86,7 +86,7 @@ public class SendPersonPasswordResetCommandHandlerTests
         Name = $"admin-{id}",
         Email = $"admin-{id}@test.local",
         RoleId = (long)Roles.ScopeAdmin,
-        ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList()
+        ScopeOwnerships = [.. owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })]
     };
 
     private static SendPersonPasswordResetCommand Command(Guid id, Roles actingRole = Roles.SystemAdmin) => new()
@@ -105,7 +105,7 @@ public class SendPersonPasswordResetCommandHandlerTests
             PersonId = person.Id,
             Person = person,
             TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
-            ExpiresAt = DateTime.UtcNow - ago + Lifetime,
+            ExpiresAt = DateTime.UtcNow - ago + s_lifetime,
             Used = used
         };
 

@@ -2,7 +2,6 @@ using System.Net;
 using ArturRios.Heimdall.WebApi.Metrics;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 

@@ -47,7 +47,7 @@ public static class MetricsConfiguration
     ///         </item>
     ///     </list>
     /// </remarks>
-    private static readonly string[] BuiltInMeters =
+    private static readonly string[] s_builtInMeters =
     [
         "System.Runtime",
         "Microsoft.AspNetCore.Server.Kestrel",
@@ -72,7 +72,7 @@ public static class MetricsConfiguration
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddMeter(BuiltInMeters)
+                .AddMeter(s_builtInMeters)
                 .AddPrometheusExporter());
 
         return services;

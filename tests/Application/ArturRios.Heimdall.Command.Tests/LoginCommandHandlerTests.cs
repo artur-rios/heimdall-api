@@ -56,9 +56,11 @@ public class LoginCommandHandlerTests
     private static Person ScopeAdmin(long id, string email, params Scope[] owned)
     {
         var person = Person(id, email, Roles.ScopeAdmin);
-        person.ScopeOwnerships = owned
-            .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
-            .ToList();
+        person.ScopeOwnerships =
+        [
+            .. owned
+                .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
+        ];
         return person;
     }
 
@@ -294,7 +296,7 @@ public class LoginCommandHandlerTests
 
         // Then the account is locked, and the counter is folded into the lockout rather than left
         // to climb
-        var stored = Assert.Single(persons.Query().ToList());
+        var stored = Assert.Single([.. persons.Query()]);
         Assert.NotNull(stored.LockedOutUntil);
         Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
         Assert.Equal(0, stored.FailedLoginAttempts);
@@ -323,7 +325,7 @@ public class LoginCommandHandlerTests
             await handler.HandleAsync(Command("admin@test.local", "wrong-password"));
         }
 
-        Assert.Equal(9, Assert.Single(persons.Query().ToList()).FailedLoginAttempts);
+        Assert.Equal(9, Assert.Single([.. persons.Query()]).FailedLoginAttempts);
 
         // When
         var output = await handler.HandleAsync(Command("admin@test.local"));
@@ -331,7 +333,7 @@ public class LoginCommandHandlerTests
         // Then
         Assert.True(output.Success);
 
-        var stored = Assert.Single(persons.Query().ToList());
+        var stored = Assert.Single([.. persons.Query()]);
         Assert.Equal(0, stored.FailedLoginAttempts);
         Assert.Null(stored.LockedOutUntil);
     }
@@ -353,7 +355,7 @@ public class LoginCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.NotNull(issuer.Subject);
-        Assert.Null(Assert.Single(persons.Query().ToList()).LockedOutUntil);
+        Assert.Null(Assert.Single([.. persons.Query()]).LockedOutUntil);
     }
 
     [UnitFact]
@@ -596,7 +598,7 @@ public class LoginCommandHandlerTests
         Assert.True(output.Success);
         Assert.True(stale.Used);
         Assert.Equal(2, fixture.EmailCodes.Query().ToList().Count);
-        Assert.Single(fixture.EmailCodes.Query().ToList(), code => !code.Used);
+        Assert.Single([.. fixture.EmailCodes.Query()], code => !code.Used);
     }
 
     [UnitFact]
@@ -757,7 +759,7 @@ public class LoginCommandHandlerTests
         Assert.Null(output.Data.Token);
         Assert.Null(fixture.TokenIssuer.RightsOnlySubject);
         Assert.Equal(person.PublicId, fixture.ChallengeTokenIssuer.PersonId);
-        Assert.Single(fixture.EmailCodes.Query().ToList());
+        Assert.Single([.. fixture.EmailCodes.Query()]);
     }
 
     [UnitFact]

@@ -15,10 +15,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class ConfirmTwoFactorAuthCommand : BaseCommand, IActorScoped
 {
     /// <summary>The 6-digit authenticator-app code, required only when the App method is enabled.</summary>
-    public string? AppCode { get; set; }
+    public string? AppCode { get; init; }
 
     /// <summary>The 6-digit email code, required only when the Email method is enabled.</summary>
-    public string? EmailCode { get; set; }
+    public string? EmailCode { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

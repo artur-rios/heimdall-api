@@ -64,12 +64,12 @@ public class LiftProcessingRestrictionCommandHandler(
         // is a right of theirs (NFR-24). Lifting somebody else's is not: an administrator who is
         // restricted or suspended themselves acts here as a subject, not as an administrator.
         if (!liftingOwn && await personReader.Query().AnyAsync(x =>
-                x.PublicId == command.ActingPersonId && (x.IsDeleted || x.ProcessingRestrictedAt != null)))
+                x.PublicId == command.ActingPersonId && (x.IsDeleted || x.ProcessingRestrictedAt != null), cancellationToken))
         {
             return output.WithError(ErasureMessages.NotEligible);
         }
 
-        var person = await personReader.Query().FirstOrDefaultAsync(x => x.PublicId == subjectId);
+        var person = await personReader.Query().FirstOrDefaultAsync(x => x.PublicId == subjectId, cancellationToken);
 
         if (person is not null)
         {
@@ -84,7 +84,7 @@ public class LiftProcessingRestrictionCommandHandler(
                 person.PublicId);
         }
 
-        var googleUser = await googleUserReader.Query().FirstOrDefaultAsync(x => x.PublicId == subjectId);
+        var googleUser = await googleUserReader.Query().FirstOrDefaultAsync(x => x.PublicId == subjectId, cancellationToken);
 
         if (googleUser is null)
         {

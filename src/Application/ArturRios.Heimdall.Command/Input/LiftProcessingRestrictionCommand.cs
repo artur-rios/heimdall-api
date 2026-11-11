@@ -24,7 +24,7 @@ public class LiftProcessingRestrictionCommand : BaseCommand, IActorScoped
     /// <summary>
     ///     The identity whose restriction is being lifted, or <c>null</c> to lift the caller's own.
     /// </summary>
-    public Guid? SubjectId { get; set; }
+    public Guid? SubjectId { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

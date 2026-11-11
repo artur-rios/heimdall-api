@@ -32,7 +32,7 @@ public class CreateScopePermissionCommandHandler(
         var output = DataOutput<CreateScopePermissionCommandOutput?>.New;
 
         // AF-31d: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -41,7 +41,7 @@ public class CreateScopePermissionCommandHandler(
 
         // AF-31a: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -51,7 +51,7 @@ public class CreateScopePermissionCommandHandler(
         // AF-31e: a Scope Admin actor may only act on a scope they own; a System Admin bypasses the
         // check inside the checker.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                command.ActingRole, command.ActingPersonId, scope.Id))
+                command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopePermissionMessages.NotScopeOwner);
         }
@@ -66,7 +66,7 @@ public class CreateScopePermissionCommandHandler(
             ScopeId = scope.Id
         };
 
-        var creation = await permissionWriter.CreateAsync(permission);
+        var creation = await permissionWriter.CreateAsync(permission, cancellationToken);
 
         if (!creation.Success)
         {

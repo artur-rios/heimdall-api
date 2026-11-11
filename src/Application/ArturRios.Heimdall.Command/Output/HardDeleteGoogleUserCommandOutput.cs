@@ -11,5 +11,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class HardDeleteGoogleUserCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the hard-deleted Google User.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

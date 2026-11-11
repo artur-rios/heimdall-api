@@ -21,7 +21,7 @@ public class ListErasureRequestsQuery : BaseQuery, IActorScoped
     ///     outstanding request, because a queue that shows only what is already late is a queue that
     ///     guarantees lateness.
     /// </summary>
-    public bool OverdueOnly { get; set; }
+    public bool OverdueOnly { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

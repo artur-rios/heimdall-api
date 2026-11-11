@@ -11,7 +11,7 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </summary>
 public static class LockWaits
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_bound = TimeSpan.FromSeconds(30);
 
     /// <summary>
     ///     Opens the context's connection, which it then keeps for every command, and returns its server
@@ -35,7 +35,7 @@ public static class LockWaits
     {
         await using var connection = new NpgsqlConnection(db.ConnectionString);
         await connection.OpenAsync();
-        var deadline = DateTime.UtcNow + Bound;
+        var deadline = DateTime.UtcNow + s_bound;
 
         while (!request.IsCompleted)
         {

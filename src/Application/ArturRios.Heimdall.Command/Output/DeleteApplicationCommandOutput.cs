@@ -10,12 +10,12 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeleteApplicationCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the deleted application.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     <c>true</c> when the application was already logically deleted and nothing was written
     ///     (AF-19b); <c>false</c> when this request performed the deletion. AF-19b answers with the
     ///     same status and message as the main flow, so this flag is what tells them apart.
     /// </summary>
-    public bool AlreadyDeleted { get; set; }
+    public bool AlreadyDeleted { get; init; }
 }

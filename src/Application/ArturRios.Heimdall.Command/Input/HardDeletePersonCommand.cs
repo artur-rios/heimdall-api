@@ -14,7 +14,7 @@ namespace ArturRios.Heimdall.Command.Input;
 public class HardDeletePersonCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the person to hard-delete (bound from the route).</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

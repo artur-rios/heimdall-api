@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // tokens alone.
 public class EmailVerificationTokenRetirementTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private static EmailVerificationToken Token(long personId, DateTime expiresAt, bool used = false) => new()
     {
@@ -25,13 +25,13 @@ public class EmailVerificationTokenRetirementTests
     {
         // Given
         var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
-        var first = Token(1, Now.AddHours(1));
-        var second = Token(1, Now.AddMinutes(5));
+        var first = Token(1, s_now.AddHours(1));
+        var second = Token(1, s_now.AddMinutes(5));
         await tokens.CreateAsync(first);
         await tokens.CreateAsync(second);
 
         // When
-        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, Now);
+        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, s_now);
 
         // Then
         Assert.Null(errors);
@@ -44,13 +44,13 @@ public class EmailVerificationTokenRetirementTests
     {
         // Given
         var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
-        var expired = Token(1, Now.AddMinutes(-1));
-        var used = Token(1, Now.AddHours(1), used: true);
+        var expired = Token(1, s_now.AddMinutes(-1));
+        var used = Token(1, s_now.AddHours(1), used: true);
         await tokens.CreateAsync(expired);
         await tokens.CreateAsync(used);
 
         // When
-        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, Now);
+        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, s_now);
 
         // Then
         Assert.Null(errors);
@@ -63,11 +63,11 @@ public class EmailVerificationTokenRetirementTests
     {
         // Given
         var tokens = new AsyncFakeRepository<EmailVerificationToken, long>();
-        var others = Token(2, Now.AddHours(1));
+        var others = Token(2, s_now.AddHours(1));
         await tokens.CreateAsync(others);
 
         // When
-        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, Now);
+        var errors = await EmailVerificationTokenRetirement.RetireLiveAsync(tokens, tokens, 1, s_now);
 
         // Then
         Assert.Null(errors);

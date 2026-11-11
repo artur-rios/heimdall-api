@@ -34,7 +34,7 @@ public class HardDeleteScopePermissionCommandHandler(
         // because the addressed resource genuinely does not exist in any of the three cases. A
         // repeated call lands here too — the row is already gone, and UC-35 has no idempotent path.
         var permission = await permissionReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (permission is null)
         {
@@ -44,7 +44,7 @@ public class HardDeleteScopePermissionCommandHandler(
         // UC-35 step 2: remove the record for good. No dependent is deleted first — no entity carries
         // a foreign key to a scope permission, so no foreign key can be violated and there is no
         // total to report.
-        var delete = await permissionWriter.DeleteAsync(permission);
+        var delete = await permissionWriter.DeleteAsync(permission, cancellationToken);
 
         if (!delete.Success)
         {

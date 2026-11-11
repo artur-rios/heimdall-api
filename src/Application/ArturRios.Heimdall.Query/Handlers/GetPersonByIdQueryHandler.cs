@@ -99,10 +99,12 @@ public class GetPersonByIdQueryHandler(IAsyncReadOnlyRepository<Person, long> pe
             return output.WithError(PersonMessages.NotAuthorizedToViewPerson);
         }
 
-        person.Output.OwnedScopeIds = person.OwnedScopes
-            .Where(scope => visibleScopeIds is null || visibleScopeIds.Contains(scope.ScopeId))
-            .Select(scope => scope.PublicId)
-            .ToList();
+        person.Output.OwnedScopeIds =
+        [
+            .. person.OwnedScopes
+                .Where(scope => visibleScopeIds is null || visibleScopeIds.Contains(scope.ScopeId))
+                .Select(scope => scope.PublicId)
+        ];
 
         return output
             .WithData(person.Output)

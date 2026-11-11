@@ -9,7 +9,6 @@ using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,7 +36,7 @@ public class CreateUserCommandHandler(
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 
         // AF-06d: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -46,7 +45,7 @@ public class CreateUserCommandHandler(
 
         // AF-06b: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -54,7 +53,7 @@ public class CreateUserCommandHandler(
         }
 
         // AF-06e: a Scope Admin actor may only act on a scope they own; a System Admin bypasses.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
         }
@@ -63,11 +62,11 @@ public class CreateUserCommandHandler(
         // (LOWER() in SQL). Trimmed first, here and where it is stored: sign-in and recovery match the
         // stored address exactly, case aside, so surrounding whitespace would make it unreachable.
         var address = command.Email.Trim();
-        var email = address.ToLower();
+        var email = address.ToLowerInvariant();
 
         var emailTaken = await personReader.Query().AnyAsync(person =>
             !person.IsDeleted && person.Email.ToLower() == email &&
-            person.ScopeMembership != null && person.ScopeMembership.ScopeId == scope.Id);
+            person.ScopeMembership != null && person.ScopeMembership.ScopeId == scope.Id, cancellationToken);
 
         if (emailTaken)
         {
@@ -80,7 +79,7 @@ public class CreateUserCommandHandler(
         // Google sign-up was refused an address a User held, while a User could still be created on
         // an address a Google User held, leaving one scope with two identities for one address.
         var takenByGoogleUser = await googleUserReader.Query()
-            .AnyAsync(googleUser => googleUser.ScopeId == scope.Id && googleUser.Email.ToLower() == email);
+            .AnyAsync(googleUser => googleUser.ScopeId == scope.Id && googleUser.Email.ToLower() == email, cancellationToken);
 
         if (takenByGoogleUser)
         {
@@ -106,7 +105,7 @@ public class CreateUserCommandHandler(
         // NFR-23: the basis the tenant declares for its own users, or contract performance.
         LegalBasisRecorder.Record(newPerson, scope, DateTime.UtcNow);
 
-        var creation = await personWriter.CreateAsync(newPerson);
+        var creation = await personWriter.CreateAsync(newPerson, cancellationToken);
 
         if (!creation.Success)
         {

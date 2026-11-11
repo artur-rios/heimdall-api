@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
@@ -6,8 +5,6 @@ using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Shared.Retention;
 using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Retention;
-using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Serilog;
 
 namespace ArturRios.Heimdall.WebApi;

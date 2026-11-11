@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Shared.Tests;
 // the grace period, or the purge's bound, is refused rather than honoured.
 public class DataRetentionOptionsTests
 {
-    private static readonly string[] AllVariables =
+    private static readonly string[] s_allVariables =
     [
         DataRetentionOptions.SingleUseTokenGraceDaysVariable,
         DataRetentionOptions.PurgeIntervalMinutesVariable,
@@ -31,7 +31,7 @@ public class DataRetentionOptionsTests
 
     private static void ClearAll()
     {
-        foreach (var variable in AllVariables)
+        foreach (var variable in s_allVariables)
         {
             Environment.SetEnvironmentVariable(variable, null);
         }

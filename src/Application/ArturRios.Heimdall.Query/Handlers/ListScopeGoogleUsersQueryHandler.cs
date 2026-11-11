@@ -78,13 +78,13 @@ public class ListScopeGoogleUsersQueryHandler(
         // case-insensitive substring matches, which translate to LOWER() … LIKE in SQL.
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var name = query.Name.ToLower();
+            var name = query.Name.ToLowerInvariant();
             googleUsers = googleUsers.Where(x => x.Name.ToLower().Contains(name));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Email))
         {
-            var email = query.Email.ToLower();
+            var email = query.Email.ToLowerInvariant();
             googleUsers = googleUsers.Where(x => x.Email.ToLower().Contains(email));
         }
 

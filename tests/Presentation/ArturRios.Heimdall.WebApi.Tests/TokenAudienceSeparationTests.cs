@@ -29,7 +29,6 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
 {
     private const string Password = Seeds.Password;
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private static string AudienceOf(string token) =>
         Assert.Single(new JwtSecurityTokenHandler().ReadJwtToken(token).Audiences);
@@ -122,7 +121,7 @@ public class TokenAudienceSeparationTests(PostgresFixture db) : WebApiTest<Progr
 
         // Then — a full token, under the person audience, that works like any other
         Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
-        var fullToken = verify.Body!.Data!.Token!;
+        var fullToken = verify.Body!.Data!.Token;
         Assert.Equal(TestTokens.Audiences.Person, AudienceOf(fullToken));
 
         ActAs(fullToken);

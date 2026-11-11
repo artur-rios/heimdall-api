@@ -89,7 +89,7 @@ public class SensitiveDiagnosticsGuardTests
         Assert.False(diagnostics.DataLogging);
         Assert.False(diagnostics.DeveloperExceptionPage);
         Assert.Equal(
-            new[] { $"{PublicHostSettings.PublicHostVariable}={PublicHost}", $"{PublicHostSettings.UiHostVariable}={UiHost}" },
+            [$"{PublicHostSettings.PublicHostVariable}={PublicHost}", $"{PublicHostSettings.UiHostVariable}={UiHost}"],
             diagnostics.PublicHosts);
     }
 
@@ -103,7 +103,7 @@ public class SensitiveDiagnosticsGuardTests
         Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
         Assert.False(diagnostics.DataLogging);
         Assert.False(diagnostics.DeveloperExceptionPage);
-        Assert.Equal(new[] { $"{PublicHostSettings.UiHostVariable}={UiHost}" }, diagnostics.PublicHosts);
+        Assert.Equal([$"{PublicHostSettings.UiHostVariable}={UiHost}"], diagnostics.PublicHosts);
     }
 
     [UnitTheory]
@@ -121,7 +121,7 @@ public class SensitiveDiagnosticsGuardTests
 
         // Then — the host is named, and nothing else of the value
         Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
-        Assert.Equal(new[] { $"{variable}={UiHost}" }, diagnostics.PublicHosts);
+        Assert.Equal([$"{variable}={UiHost}"], diagnostics.PublicHosts);
     }
 
     [UnitTheory]
@@ -139,7 +139,7 @@ public class SensitiveDiagnosticsGuardTests
 
         // Then — read as a host name, and only the host is named
         Assert.Equal(SensitiveDiagnosticsDecision.Suppressed, diagnostics.Decision);
-        Assert.Equal(new[] { $"{variable}={UiHost}" }, diagnostics.PublicHosts);
+        Assert.Equal([$"{variable}={UiHost}"], diagnostics.PublicHosts);
     }
 
     [UnitFact]

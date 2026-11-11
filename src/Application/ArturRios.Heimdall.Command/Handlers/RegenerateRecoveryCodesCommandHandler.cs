@@ -58,12 +58,12 @@ public class RegenerateRecoveryCodesCommandHandler(
         var output = DataOutput<RegenerateRecoveryCodesCommandOutput?>.New;
 
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted, cancellationToken);
 
         var twoFactorAuth = person is null
             ? null
             : await twoFactorReader.Query()
-                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
+                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive, cancellationToken);
 
         // AF-40a: nothing to regenerate — whether because two-factor was never activated, or because
         // the caller could not be resolved as a live person at all (a Google User, or a bearer token
@@ -117,7 +117,7 @@ public class RegenerateRecoveryCodesCommandHandler(
         var supersededRecoveryCodeIds = await recoveryCodeReader.Query()
             .Where(x => x.TwoFactorAuthId == twoFactorAuth.Id)
             .Select(x => x.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // UC-40 steps 4-5 (FR-2F-12, FR-2F-20): ten fresh recovery codes, hashed at rest, returned
         // once, written in one insert before the old set is removed — see the write-order note below.
@@ -128,7 +128,7 @@ public class RegenerateRecoveryCodesCommandHandler(
             new TwoFactorRecoveryCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id, CodeHash = recoveryCode.CodeHash, Used = false
-            }));
+            }), cancellationToken);
 
         if (!creation.Success)
         {
@@ -137,7 +137,7 @@ public class RegenerateRecoveryCodesCommandHandler(
 
         if (supersededRecoveryCodeIds.Count > 0)
         {
-            var deletion = await recoveryCodeWriter.DeleteRangeAsync(supersededRecoveryCodeIds);
+            var deletion = await recoveryCodeWriter.DeleteRangeAsync(supersededRecoveryCodeIds, cancellationToken);
 
             if (!deletion.Success)
             {
@@ -148,7 +148,7 @@ public class RegenerateRecoveryCodesCommandHandler(
         return output
             .WithData(new RegenerateRecoveryCodesCommandOutput
             {
-                RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+                RecoveryCodes = [.. recoveryCodes.Select(issued => issued.Code)]
             })
             .WithMessage(TwoFactorMessages.RecoveryCodesRegenerated);
     }

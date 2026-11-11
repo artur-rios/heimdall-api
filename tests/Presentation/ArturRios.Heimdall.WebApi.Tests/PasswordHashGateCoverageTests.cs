@@ -20,7 +20,7 @@ public partial class PasswordHashGateCoverageTests
     // The places allowed to derive directly, each for a reason PasswordHashGate's remarks give:
     // the gate itself; the login decoy, computed once at type initialisation; and the seeder's
     // master user, written at start-up before anything is served.
-    private static readonly string[] Allowed =
+    private static readonly string[] s_allowed =
         ["PasswordHashGate.cs", "LoginCommandHandler.cs", "DatabaseSeeder.cs"];
 
     [GeneratedRegex(@"\bHash\.(EncodeWithRandomSalt|EncodeWithSalt|TextMatches)\(")]
@@ -43,7 +43,7 @@ public partial class PasswordHashGateCoverageTests
         Assert.NotEmpty(files);
 
         var offenders = files
-            .Where(path => !Allowed.Contains(Path.GetFileName(path)))
+            .Where(path => !s_allowed.Contains(Path.GetFileName(path)))
             .Where(path => DirectDerivation().IsMatch(File.ReadAllText(path)))
             .Select(Path.GetFileName)
             .ToList();

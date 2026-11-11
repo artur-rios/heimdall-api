@@ -20,8 +20,9 @@ public static class CommandServiceCollectionExtensions
     {
         // #219: commands are dispatched without a cancellation token, by design. A write that has begun
         // must finish or roll back as one unit, not stop halfway because the client went away, so the
-        // controllers hand ExecuteCommandAsync no HttpContext.RequestAborted and the command handlers
-        // forward no token to EF Core. Queries are the opposite: they receive the request's token.
+        // controllers hand ExecuteCommandAsync no HttpContext.RequestAborted. The command handlers still
+        // forward the token they receive (CA2016 holds them to it, as it does the queries), so whatever
+        // dispatches a command decides whether it can be cancelled. Queries receive the request's token.
         services.AddScoped<CommandMediator>();
         services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         services.AddScoped<IValidator<CreateScopeCommand>, CreateScopeCommandValidator>();

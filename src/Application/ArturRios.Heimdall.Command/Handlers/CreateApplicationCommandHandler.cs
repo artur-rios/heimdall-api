@@ -33,7 +33,7 @@ public class CreateApplicationCommandHandler(
         var output = DataOutput<CreateApplicationCommandOutput?>.New;
 
         // AF-16d: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -42,7 +42,7 @@ public class CreateApplicationCommandHandler(
 
         // AF-16a: the target scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -53,7 +53,7 @@ public class CreateApplicationCommandHandler(
         // check inside the checker. Asked before who was named, so an actor acting where they have no
         // standing is told that, rather than being told about the owner.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                command.ActingRole, command.ActingPersonId, scope.Id))
+                command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ApplicationMessages.NotScopeOwner);
         }
@@ -73,7 +73,7 @@ public class CreateApplicationCommandHandler(
         var owner = await personReader.Query().FirstOrDefaultAsync(person =>
             person.PublicId == command.OwnerId && !person.IsDeleted &&
             (person.RoleId == (long)Roles.ScopeAdmin || person.RoleId == (long)Roles.SystemAdmin) &&
-            person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
+            person.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id), cancellationToken);
 
         if (owner is null)
         {
@@ -89,7 +89,7 @@ public class CreateApplicationCommandHandler(
             OwnerId = owner.Id
         };
 
-        var creation = await applicationWriter.CreateAsync(application);
+        var creation = await applicationWriter.CreateAsync(application, cancellationToken);
 
         if (!creation.Success)
         {

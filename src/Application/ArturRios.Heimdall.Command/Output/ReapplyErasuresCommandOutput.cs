@@ -6,22 +6,22 @@ namespace ArturRios.Heimdall.Command.Output;
 public class ReapplyErasuresCommandOutput : CommandOutput
 {
     /// <summary>Identities anonymised by this run.</summary>
-    public int Anonymised { get; set; }
+    public int Anonymised { get; init; }
 
     /// <summary>
     ///     Identities that were already anonymised, so the restore did not in fact bring them back.
     /// </summary>
-    public int AlreadyAnonymised { get; set; }
+    public int AlreadyAnonymised { get; init; }
 
     /// <summary>
     ///     Identifiers that matched nothing. Reported rather than treated as an error: a ledger
     ///     naming somebody the restore did not reinstate is the expected case, not a mistake.
     /// </summary>
-    public IEnumerable<Guid> NotFound { get; set; } = [];
+    public IEnumerable<Guid> NotFound { get; init; } = [];
 
     /// <summary>
     ///     Unended scope owner invitations of the persons this run anonymised again, voided (FR-SC-17).
     ///     Each is recorded in the audit trail as <c>ScopeOwnerInvitationVoided</c>, on that invitation.
     /// </summary>
-    public int ScopeOwnerInvitationsVoided { get; set; }
+    public int ScopeOwnerInvitationsVoided { get; init; }
 }

@@ -8,14 +8,14 @@ namespace ArturRios.Heimdall.Command.Tests;
 // line before they reach a third party's mailbox (Review Focus 5).
 public class ScopeInvitationNoticeTextTests
 {
-    private static readonly DateTime ExpiresAt = new(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_expiresAt = new(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
 
     [UnitFact]
     public void GivenAnInvitation_WhenWritten_ThenItIsTheSpecifiedSentence()
     {
         // Given
         // When
-        var body = ScopeInvitationNoticeText.Invitation("Ada Lovelace", "Acme", ExpiresAt);
+        var body = ScopeInvitationNoticeText.Invitation("Ada Lovelace", "Acme", s_expiresAt);
 
         // Then
         Assert.Equal(
@@ -29,7 +29,7 @@ public class ScopeInvitationNoticeTextTests
     {
         // Given
         // When
-        var body = ScopeInvitationNoticeText.Invitation("Ada Lovelace", "Acme", ExpiresAt);
+        var body = ScopeInvitationNoticeText.Invitation("Ada Lovelace", "Acme", s_expiresAt);
 
         // Then
         Assert.DoesNotContain("http", body, StringComparison.OrdinalIgnoreCase);
@@ -56,7 +56,7 @@ public class ScopeInvitationNoticeTextTests
         const string name = "Ada\r\nSupport desk:\tcall now\u0007\u2028 ";
 
         // When
-        var body = ScopeInvitationNoticeText.Invitation(name, "Acme", ExpiresAt);
+        var body = ScopeInvitationNoticeText.Invitation(name, "Acme", s_expiresAt);
 
         // Then
         Assert.StartsWith("Ada Support desk: call now invited you", body);

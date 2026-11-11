@@ -188,7 +188,7 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
             context.PasswordResetTokens.Add(new PasswordResetToken
             {
                 PersonId = person.Id,
-                TokenHash = ArturRios.Heimdall.Command.Services.SingleUseTokenHash.Of(plaintext),
+                TokenHash = SingleUseTokenHash.Of(plaintext),
                 ExpiresAt = DateTime.UtcNow.AddHours(1)
             });
             await context.SaveChangesAsync();

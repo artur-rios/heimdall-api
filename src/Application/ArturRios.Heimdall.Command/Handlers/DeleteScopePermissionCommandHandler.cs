@@ -37,7 +37,7 @@ public class DeleteScopePermissionCommandHandler(
         // addresses. Checked before authorization so AF-34a and AF-34e both stay observable.
         var permission = await permissionReader.Query()
             .Include(x => x.Scope)
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (permission is null)
         {
@@ -48,7 +48,7 @@ public class DeleteScopePermissionCommandHandler(
         // Runs before AF-34b so an already-deleted permission cannot be used to probe for scopes the
         // caller may not act on.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                command.ActingRole, command.ActingPersonId, permission.ScopeId))
+                command.ActingRole, command.ActingPersonId, permission.ScopeId, cancellationToken))
         {
             return output.WithError(ScopePermissionMessages.NotScopeOwner);
         }
@@ -72,7 +72,7 @@ public class DeleteScopePermissionCommandHandler(
         permission.IsDeleted = true;
         permission.UpdatedAt = DateTime.UtcNow;
 
-        var update = await permissionWriter.UpdateAsync(permission);
+        var update = await permissionWriter.UpdateAsync(permission, cancellationToken);
 
         if (!update.Success)
         {

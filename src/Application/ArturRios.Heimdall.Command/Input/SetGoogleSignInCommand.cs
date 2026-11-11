@@ -24,7 +24,7 @@ public class SetGoogleSignInCommand : BaseCommand, IActorScoped
     ///     request would silently *disable* Google Sign-In. The validator refuses <c>null</c>, which
     ///     turns that into an explicit 400 (NFR-10).
     /// </summary>
-    public bool? Enabled { get; set; }
+    public bool? Enabled { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

@@ -9,19 +9,19 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class ScopeOwner
 {
     /// <summary>Foreign key to the owned <see cref="Scope" /> (internal Id). Part of the composite key.</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
     /// <summary>
     ///     Foreign key to the owning <see cref="Person" /> (internal Id), which must have the
     ///     <c>ScopeAdmin</c> role. Part of the composite key.
     /// </summary>
-    public long PersonId { get; set; }
+    public long PersonId { get; init; }
 
     // Navigation properties
 
     /// <summary>The owned scope.</summary>
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 
     /// <summary>The owning person.</summary>
-    public Person Person { get; set; } = null!;
+    public Person Person { get; init; } = null!;
 }

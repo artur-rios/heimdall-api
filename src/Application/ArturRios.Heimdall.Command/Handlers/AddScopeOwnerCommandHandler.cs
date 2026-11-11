@@ -46,7 +46,7 @@ public class AddScopeOwnerCommandHandler(
         // AF-21a (UC-21 step 2): the target scope must exist and not be logically deleted — the
         // alternative flow names both conditions as one outcome, so the filter answers for both.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -56,7 +56,7 @@ public class AddScopeOwnerCommandHandler(
         // AF-21c: a Scope Admin actor may only act on a scope they own; a System Admin bypasses.
         // Checked before the person is looked up so a caller who fails here learns nothing about
         // which person ids exist or what roles they hold.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
         }
@@ -71,7 +71,7 @@ public class AddScopeOwnerCommandHandler(
             .Include(x => x.ScopeOwnerships)
             .FirstOrDefaultAsync(x =>
                 x.PublicId == command.PersonId && !x.IsDeleted &&
-                (x.RoleId == (long)Roles.ScopeAdmin || x.RoleId == (long)Roles.SystemAdmin));
+                (x.RoleId == (long)Roles.ScopeAdmin || x.RoleId == (long)Roles.SystemAdmin), cancellationToken);
 
         if (person is null)
         {
@@ -104,7 +104,7 @@ public class AddScopeOwnerCommandHandler(
             // Refused: either another request made them an owner meanwhile, which is AF-21d's outcome,
             // or they stopped being a live administrator, which is AF-21b's. The row tells which.
             var ownsNow = await personReader.Query()
-                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id));
+                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(ownership => ownership.ScopeId == scope.Id), cancellationToken);
 
             return ownsNow
                 ? AlreadyOwner(output, scope, person)

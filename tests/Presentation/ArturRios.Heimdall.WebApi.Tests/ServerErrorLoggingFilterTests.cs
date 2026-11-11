@@ -1,4 +1,3 @@
-using System.Reflection;
 using ArturRios.Heimdall.WebApi.Controllers;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.Test.Attributes;

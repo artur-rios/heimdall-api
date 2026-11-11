@@ -11,8 +11,6 @@ using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -178,7 +176,7 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
     // The writer, and the writes that land under it
 
     private AppDbContext Writer(Func<Task> competitor) =>
-        PostgresFixture.CreateContext(db.RuntimeConnectionString, (IInterceptor)new BeforeFirstCommand(GoogleUserWrite, competitor));
+        PostgresFixture.CreateContext(db.RuntimeConnectionString, new BeforeFirstCommand(GoogleUserWrite, competitor));
 
     /// <summary>UC-44's columns, on a connection of their own.</summary>
     private Func<Task> Restriction(long googleUserId, int ground) => () => OnGoogleUserAsync(googleUserId, rows =>

@@ -15,10 +15,10 @@ namespace ArturRios.Heimdall.Query.Input;
 public class ListScopesQuery : BaseQuery, IActorScoped
 {
     /// <summary>Optional case-insensitive substring filter on the scope name.</summary>
-    public string? Name { get; set; }
+    public string? Name { get; init; }
 
     /// <summary>When <c>true</c>, logically deleted scopes are included in the results (FR-SC-07).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

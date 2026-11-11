@@ -15,14 +15,14 @@ namespace ArturRios.Heimdall.Query.Output;
 public class TwoFactorStatusOutput : QueryOutput
 {
     /// <summary>Whether two-factor authentication is confirmed and in force (FR-2F-04).</summary>
-    public bool IsActive { get; set; }
+    public bool IsActive { get; init; }
 
     /// <summary>Whether the authenticator-app method is configured (FR-2F-02).</summary>
-    public bool AppEnabled { get; set; }
+    public bool AppEnabled { get; init; }
 
     /// <summary>Whether the email method is configured (FR-2F-03).</summary>
-    public bool EmailEnabled { get; set; }
+    public bool EmailEnabled { get; init; }
 
     /// <summary>How many issued recovery codes remain unused (FR-2F-05, FR-2F-06).</summary>
-    public int RemainingRecoveryCodes { get; set; }
+    public int RemainingRecoveryCodes { get; init; }
 }

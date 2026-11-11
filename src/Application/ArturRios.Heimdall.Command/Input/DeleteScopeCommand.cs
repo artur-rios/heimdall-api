@@ -10,5 +10,5 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DeleteScopeCommand : BaseCommand
 {
     /// <summary>Public identifier of the scope to delete (bound from the route).</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

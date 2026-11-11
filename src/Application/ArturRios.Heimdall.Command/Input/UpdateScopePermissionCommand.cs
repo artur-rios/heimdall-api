@@ -26,16 +26,16 @@ public class UpdateScopePermissionCommand : BaseCommand, IActorScoped
     public Guid Id { get; set; }
 
     /// <summary>New permission display name. Required, max 200 characters.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>New permission description. Max 500 characters.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>
     ///     New value of the flag controlling whether the permission's <see cref="Name" /> is added as
     ///     a claim on the JWT issued to identities acting within the owning scope.
     /// </summary>
-    public bool IncludeAsJwtClaim { get; set; }
+    public bool IncludeAsJwtClaim { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

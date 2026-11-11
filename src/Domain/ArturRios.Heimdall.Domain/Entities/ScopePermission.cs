@@ -16,7 +16,7 @@ public class ScopePermission : Entity<long>
     ///     addressed from outside the database (API paths, response bodies). The internal
     ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Permission display name. Required, max 200 characters.</summary>
     [MaxLength(200)]
@@ -36,10 +36,10 @@ public class ScopePermission : Entity<long>
     public bool IsDeleted { get; set; }
 
     /// <summary>Foreign key to the owning <see cref="Scope" /> (internal Id). Required.</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>Last update timestamp.</summary>
     public DateTime UpdatedAt { get; set; }
@@ -47,5 +47,5 @@ public class ScopePermission : Entity<long>
     // Navigation properties
 
     /// <summary>The scope this permission belongs to.</summary>
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 }

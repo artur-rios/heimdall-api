@@ -8,11 +8,11 @@ namespace ArturRios.Heimdall.Command.Output;
 /// </summary>
 public class IssueApplicationCredentialCommandOutput : CommandOutput
 {
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
-    public string Secret { get; set; } = string.Empty;
+    public string Secret { get; init; } = string.Empty;
 
     public DateTime CreatedAt { get; set; }
 
-    public DateTime? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; init; }
 }

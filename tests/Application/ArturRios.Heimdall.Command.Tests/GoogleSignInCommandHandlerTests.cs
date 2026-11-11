@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Services;
@@ -25,7 +24,7 @@ public class GoogleSignInCommandHandlerTests
     private const string GoogleSubject = "google-sub-1234567890";
     private const string Email = "signer@gmail.test";
 
-    private static readonly DateTime TokenExpiry = new(2026, 8, 3, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_tokenExpiry = new(2026, 8, 3, 12, 0, 0, DateTimeKind.Utc);
 
     private static GoogleIdTokenPayload Payload(
         string subject = GoogleSubject,
@@ -34,7 +33,7 @@ public class GoogleSignInCommandHandlerTests
         string? name = "Google Signer",
         string? pictureUrl = "https://lh3.googleusercontent.test/a/photo",
         string? tokenId = "jti-1") =>
-        new(subject, email, emailVerified, name, pictureUrl, TokenId: tokenId, ExpiresAt: TokenExpiry);
+        new(subject, email, emailVerified, name, pictureUrl, TokenId: tokenId, ExpiresAt: s_tokenExpiry);
 
     /// <summary>A verifier that accepts every token and returns <paramref name="payload" />.</summary>
     private static IGoogleIdTokenVerifier Verifier(GoogleIdTokenPayload? payload)
@@ -50,7 +49,7 @@ public class GoogleSignInCommandHandlerTests
         var issuer = new Mock<IAuthTokenIssuer>();
         issuer
             .Setup(i => i.IssueAsync(It.IsAny<AuthTokenSubject>()))
-            .ReturnsAsync(new AuthToken("issued-token", TokenExpiry));
+            .ReturnsAsync(new AuthToken("issued-token", s_tokenExpiry));
         return (issuer.Object, issuer);
     }
 
@@ -128,7 +127,7 @@ public class GoogleSignInCommandHandlerTests
         // Then — output
         Assert.True(output.Success);
         Assert.Equal("issued-token", output.Data!.Token);
-        Assert.Equal(TokenExpiry, output.Data.ExpiresAt);
+        Assert.Equal(s_tokenExpiry, output.Data.ExpiresAt);
         Assert.Contains(AuthMessages.GoogleSignInSuccessful, output.Messages);
 
         // Then — persisted state: every field comes from the verified token (FR-GO-05) and the row
@@ -329,7 +328,7 @@ public class GoogleSignInCommandHandlerTests
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = await SeedScopeAsync(scopes);
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
-        await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub", email: Email.ToUpper());
+        await SeedGoogleUserAsync(googleUsers, scope, googleId: "another-google-sub", email: Email.ToUpperInvariant());
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers,
             TokenIssuer().issuer, InMemoryAtomicWrites.Instance);
@@ -403,7 +402,7 @@ public class GoogleSignInCommandHandlerTests
         var (issuer, issuerMock) = TokenIssuer();
         issuerMock
             .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User, null))
-            .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
+            .ReturnsAsync(new AuthToken("rights-only-token", s_tokenExpiry));
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload(emailVerified: true)), scopes, new AsyncFakeRepository<Person, long>(), googleUsers,
             googleUsers, issuer, InMemoryAtomicWrites.Instance);
@@ -432,7 +431,7 @@ public class GoogleSignInCommandHandlerTests
         var (issuer, issuerMock) = TokenIssuer();
         issuerMock
             .Setup(i => i.IssueSubjectRightsOnlyAsync(googleUser.PublicId, (int)Roles.User, null))
-            .ReturnsAsync(new AuthToken("rights-only-token", TokenExpiry));
+            .ReturnsAsync(new AuthToken("rights-only-token", s_tokenExpiry));
         var handler = new GoogleSignInCommandHandler(
             Verifier(Payload()), scopes, new AsyncFakeRepository<Person, long>(), googleUsers, googleUsers, issuer,
             InMemoryAtomicWrites.Instance);

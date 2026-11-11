@@ -134,7 +134,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 var persons = await DuePersons(now, erasureCutoff, administrativeCutoff)
                     .OrderBy(person => person.DeletedAt)
                     .Take(retention.PurgeBatchSize)
-                    .ToListAsync();
+                    .ToListAsync(cancellationToken);
 
                 if (persons.Count == 0)
                 {
@@ -181,7 +181,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 // other. Only for the persons actually anonymised — one restricted since the selection is not
                 // erased (NFR-24), so what names them stays as it stands.
                 var voided = await ErasedPersonInvitations.ForgetAsync(
-                    invitations, auditLog, logger, anonymisedPersons.Select(person => person.Id).ToList(), now);
+                    invitations, auditLog, logger, [.. anonymisedPersons.Select(person => person.Id)], now);
 
                 result.ScopeOwnerInvitationsVoided += voided.Count;
 
@@ -201,7 +201,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
                 var googleUsers = await DueGoogleUsers(now, erasureCutoff, administrativeCutoff)
                     .OrderBy(googleUser => googleUser.DeletedAt)
                     .Take(retention.PurgeBatchSize)
-                    .ToListAsync();
+                    .ToListAsync(cancellationToken);
 
                 if (googleUsers.Count == 0)
                 {
@@ -259,7 +259,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
             .WithMessage(RetentionMessages.ExpiredDeletionsAnonymised);
 
         return errors.Count > 0
-            ? success.WithErrors(errors.Concat(retryErrors).ToList())
+            ? success.WithErrors([.. errors, .. retryErrors])
             : WithRetryErrors(success, retryErrors);
     }
 
@@ -329,7 +329,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
 
     private static DataOutput<AnonymiseExpiredDeletionsCommandOutput?> WithRetryErrors(
         DataOutput<AnonymiseExpiredDeletionsCommandOutput?> output, IReadOnlyCollection<string> retryErrors) =>
-        retryErrors.Count == 0 ? output : output.WithErrors(retryErrors.ToList());
+        retryErrors.Count == 0 ? output : output.WithErrors([.. retryErrors]);
 
     /// <summary>
     ///     Suspends the persons whose erasure request was blocked when it was made and is no longer
@@ -489,7 +489,7 @@ public class AnonymiseExpiredDeletionsCommandHandler(
     private async Task<(int Removed, IEnumerable<string> Errors)> RemovePersonDependentsAsync(
         IReadOnlyCollection<Person> persons) =>
         await PersonDependentsRemoval.RemoveAsync(
-            persons.Select(person => person.Id).ToList(),
+            [.. persons.Select(person => person.Id)],
             passwordResetTokenWriter,
             emailVerificationTokenWriter,
             twoFactorAuthWriter);

@@ -15,16 +15,16 @@ public class TwoFactorEmailCode : Entity<long>
     ///     Foreign key to the owning <see cref="TwoFactorAuth" /> configuration (internal Id).
     ///     Required.
     /// </summary>
-    public long TwoFactorAuthId { get; set; }
+    public long TwoFactorAuthId { get; init; }
 
     /// <summary>Hash computed from the 6-digit code and <see cref="Salt" />.</summary>
-    public byte[] CodeHash { get; set; } = [];
+    public byte[] CodeHash { get; init; } = [];
 
     /// <summary>Randomly generated per code, used to hash it.</summary>
-    public byte[] Salt { get; set; } = [];
+    public byte[] Salt { get; init; } = [];
 
     /// <summary>Expiration timestamp, 10 minutes after issue (FR-2F-03).</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>Whether the code has already been consumed or superseded by a fresher one.</summary>
     public bool Used { get; set; }
@@ -38,10 +38,10 @@ public class TwoFactorEmailCode : Entity<long>
     public int FailedAttempts { get; set; }
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     // Navigation properties
 
     /// <summary>The two-factor configuration this code was issued for.</summary>
-    public TwoFactorAuth TwoFactorAuth { get; set; } = null!;
+    public TwoFactorAuth TwoFactorAuth { get; init; } = null!;
 }

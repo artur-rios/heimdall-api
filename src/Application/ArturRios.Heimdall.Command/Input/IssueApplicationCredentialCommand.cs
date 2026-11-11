@@ -19,7 +19,7 @@ public class IssueApplicationCredentialCommand : BaseCommand, IActorScoped
     public Guid Id { get; set; }
 
     /// <summary>When the credential stops being accepted; omitted for never. Must be in the future.</summary>
-    public DateTime? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

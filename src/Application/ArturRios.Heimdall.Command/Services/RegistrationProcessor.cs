@@ -80,7 +80,7 @@ public class RegistrationProcessor(
             return;
         }
 
-        var email = request.Email.ToLower();
+        var email = request.Email.ToLowerInvariant();
 
         var holder = await personReader.Query().FirstOrDefaultAsync(person =>
             !person.IsDeleted && person.Email.ToLower() == email &&

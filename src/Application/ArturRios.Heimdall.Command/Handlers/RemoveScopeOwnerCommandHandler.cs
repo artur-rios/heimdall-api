@@ -44,7 +44,7 @@ public class RemoveScopeOwnerCommandHandler(
         // logically deleted one — rewriting the ownership of a scope withdrawn from service is not
         // something UC-22 promises, and every scope-scoped handler treats it as absent.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -54,7 +54,7 @@ public class RemoveScopeOwnerCommandHandler(
         // AF-22c: a Scope Admin actor may only act on a scope they own; a System Admin bypasses.
         // Checked before the person is looked up so a caller who fails here learns nothing about which
         // person ids exist or who owns the scope.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
         }
@@ -65,7 +65,7 @@ public class RemoveScopeOwnerCommandHandler(
 
         // Read again under the lock: a deletion of the scope that committed since the read above answers
         // AF-22a as it would have a moment earlier.
-        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id && !x.IsDeleted))
+        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id && !x.IsDeleted, cancellationToken))
         {
             return output.WithError(PersonMessages.ScopeNotFound);
         }
@@ -76,7 +76,7 @@ public class RemoveScopeOwnerCommandHandler(
         // and clearing such a stale row is exactly what this endpoint is for.
         var person = await personReader.Query()
             .Include(x => x.ScopeOwnerships)
-            .FirstOrDefaultAsync(x => x.PublicId == command.PersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.PersonId, cancellationToken);
 
         var ownership = person?.ScopeOwnerships.FirstOrDefault(x => x.ScopeId == scope.Id);
 
@@ -106,7 +106,7 @@ public class RemoveScopeOwnerCommandHandler(
             // Refused: either another request removed the row meanwhile, which is AF-22a's outcome, or
             // the last live co-owner went, which is AF-22b's. The row tells which.
             var ownsStill = await personReader.Query()
-                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(owned => owned.ScopeId == scope.Id));
+                .AnyAsync(x => x.Id == person.Id && x.ScopeOwnerships.Any(owned => owned.ScopeId == scope.Id), cancellationToken);
 
             return output.WithError(ownsStill
                 ? PersonMessages.ScopeWouldLoseLastOwner

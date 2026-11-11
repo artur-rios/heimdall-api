@@ -9,8 +9,8 @@ public class RestrictProcessingCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>When the restriction took effect.</summary>
-    public DateTime RestrictedAt { get; set; }
+    public DateTime RestrictedAt { get; init; }
 
     /// <summary>The Art. 18(1) ground it rests on.</summary>
-    public int Ground { get; set; }
+    public int Ground { get; init; }
 }

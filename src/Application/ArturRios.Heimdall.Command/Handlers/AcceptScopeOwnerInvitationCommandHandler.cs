@@ -28,7 +28,7 @@ namespace ArturRios.Heimdall.Command.Handlers;
 ///         invitation is told the same as an outsider.
 ///     </para>
 ///     <para>
-///         <b>An invitation that can no longer be honoured is voided (AF-60b).</b> The scope must still be live
+///         <b>An invitation that can no longer be honored is voided (AF-60b).</b> The scope must still be live
 ///         and the invitee <see cref="ScopeOwnerInvitation.EligibleInvitee" />. If not, the invitation ends as
 ///         voided, the void is audited with the invitation as target, and the answer is AF-60a's. The
 ///         acceptance's own write re-checks both conditions, so a change landing after this check cannot slip
@@ -50,7 +50,7 @@ public class AcceptScopeOwnerInvitationCommandHandler(
     ILogger<AcceptScopeOwnerInvitationCommandHandler> logger)
     : ICommandHandlerAsync<AcceptScopeOwnerInvitationCommand, AcceptScopeOwnerInvitationCommandOutput>
 {
-    private static readonly Func<Person, bool> EligibleInvitee = ScopeOwnerInvitation.EligibleInvitee.Compile();
+    private static readonly Func<Person, bool> s_eligibleInvitee = ScopeOwnerInvitation.EligibleInvitee.Compile();
 
     public async Task<DataOutput<AcceptScopeOwnerInvitationCommandOutput?>> HandleAsync(
         AcceptScopeOwnerInvitationCommand command, CancellationToken cancellationToken = default)
@@ -73,7 +73,7 @@ public class AcceptScopeOwnerInvitationCommandHandler(
             .FirstOrDefaultAsync(x => x.Id == invitation.ScopeId, cancellationToken);
 
         // AF-60b. EligibleInvitee covers the person only; the scope's liveness is checked beside it.
-        if (scope is null || scope.IsDeleted || !EligibleInvitee(invitee))
+        if (scope is null || scope.IsDeleted || !s_eligibleInvitee(invitee))
         {
             await VoidAsync(invitation, now);
 

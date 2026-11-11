@@ -102,10 +102,10 @@ public class IssueApplicationTokenCommandHandlerTests
         Assert.True(output.Success);
     }
 
-    public static TheoryData<string> Refusals => new()
-    {
+    public static TheoryData<string> Refusals =>
+    [
         "wrong-secret", "other-application", "other-scope", "revoked", "expired", "application-deleted", "scope-deleted"
-    };
+    ];
 
     [UnitTheory]
     [MemberData(nameof(Refusals))]

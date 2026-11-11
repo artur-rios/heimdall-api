@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Query.Tests;
 // name is withheld (NFR-24); AF-58a, AF-58b and the page bound.
 public class ListScopeOwnerInvitationsQueryHandlerTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private static Scope Scope(long id, bool isDeleted = false) => new()
     {
@@ -29,7 +29,7 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
     {
         Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
         RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
-        ProcessingRestrictedAt = isRestricted ? Now.AddDays(-1) : null
+        ProcessingRestrictedAt = isRestricted ? s_now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(
@@ -40,7 +40,7 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
         ScopeId = scope.Id, Scope = scope,
         InviteePersonId = invitee.Id, Invitee = invitee,
         InvitedByPersonId = inviter?.Id, InvitedBy = inviter,
-        CreatedAt = createdAt ?? Now.AddMinutes(-id), ExpiresAt = expiresAt ?? Now.AddDays(7),
+        CreatedAt = createdAt ?? s_now.AddMinutes(-id), ExpiresAt = expiresAt ?? s_now.AddDays(7),
         EndedAt = endedAt, Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Withdrawn
     };
 
@@ -85,11 +85,11 @@ public class ListScopeOwnerInvitationsQueryHandlerTests
         var grace = Person(2, "Grace");
         var alan = Person(3, "Alan");
         var hedy = Person(4, "Hedy");
-        var older = Invitation(1, scope, grace, ada, createdAt: Now.AddMinutes(-20));
-        var newer = Invitation(2, scope, alan, ada, createdAt: Now.AddMinutes(-10));
-        var ended = Invitation(3, scope, hedy, ada, endedAt: Now.AddMinutes(-1));
+        var older = Invitation(1, scope, grace, ada, createdAt: s_now.AddMinutes(-20));
+        var newer = Invitation(2, scope, alan, ada, createdAt: s_now.AddMinutes(-10));
+        var ended = Invitation(3, scope, hedy, ada, endedAt: s_now.AddMinutes(-1));
         var handler = Handler(await RepositoryWith(scope), await RepositoryWith(older, newer, ended,
-            Invitation(4, scope, Person(5, "Expired"), ada, createdAt: Now.AddDays(-8), expiresAt: Now.AddDays(-1))));
+            Invitation(4, scope, Person(5, "Expired"), ada, createdAt: s_now.AddDays(-8), expiresAt: s_now.AddDays(-1))));
 
         // When
         var output = await handler.HandleAsync(Query(scope));

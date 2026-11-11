@@ -15,11 +15,11 @@ namespace ArturRios.Heimdall.Query.Tests;
 // on the wrong one and misses the right one.
 public class DetectSecuritySignalsQueryHandlerTests
 {
-    private static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan s_window = TimeSpan.FromMinutes(15);
 
     private static DataRetentionOptions Options(int refusals = 5, int lockouts = 3) => new()
     {
-        MonitoringWindow = Window,
+        MonitoringWindow = s_window,
         RefusalThreshold = refusals,
         LockoutThreshold = lockouts
     };
@@ -204,6 +204,6 @@ public class DetectSecuritySignalsQueryHandlerTests
 
         Assert.True(output.Success);
         Assert.Empty(output.Data!.Signals);
-        Assert.Equal(Window, output.Data.Window);
+        Assert.Equal(s_window, output.Data.Window);
     }
 }

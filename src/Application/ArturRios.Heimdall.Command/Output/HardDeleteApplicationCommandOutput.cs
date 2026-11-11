@@ -12,5 +12,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class HardDeleteApplicationCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the hard-deleted application.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

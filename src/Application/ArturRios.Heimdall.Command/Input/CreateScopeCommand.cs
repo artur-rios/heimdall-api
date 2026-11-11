@@ -10,15 +10,15 @@ namespace ArturRios.Heimdall.Command.Input;
 public class CreateScopeCommand : BaseCommand
 {
     /// <summary>Scope display name. Required and must be unique across all scopes.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Optional description of the scope's purpose.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>
     ///     Public identifiers of the persons to designate as initial owners. Each must reference an
     ///     existing, non-logically-deleted person with the <c>ScopeAdmin</c> or <c>SystemAdmin</c> role.
     ///     At least one is required.
     /// </summary>
-    public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnerIds { get; set; } = [];
 }

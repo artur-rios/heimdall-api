@@ -4,7 +4,6 @@ using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ArturRios.Heimdall.Data.Configuration;
 

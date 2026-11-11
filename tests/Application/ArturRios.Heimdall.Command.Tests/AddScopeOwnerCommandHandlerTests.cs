@@ -106,7 +106,7 @@ public class AddScopeOwnerCommandHandlerTests
     }
 
     private static async Task<List<ScopeOwnerInvitation>> AllAsync(AsyncFakeRepository<ScopeOwnerInvitation, long> invitations) =>
-        (await invitations.GetAllAsync()).Data!.ToList();
+        [.. (await invitations.GetAllAsync()).Data!];
 
     private static async Task<Person> StoredAsync(AsyncFakeRepository<Person, long> persons, Person person) =>
         (await persons.GetAllAsync()).Data!.Single(x => x.PublicId == person.PublicId);

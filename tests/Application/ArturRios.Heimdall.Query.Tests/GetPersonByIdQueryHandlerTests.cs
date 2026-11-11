@@ -33,9 +33,11 @@ public class GetPersonByIdQueryHandlerTests
         Name = $"admin-{id}",
         Email = $"admin-{id}@test.local",
         RoleId = (long)Roles.ScopeAdmin,
-        ScopeOwnerships = ownedScopes
-            .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
-            .ToList()
+        ScopeOwnerships =
+        [
+            .. ownedScopes
+                .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
+        ]
     };
 
     private static Person SystemAdmin(long id) => new()

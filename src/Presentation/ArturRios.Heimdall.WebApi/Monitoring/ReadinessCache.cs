@@ -16,7 +16,7 @@ public class ReadinessCache(TimeProvider clock)
     /// <summary>How long an answer is reused.</summary>
     public static readonly TimeSpan Window = TimeSpan.FromSeconds(5);
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Task<bool>? _current;
     private DateTimeOffset _startedAt;
 

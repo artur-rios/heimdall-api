@@ -17,7 +17,7 @@ public static class InternalHealthEndpoint
     /// <summary>How long a report is reused, counted from when its checks finished.</summary>
     public static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(5);
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions s_json = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
@@ -33,7 +33,7 @@ public static class InternalHealthEndpoint
                 : StatusCodes.Status200OK;
             context.Response.ContentType = "application/json";
 
-            await JsonSerializer.SerializeAsync(context.Response.Body, report, Json, context.RequestAborted);
+            await JsonSerializer.SerializeAsync(context.Response.Body, report, s_json, context.RequestAborted);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
@@ -55,7 +55,7 @@ public static class InternalHealthEndpoint
     public sealed class Reports(
         IServiceScopeFactory scopes, TimeProvider clock, ILogger<Reports> logger)
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
 
         // Touched only inside a run, and runs never overlap.
         private readonly Dictionary<string, string> _lastStatus = [];
@@ -132,7 +132,7 @@ public static class InternalHealthEndpoint
                     return ResultOfAsync(check, task, bound.Token);
                 }).ToList());
 
-                return new Report(Aggregate(entries), entries.Select(entry => entry.Service).ToList());
+                return new Report(Aggregate(entries), [.. entries.Select(entry => entry.Service)]);
             }
             finally
             {

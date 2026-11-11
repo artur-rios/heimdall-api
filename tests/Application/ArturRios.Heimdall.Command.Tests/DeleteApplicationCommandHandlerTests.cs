@@ -18,7 +18,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class DeleteApplicationCommandHandlerTests
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was (not) stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static async Task<Scope> SeedScopeAsync(AsyncFakeRepository<Scope, long> scopes, string name = "Acme")
     {
@@ -58,7 +58,7 @@ public class DeleteApplicationCommandHandlerTests
             Scope = scope,
             OwnerId = owner.Id,
             Owner = owner,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         await applications.CreateAsync(application);
         return application;
@@ -215,7 +215,7 @@ public class DeleteApplicationCommandHandlerTests
         // Then
         var stored = await StoredAsync(applications, application.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [UnitFact]
@@ -311,7 +311,7 @@ public class DeleteApplicationCommandHandlerTests
 
         var stored = await StoredAsync(applications, application.PublicId);
         Assert.False(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [UnitFact]

@@ -14,11 +14,11 @@ namespace ArturRios.Heimdall.Command.Input;
 public class VerifyTwoFactorAuthCommand : BaseCommand
 {
     /// <summary>The short-lived challenge token AF-11g returned from <c>POST /api/auth/login</c>.</summary>
-    public string ChallengeToken { get; set; } = string.Empty;
+    public string ChallengeToken { get; init; } = string.Empty;
 
     /// <summary>The caller's current app or email code, when proving a code rather than a recovery code.</summary>
-    public string? Code { get; set; }
+    public string? Code { get; init; }
 
     /// <summary>One of the caller's unused recovery codes, when no code is available.</summary>
-    public string? RecoveryCode { get; set; }
+    public string? RecoveryCode { get; init; }
 }

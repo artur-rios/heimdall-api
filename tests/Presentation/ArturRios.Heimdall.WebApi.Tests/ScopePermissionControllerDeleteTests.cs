@@ -20,7 +20,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was (not) stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/permissions/{id}";
 
@@ -35,7 +35,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
             IncludeAsJwtClaim = false,
             IsDeleted = isDeleted,
             ScopeId = scope.Id,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         context.ScopePermissions.Add(permission);
         await context.SaveChangesAsync();
@@ -68,7 +68,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
         // Then — database state: flagged and UpdatedAt stamped
         var stored = await StoredAsync(permission.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.NotEqual(Stamp, stored.UpdatedAt);
+        Assert.NotEqual(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -108,7 +108,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
 
         var stored = await StoredAsync(permission.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -153,7 +153,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Body?.Data?.AlreadyDeleted);
-        Assert.Equal(Stamp, (await StoredAsync(permission.PublicId)).UpdatedAt);
+        Assert.Equal(s_stamp, (await StoredAsync(permission.PublicId)).UpdatedAt);
     }
 
     [FunctionalFact]
@@ -174,7 +174,7 @@ public class ScopePermissionControllerDeleteTests(PostgresFixture db) : WebApiTe
 
         var stored = await StoredAsync(permission.PublicId);
         Assert.False(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]

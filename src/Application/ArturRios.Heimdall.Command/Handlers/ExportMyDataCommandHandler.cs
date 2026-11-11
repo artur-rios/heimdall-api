@@ -55,7 +55,7 @@ public class ExportMyDataCommandHandler(
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
             .Include(x => x.ScopeOwnerships)
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         if (person is not null)
         {
@@ -65,7 +65,7 @@ public class ExportMyDataCommandHandler(
         }
 
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         return googleUser is not null
             ? output.WithData(await ExportGoogleUserAsync(googleUser)).WithMessage(ErasureMessages.DataExported)
@@ -160,9 +160,11 @@ public class ExportMyDataCommandHandler(
             ScopeMemberships = person.ScopeMembership is null
                 ? []
                 : [Public(person.ScopeMembership.ScopeId) ?? Guid.Empty],
-            ScopeOwnerships = person.ScopeOwnerships
-                .Select(ownership => Public(ownership.ScopeId) ?? Guid.Empty)
-                .ToList(),
+            ScopeOwnerships =
+            [
+                .. person.ScopeOwnerships
+                    .Select(ownership => Public(ownership.ScopeId) ?? Guid.Empty)
+            ],
             Applications = applications,
             AuditEntries = auditEntries,
             AuditEntriesTruncated = truncated,
@@ -252,7 +254,7 @@ public class ExportMyDataCommandHandler(
 
         var truncated = entries.Count > DataExportDisclosure.MaximumAuditEntries;
 
-        return (truncated ? entries.Take(DataExportDisclosure.MaximumAuditEntries).ToList() : entries, truncated);
+        return (truncated ? [.. entries.Take(DataExportDisclosure.MaximumAuditEntries)] : entries, truncated);
     }
 
     private static DataExportProcessing Processing(int basis, string? noticeVersion, DateTime? recordedAt) =>

@@ -10,22 +10,22 @@ namespace ArturRios.Heimdall.Command.Output;
 public class CreateScopePermissionCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the created permission.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Permission display name.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Permission description.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>
     ///     Whether the permission's <see cref="Name" /> is added as a claim on the JWT issued to
     ///     identities acting within the owning scope.
     /// </summary>
-    public bool IncludeAsJwtClaim { get; set; }
+    public bool IncludeAsJwtClaim { get; init; }
 
     /// <summary>Public identifier of the scope the permission belongs to.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

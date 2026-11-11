@@ -20,7 +20,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // becomes a way to probe for Google Users outside the caller's reach.
 public class DeleteGoogleUserCommandHandlerTests
 {
-    private static readonly Guid ScopePublicId = Guid.NewGuid();
+    private static readonly Guid s_scopePublicId = Guid.NewGuid();
 
     private const long ScopeInternalId = 42;
 
@@ -41,7 +41,7 @@ public class DeleteGoogleUserCommandHandlerTests
         var scope = new Scope
         {
             Id = ScopeInternalId,
-            PublicId = scopePublicId ?? ScopePublicId,
+            PublicId = scopePublicId ?? s_scopePublicId,
             Name = $"scope-{Guid.NewGuid():N}"
         };
 
@@ -60,7 +60,7 @@ public class DeleteGoogleUserCommandHandlerTests
     }
 
     private static DeleteGoogleUserCommand Command(Guid id, Roles actingRole = Roles.SystemAdmin) =>
-        new() { ScopeId = ScopePublicId, Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)actingRole };
+        new() { ScopeId = s_scopePublicId, Id = id, ActingPersonId = Guid.NewGuid(), ActingRole = (int)actingRole };
 
     [UnitFact]
     public async Task GivenActiveGoogleUser_WhenHandlingDelete_ThenSetsIsDeletedAndStampsUpdatedAt()

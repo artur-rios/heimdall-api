@@ -19,7 +19,6 @@ using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using ArturRios.Util.WebApi.Security.Authentication;
-using ArturRios.Util.WebApi.Security.Constants;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -131,11 +130,11 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
     public async Task GivenEmailDifferingInCase_WhenPostLogin_ThenLoginSucceeds()
     {
         // Given a stored email in mixed case
-        var email = UniqueEmail("MiXeD").ToUpper();
+        var email = UniqueEmail("MiXeD").ToUpperInvariant();
         await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
         // When authenticating with the lower-case form
-        var response = await LoginAsync(email.ToLower());
+        var response = await LoginAsync(email.ToLowerInvariant());
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -369,7 +368,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(email)).StatusCode);
     }
 
-    private static readonly Expression<Func<AuditLog, bool>> IsShedLogin = x =>
+    private static readonly Expression<Func<AuditLog, bool>> s_isShedLogin = x =>
         x.Action == nameof(LoginCommand) && x.FailureReason == AuthMessages.AuthenticationTemporarilyUnavailable;
 
     [FunctionalFact]
@@ -386,7 +385,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         // shed rows a neighbouring test wrote a moment earlier. The collection runs one test at a
         // time, so the rows already there are the baseline and this test's own are what is added.
         await using var baselineContext = db.CreateContext();
-        var shedBefore = await baselineContext.AuditLogs.AsNoTracking().CountAsync(IsShedLogin);
+        var shedBefore = await baselineContext.AuditLogs.AsNoTracking().CountAsync(s_isShedLogin);
 
         var release = new TaskCompletionSource();
         var holding = new TaskCompletionSource();
@@ -425,7 +424,7 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
         await using var context = db.CreateContext();
 
         var shedEntries = await context.AuditLogs.AsNoTracking()
-            .Where(IsShedLogin)
+            .Where(s_isShedLogin)
             .OrderByDescending(x => x.Id)
             .ToListAsync();
 

@@ -12,7 +12,7 @@ namespace ArturRios.Heimdall.Command.Input;
 public class SendPersonPasswordResetCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public id of the person to email.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

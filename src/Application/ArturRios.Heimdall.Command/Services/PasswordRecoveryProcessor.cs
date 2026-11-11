@@ -76,7 +76,7 @@ public class PasswordRecoveryProcessor(
     /// </summary>
     private async Task<Person?> FindPersonAsync(PasswordRecoveryRequest request)
     {
-        var email = request.Email.ToLower();
+        var email = request.Email.ToLowerInvariant();
 
         var query = personReader.Query()
             .Include(person => person.ScopeMembership)

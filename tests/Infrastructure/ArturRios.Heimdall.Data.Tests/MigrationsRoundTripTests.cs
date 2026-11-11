@@ -45,7 +45,7 @@ public class MigrationsRoundTripTests
         await migrator.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Empty(await context.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(all, (await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).ToList());
+        Assert.Equal(all, [.. await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)]);
 
         // And every Down is run, newest first, back to the empty database
         await migrator.MigrateAsync(Zero, TestContext.Current.CancellationToken);
@@ -55,6 +55,6 @@ public class MigrationsRoundTripTests
         // Then the chain applies again from nothing, so no Down left something behind that an Up trips on
         await migrator.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(all, (await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)).ToList());
+        Assert.Equal(all, [.. await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)]);
     }
 }

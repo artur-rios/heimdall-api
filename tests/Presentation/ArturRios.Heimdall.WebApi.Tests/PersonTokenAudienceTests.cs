@@ -21,9 +21,9 @@ public class PersonTokenAudienceTests
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
 
-    private static readonly PersonTokenAudiences Audiences = new(PersonAudience);
+    private static readonly PersonTokenAudiences s_audiences = new(PersonAudience);
 
-    private static readonly IdentityUserMapper Mapper = new(Audiences);
+    private static readonly IdentityUserMapper s_mapper = new(s_audiences);
 
     // Heimdall's issuers and readers over one ES256 key, as start-up wires them.
     private readonly UnitTokenReaders _readers = new(issuer: Issuer, personAudience: PersonAudience);
@@ -191,7 +191,7 @@ public class PersonTokenAudienceTests
         // token's audience: not what the challenge issuer writes, so not a challenge
         var configuration = Configuration() with
         {
-            Claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+            Claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
             {
                 MfaPending = true, ChallengeId = Guid.NewGuid()
             })
@@ -216,7 +216,7 @@ public class PersonTokenAudienceTests
         {
             Issuer = issuer,
             Audience = audience,
-            Claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
+            Claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
             {
                 MfaPending = true, ChallengeId = Guid.NewGuid()
             })

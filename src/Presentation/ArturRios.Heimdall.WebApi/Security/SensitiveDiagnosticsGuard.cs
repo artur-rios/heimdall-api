@@ -127,7 +127,7 @@ public sealed record PublicHostSettings(
             }
         }
 
-        return found.Distinct().ToList();
+        return [.. found.Distinct()];
     }
 }
 

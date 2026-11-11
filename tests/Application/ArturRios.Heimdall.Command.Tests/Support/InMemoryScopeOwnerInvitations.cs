@@ -21,7 +21,7 @@ public sealed class InMemoryScopeOwnerInvitations(
     AsyncFakeRepository<Person, long> persons,
     AsyncFakeRepository<Scope, long> scopes) : IScopeOwnerInvitations
 {
-    private static readonly Func<Person, bool> EligibleInvitee = ScopeOwnerInvitation.EligibleInvitee.Compile();
+    private static readonly Func<Person, bool> s_eligibleInvitee = ScopeOwnerInvitation.EligibleInvitee.Compile();
 
     /// <summary>Called with the invitation just before an end or an acceptance evaluates its condition.</summary>
     public Action<ScopeOwnerInvitation>? BeforeConditionalWrite { get; init; }
@@ -77,7 +77,7 @@ public sealed class InMemoryScopeOwnerInvitations(
 
         // The scope's liveness is not part of EligibleInvitee, which covers the person only.
         if (!OpenAt(now)(invitation) || scope is not { IsDeleted: false } || invitee is null ||
-            !EligibleInvitee(invitee))
+            !s_eligibleInvitee(invitee))
         {
             return Task.FromResult(false);
         }

@@ -35,7 +35,7 @@ public class HardDeleteApplicationCommandHandler(
         // addressed resource genuinely does not exist in any of the three cases. A repeated call
         // lands here too — the row is already gone, and UC-20 has no idempotent path.
         var application = await applicationReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (application is null)
         {
@@ -45,7 +45,7 @@ public class HardDeleteApplicationCommandHandler(
         // UC-20 step 2: remove the record for good. No dependent is deleted first — no entity carries
         // a foreign key to an application, so no foreign key can be violated and there is no total to
         // report, unlike the scope and person hard deletes.
-        var delete = await applicationWriter.DeleteAsync(application);
+        var delete = await applicationWriter.DeleteAsync(application, cancellationToken);
 
         if (!delete.Success)
         {

@@ -35,7 +35,7 @@ public class JwtApplicationTokenService(
     JwtHandler jwtHandler,
     ApplicationTokenOptions options) : IApplicationTokenIssuer, IApplicationTokenValidator
 {
-    private static readonly JsonWebTokenHandler Reader = new();
+    private static readonly JsonWebTokenHandler s_reader = new();
 
     // The configured ES256 keys, the current and any previous one, as IdentityModel holds them.
     private readonly IReadOnlyList<SecurityKey> _keys = [.. configuration.Keys.Select(key => key.ToSecurityKey())];
@@ -70,7 +70,7 @@ public class JwtApplicationTokenService(
             return null;
         }
 
-        var result = await Reader.ValidateTokenAsync(token, new TokenValidationParameters
+        var result = await s_reader.ValidateTokenAsync(token, new TokenValidationParameters
         {
             ValidIssuer = configuration.Issuer,
             ValidateIssuer = !string.IsNullOrWhiteSpace(configuration.Issuer),

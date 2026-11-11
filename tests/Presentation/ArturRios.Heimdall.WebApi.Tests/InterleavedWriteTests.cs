@@ -13,9 +13,7 @@ using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
-using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 using Application = ArturRios.Heimdall.Domain.Entities.Application;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -36,8 +34,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///     </para>
 ///     <para>
 ///         The competing restriction and erasure request are the targeted writes UC-44 and UC-42 make
-///         (<see cref="AtomicWrites.TryRestrictProcessingAsync" />,
-///         <see cref="AtomicWrites.TryRecordErasureRequestAsync" />); the competing scope settings are written
+///         (<see cref="AtomicWrites.TryRestrictProcessingAsync(Person, int, DateTime)" />,
+///         <see cref="AtomicWrites.TryRecordErasureRequestAsync(Person, DateTime, DateTime, string?)" />); the competing scope settings are written
 ///         the way their own endpoints change them — Google sign-in (UC-24), self-registration (FR-SR-02)
 ///         and the email links — one column set at a time.
 ///     </para>
@@ -477,7 +475,7 @@ public class InterleavedWriteTests(PostgresFixture db)
     ///     before the first command starting with <paramref name="prefix" /> is sent.
     /// </summary>
     private AppDbContext Writer(string prefix, Func<Task> competitor) =>
-        PostgresFixture.CreateContext(db.RuntimeConnectionString, (IInterceptor)new BeforeFirstCommand(prefix, competitor));
+        PostgresFixture.CreateContext(db.RuntimeConnectionString, new BeforeFirstCommand(prefix, competitor));
 
     /// <summary>UC-44's write, on a connection of its own.</summary>
     private Func<Task> Restriction(long personId) => () => OnPersonAsync(personId, async (writes, person) =>
@@ -670,28 +668,30 @@ public class InterleavedWriteTests(PostgresFixture db)
         var actor = Guid.NewGuid();
         const int systemAdmin = (int)Roles.SystemAdmin;
 
-        return setting switch
+        var errors = setting switch
         {
             GoogleSignIn => (await new SetGoogleSignInCommandHandler(
                     new SetGoogleSignInCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetGoogleSignInCommand
                 {
                     Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
-                })).Errors.ToList(),
+                })).Errors,
             SelfRegistration => (await new SetSelfRegistrationCommandHandler(
                     new SetSelfRegistrationCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetSelfRegistrationCommand
                 {
                     Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
-                })).Errors.ToList(),
+                })).Errors,
             _ => (await new SetScopeEmailLinksCommandHandler(
                     new SetScopeEmailLinksCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetScopeEmailLinksCommand
                 {
                     Id = scope.PublicId, EmailVerificationUrl = VerificationUrl, PasswordResetUrl = ResetUrl,
                     ActingRole = systemAdmin, ActingPersonId = actor
-                })).Errors.ToList()
+                })).Errors
         };
+
+        return [.. errors];
     }
 
     // Handlers, over EF repositories on the writer's context

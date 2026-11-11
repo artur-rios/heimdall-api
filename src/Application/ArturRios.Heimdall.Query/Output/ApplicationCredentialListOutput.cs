@@ -9,5 +9,5 @@ namespace ArturRios.Heimdall.Query.Output;
 /// </summary>
 public class ApplicationCredentialListOutput : QueryOutput
 {
-    public List<ApplicationCredentialOutput> Credentials { get; set; } = [];
+    public List<ApplicationCredentialOutput> Credentials { get; init; } = [];
 }

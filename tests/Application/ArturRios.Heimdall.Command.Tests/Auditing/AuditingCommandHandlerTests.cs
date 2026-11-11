@@ -18,14 +18,14 @@ public class StubCommand : BaseCommand;
 
 public class StubOutput : CommandOutput
 {
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }
 
 public class StubOutputWithSideEffects : CommandOutput, IAuditedSideEffects
 {
     public Guid Id { get; set; }
 
-    public List<string> SideEffects { get; set; } = [];
+    public List<string> SideEffects { get; init; } = [];
 
     public IEnumerable<string> AuditedSideEffects() => SideEffects;
 }
@@ -158,7 +158,7 @@ public class AuditingCommandHandlerTests
         // Given a successful result carrying a null Data (e.g. a command whose output is empty)
         var inner = new Mock<ICommandHandlerAsync<StubCommand, StubOutput>>();
         inner.Setup(h => h.HandleAsync(It.IsAny<StubCommand>()))
-            .ReturnsAsync(DataOutput<StubOutput?>.New.WithData((StubOutput?)null));
+            .ReturnsAsync(DataOutput<StubOutput?>.New.WithData(null));
         var writer = new Mock<IAuditLogWriter>();
         var handler = new AuditingCommandHandler<StubCommand, StubOutput>(inner.Object, writer.Object, NullLogger());
 

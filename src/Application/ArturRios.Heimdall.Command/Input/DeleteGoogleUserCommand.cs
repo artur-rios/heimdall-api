@@ -13,10 +13,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DeleteGoogleUserCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the scope the Google User belongs to (bound from the route).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the Google User to delete (bound from the route).</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

@@ -10,18 +10,18 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeleteScopeCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the deleted scope.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     Total number of Users (via SCOPE_USER) belonging to the scope. A total, not a count of
     ///     what this call deleted: on the AF-04b idempotent path nothing is written and this is
     ///     still reported.
     /// </summary>
-    public int UserCount { get; set; }
+    public int UserCount { get; init; }
 
     /// <summary>Total number of Google Users belonging to the scope.</summary>
-    public int GoogleUserCount { get; set; }
+    public int GoogleUserCount { get; init; }
 
     /// <summary>Total number of applications belonging to the scope.</summary>
-    public int ApplicationCount { get; set; }
+    public int ApplicationCount { get; init; }
 }

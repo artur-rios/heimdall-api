@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 public class DeleteScopePermissionCommandHandlerTests
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was (not) stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static IScopeOwnershipChecker OwnershipChecker(bool allowed = true)
     {
@@ -49,7 +49,7 @@ public class DeleteScopePermissionCommandHandlerTests
             IsDeleted = isDeleted,
             ScopeId = scope.Id,
             Scope = scope,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         await permissions.CreateAsync(permission);
         return permission;
@@ -178,7 +178,7 @@ public class DeleteScopePermissionCommandHandlerTests
         // Then
         var stored = await StoredAsync(permissions, permission.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [UnitFact]
@@ -263,7 +263,7 @@ public class DeleteScopePermissionCommandHandlerTests
 
         var stored = await StoredAsync(permissions, permission.PublicId);
         Assert.False(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [UnitFact]

@@ -13,7 +13,7 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DeletePersonCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the person to delete (bound from the route).</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

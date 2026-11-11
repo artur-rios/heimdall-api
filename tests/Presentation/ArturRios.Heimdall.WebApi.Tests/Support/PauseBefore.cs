@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </remarks>
 public sealed class PauseBefore(string prefix) : DbCommandInterceptor
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_bound = TimeSpan.FromSeconds(30);
 
     private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -58,6 +58,6 @@ public sealed class PauseBefore(string prefix) : DbCommandInterceptor
         }
 
         _reached.TrySetResult();
-        await _resume.Task.WaitAsync(Bound);
+        await _resume.Task.WaitAsync(s_bound);
     }
 }

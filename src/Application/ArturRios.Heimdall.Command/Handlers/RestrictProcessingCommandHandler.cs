@@ -55,7 +55,7 @@ public class RestrictProcessingCommandHandler(
         // accuracy of what is held about it, and Art. 18 does not require the account to be in good
         // standing. What it must not be is anonymised, and an anonymised record cannot authenticate.
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         if (person is not null)
         {
@@ -73,7 +73,7 @@ public class RestrictProcessingCommandHandler(
         }
 
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         if (googleUser is null)
         {

@@ -22,7 +22,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/applications/{id}";
 
@@ -41,7 +41,7 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
             IsDeleted = isDeleted,
             ScopeId = scope.Id,
             OwnerId = owner.Id,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         context.Applications.Add(application);
         await context.SaveChangesAsync();
@@ -79,7 +79,7 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
         var stored = await StoredAsync(application.PublicId);
         Assert.Equal("Renamed", stored.Name);
         Assert.Equal(owner.Id, stored.OwnerId);
-        Assert.NotEqual(Stamp, stored.UpdatedAt);
+        Assert.NotEqual(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -145,7 +145,7 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
         var stored = await StoredAsync(application.PublicId);
         Assert.Equal(application.Name, stored.Name);
         Assert.Equal(owner.Id, stored.OwnerId);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]

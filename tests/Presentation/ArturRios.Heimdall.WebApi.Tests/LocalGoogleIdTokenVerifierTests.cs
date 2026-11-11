@@ -25,7 +25,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // application supplies.
 public class LocalGoogleIdTokenVerifierTests
 {
-    private static readonly JsonWebTokenHandler Handler = new();
+    private static readonly JsonWebTokenHandler s_handler = new();
 
     private static LocalGoogleIdTokenVerifier Verifier() =>
         new(
@@ -41,7 +41,7 @@ public class LocalGoogleIdTokenVerifierTests
         string? audience = null,
         string? signingSecret = null,
         TimeSpan? expiresIn = null) =>
-        Handler.CreateToken(new SecurityTokenDescriptor
+        s_handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = issuer ?? LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = audience ?? LocalGoogleIdTokenVerifier.TestIssuer,
@@ -103,7 +103,7 @@ public class LocalGoogleIdTokenVerifierTests
         // Not one of NFR-13's four, but the same boundary: a token that passes every cryptographic
         // check and still cannot name an account is refused rather than turned into a Google User
         // with an empty identity.
-        var withoutEmail = Handler.CreateToken(new SecurityTokenDescriptor
+        var withoutEmail = s_handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = LocalGoogleIdTokenVerifier.TestIssuer,

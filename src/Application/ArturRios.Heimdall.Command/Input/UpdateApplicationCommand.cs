@@ -25,13 +25,13 @@ public class UpdateApplicationCommand : BaseCommand, IActorScoped
     public Guid Id { get; set; }
 
     /// <summary>New application display name. Required, max 200 characters.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
     ///     Public identifier of the person that will own the application (FR-AP-03). Verified only
     ///     when it differs from the current owner (UC-18 main flow step 4).
     /// </summary>
-    public Guid OwnerId { get; set; }
+    public Guid OwnerId { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

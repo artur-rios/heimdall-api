@@ -19,13 +19,13 @@ public class ListScopeGoogleUsersQuery : BaseQuery, IActorScoped
     public Guid ScopeId { get; set; }
 
     /// <summary>Optional case-insensitive substring filter on the Google User's name.</summary>
-    public string? Name { get; set; }
+    public string? Name { get; init; }
 
     /// <summary>Optional case-insensitive substring filter on the Google User's email.</summary>
-    public string? Email { get; set; }
+    public string? Email { get; init; }
 
     /// <summary>When <c>true</c>, logically deleted Google Users are included (FR-GO-17).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

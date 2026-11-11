@@ -142,7 +142,7 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], audit.Entries);
         Assert.Empty(invitee.ScopeOwnerships);
         Assert.Empty(world.Notices.Answers);
     }
@@ -161,7 +161,7 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], audit.Entries);
         Assert.DoesNotContain(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
     }
 
@@ -179,7 +179,7 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], audit.Entries);
         Assert.DoesNotContain(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
     }
 
@@ -198,7 +198,7 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], audit.Entries);
         Assert.DoesNotContain(invitee.ScopeOwnerships, ownership => ownership.ScopeId == scope.Id);
         Assert.Empty(world.Notices.Answers);
     }
@@ -217,7 +217,7 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
         // Then
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], audit.Entries);
         Assert.Empty(invitee.ScopeOwnerships);
     }
 

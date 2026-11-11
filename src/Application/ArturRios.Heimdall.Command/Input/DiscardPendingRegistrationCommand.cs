@@ -11,10 +11,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DiscardPendingRegistrationCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public id of the scope the registration belongs to.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public id of the pending registration (UC-49's <c>id</c>).</summary>
-    public Guid RegistrationId { get; set; }
+    public Guid RegistrationId { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

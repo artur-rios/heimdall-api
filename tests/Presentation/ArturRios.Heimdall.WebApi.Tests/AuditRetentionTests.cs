@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Data.Relational.Core.Repositories;
@@ -48,7 +49,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
+    private static readonly TimeSpan s_attributionPeriod = TimeSpan.FromDays(548);
 
     private static PseudonymiseAuditActorsCommandHandler Handler(
         AppDbContext context, int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick)
@@ -63,7 +64,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
             tombstones, tombstones,
             new DataRetentionOptions
             {
-                AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+                AuditActorRetention = s_attributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
             });
     }
 
@@ -125,7 +126,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         var actor = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
         var due = await SeedEntryAsync(
-            context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)));
+            context, actor.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30)));
         var recent = await SeedEntryAsync(context, actor.PublicId, DateTime.UtcNow.AddDays(-1));
 
         var output = await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
@@ -175,7 +176,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         for (var i = 0; i < 6; i++)
         {
             entries.Add(await SeedEntryAsync(
-                context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)), live.PublicId));
+                context, live.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30 + i)), live.PublicId));
             entries.Add(await SeedEntryAsync(context, erased.PublicId, DateTime.UtcNow.AddDays(-3 - i), erased.PublicId));
             entries.Add(await SeedEntryAsync(context, actorId: null, DateTime.UtcNow.AddDays(-3 - i), removed.PublicId));
         }
@@ -211,7 +212,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         for (var i = 0; i < 4; i++)
         {
-            await SeedEntryAsync(context, live.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30 + i)));
+            await SeedEntryAsync(context, live.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30 + i)));
         }
 
         for (var i = 0; i < 3; i++)
@@ -260,7 +261,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
 
         var actor = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
         var entry = await SeedEntryAsync(
-            context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)));
+            context, actor.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30)));
 
         await Handler(context).HandleAsync(new PseudonymiseAuditActorsCommand());
 
@@ -287,7 +288,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         var erased = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Anonymised", EmailPrefix = "audit", IsDeleted = true, Configure = p => p.AnonymisedAt = DateTime.UtcNow.AddHours(-1) });
         var scopeId = Guid.NewGuid();
         var aboutScope = await SeedEntryAsync(
-            context, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)), scopeId);
+            context, actor.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30)), scopeId);
         var aboutErased = await SeedEntryAsync(
             context, actor.PublicId, DateTime.UtcNow.AddDays(-1), erased.PublicId);
 
@@ -323,7 +324,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         {
             var person = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
             var entry = await SeedEntryAsync(
-                context, actorId: null, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(30)),
+                context, actorId: null, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(30)),
                 person.PublicId, action);
 
             entryId = entry.PublicId;
@@ -392,7 +393,7 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         Assert.Null(seeded.TargetId);
         Assert.Equal(administrator.PublicId, seeded.ActorId);
 
-        var since = Uri.EscapeDataString(start.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+        var since = Uri.EscapeDataString(start.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
         var hardDeletes = (await ListAsync($"action={nameof(HardDeletePersonCommand)}&from={since}")).Body!.Data!;
         var own = Assert.Single(hardDeletes, entry => entry.Id == ownEntry.Id);
         Assert.Null(own.TargetId);

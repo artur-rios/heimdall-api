@@ -77,7 +77,7 @@ public class GoogleSignInCommandHandler(
         // outcome, so the filter answers for all three.
         var scope = await scopeReader.Query()
             .FirstOrDefaultAsync(x =>
-                x.PublicId == command.ScopeId && !x.IsDeleted && x.GoogleSignInEnabled);
+                x.PublicId == command.ScopeId && !x.IsDeleted && x.GoogleSignInEnabled, cancellationToken);
 
         if (scope is null)
         {
@@ -88,7 +88,7 @@ public class GoogleSignInCommandHandler(
         // deliberately omits an !IsDeleted filter: AF-25d exists to reject a logically deleted Google
         // User, so it must be found first — the same reason UC-11's person lookup omits one.
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.ScopeId == scope.Id && x.GoogleId == payload.Subject);
+            .FirstOrDefaultAsync(x => x.ScopeId == scope.Id && x.GoogleId == payload.Subject, cancellationToken);
 
         if (googleUser is null)
         {
@@ -227,7 +227,7 @@ public class GoogleSignInCommandHandler(
             return (null, output.WithError(AuthMessages.GoogleEmailNotVerified));
         }
 
-        var email = payload.Email.ToLower();
+        var email = payload.Email.ToLowerInvariant();
 
         // AF-25c (FR-GO-07): the address must be free within the scope, considered jointly with the
         // scope's User persons. Two reads rather than one because the rule spans two tables — the

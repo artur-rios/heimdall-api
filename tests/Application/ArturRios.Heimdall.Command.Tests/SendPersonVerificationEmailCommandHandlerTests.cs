@@ -20,9 +20,9 @@ namespace ArturRios.Heimdall.Command.Tests;
 // AF-51e at both edges of the cooldown window, counting used tokens too.
 public class SendPersonVerificationEmailCommandHandlerTests
 {
-    private static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
+    private static readonly TimeSpan s_lifetime = TimeSpan.FromHours(24);
     private const string RetireFailure = "the token could not be retired";
-    private static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan s_cooldown = TimeSpan.FromMinutes(5);
 
     /// <summary>The one scope the acting Scope Admin owns in these tests.</summary>
     private const long OwnedScopeId = 1;
@@ -39,8 +39,8 @@ public class SendPersonVerificationEmailCommandHandlerTests
             Tokens,
             Ownership.Object,
             EmailVerification.Object,
-            new EmailVerificationOptions { TokenLifetime = Lifetime },
-            new AdminEmailOptions { Cooldown = Cooldown });
+            new EmailVerificationOptions { TokenLifetime = s_lifetime },
+            new AdminEmailOptions { Cooldown = s_cooldown });
     }
 
     private static async Task<Fixture> FixtureWith(params Person[] persons)
@@ -106,7 +106,7 @@ public class SendPersonVerificationEmailCommandHandlerTests
             PersonId = person.Id,
             Person = person,
             TokenHash = SingleUseTokenHash.Of(Guid.NewGuid().ToString("N")),
-            ExpiresAt = DateTime.UtcNow - ago + Lifetime,
+            ExpiresAt = DateTime.UtcNow - ago + s_lifetime,
             Used = used
         };
 
@@ -324,8 +324,8 @@ public class SendPersonVerificationEmailCommandHandlerTests
             writer.Object,
             fixture.Ownership.Object,
             fixture.EmailVerification.Object,
-            new EmailVerificationOptions { TokenLifetime = Lifetime },
-            new AdminEmailOptions { Cooldown = Cooldown });
+            new EmailVerificationOptions { TokenLifetime = s_lifetime },
+            new AdminEmailOptions { Cooldown = s_cooldown });
 
         // When
         var output = await handler.HandleAsync(Command(target.PublicId));

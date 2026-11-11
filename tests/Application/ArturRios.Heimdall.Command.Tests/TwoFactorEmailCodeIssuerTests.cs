@@ -25,7 +25,7 @@ public class TwoFactorEmailCodeIssuerTests
     {
         public TwoFactorEmailCodeIssuer Issuer() => new(EmailCodes, EmailCodes, Sender.Object);
 
-        public List<TwoFactorEmailCode> Codes() => EmailCodes.Query().ToList();
+        public List<TwoFactorEmailCode> Codes() => [.. EmailCodes.Query()];
 
         /// <summary>The codes sent, as the sender saw them — the plaintext never leaves this call.</summary>
         public List<string> Sent { get; } = [];

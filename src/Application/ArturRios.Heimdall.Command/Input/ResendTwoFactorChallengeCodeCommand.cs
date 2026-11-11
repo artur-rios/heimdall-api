@@ -15,5 +15,5 @@ namespace ArturRios.Heimdall.Command.Input;
 public class ResendTwoFactorChallengeCodeCommand : BaseCommand
 {
     /// <summary>The short-lived challenge token AF-11g returned from <c>POST /api/auth/login</c>.</summary>
-    public string ChallengeToken { get; set; } = string.Empty;
+    public string ChallengeToken { get; init; } = string.Empty;
 }

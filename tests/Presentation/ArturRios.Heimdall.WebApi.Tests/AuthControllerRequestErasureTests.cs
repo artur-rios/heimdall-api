@@ -25,7 +25,6 @@ public class AuthControllerRequestErasureTests(PostgresFixture db) : WebApiTest<
 {
     private const string Password = Seeds.Password;
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private async Task<Person> ReloadAsync(Person person)
     {

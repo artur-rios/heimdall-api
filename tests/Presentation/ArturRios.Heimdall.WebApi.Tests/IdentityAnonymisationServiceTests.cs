@@ -7,7 +7,6 @@ using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ArturRios.Heimdall.WebApi.Tests;

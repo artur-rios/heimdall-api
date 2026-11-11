@@ -8,5 +8,5 @@ namespace ArturRios.Heimdall.Query.Input;
 /// </summary>
 public class CheckApplicationTokenQuery : BaseQuery
 {
-    public string? Token { get; set; }
+    public string? Token { get; init; }
 }

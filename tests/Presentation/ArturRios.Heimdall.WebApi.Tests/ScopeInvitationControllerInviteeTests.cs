@@ -19,7 +19,6 @@ using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -240,7 +239,7 @@ public class ScopeInvitationControllerInviteeTests(PostgresFixture db) : WebApiT
         Assert.Equal([ScopeInvitationMessages.InvitationNotOpen], output.Errors);
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, (await StoredAsync(invitation)).Outcome);
         Assert.Equal(0, await OwnershipCountAsync(scope, invitee));
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId)], audit.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId)], audit.Entries);
     }
 
     [FunctionalFact]

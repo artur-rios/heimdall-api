@@ -16,10 +16,10 @@ public class CreateApplicationCommand : BaseCommand, IActorScoped
     [JsonIgnore]
     public Guid ScopeId { get; set; }
 
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Public identifier of the person that will own the application (FR-AP-03).</summary>
-    public Guid OwnerId { get; set; }
+    public Guid OwnerId { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

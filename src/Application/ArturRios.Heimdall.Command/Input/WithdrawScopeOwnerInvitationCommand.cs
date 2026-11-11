@@ -11,10 +11,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class WithdrawScopeOwnerInvitationCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public id of the scope the invitation is for.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public id of the invitation (UC-21's <c>invitationId</c>, UC-58's <c>id</c>).</summary>
-    public Guid InvitationId { get; set; }
+    public Guid InvitationId { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

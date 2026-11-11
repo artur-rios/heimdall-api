@@ -87,7 +87,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
             "/api/auth/2fa/enable",
-            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
+            new EnableTwoFactorAuthCommand { Methods = [.. methods], CurrentPassword = Password });
 
     /// <summary>
     ///     Initiates App setup through the real <c>/2fa/enable</c> endpoint (as opposed to
@@ -134,7 +134,7 @@ public class AuthControllerConfirmTwoFactorAuthTests(PostgresFixture db)
         // Then — database state
         var stored = await ConfigurationForAsync(person);
         Assert.NotNull(stored);
-        Assert.True(stored!.IsActive);
+        Assert.True(stored.IsActive);
         Assert.Equal(10, stored.RecoveryCodes.Count);
         Assert.All(stored.RecoveryCodes, code => Assert.False(code.Used));
     }

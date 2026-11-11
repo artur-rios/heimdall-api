@@ -24,7 +24,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // idempotently.
 public class VerifyEmailCommandHandlerTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private sealed record Fixture(
         AsyncFakeRepository<Person, long> Persons,
@@ -104,7 +104,7 @@ public class VerifyEmailCommandHandlerTests
             PersonId = person.Id,
             Person = person,
             TokenHash = SingleUseTokenHash.Of(value),
-            ExpiresAt = expiresAt ?? Now.AddHours(1),
+            ExpiresAt = expiresAt ?? s_now.AddHours(1),
             Used = used
         };
 
@@ -159,7 +159,7 @@ public class VerifyEmailCommandHandlerTests
         await fixture.Handler().HandleAsync(Command("live-token"));
 
         // Then
-        Assert.True(fixture.Person.UpdatedAt >= Now);
+        Assert.True(fixture.Person.UpdatedAt >= s_now);
     }
 
     [UnitFact]
@@ -217,7 +217,7 @@ public class VerifyEmailCommandHandlerTests
         // reason for being dead.
         var fixture = await FixtureAsync();
         var expired = await TokenForAsync(
-            fixture.Tokens, fixture.Person, "stale-token", Now.AddHours(-1));
+            fixture.Tokens, fixture.Person, "stale-token", s_now.AddHours(-1));
         await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 
         // When
@@ -250,7 +250,7 @@ public class VerifyEmailCommandHandlerTests
     {
         // Given — AF-14a (FR-EV-02)
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", Now.AddSeconds(-1));
+        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", s_now.AddSeconds(-1));
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("stale-token"));
@@ -283,7 +283,7 @@ public class VerifyEmailCommandHandlerTests
         // Given both conditions at once. UC-14's main flow states the order — exists, not expired,
         // not used — so expiry is the reason reported.
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "dead-token", Now.AddHours(-1), used: true);
+        await TokenForAsync(fixture.Tokens, fixture.Person, "dead-token", s_now.AddHours(-1), used: true);
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("dead-token"));
@@ -401,7 +401,7 @@ public class VerifyEmailCommandHandlerTests
         await TokenForAsync(fixture.Tokens, fixture.Person, "race-token");
         var atomicWrites = new InMemoryAtomicWrites
         {
-            BeforeConditionalWrite = person => person.ProcessingRestrictedAt = Now
+            BeforeConditionalWrite = person => person.ProcessingRestrictedAt = s_now
         };
         var handler = new VerifyEmailCommandHandler(
             PassingValidator(), fixture.Tokens, fixture.Tokens, atomicWrites,

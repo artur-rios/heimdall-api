@@ -30,7 +30,7 @@ public class DeletePersonCommandHandlerTests
         Email = $"user-{id}@test.local",
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
-        UpdatedAt = Stamp,
+        UpdatedAt = s_stamp,
         ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
@@ -42,12 +42,12 @@ public class DeletePersonCommandHandlerTests
         Email = $"admin-{id}@test.local",
         RoleId = (long)Roles.ScopeAdmin,
         IsDeleted = isDeleted,
-        UpdatedAt = Stamp,
-        ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList()
+        UpdatedAt = s_stamp,
+        ScopeOwnerships = [.. owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })]
     };
 
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was not touched" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static IScopeOwnershipChecker Ownership(bool allowed)
     {
@@ -105,7 +105,7 @@ public class DeletePersonCommandHandlerTests
 
         // Then — the person is flagged and stamped
         Assert.True(target.IsDeleted);
-        Assert.NotEqual(Stamp, target.UpdatedAt);
+        Assert.NotEqual(s_stamp, target.UpdatedAt);
     }
 
     [UnitFact]
@@ -180,7 +180,7 @@ public class DeletePersonCommandHandlerTests
         Assert.True(output.Data!.AlreadyDeleted);
         Assert.Contains(PersonMessages.PersonDeletedSuccessfully, output.Messages);
         Assert.True(target.IsDeleted);
-        Assert.Equal(Stamp, target.UpdatedAt);
+        Assert.Equal(s_stamp, target.UpdatedAt);
     }
 
     [UnitFact]
@@ -302,7 +302,7 @@ public class DeletePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.ScopeWouldLoseLastOwner, output.Errors);
         Assert.False(target.IsDeleted);
-        Assert.Equal(Stamp, target.UpdatedAt);
+        Assert.Equal(s_stamp, target.UpdatedAt);
     }
 
     [UnitFact]
@@ -397,7 +397,7 @@ public class DeletePersonCommandHandlerTests
         Name = $"system-admin-{id}",
         Email = $"system-admin-{id}@test.local",
         RoleId = (long)Roles.SystemAdmin,
-        UpdatedAt = Stamp
+        UpdatedAt = s_stamp
     };
 
     [UnitTheory]

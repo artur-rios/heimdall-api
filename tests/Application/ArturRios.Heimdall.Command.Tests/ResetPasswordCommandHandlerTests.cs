@@ -30,7 +30,7 @@ public class ResetPasswordCommandHandlerTests
     private const string OldPassword = "0ld-Pa55word!";
     private const string NewPassword = "Str0ng-New-Pass!";
 
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private sealed record Fixture(
         AsyncFakeRepository<Person, long> Persons,
@@ -91,7 +91,7 @@ public class ResetPasswordCommandHandlerTests
             PersonId = person.Id,
             Person = person,
             TokenHash = SingleUseTokenHash.Of(value),
-            ExpiresAt = expiresAt ?? Now.AddHours(1),
+            ExpiresAt = expiresAt ?? s_now.AddHours(1),
             Used = used
         };
 
@@ -149,7 +149,7 @@ public class ResetPasswordCommandHandlerTests
         await fixture.Handler().HandleAsync(Command("live-token"));
 
         // Then
-        Assert.True(fixture.Person.UpdatedAt >= Now);
+        Assert.True(fixture.Person.UpdatedAt >= s_now);
     }
 
     [UnitFact]
@@ -221,7 +221,7 @@ public class ResetPasswordCommandHandlerTests
         // reason for being dead.
         var fixture = await FixtureAsync();
         var expired = await TokenForAsync(
-            fixture.Tokens, fixture.Person, "stale-token", Now.AddHours(-1));
+            fixture.Tokens, fixture.Person, "stale-token", s_now.AddHours(-1));
         await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 
         // When
@@ -253,7 +253,7 @@ public class ResetPasswordCommandHandlerTests
     {
         // Given — AF-13a (FR-PR-04)
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", Now.AddSeconds(-1));
+        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", s_now.AddSeconds(-1));
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("stale-token"));
@@ -286,7 +286,7 @@ public class ResetPasswordCommandHandlerTests
         // Given both conditions at once. UC-13's main flow states the order — exists, not expired,
         // not used — so expiry is the reason reported.
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "dead-token", Now.AddHours(-1), used: true);
+        await TokenForAsync(fixture.Tokens, fixture.Person, "dead-token", s_now.AddHours(-1), used: true);
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("dead-token"));
@@ -363,10 +363,10 @@ public class ResetPasswordCommandHandlerTests
                 person.IsDeleted = true;
                 break;
             case "restricted":
-                person.ProcessingRestrictedAt = Now;
+                person.ProcessingRestrictedAt = s_now;
                 break;
             case "anonymised":
-                person.AnonymisedAt = Now;
+                person.AnonymisedAt = s_now;
                 break;
             case "user of a deleted scope":
                 person.RoleId = (long)Roles.User;
@@ -424,7 +424,7 @@ public class ResetPasswordCommandHandlerTests
     {
         // Given — the account is checked before the token's own state, so it says nothing more
         var fixture = await FixtureAsync(isDeleted: true);
-        await TokenForAsync(fixture.Tokens, fixture.Person, "old-token", expiresAt: Now.AddMinutes(-5));
+        await TokenForAsync(fixture.Tokens, fixture.Person, "old-token", expiresAt: s_now.AddMinutes(-5));
 
         // When
         var output = await fixture.Handler().HandleAsync(Command("old-token"));
@@ -476,7 +476,7 @@ public class ResetPasswordCommandHandlerTests
     {
         // Given — a refused reset changes no credential, so it revokes nothing
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", expiresAt: Now.AddMinutes(-1));
+        await TokenForAsync(fixture.Tokens, fixture.Person, "stale-token", expiresAt: s_now.AddMinutes(-1));
         var stamp = fixture.Person.SecurityStamp;
 
         // When

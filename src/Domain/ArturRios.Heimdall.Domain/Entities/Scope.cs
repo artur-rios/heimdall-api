@@ -14,7 +14,7 @@ public class Scope : Entity<long>
     ///     from outside the database (API paths, response bodies, token claims). The internal
     ///     <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Scope display name. Required, unique.</summary>
     [MaxLength(200)]
@@ -85,7 +85,7 @@ public class Scope : Entity<long>
     public string? PasswordResetUrl { get; set; }
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>Last update timestamp.</summary>
     public DateTime UpdatedAt { get; set; }
@@ -93,17 +93,17 @@ public class Scope : Entity<long>
     // Navigation properties
 
     /// <summary>Ownership join rows linking this scope to its owners (persons with the <c>ScopeAdmin</c> role).</summary>
-    public ICollection<ScopeOwner> Owners { get; set; } = new List<ScopeOwner>();
+    public ICollection<ScopeOwner> Owners { get; init; } = [];
 
     /// <summary>Membership join rows linking this scope to its users (persons with the <c>User</c> role).</summary>
-    public ICollection<ScopeUser> Users { get; set; } = new List<ScopeUser>();
+    public ICollection<ScopeUser> Users { get; init; } = [];
 
     /// <summary>Applications contained in this scope.</summary>
-    public ICollection<Application> Applications { get; set; } = new List<Application>();
+    public ICollection<Application> Applications { get; init; } = [];
 
     /// <summary>Google Users contained in this scope.</summary>
-    public ICollection<GoogleUser> GoogleUsers { get; set; } = new List<GoogleUser>();
+    public ICollection<GoogleUser> GoogleUsers { get; init; } = [];
 
     /// <summary>Scope-specific permissions defined within this scope.</summary>
-    public ICollection<ScopePermission> ScopePermissions { get; set; } = new List<ScopePermission>();
+    public ICollection<ScopePermission> ScopePermissions { get; init; } = [];
 }

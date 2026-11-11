@@ -28,7 +28,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class AuditLog : Entity<long>
 {
     /// <summary>External identifier of this entry.</summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>
     ///     The acting person's <c>PublicId</c>; <c>null</c> for an anonymous write, and <c>null</c>
@@ -56,7 +56,7 @@ public class AuditLog : Entity<long>
 
     /// <summary>The command's CLR type name, e.g. <c>"CreateApplicationCommand"</c>.</summary>
     [MaxLength(200)]
-    public string Action { get; set; } = string.Empty;
+    public string Action { get; init; } = string.Empty;
 
     /// <summary>
     ///     Best-effort public identifier of the entity the write affected; <c>null</c> if none could be
@@ -77,7 +77,7 @@ public class AuditLog : Entity<long>
     ///     refused attempt is usually the more interesting one: a caller repeatedly denied a scope
     ///     they do not own, or repeatedly failing a password, leaves no other trace.
     /// </summary>
-    public bool Succeeded { get; set; }
+    public bool Succeeded { get; init; }
 
     /// <summary>
     ///     The first error the operation reported, when it failed; <c>null</c> on success.
@@ -88,8 +88,8 @@ public class AuditLog : Entity<long>
     ///     cannot become a place where a submitted password or an address ends up recorded verbatim.
     /// </remarks>
     [MaxLength(500)]
-    public string? FailureReason { get; set; }
+    public string? FailureReason { get; init; }
 
     /// <summary>When the entry was written.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 }

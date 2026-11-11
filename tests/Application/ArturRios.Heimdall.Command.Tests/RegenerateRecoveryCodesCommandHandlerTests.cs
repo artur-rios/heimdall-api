@@ -310,7 +310,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
+        Assert.Single([.. fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id)]);
     }
 
     [UnitFact]
@@ -328,7 +328,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
+        Assert.Single([.. fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id)]);
     }
 
     [UnitFact]
@@ -396,7 +396,7 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         // Then
         Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
-        Assert.Single(fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id).ToList());
+        Assert.Single([.. fixture.RecoveryCodes.Query().Where(x => x.TwoFactorAuthId == twoFactorAuth.Id)]);
     }
 
     [UnitFact]

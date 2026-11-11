@@ -13,7 +13,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // matching nothing.
 public class RecoveryCodesTests
 {
-    private static readonly Regex IssuedShape =
+    private static readonly Regex s_issuedShape =
         new("^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$");
 
     private static byte[] Sha256(string value) => SHA256.HashData(Encoding.UTF8.GetBytes(value));
@@ -26,7 +26,7 @@ public class RecoveryCodesTests
 
         // Then
         Assert.Equal(10, issued.Count);
-        Assert.All(issued, code => Assert.Matches(IssuedShape, code.Code));
+        Assert.All(issued, code => Assert.Matches(s_issuedShape, code.Code));
         Assert.Equal(10, issued.Select(code => code.Code).Distinct().Count());
     }
 
@@ -50,7 +50,7 @@ public class RecoveryCodesTests
             .ToHashSet();
 
         // Then
-        Assert.Equal(RecoveryCodes.Alphabet.ToHashSet(), characters);
+        Assert.Equal([.. RecoveryCodes.Alphabet], characters);
         Assert.Equal(32, RecoveryCodes.Alphabet.Length);
         Assert.DoesNotContain('I', RecoveryCodes.Alphabet);
         Assert.DoesNotContain('L', RecoveryCodes.Alphabet);

@@ -429,8 +429,8 @@ public interface IAtomicWrites
     Task<bool> TryAnonymiseAsync(GoogleUser googleUser, string name, string email, string googleId, DateTime at);
 
     /// <summary>
-    ///     NFR-25 for a Google User a restore brought back: anonymised as <see cref="TryAnonymiseAsync(GoogleUser,
-    ///     string, string, string, DateTime)" /> does and marked a subject-requested deletion — dated when they
+    ///     NFR-25 for a Google User a restore brought back: anonymised as
+    ///     <see cref="TryAnonymiseAsync(GoogleUser, string, string, string, DateTime)" /> does and marked a subject-requested deletion — dated when they
     ///     were deleted, or <paramref name="at" /> if the restored row is live — whatever their state, so long
     ///     as they are not anonymised already.
     /// </summary>
@@ -494,7 +494,8 @@ public interface IAtomicWrites
     Task<bool> TryAnonymiseAsync(Person person, string name, string email, DateTime at);
 
     /// <summary>
-    ///     NFR-25: anonymises a person a restore brought back, as <see cref="TryAnonymiseAsync" /> does,
+    ///     NFR-25: anonymises a person a restore brought back, as
+    ///     <see cref="TryAnonymiseAsync(Person, string, string, DateTime)" /> does,
     ///     and marks them a subject-requested deletion — dated when they were deleted, or
     ///     <paramref name="at" /> if the restored row is live — whatever their state, so long as they are
     ///     not anonymised already. <c>false</c> means they were, possibly since the caller read them.

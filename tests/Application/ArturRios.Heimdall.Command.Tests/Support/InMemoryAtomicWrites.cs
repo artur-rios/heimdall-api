@@ -421,7 +421,7 @@ public sealed class InMemoryAtomicWrites : IAtomicWrites
         if (!string.Equals(email, person.Email, StringComparison.Ordinal))
         {
             // A change of case alone names the same mailbox, so the verification stands (#225).
-            if (!string.Equals(email.ToLower(), person.Email.ToLower(), StringComparison.Ordinal))
+            if (!string.Equals(email.ToLowerInvariant(), person.Email.ToLowerInvariant(), StringComparison.Ordinal))
             {
                 person.EmailVerified = false;
             }

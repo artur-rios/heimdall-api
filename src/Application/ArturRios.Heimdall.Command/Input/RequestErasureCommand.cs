@@ -25,10 +25,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class RequestErasureCommand : BaseCommand, IActorScoped
 {
     /// <summary>The caller's current password, when the caller is a person.</summary>
-    public string? Password { get; set; }
+    public string? Password { get; init; }
 
     /// <summary>A freshly issued Google ID token, when the caller is a Google User.</summary>
-    public string? IdToken { get; set; }
+    public string? IdToken { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

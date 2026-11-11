@@ -10,11 +10,11 @@ namespace ArturRios.Heimdall.Command.Output;
 public class HardDeletePersonCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the hard-deleted person.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Total number of applications the person owned.</summary>
-    public int DeletedApplicationCount { get; set; }
+    public int DeletedApplicationCount { get; init; }
 
     /// <summary>Total number of password reset and email verification tokens issued for the person.</summary>
-    public int DeletedTokenCount { get; set; }
+    public int DeletedTokenCount { get; init; }
 }

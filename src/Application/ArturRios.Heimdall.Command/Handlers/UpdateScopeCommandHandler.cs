@@ -35,7 +35,7 @@ public class UpdateScopeCommandHandler(
         var output = DataOutput<UpdateScopeCommandOutput?>.New;
 
         // Step 2: validate input fields.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -44,7 +44,7 @@ public class UpdateScopeCommandHandler(
 
         // Step 3 (AF-03a): the scope must exist and not be logically deleted.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -56,7 +56,7 @@ public class UpdateScopeCommandHandler(
         // that the case-sensitive DB unique index on Name would not catch. Checked against all scopes
         // (deleted included), excluding this scope so an unchanged name is not a false conflict.
         var nameTaken = await scopeReader.Query()
-            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower() && x.PublicId != command.Id);
+            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower() && x.PublicId != command.Id, cancellationToken);
 
         if (nameTaken)
         {
@@ -68,7 +68,7 @@ public class UpdateScopeCommandHandler(
         var ownerIds = await scopeReader.Query()
             .Where(x => x.PublicId == command.Id)
             .SelectMany(x => x.Owners.Select(owner => owner.Person.PublicId))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // Step 4 (main flow): apply the updates and stamp UpdatedAt (no DB trigger maintains it) — those
         // columns only, and only while the scope is not deleted (#205). A whole-row save of the copy read

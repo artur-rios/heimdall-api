@@ -35,7 +35,7 @@ public class PasswordRecoveryEligibilityTests
     private static Person ScopeAdmin(params Scope[] owned)
     {
         var person = Person(Roles.ScopeAdmin);
-        person.ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList();
+        person.ScopeOwnerships = [.. owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })];
         return person;
     }
 

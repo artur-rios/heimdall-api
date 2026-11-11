@@ -36,7 +36,7 @@ public class DeleteApplicationCommandHandler(
         var application = await applicationReader.Query()
             .Include(x => x.Owner)
             .ThenInclude(owner => owner.ScopeOwnerships)
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (application is null)
         {
@@ -72,7 +72,7 @@ public class DeleteApplicationCommandHandler(
         application.IsDeleted = true;
         application.UpdatedAt = DateTime.UtcNow;
 
-        var update = await applicationWriter.UpdateAsync(application);
+        var update = await applicationWriter.UpdateAsync(application, cancellationToken);
 
         if (!update.Success)
         {

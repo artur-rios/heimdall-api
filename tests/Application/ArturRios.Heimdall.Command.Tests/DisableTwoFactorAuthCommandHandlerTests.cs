@@ -252,7 +252,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Single([.. fixture.TwoFactorAuths.Query()]);
     }
 
     [UnitFact]
@@ -268,7 +268,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Single([.. fixture.TwoFactorAuths.Query()]);
     }
 
     [UnitFact]
@@ -286,7 +286,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Single([.. fixture.TwoFactorAuths.Query()]);
     }
 
     [UnitFact]
@@ -375,7 +375,7 @@ public class DisableTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.Equal([AuthMessages.PasswordOrCodeIncorrect], output.Errors);
-        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.NotNull(fixture.Person.ReauthenticationPausedUntil);
     }
 

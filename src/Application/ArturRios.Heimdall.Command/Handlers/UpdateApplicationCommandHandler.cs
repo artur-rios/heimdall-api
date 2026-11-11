@@ -32,7 +32,7 @@ public class UpdateApplicationCommandHandler(
 
         // UC-18 step 2: validate input shape. UC-18 defines no alternative flow for this, so the
         // validator's UC-16 messages carry their existing 400.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -48,7 +48,7 @@ public class UpdateApplicationCommandHandler(
             .Include(x => x.Owner)
             .ThenInclude(owner => owner.ScopeOwnerships)
             .FirstOrDefaultAsync(x =>
-                x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId && !x.IsDeleted);
+                x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (application is null)
         {
@@ -86,7 +86,7 @@ public class UpdateApplicationCommandHandler(
             var newOwner = await personReader.Query().FirstOrDefaultAsync(person =>
                 person.PublicId == command.OwnerId && !person.IsDeleted &&
                 (person.RoleId == (long)Roles.ScopeAdmin || person.RoleId == (long)Roles.SystemAdmin) &&
-                person.ScopeOwnerships.Any(ownership => ownership.ScopeId == application.ScopeId));
+                person.ScopeOwnerships.Any(ownership => ownership.ScopeId == application.ScopeId), cancellationToken);
 
             if (newOwner is null)
             {
@@ -104,7 +104,7 @@ public class UpdateApplicationCommandHandler(
         application.Name = command.Name;
         application.UpdatedAt = DateTime.UtcNow;
 
-        var update = await applicationWriter.UpdateAsync(application);
+        var update = await applicationWriter.UpdateAsync(application, cancellationToken);
 
         if (!update.Success)
         {

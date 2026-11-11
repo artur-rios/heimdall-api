@@ -10,12 +10,12 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeleteScopePermissionCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the deleted permission.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     <c>true</c> when the permission was already logically deleted and nothing was written
     ///     (AF-34b); <c>false</c> when this request performed the deletion. AF-34b answers with the
     ///     same status and message as the main flow, so this flag is what tells them apart.
     /// </summary>
-    public bool AlreadyDeleted { get; set; }
+    public bool AlreadyDeleted { get; init; }
 }

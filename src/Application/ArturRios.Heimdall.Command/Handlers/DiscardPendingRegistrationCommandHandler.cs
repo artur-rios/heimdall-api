@@ -50,7 +50,7 @@ public class DiscardPendingRegistrationCommandHandler(
         }
 
         // AF-50b. Before the registration lookup, so a non-owner cannot learn which ids exist.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.NotScopeOwner);
         }

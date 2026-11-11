@@ -74,7 +74,7 @@ public sealed class TrustedCallerOptions
 
         return new TrustedCallerOptions
         {
-            KeyDigests = entries.Select(Digest).ToArray()
+            KeyDigests = [.. entries.Select(Digest)]
         };
     }
 

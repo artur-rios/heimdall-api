@@ -12,10 +12,10 @@ namespace ArturRios.Heimdall.Query.Input;
 public class GetPersonByIdQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the person to retrieve.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>When <c>true</c>, a logically deleted person is still returned (FR-PE-08).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

@@ -12,28 +12,28 @@ namespace ArturRios.Heimdall.Command.Output;
 public class AddScopeOwnerCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the scope.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the person added or invited.</summary>
-    public Guid PersonId { get; set; }
+    public Guid PersonId { get; init; }
 
     /// <summary>
     ///     <c>true</c> when the person already owned the scope and nothing was written (AF-21d). AF-21d already
     ///     answers with its own status (200 against the main flow's 201), so this flag confirms which path ran
     ///     rather than being the only way to tell them apart.
     /// </summary>
-    public bool AlreadyOwner { get; set; }
+    public bool AlreadyOwner { get; init; }
 
     /// <summary>
     ///     <c>true</c> when a Scope Admin asked and the person was invited rather than added (FR-SC-14): they
     ///     own nothing until they accept (UC-60). The answer is then 202. Always <c>false</c> for a System
     ///     Admin and for AF-21d.
     /// </summary>
-    public bool Invited { get; set; }
+    public bool Invited { get; init; }
 
     /// <summary>The open invitation's public id when <see cref="Invited" />; what UC-58 withdraws it by.</summary>
-    public Guid? InvitationId { get; set; }
+    public Guid? InvitationId { get; init; }
 
     /// <summary>When the open invitation stops being acceptable, when <see cref="Invited" />.</summary>
-    public DateTime? InvitationExpiresAt { get; set; }
+    public DateTime? InvitationExpiresAt { get; init; }
 }

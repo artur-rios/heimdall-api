@@ -12,13 +12,13 @@ namespace ArturRios.Heimdall.Query.Input;
 public class GetGoogleUserByIdQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the scope the Google User must belong to (from the route).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the Google User to retrieve.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>When <c>true</c>, a logically deleted Google User is still returned (FR-GO-17).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     /// <summary>
     ///     The acting caller's <c>PublicId</c>. For a Google User this is their own Google User

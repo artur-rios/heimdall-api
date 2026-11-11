@@ -29,7 +29,7 @@ namespace ArturRios.Heimdall.Shared.Messages;
 /// </remarks>
 public static class DataAccessMessageMap
 {
-    private static readonly IReadOnlyDictionary<string, int> StatusCodes = new Dictionary<string, int>
+    private static readonly IReadOnlyDictionary<string, int> s_statusCodes = new Dictionary<string, int>
     {
         // A write lost a race against a unique index — the state the caller asked for conflicts with
         // state that already exists, which is exactly 409. The application checks these rules before
@@ -60,7 +60,7 @@ public static class DataAccessMessageMap
     /// </remarks>
     public static IReadOnlyDictionary<string, int> CombinedWith(IReadOnlyDictionary<string, int> useCaseStatusCodes)
     {
-        var combined = new Dictionary<string, int>(StatusCodes);
+        var combined = new Dictionary<string, int>(s_statusCodes);
 
         foreach (var (message, statusCode) in useCaseStatusCodes)
         {

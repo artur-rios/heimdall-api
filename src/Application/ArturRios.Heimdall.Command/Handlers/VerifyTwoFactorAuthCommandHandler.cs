@@ -92,12 +92,12 @@ public class VerifyTwoFactorAuthCommandHandler(
             // the login it diverted here ends the same way (NFR-24).
             .FirstOrDefaultAsync(person => person.PublicId == principal.PersonId &&
                                            person.AnonymisedAt == null &&
-                                           (!person.IsDeleted || person.ProcessingRestrictedAt != null));
+                                           (!person.IsDeleted || person.ProcessingRestrictedAt != null), cancellationToken);
 
         var twoFactorAuth = person is null
             ? null
             : await twoFactorReader.Query()
-                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
+                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive, cancellationToken);
 
         // AF-38a again, for what a signature cannot say. A challenge is redeemable once (FR-2F-10):
         // the token must still name the configuration's outstanding challenge, which redemption

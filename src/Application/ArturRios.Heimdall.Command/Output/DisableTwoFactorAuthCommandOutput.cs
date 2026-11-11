@@ -10,5 +10,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DisableTwoFactorAuthCommandOutput : CommandOutput
 {
     /// <summary>Always <c>true</c> when this output is returned — disabling only ever succeeds fully.</summary>
-    public bool Disabled { get; set; }
+    public bool Disabled { get; init; }
 }

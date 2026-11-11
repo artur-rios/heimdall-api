@@ -47,15 +47,18 @@ public class ListApplicationCredentialsQueryHandler(
         return output
             .WithData(new ApplicationCredentialListOutput
             {
-                Credentials = credentials.Select(x => new ApplicationCredentialOutput
-                {
-                    Id = x.PublicId,
-                    CreatedAt = x.CreatedAt,
-                    ExpiresAt = x.ExpiresAt,
-                    RevokedAt = x.RevokedAt,
-                    LastUsedAt = x.LastUsedAt,
-                    Live = x.IsLiveAt(now)
-                }).ToList()
+                Credentials =
+                [
+                    .. credentials.Select(x => new ApplicationCredentialOutput
+                    {
+                        Id = x.PublicId,
+                        CreatedAt = x.CreatedAt,
+                        ExpiresAt = x.ExpiresAt,
+                        RevokedAt = x.RevokedAt,
+                        LastUsedAt = x.LastUsedAt,
+                        Live = x.IsLiveAt(now)
+                    })
+                ]
             })
             .WithMessage(ApplicationCredentialMessages.CredentialsRetrieved);
     }

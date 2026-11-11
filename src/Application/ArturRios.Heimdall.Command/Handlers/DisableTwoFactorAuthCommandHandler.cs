@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using Microsoft.EntityFrameworkCore;
 
 namespace ArturRios.Heimdall.Command.Handlers;
@@ -42,12 +41,12 @@ public class DisableTwoFactorAuthCommandHandler(
         var output = DataOutput<DisableTwoFactorAuthCommandOutput?>.New;
 
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted, cancellationToken);
 
         var twoFactorAuth = person is null
             ? null
             : await twoFactorReader.Query()
-                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
+                .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive, cancellationToken);
 
         // AF-39a: nothing to disable — whether because two-factor was never active, or because the
         // caller could not be resolved as a live person at all (a Google User, or a bearer token
@@ -86,7 +85,7 @@ public class DisableTwoFactorAuthCommandHandler(
         // UC-39 step 4: only once both checks pass. ON DELETE CASCADE (TwoFactorAuthDbMap,
         // TwoFactorRecoveryCodeDbMap, TwoFactorEmailCodeDbMap) removes the recovery codes and email
         // codes at the database level — no explicit child deletion needed.
-        var deletion = await twoFactorWriter.DeleteAsync(twoFactorAuth);
+        var deletion = await twoFactorWriter.DeleteAsync(twoFactorAuth, cancellationToken);
 
         if (!deletion.Success)
         {

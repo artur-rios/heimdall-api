@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,7 +30,7 @@ public class CreateAdminCommandHandler(
         var output = DataOutput<CreatePersonCommandOutput?>.New;
 
         // AF-06d: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -42,11 +41,11 @@ public class CreateAdminCommandHandler(
         // Trimmed first, here and where it is stored: sign-in and recovery match the stored address
         // exactly, case aside, so surrounding whitespace would make it unreachable.
         var address = command.Email.Trim();
-        var email = address.ToLower();
+        var email = address.ToLowerInvariant();
 
         var emailTaken = await personReader.Query().AnyAsync(person =>
             !person.IsDeleted && person.Email.ToLower() == email &&
-            (person.RoleId == (long)Roles.SystemAdmin || person.RoleId == (long)Roles.ScopeAdmin));
+            (person.RoleId == (long)Roles.SystemAdmin || person.RoleId == (long)Roles.ScopeAdmin), cancellationToken);
 
         if (emailTaken)
         {
@@ -69,7 +68,7 @@ public class CreateAdminCommandHandler(
         // own purpose rather than a tenant's, so the deployment default applies.
         LegalBasisRecorder.Record(newPerson, scope: null, DateTime.UtcNow);
 
-        var creation = await personWriter.CreateAsync(newPerson);
+        var creation = await personWriter.CreateAsync(newPerson, cancellationToken);
 
         if (!creation.Success)
         {

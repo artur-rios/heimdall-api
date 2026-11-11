@@ -16,7 +16,7 @@ public class AuthRateLimitPartitionTests
     private const string KeyB = "caller-key-B-0123456789abcdefghijklmn";
     private const string Connection = "172.18.0.9";
 
-    private static readonly string ConnectionPartition = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse(Connection));
+    private static readonly string s_connectionPartition = RateLimitingConfiguration.RateLimitPartitionKey(IPAddress.Parse(Connection));
 
     private static DefaultHttpContext Context(string? key = null, string? clientAddress = null)
     {
@@ -106,7 +106,7 @@ public class AuthRateLimitPartitionTests
         var key = AuthRateLimitPartition.KeyFor(
             Context("caller-key-X-0123456789abcdefghijklmn", "203.0.113.7"), Callers());
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitFact]
@@ -114,7 +114,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA[..^1], "203.0.113.7"), Callers());
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitFact]
@@ -122,7 +122,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(clientAddress: "203.0.113.7"), Callers());
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitFact]
@@ -130,7 +130,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA), Callers());
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitTheory]
@@ -142,7 +142,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, address), Callers());
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitFact]
@@ -150,7 +150,7 @@ public class AuthRateLimitPartitionTests
     {
         var key = AuthRateLimitPartition.KeyFor(Context(KeyA, "203.0.113.7"), Callers(keys: null));
 
-        Assert.Equal(ConnectionPartition, key);
+        Assert.Equal(s_connectionPartition, key);
     }
 
     [UnitFact]
@@ -160,7 +160,7 @@ public class AuthRateLimitPartitionTests
         var context = Context(clientAddress: "203.0.113.7");
         context.Request.Headers[AuthRateLimitPartition.CallerKeyHeader] = new[] { KeyA, KeyA };
 
-        Assert.Equal(ConnectionPartition, AuthRateLimitPartition.KeyFor(context, Callers()));
+        Assert.Equal(s_connectionPartition, AuthRateLimitPartition.KeyFor(context, Callers()));
     }
 
     [UnitFact]

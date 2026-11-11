@@ -1,5 +1,4 @@
 using ArturRios.Heimdall.WebApi.Tests.Support;
-using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Persistence;

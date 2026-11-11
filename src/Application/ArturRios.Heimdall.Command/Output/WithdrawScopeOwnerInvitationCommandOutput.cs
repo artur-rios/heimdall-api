@@ -9,5 +9,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class WithdrawScopeOwnerInvitationCommandOutput : CommandOutput
 {
     /// <summary>Public id of the withdrawn invitation.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

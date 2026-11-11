@@ -20,7 +20,7 @@ namespace ArturRios.Heimdall.Query.Tests;
 // it at all, and with which scope id.
 public class GetGoogleUserByIdQueryHandlerTests
 {
-    private static readonly Guid ScopePublicId = Guid.NewGuid();
+    private static readonly Guid s_scopePublicId = Guid.NewGuid();
 
     private const long ScopeInternalId = 42;
 
@@ -42,7 +42,7 @@ public class GetGoogleUserByIdQueryHandlerTests
         var scope = new Scope
         {
             Id = ScopeInternalId,
-            PublicId = scopePublicId ?? ScopePublicId,
+            PublicId = scopePublicId ?? s_scopePublicId,
             Name = $"scope-{Guid.NewGuid():N}"
         };
 
@@ -67,7 +67,7 @@ public class GetGoogleUserByIdQueryHandlerTests
         Guid id, Guid actingPersonId, Roles actingRole = Roles.SystemAdmin, bool includeDeleted = false) =>
         new()
         {
-            ScopeId = ScopePublicId,
+            ScopeId = s_scopePublicId,
             Id = id,
             IncludeDeleted = includeDeleted,
             ActingPersonId = actingPersonId,
@@ -91,7 +91,7 @@ public class GetGoogleUserByIdQueryHandlerTests
         Assert.Equal(googleUser.PublicId, output.Data!.Id);
         Assert.Equal(googleUser.GoogleId, output.Data.GoogleId);
         Assert.Equal(googleUser.Email, output.Data.Email);
-        Assert.Equal(ScopePublicId, output.Data.ScopeId);
+        Assert.Equal(s_scopePublicId, output.Data.ScopeId);
         Assert.False(output.Data.IsDeleted);
     }
 

@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Query.Tests;
 // and is asserted in AuditControllerListTests.
 public class ListAuditLogQueryHandlerTests
 {
-    private static readonly DateTime T0 = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_t0 = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 
     private static AuditLog Entry(
         long id,
@@ -66,9 +66,9 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenEntries_WhenListingAuditLog_ThenNewestComesFirst()
     {
         // Given three entries an hour apart, stored out of order
-        var oldest = Entry(1, T0);
-        var newest = Entry(2, T0.AddHours(2));
-        var middle = Entry(3, T0.AddHours(1));
+        var oldest = Entry(1, s_t0);
+        var newest = Entry(2, s_t0.AddHours(2));
+        var middle = Entry(3, s_t0.AddHours(1));
         var handler = Handler(await EntriesWith(oldest, newest, middle));
 
         // When
@@ -86,8 +86,8 @@ public class ListAuditLogQueryHandlerTests
     {
         // Given two entries sharing a timestamp — a command and its side effect can. The id breaks
         // the tie, so a page boundary between them cannot show one twice and the other never.
-        var first = Entry(1, T0);
-        var second = Entry(2, T0);
+        var first = Entry(1, s_t0);
+        var second = Entry(2, s_t0);
         var handler = Handler(await EntriesWith(first, second));
 
         // When
@@ -104,7 +104,7 @@ public class ListAuditLogQueryHandlerTests
         var actor = Guid.NewGuid();
         var target = Guid.NewGuid();
         var entry = Entry(
-            1, T0, action: "DeletePersonCommand", actor: actor, actorRole: (int)Roles.ScopeAdmin,
+            1, s_t0, action: "DeletePersonCommand", actor: actor, actorRole: (int)Roles.ScopeAdmin,
             target: target, succeeded: false, failureReason: PersonMessages.NotAuthorizedToDeletePerson);
         var handler = Handler(await EntriesWith(entry));
 
@@ -114,7 +114,7 @@ public class ListAuditLogQueryHandlerTests
         // Then
         var item = Assert.Single(output.Data!);
         Assert.Equal(entry.PublicId, item.Id);
-        Assert.Equal(T0, item.RecordedAt);
+        Assert.Equal(s_t0, item.RecordedAt);
         Assert.Equal(actor, item.ActorId);
         Assert.Equal((int)Roles.ScopeAdmin, item.ActorRole);
         Assert.Equal("DeletePersonCommand", item.Action);
@@ -127,7 +127,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnEntryWhoseActorWasCleared_WhenListingAuditLog_ThenActorFieldsAreNull()
     {
         // Given an entry the retention pass has pseudonymised (NFR-21) — nothing to reconstruct from
-        var entry = Entry(1, T0, actor: null, actorRole: null, target: Guid.NewGuid());
+        var entry = Entry(1, s_t0, actor: null, actorRole: null, target: Guid.NewGuid());
         var handler = Handler(await EntriesWith(entry));
 
         // When
@@ -143,14 +143,14 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenFromAndTo_WhenListingAuditLog_ThenBothBoundsAreInclusive()
     {
         // Given one entry just before the range, one on each bound, one just after
-        var before = Entry(1, T0.AddSeconds(-1));
-        var onFrom = Entry(2, T0);
-        var onTo = Entry(3, T0.AddHours(1));
-        var after = Entry(4, T0.AddHours(1).AddSeconds(1));
+        var before = Entry(1, s_t0.AddSeconds(-1));
+        var onFrom = Entry(2, s_t0);
+        var onTo = Entry(3, s_t0.AddHours(1));
+        var after = Entry(4, s_t0.AddHours(1).AddSeconds(1));
         var handler = Handler(await EntriesWith(before, onFrom, onTo, after));
         var query = Query();
-        query.From = T0;
-        query.To = T0.AddHours(1);
+        query.From = s_t0;
+        query.To = s_t0.AddHours(1);
 
         // When
         var output = await handler.HandleAsync(query);
@@ -163,11 +163,11 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenToEqualToFrom_WhenListingAuditLog_ThenTheEntryAtThatInstantIsReturned()
     {
         // Given a range of a single instant — valid, since To is not earlier than From
-        var exact = Entry(1, T0);
-        var handler = Handler(await EntriesWith(exact, Entry(2, T0.AddSeconds(1))));
+        var exact = Entry(1, s_t0);
+        var handler = Handler(await EntriesWith(exact, Entry(2, s_t0.AddSeconds(1))));
         var query = Query();
-        query.From = T0;
-        query.To = T0;
+        query.From = s_t0;
+        query.To = s_t0;
 
         // When
         var output = await handler.HandleAsync(query);
@@ -181,8 +181,8 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenBoundsWithoutAnOffset_WhenListingAuditLog_ThenTheyFilterAsUtc()
     {
         // Given From as the binder produces it from "2026-10-01T12:00:00" — no offset
-        var onFrom = Entry(1, T0);
-        var handler = Handler(await EntriesWith(Entry(2, T0.AddSeconds(-1)), onFrom));
+        var onFrom = Entry(1, s_t0);
+        var handler = Handler(await EntriesWith(Entry(2, s_t0.AddSeconds(-1)), onFrom));
         var query = Query();
         query.From = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Unspecified);
 
@@ -199,9 +199,9 @@ public class ListAuditLogQueryHandlerTests
     {
         // Given entries by two actors and one anonymous entry
         var ana = Guid.NewGuid();
-        var anas = Entry(1, T0, actor: ana, actorRole: (int)Roles.SystemAdmin);
+        var anas = Entry(1, s_t0, actor: ana, actorRole: (int)Roles.SystemAdmin);
         var handler = Handler(await EntriesWith(
-            anas, Entry(2, T0, actor: Guid.NewGuid(), actorRole: (int)Roles.ScopeAdmin), Entry(3, T0)));
+            anas, Entry(2, s_t0, actor: Guid.NewGuid(), actorRole: (int)Roles.ScopeAdmin), Entry(3, s_t0)));
         var query = Query();
         query.ActorId = ana;
 
@@ -216,8 +216,8 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnActionFilter_WhenListingAuditLog_ThenOnlyThatActionIsReturned()
     {
         // Given two kinds of action
-        var create = Entry(1, T0, action: "CreateScopeCommand");
-        var handler = Handler(await EntriesWith(create, Entry(2, T0, action: "UpdateScopeCommand")));
+        var create = Entry(1, s_t0, action: "CreateScopeCommand");
+        var handler = Handler(await EntriesWith(create, Entry(2, s_t0, action: "UpdateScopeCommand")));
         var query = Query();
         query.Action = "CreateScopeCommand";
 
@@ -232,7 +232,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnActionInAnotherCase_WhenListingAuditLog_ThenNothingMatches()
     {
         // Given the action is matched exactly, as recorded — the command's type name
-        var handler = Handler(await EntriesWith(Entry(1, T0, action: "CreateScopeCommand")));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0, action: "CreateScopeCommand")));
         var query = Query();
         query.Action = "createscopecommand";
 
@@ -251,7 +251,7 @@ public class ListAuditLogQueryHandlerTests
     {
         // Given what a cleared text box submits
         var handler = Handler(await EntriesWith(
-            Entry(1, T0, action: "CreateScopeCommand"), Entry(2, T0, action: "UpdateScopeCommand")));
+            Entry(1, s_t0, action: "CreateScopeCommand"), Entry(2, s_t0, action: "UpdateScopeCommand")));
         var query = Query();
         query.Action = action;
 
@@ -268,8 +268,8 @@ public class ListAuditLogQueryHandlerTests
     {
         // Given entries about two entities and one with no target
         var target = Guid.NewGuid();
-        var about = Entry(1, T0, target: target);
-        var handler = Handler(await EntriesWith(about, Entry(2, T0, target: Guid.NewGuid()), Entry(3, T0)));
+        var about = Entry(1, s_t0, target: target);
+        var handler = Handler(await EntriesWith(about, Entry(2, s_t0, target: Guid.NewGuid()), Entry(3, s_t0)));
         var query = Query();
         query.TargetId = target;
 
@@ -286,8 +286,8 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnOutcomeFilter_WhenListingAuditLog_ThenOnlyThatOutcomeIsReturned(bool succeeded)
     {
         // Given one completed write and one refusal
-        var completed = Entry(1, T0, succeeded: true);
-        var refused = Entry(2, T0, succeeded: false, failureReason: ScopeMessages.NotScopeOwner);
+        var completed = Entry(1, s_t0, succeeded: true);
+        var refused = Entry(2, s_t0, succeeded: false, failureReason: ScopeMessages.NotScopeOwner);
         var handler = Handler(await EntriesWith(completed, refused));
         var query = Query();
         query.Succeeded = succeeded;
@@ -305,11 +305,11 @@ public class ListAuditLogQueryHandlerTests
     {
         // Given entries matching the actor only, the action only, and both
         var ana = Guid.NewGuid();
-        var both = Entry(1, T0, action: "CreateScopeCommand", actor: ana, actorRole: (int)Roles.SystemAdmin);
+        var both = Entry(1, s_t0, action: "CreateScopeCommand", actor: ana, actorRole: (int)Roles.SystemAdmin);
         var handler = Handler(await EntriesWith(
             both,
-            Entry(2, T0, action: "UpdateScopeCommand", actor: ana, actorRole: (int)Roles.SystemAdmin),
-            Entry(3, T0, action: "CreateScopeCommand", actor: Guid.NewGuid(), actorRole: (int)Roles.SystemAdmin)));
+            Entry(2, s_t0, action: "UpdateScopeCommand", actor: ana, actorRole: (int)Roles.SystemAdmin),
+            Entry(3, s_t0, action: "CreateScopeCommand", actor: Guid.NewGuid(), actorRole: (int)Roles.SystemAdmin)));
         var query = Query();
         query.ActorId = ana;
         query.Action = "CreateScopeCommand";
@@ -325,7 +325,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenNoMatchingEntry_WhenListingAuditLog_ThenAnEmptyPageIsASuccess()
     {
         // Given AF-48c — entries exist, none about this target
-        var handler = Handler(await EntriesWith(Entry(1, T0, target: Guid.NewGuid())));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0, target: Guid.NewGuid())));
         var query = Query();
         query.TargetId = Guid.NewGuid();
 
@@ -343,10 +343,10 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenToEarlierThanFrom_WhenListingAuditLog_ThenReturnsInvalidDateRange()
     {
         // Given AF-48a — a range that runs backwards
-        var handler = Handler(await EntriesWith(Entry(1, T0)));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0)));
         var query = Query();
-        query.From = T0;
-        query.To = T0.AddSeconds(-1);
+        query.From = s_t0;
+        query.To = s_t0.AddSeconds(-1);
 
         // When
         var output = await handler.HandleAsync(query);
@@ -360,7 +360,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnActionLongerThanTheColumn_WhenListingAuditLog_ThenReturnsFilterTooLong()
     {
         // Given AF-48a — AUDIT_LOG.action holds 200 characters, so 201 could never match
-        var handler = Handler(await EntriesWith(Entry(1, T0)));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0)));
         var query = Query();
         query.Action = new string('A', 201);
 
@@ -376,7 +376,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenAnActionAtTheColumnsLength_WhenListingAuditLog_ThenItIsAccepted()
     {
         // Given the boundary — exactly 200 characters
-        var handler = Handler(await EntriesWith(Entry(1, T0)));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0)));
         var query = Query();
         query.Action = new string('A', 200);
 
@@ -392,7 +392,7 @@ public class ListAuditLogQueryHandlerTests
     public async Task GivenPageSizeAboveTheBound_WhenListingAuditLog_ThenReturnsInvalidPageSize()
     {
         // Given AF-48a (NFR-10)
-        var handler = Handler(await EntriesWith(Entry(1, T0)));
+        var handler = Handler(await EntriesWith(Entry(1, s_t0)));
         var query = Query();
         query.PageSize = 101;
 

@@ -23,10 +23,10 @@ public class EnableTwoFactorAuthCommandHandlerTests
 {
     private const string Password = "Str0ng-Enable-Pass!";
 
-    private static readonly byte[] EncryptedSecret = [1, 2, 3, 4];
+    private static readonly byte[] s_encryptedSecret = [1, 2, 3, 4];
 
     /// <summary>One Argon2id derivation for the whole class, shared by every person it builds.</summary>
-    private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
+    private static readonly Lazy<(byte[] Hash, byte[] Salt)> s_credential = new(() =>
     {
         var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
 
@@ -61,7 +61,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
 
         public EnableTwoFactorAuthCommand Command(params string[] methods) => new()
         {
-            Methods = methods.ToList(),
+            Methods = [.. methods],
             CurrentPassword = Password,
             ActingPersonId = Person.PublicId,
             ActingRole = (int)Roles.User
@@ -76,14 +76,14 @@ public class EnableTwoFactorAuthCommandHandlerTests
             PublicId = Guid.NewGuid(),
             Name = "person",
             Email = email,
-            PasswordHash = Credential.Value.Hash,
-            Salt = Credential.Value.Salt,
+            PasswordHash = s_credential.Value.Hash,
+            Salt = s_credential.Value.Salt,
             RoleId = (long)Roles.User
         };
         await persons.CreateAsync(person);
 
         var protector = new Mock<ITotpSecretProtector>();
-        protector.Setup(p => p.Protect(It.IsAny<string>())).Returns(EncryptedSecret);
+        protector.Setup(p => p.Protect(It.IsAny<string>())).Returns(s_encryptedSecret);
 
         return new Fixture(
             persons,
@@ -135,12 +135,12 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Data.EmailCodeSent);
 
         // Then — persisted state: exactly one pending (inactive) row, both methods enabled
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.Equal(fixture.Person.Id, stored.PersonId);
         Assert.False(stored.IsActive);
         Assert.True(stored.AppEnabled);
         Assert.True(stored.EmailEnabled);
-        Assert.Equal(EncryptedSecret, stored.TotpSecretEncrypted);
+        Assert.Equal(s_encryptedSecret, stored.TotpSecretEncrypted);
 
         fixture.EmailSender.Verify(
             sender => sender.SendAsync(fixture.Person.Email, It.IsAny<string>()), Times.Once);
@@ -160,7 +160,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.NotNull(output.Data!.OtpAuthUri);
         Assert.Null(output.Data.EmailCodeSent);
 
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.True(stored.AppEnabled);
         Assert.False(stored.EmailEnabled);
 
@@ -182,11 +182,11 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.Null(output.Data!.OtpAuthUri);
         Assert.True(output.Data.EmailCodeSent);
 
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.False(stored.AppEnabled);
         Assert.True(stored.EmailEnabled);
 
-        var emailCode = Assert.Single(fixture.EmailCodes.Query().ToList());
+        var emailCode = Assert.Single([.. fixture.EmailCodes.Query()]);
         Assert.Equal(stored.Id, emailCode.TwoFactorAuthId);
         Assert.False(emailCode.Used);
     }
@@ -281,7 +281,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
         Assert.True(output.Success);
         Assert.Contains(TwoFactorMessages.SetupInitiated, output.Messages);
 
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.Equal(pending.Id, stored.Id);
         Assert.True(stored.EmailEnabled);
         Assert.False(stored.IsActive);
@@ -318,7 +318,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
         // Then — Email is dropped from the pending configuration and its live code retired, so
         // UC-37 will only ask for the app code.
         Assert.True(output.Success);
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.Equal(pending.Id, stored.Id);
         Assert.True(stored.AppEnabled);
         Assert.False(stored.EmailEnabled);
@@ -404,7 +404,7 @@ public class EnableTwoFactorAuthCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Contains(TwoFactorMessages.SetupInitiated, output.Messages);
-        Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        Assert.Single([.. fixture.TwoFactorAuths.Query()]);
     }
 
     // FR-AU-13: the re-authentication budget

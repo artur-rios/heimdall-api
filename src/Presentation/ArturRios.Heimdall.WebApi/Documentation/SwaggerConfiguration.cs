@@ -178,7 +178,7 @@ public sealed class SecurityDocumentFilter : IDocumentFilter
             }
         ];
 
-        operation.Responses ??= new OpenApiResponses();
+        operation.Responses ??= [];
 
         operation.Responses.TryAdd(
             "401",

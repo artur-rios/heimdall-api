@@ -14,26 +14,26 @@ namespace ArturRios.Heimdall.Query.Output;
 public class PendingRegistrationOutput : QueryOutput
 {
     /// <summary>The registration's public id — what UC-50 discards it by.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>The name the registrant gave.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>The address awaiting confirmation.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>When the registration was stored.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>When its link stops working.</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>Wrong passwords the registrant may still try before the registration is discarded (FR-SR-09); never below 0.</summary>
-    public int AttemptsLeft { get; set; }
+    public int AttemptsLeft { get; init; }
 
     /// <summary>
     ///     Whether the link has already expired. Such a row stays until the scheduled purge removes it,
     ///     so it is listed and may be discarded like any other.
     /// </summary>
-    public bool Expired { get; set; }
+    public bool Expired { get; init; }
 }

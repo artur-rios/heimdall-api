@@ -11,7 +11,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // checked and not only the absoluteness.
 public class SetScopeEmailLinksCommandValidatorTests
 {
-    private static readonly string[] LinkFields = ["verification", "reset"];
+    private static readonly string[] s_linkFields = ["verification", "reset"];
 
     private static SetScopeEmailLinksCommand Command(string field, string? url) => field == "verification"
         ? new SetScopeEmailLinksCommand { EmailVerificationUrl = url }
@@ -21,7 +21,7 @@ public class SetScopeEmailLinksCommandValidatorTests
     {
         var data = new TheoryData<string, string>();
 
-        foreach (var field in LinkFields)
+        foreach (var field in s_linkFields)
         {
             data.Add(field, "https://app.test/verify-email");
             data.Add(field, "http://localhost:3000/verify-email");
@@ -35,7 +35,7 @@ public class SetScopeEmailLinksCommandValidatorTests
     {
         var data = new TheoryData<string, string>();
 
-        foreach (var field in LinkFields)
+        foreach (var field in s_linkFields)
         {
             data.Add(field, "/unix/path");
             data.Add(field, "relative/page");

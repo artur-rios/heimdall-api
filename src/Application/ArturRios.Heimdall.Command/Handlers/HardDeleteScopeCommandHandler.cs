@@ -70,7 +70,7 @@ public class HardDeleteScopeCommandHandler(
 
         // Step 2 (AF-05a): locate the scope in ANY deletion state — an already logically-deleted
         // scope can still be hard-deleted.
-        var scope = await scopeReader.Query().FirstOrDefaultAsync(x => x.PublicId == command.Id);
+        var scope = await scopeReader.Query().FirstOrDefaultAsync(x => x.PublicId == command.Id, cancellationToken);
 
         if (scope is null)
         {
@@ -83,7 +83,7 @@ public class HardDeleteScopeCommandHandler(
         await locks.LockAsync([scope.Id]);
 
         // Read again under the lock: a hard delete that committed since the read above answers AF-05a.
-        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id))
+        if (!await scopeReader.Query().AnyAsync(x => x.Id == scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
@@ -93,17 +93,17 @@ public class HardDeleteScopeCommandHandler(
         var users = await personReader.Query()
             .Where(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id)
             .Select(p => new { p.Id, p.PublicId })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         var googleUsers = await googleUserReader.Query()
             .Where(g => g.ScopeId == scope.Id)
             .Select(g => new { g.Id, g.PublicId })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         var applicationIds = await applicationReader.Query()
             .Where(a => a.ScopeId == scope.Id)
             .Select(a => a.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         var scopePermissionCount = await scopePermissionReader.Query()
-            .CountAsync(p => p.ScopeId == scope.Id);
+            .CountAsync(p => p.ScopeId == scope.Id, cancellationToken);
 
         // Step 3 (NFR-21, #195): tombstone exactly the persons and Google Users step 4 removes,
         // before any of it happens. Owners are not members and are not removed, so they are not
@@ -128,13 +128,13 @@ public class HardDeleteScopeCommandHandler(
         // (applications reference their owning person, so they go first), in batches.
         await scopeCascades.DeleteMembersAsync(new ScopeMemberIds(
             applicationIds,
-            googleUsers.Select(googleUser => googleUser.Id).ToList(),
-            users.Select(user => user.Id).ToList()));
+            [.. googleUsers.Select(googleUser => googleUser.Id)],
+            [.. users.Select(user => user.Id)]));
 
         // Steps 5-6: delete the scope; its ON DELETE CASCADE foreign keys clear the SCOPE_OWNER and any
         // remaining SCOPE_USER join rows, as well as any remaining scope permissions. Owner person
         // records are untouched.
-        var scopeDelete = await scopeWriter.DeleteAsync(scope);
+        var scopeDelete = await scopeWriter.DeleteAsync(scope, cancellationToken);
 
         if (!scopeDelete.Success)
         {

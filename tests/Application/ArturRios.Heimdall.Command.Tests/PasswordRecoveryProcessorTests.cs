@@ -43,9 +43,11 @@ public class PasswordRecoveryProcessorTests
     private static Person ScopeAdmin(long id, string email, params Scope[] owned)
     {
         var person = Person(id, email, Roles.ScopeAdmin);
-        person.ScopeOwnerships = owned
-            .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
-            .ToList();
+        person.ScopeOwnerships =
+        [
+            .. owned
+                .Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })
+        ];
         return person;
     }
 
@@ -78,14 +80,14 @@ public class PasswordRecoveryProcessorTests
         }
     }
 
-    private static readonly PasswordResetOptions ResetOptions = new() { TokenLifetime = TimeSpan.FromHours(1) };
+    private static readonly PasswordResetOptions s_resetOptions = new() { TokenLifetime = TimeSpan.FromHours(1) };
 
     private static PasswordRecoveryProcessor ProcessorFor(
         AsyncFakeRepository<Person, long> persons,
         IPasswordResetService passwordReset,
         AsyncFakeRepository<PasswordResetToken, long>? tokens = null,
         TimeSpan? cooldown = null) =>
-        new(persons, tokens ?? new AsyncFakeRepository<PasswordResetToken, long>(), passwordReset, ResetOptions,
+        new(persons, tokens ?? new AsyncFakeRepository<PasswordResetToken, long>(), passwordReset, s_resetOptions,
             new AdminEmailOptions { Cooldown = cooldown ?? TimeSpan.FromMinutes(5) },
             NullLogger<PasswordRecoveryProcessor>.Instance);
 
@@ -97,7 +99,7 @@ public class PasswordRecoveryProcessorTests
         {
             PersonId = person.Id,
             TokenHash = Guid.NewGuid().ToString("N"),
-            ExpiresAt = DateTime.UtcNow + ResetOptions.TokenLifetime - age
+            ExpiresAt = DateTime.UtcNow + s_resetOptions.TokenLifetime - age
         });
 
         return tokens;

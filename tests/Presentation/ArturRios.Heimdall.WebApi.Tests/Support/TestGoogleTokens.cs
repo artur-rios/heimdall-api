@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </remarks>
 public static class TestGoogleTokens
 {
-    private static readonly JsonWebTokenHandler Handler = new();
+    private static readonly JsonWebTokenHandler s_handler = new();
 
     /// <summary>Builds a valid ID token carrying the claims a Google User is populated from.</summary>
     /// <param name="subject">Google's <c>sub</c>. Defaults to a fresh value, i.e. an unknown account.</param>
@@ -32,6 +32,8 @@ public static class TestGoogleTokens
     /// <param name="pictureUrl">The <c>picture</c> claim; omitted from the token when null.</param>
     /// <param name="expiresIn">Lifetime, so a test can mint an expired token for AF-25a.</param>
     /// <param name="nonce">The <c>nonce</c> claim (FR-GO-20); omitted from the token when null.</param>
+    /// <param name="tokenId">The <c>jti</c> claim. Defaults to a fresh value.</param>
+    /// <param name="withTokenId">Whether the token carries a <c>jti</c> claim at all.</param>
     public static string For(
         string? subject = null,
         string? email = null,
@@ -76,7 +78,7 @@ public static class TestGoogleTokens
             claims.Add(new Claim("nonce", nonce));
         }
 
-        return Handler.CreateToken(new SecurityTokenDescriptor
+        return s_handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = LocalGoogleIdTokenVerifier.TestIssuer,
@@ -94,7 +96,7 @@ public static class TestGoogleTokens
     ///     nothing, so FR-GO-19 must treat it exactly as an omitted claim.
     /// </summary>
     public static string WithNullEmailVerified(string subject, string email) =>
-        Handler.CreateToken(new SecurityTokenDescriptor
+        s_handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = LocalGoogleIdTokenVerifier.TestIssuer,
@@ -113,7 +115,7 @@ public static class TestGoogleTokens
     ///     API's side, for AF-25a.
     /// </summary>
     public static string SignedWithWrongSecret() =>
-        Handler.CreateToken(new SecurityTokenDescriptor
+        s_handler.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = LocalGoogleIdTokenVerifier.TestIssuer,
             Audience = LocalGoogleIdTokenVerifier.TestIssuer,

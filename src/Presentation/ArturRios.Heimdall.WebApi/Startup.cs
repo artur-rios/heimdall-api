@@ -10,7 +10,6 @@ using ArturRios.Heimdall.WebApi.Documentation;
 using ArturRios.Heimdall.WebApi.Metrics;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Net.Http.Headers;
 using Serilog;

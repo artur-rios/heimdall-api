@@ -12,8 +12,8 @@ namespace ArturRios.Heimdall.Command.Output;
 public class RemoveScopeOwnerCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the scope that lost the owner.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the person who no longer owns the scope.</summary>
-    public Guid PersonId { get; set; }
+    public Guid PersonId { get; init; }
 }

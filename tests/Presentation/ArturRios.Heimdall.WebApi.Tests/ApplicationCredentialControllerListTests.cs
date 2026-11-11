@@ -1,7 +1,5 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
-using ArturRios.Heimdall.Command.Input;
-using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
@@ -11,7 +9,6 @@ using ArturRios.Output;
 using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
-using Microsoft.EntityFrameworkCore;
 using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -24,7 +21,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ApplicationCredentialControllerListTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     private Task<HttpOutput<DataOutput<ApplicationCredentialListOutput?>?>> ListAsync(
-        Scope scope, Domain.Entities.Application application) =>
+        Scope scope, Application application) =>
         Gateway.GetAsync<DataOutput<ApplicationCredentialListOutput?>>(Route(scope.PublicId, application.PublicId));
 
     [FunctionalFact]

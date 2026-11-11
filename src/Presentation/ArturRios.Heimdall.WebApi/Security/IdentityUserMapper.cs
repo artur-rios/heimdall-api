@@ -212,13 +212,15 @@ public class IdentityUserMapper(PersonTokenAudiences audiences) : IAuthenticated
         // An unparseable entry is dropped rather than failing the whole token: the remaining owned
         // scopes are still a true statement about the caller, and authorization is a per-scope
         // check anyway.
-        return raw
-            .Split(OwnedScopeIdsSeparator, StringSplitOptions.RemoveEmptyEntries |
-                                           StringSplitOptions.TrimEntries)
-            .Select(entry => Guid.TryParse(entry, out var scopeId) ? scopeId : (Guid?)null)
-            .Where(scopeId => scopeId is not null)
-            .Select(scopeId => scopeId!.Value)
-            .ToList();
+        return
+        [
+            .. raw
+                .Split(OwnedScopeIdsSeparator, StringSplitOptions.RemoveEmptyEntries |
+                                               StringSplitOptions.TrimEntries)
+                .Select(entry => Guid.TryParse(entry, out var scopeId) ? scopeId : (Guid?)null)
+                .Where(scopeId => scopeId is not null)
+                .Select(scopeId => scopeId!.Value)
+        ];
     }
 
     private static IReadOnlyCollection<string> ReadScopePermissionClaims(IReadOnlyDictionary<string, string> claims)

@@ -13,7 +13,7 @@ public class TotpCodeVerifier(
     // A one time-step (30s) tolerance on either side of "now", the conventional allowance for clock
     // drift between the server and whatever device generated the code — wide enough to forgive a
     // little skew, narrow enough that it does not meaningfully widen the guessing window.
-    private static readonly VerificationWindow TotpVerificationWindow = new(previous: 1, future: 1);
+    private static readonly VerificationWindow s_totpVerificationWindow = new(previous: 1, future: 1);
 
     public async Task<bool> VerifyAsync(TwoFactorAuth twoFactorAuth, string? code)
     {
@@ -39,7 +39,7 @@ public class TotpCodeVerifier(
 
         var totp = new Totp(Base32Encoding.ToBytes(base32Secret));
 
-        if (!totp.VerifyTotp(code, out var matchedTimeStep, TotpVerificationWindow))
+        if (!totp.VerifyTotp(code, out var matchedTimeStep, s_totpVerificationWindow))
         {
             return false;
         }

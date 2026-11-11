@@ -142,7 +142,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // Then — the request fails, the configuration is left exactly as it was, and nothing written on
         // the way, the security stamp included, is committed (#209)
         Assert.False(output.Success);
-        Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.False(Assert.Single([.. fixture.TwoFactorAuths.Query()]).IsActive);
         Assert.False(twoFactorAuth.IsActive);
         Assert.Equal(1, transactions.Begun);
         Assert.Equal(0, transactions.Committed);
@@ -210,11 +210,11 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         Assert.Equal(10, output.Data.RecoveryCodes.Distinct().Count());
 
         // Then — persisted state
-        var stored = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var stored = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.True(stored.IsActive);
         Assert.True(emailCode.Used);
         Assert.Equal(10, fixture.RecoveryCodes.Query().ToList().Count);
-        Assert.All(fixture.RecoveryCodes.Query().ToList(), code => Assert.False(code.Used));
+        Assert.All([.. fixture.RecoveryCodes.Query()], code => Assert.False(code.Used));
     }
 
     [UnitFact]
@@ -250,7 +250,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.True(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.True(Assert.Single([.. fixture.TwoFactorAuths.Query()]).IsActive);
         Assert.Empty(fixture.EmailCodes.Query().ToList());
     }
 
@@ -267,7 +267,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.True(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.True(Assert.Single([.. fixture.TwoFactorAuths.Query()]).IsActive);
         Assert.True(emailCode.Used);
     }
 
@@ -315,7 +315,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.False(Assert.Single([.. fixture.TwoFactorAuths.Query()]).IsActive);
     }
 
     [UnitFact]
@@ -347,7 +347,7 @@ public class ConfirmTwoFactorAuthCommandHandlerTests
         // Then
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.PasswordOrCodeIncorrect, output.Errors);
-        Assert.False(Assert.Single(fixture.TwoFactorAuths.Query().ToList()).IsActive);
+        Assert.False(Assert.Single([.. fixture.TwoFactorAuths.Query()]).IsActive);
     }
 
     [UnitFact]

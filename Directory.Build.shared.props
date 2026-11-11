@@ -5,16 +5,21 @@
     the nearest Directory.Build.props, so src/Directory.Build.props and tests/Directory.Build.props each
     import this file and add only what is particular to them.
 
-    Two entries under WarningsAsErrors fail a build: nullable flags a possible null dereference or a
-    broken nullability contract, and CA2016 flags a method that holds a CancellationToken yet calls an
-    overload that would take it without passing it on, which is the shape of #219. Everything else stays
-    a warning.
+    These entries under WarningsAsErrors fail a build: nullable flags a possible null dereference or a
+    broken nullability contract; CA2016 flags a method that holds a CancellationToken yet calls an
+    overload that would take it without passing it on, which is the shape of #219; IDE1006 flags a
+    name that breaks the naming rules in .editorconfig (s_ for non-public static fields, _ for private
+    instance fields, PascalCase constant fields, camelCase local constants); and IDE0028 and
+    IDE0300-IDE0306 flag a collection built some other way where a collection expression would do.
+    EnforceCodeStyleInBuild is what makes the build run the IDE rules at all. Everything else stays a
+    warning.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <WarningsAsErrors>$(WarningsAsErrors);nullable;CA2016</WarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable;CA2016;IDE1006;IDE0028;IDE0300;IDE0301;IDE0302;IDE0303;IDE0304;IDE0305;IDE0306</WarningsAsErrors>
   </PropertyGroup>
 
 </Project>

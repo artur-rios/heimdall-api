@@ -9,20 +9,20 @@ namespace ArturRios.Heimdall.Query.Output;
 public class ScopeOwnerInvitationOutput : QueryOutput
 {
     /// <summary>The invitation's public id — what UC-58 withdraws it by.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>The invited administrator's public id.</summary>
-    public Guid InviteeId { get; set; }
+    public Guid InviteeId { get; init; }
 
-    public string InviteeName { get; set; } = string.Empty;
+    public string InviteeName { get; init; } = string.Empty;
 
-    public string InviteeEmail { get; set; } = string.Empty;
+    public string InviteeEmail { get; init; } = string.Empty;
 
     /// <summary>Who invited them; <c>null</c> once that person was anonymised, removed or restricted.</summary>
-    public string? InvitedByName { get; set; }
+    public string? InvitedByName { get; init; }
 
     public DateTime CreatedAt { get; set; }
 
     /// <summary>When it stops being acceptable.</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 }

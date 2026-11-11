@@ -340,9 +340,9 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
 
         // Then the full token carries the same stamp and works
         Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
-        Assert.Equal(stamp, StampClaimOf(verify.Body!.Data!.Token!));
+        Assert.Equal(stamp, StampClaimOf(verify.Body!.Data!.Token));
 
-        ActAs(verify.Body.Data.Token!);
+        ActAs(verify.Body.Data.Token);
         Assert.Equal(HttpStatusCode.OK, (await ReadAsync(person)).StatusCode);
     }
 

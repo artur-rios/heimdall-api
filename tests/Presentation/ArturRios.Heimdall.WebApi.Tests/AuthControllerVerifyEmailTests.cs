@@ -245,10 +245,10 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         // Given — AF-14c. The lookup is case-sensitive, unlike every email comparison in this system:
         // the token is a random secret, and folding its case would throw away part of its alphabet.
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("admin"), EmailVerified = false });
-        var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
+        var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpperInvariant());
 
         // When
-        var response = await VerifyAsync(token.ToLower());
+        var response = await VerifyAsync(token.ToLowerInvariant());
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -396,7 +396,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         }
 
         // When
-        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+        var written = await new Data.Persistence.AtomicWrites(reading)
             .TryMarkEmailVerifiedAsync(read, DateTime.UtcNow);
 
         // Then — the new address is not verified by a link mailed to the old one (FR-PE-17)
@@ -420,7 +420,7 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
         }
 
         // When
-        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+        var written = await new Data.Persistence.AtomicWrites(reading)
             .TryMarkEmailVerifiedAsync(read, DateTime.UtcNow);
 
         // Then

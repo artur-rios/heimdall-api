@@ -29,7 +29,7 @@ public class PersonalDataPurposeTests
     ///     anonymous: whoever suspects an address can hash it and find its row. `ScopeOwnerInvitation`
     ///     is here because it records who invited whom to co-own which scope (UC-21).
     /// </summary>
-    private static readonly Type[] PersonalDataEntities =
+    private static readonly Type[] s_personalDataEntities =
     [
         typeof(Person), typeof(GoogleUser), typeof(AuditLog), typeof(PendingRegistration), typeof(ErasedSubject),
         typeof(AttemptNoticeBudget), typeof(ScopeOwnerInvitation)
@@ -76,7 +76,7 @@ public class PersonalDataPurposeTests
     {
         var record = ReadRecord();
 
-        var missing = PersonalDataEntities
+        var missing = s_personalDataEntities
             .SelectMany(entity => entity
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(IsStoredValue)

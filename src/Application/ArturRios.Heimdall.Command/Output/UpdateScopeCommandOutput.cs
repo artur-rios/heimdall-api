@@ -12,10 +12,10 @@ public class UpdateScopeCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>Scope display name.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Scope description, if any.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>Whether Google sign-in is enabled for the scope.</summary>
     public bool GoogleSignInEnabled { get; set; }
@@ -24,13 +24,13 @@ public class UpdateScopeCommandOutput : CommandOutput
     public bool SelfRegistrationEnabled { get; set; }
 
     /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
-    public string? EmailVerificationUrl { get; set; }
+    public string? EmailVerificationUrl { get; init; }
 
     /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
-    public string? PasswordResetUrl { get; set; }
+    public string? PasswordResetUrl { get; init; }
 
     /// <summary>Public identifiers of the scope's owners.</summary>
-    public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnerIds { get; init; } = [];
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

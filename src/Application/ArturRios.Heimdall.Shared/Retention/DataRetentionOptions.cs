@@ -361,7 +361,7 @@ public sealed record DataRetentionOptions
     /// </summary>
     /// <remarks>
     ///     The bounds are checked on the number, before it is converted, and that ordering is the
-    ///     point: <see cref="TimeSpan.FromDays" /> throws on a large enough <c>double</c>, so a
+    ///     point: <see cref="TimeSpan.FromDays(double)" /> throws on a large enough <c>double</c>, so a
     ///     check performed on the converted value would never run. An exception here would fail
     ///     start-up, which is the one outcome this type exists to avoid.
     /// </remarks>

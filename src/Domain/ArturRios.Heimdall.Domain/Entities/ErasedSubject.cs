@@ -39,7 +39,7 @@ public class ErasedSubject : Entity<Guid>
     /// <summary>
     ///     Which table the id was taken from (see <c>ErasedSubjectKinds</c>).
     /// </summary>
-    public int Kind { get; set; }
+    public int Kind { get; init; }
 
     /// <summary>
     ///     When the tombstone was written, just before the delete. The pass keeps it for a day at

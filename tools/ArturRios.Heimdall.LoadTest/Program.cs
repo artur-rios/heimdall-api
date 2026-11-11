@@ -412,7 +412,7 @@ public static class Program
         """;
 
     /// <summary>Options that take no value. Everything else must be followed by one.</summary>
-    private static readonly HashSet<string> SwitchOptions = new(StringComparer.OrdinalIgnoreCase) { "write" };
+    private static readonly HashSet<string> s_switchOptions = new(StringComparer.OrdinalIgnoreCase) { "write" };
 
     private static Options Parse(string[] args)
     {
@@ -432,7 +432,7 @@ public static class Program
             // that value was the next option's.
             if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
             {
-                if (!SwitchOptions.Contains(name))
+                if (!s_switchOptions.Contains(name))
                 {
                     throw new ArgumentException($"'{args[i]}' needs a value.");
                 }

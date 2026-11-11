@@ -15,9 +15,9 @@ public class OpenApiContractTests
     // PasswordRecoveryCommand and GoogleSignInCommand take a genuine client-supplied ScopeId on
     // routes with no {scopeId} segment, which is why the route-collision test below keys off the
     // operation's own path parameters instead of a name blocklist.
-    private static readonly string[] ServerPopulated = ["actingPersonId", "actingRole"];
+    private static readonly string[] s_serverPopulated = ["actingPersonId", "actingRole"];
 
-    private static readonly string[] HttpMethods =
+    private static readonly string[] s_httpMethods =
         ["get", "put", "post", "delete", "patch", "options", "head"];
 
     [UnitFact]
@@ -66,7 +66,7 @@ public class OpenApiContractTests
     // never serves it — consumers fetch it from the API's own host or the edge network
     // (http://heimdall-api.<env>:8080), never through the web UI's host. Compared for equality, so
     // the exemption cannot go stale.
-    private static readonly string[] PathsOutsideApi = ["/.well-known/jwks.json"];
+    private static readonly string[] s_pathsOutsideApi = ["/.well-known/jwks.json"];
 
     // yggdrasil hands the web UI's host to the API only for paths under /api/ (its
     // heimdall-api.proxy.yml); anything else on that host is served by heimdall-ui's nginx, which
@@ -84,14 +84,14 @@ public class OpenApiContractTests
             .ToList();
 
         Assert.True(
-            PathsOutsideApi.SequenceEqual(outside),
-            $"Expected exactly [{string.Join(", ", PathsOutsideApi)}] outside /api/, found {outside.Count}:"
+            s_pathsOutsideApi.SequenceEqual(outside),
+            $"Expected exactly [{string.Join(", ", s_pathsOutsideApi)}] outside /api/, found {outside.Count}:"
             + Environment.NewLine
             + string.Join(Environment.NewLine, outside));
     }
 
     private static bool IsServerPopulated(string name) =>
-        ServerPopulated.Contains(name, StringComparer.OrdinalIgnoreCase);
+        s_serverPopulated.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     private static string Report(List<string> violations) =>
         $"The published contract exposes {violations.Count} server-populated field(s):"
@@ -128,7 +128,7 @@ public class OpenApiContractTests
         foreach (var path in document.RootElement.GetProperty("paths").EnumerateObject())
         {
             foreach (var operation in path.Value.EnumerateObject()
-                         .Where(candidate => HttpMethods.Contains(candidate.Name)))
+                         .Where(candidate => s_httpMethods.Contains(candidate.Name)))
             {
                 yield return (path.Name, operation.Name.ToUpperInvariant(), operation.Value);
             }
@@ -137,10 +137,12 @@ public class OpenApiContractTests
 
     private static List<string> ParameterNames(JsonElement operation, string location) =>
         operation.TryGetProperty("parameters", out var parameters)
-            ? parameters.EnumerateArray()
-                .Where(parameter => parameter.GetProperty("in").GetString() == location)
-                .Select(parameter => parameter.GetProperty("name").GetString()!)
-                .ToList()
+            ?
+            [
+                .. parameters.EnumerateArray()
+                    .Where(parameter => parameter.GetProperty("in").GetString() == location)
+                    .Select(parameter => parameter.GetProperty("name").GetString()!)
+            ]
             : [];
 
     private static IEnumerable<string> RequestBodyPropertyNames(

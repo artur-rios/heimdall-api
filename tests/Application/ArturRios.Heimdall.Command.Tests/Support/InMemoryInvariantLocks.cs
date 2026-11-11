@@ -30,7 +30,7 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
         {
             lock (_scopeLocks)
             {
-                return _scopeLocks.ToList();
+                return [.. _scopeLocks];
             }
         }
     }
@@ -39,7 +39,7 @@ public sealed class InMemoryInvariantLocks : IInvariantLocks
     {
         lock (_scopeLocks)
         {
-            _scopeLocks.Add(scopeIds.ToList());
+            _scopeLocks.Add([.. scopeIds]);
 
             if (systemAdmins)
             {

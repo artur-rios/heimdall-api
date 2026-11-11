@@ -11,20 +11,20 @@ namespace ArturRios.Heimdall.Command.Output;
 public class HardDeleteScopeCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the hard-deleted scope.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Total number of Users (via SCOPE_USER) that belonged to the scope.</summary>
-    public int UserCount { get; set; }
+    public int UserCount { get; init; }
 
     /// <summary>Total number of Google Users that belonged to the scope.</summary>
-    public int GoogleUserCount { get; set; }
+    public int GoogleUserCount { get; init; }
 
     /// <summary>Total number of applications that belonged to the scope.</summary>
-    public int ApplicationCount { get; set; }
+    public int ApplicationCount { get; init; }
 
     /// <summary>
     ///     Total number of scope permissions that belonged to the scope, removed via
     ///     <c>ON DELETE CASCADE</c> rather than explicitly by this handler.
     /// </summary>
-    public int ScopePermissionCount { get; set; }
+    public int ScopePermissionCount { get; init; }
 }

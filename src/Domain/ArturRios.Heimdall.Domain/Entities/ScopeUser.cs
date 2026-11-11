@@ -9,19 +9,19 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class ScopeUser
 {
     /// <summary>Foreign key to the <see cref="Scope" /> the person belongs to (internal Id). Required.</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
     /// <summary>
     ///     Foreign key to the <see cref="Person" /> (internal Id), which must have the <c>User</c>
     ///     role. Required and unique across this table.
     /// </summary>
-    public long PersonId { get; set; }
+    public long PersonId { get; init; }
 
     // Navigation properties
 
     /// <summary>The scope the person belongs to.</summary>
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 
     /// <summary>The member person.</summary>
-    public Person Person { get; set; } = null!;
+    public Person Person { get; init; } = null!;
 }

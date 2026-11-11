@@ -7,6 +7,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The command handlers now forward the `CancellationToken` they receive to validation, EF Core and the services
+  they call (145 calls in 49 handlers), and rule CA2016 now holds the Command project to that as it does the rest of
+  the solution. Neither the controllers nor the retention services dispatch a command with a token, so commands
+  still run to completion or roll back as one unit (#219).
+- The naming rules in `.editorconfig` now fail the build (IDE1006) instead of showing only as IDE suggestions:
+  `s_camelCase` for non-public static fields, `_camelCase` for private and internal instance fields, PascalCase for
+  constant fields, and a new rule for camelCase local constants. The existing code already follows them.
+- A collection built some other way where a collection expression would do now fails the build (IDE0028 and
+  IDE0300 to IDE0306): `[]` and `[.. source]` in place of `new List<T>()`, `new[] { ... }`, `Enumerable.Empty<T>()`,
+  `.ToList()` chains and the like. The generated EF Core migrations are marked `generated_code` and left as written.
+
+### Fixed
+
+- Email addresses and search terms are lowercased with the invariant culture, matching the database's `lower()`,
+  so a sign-in, a lookup or a filter no longer depends on the server's culture (under a Turkish culture, `I`
+  lowercased to a dotless `ı` and the address stopped matching). The email-verification and password-reset
+  lifetimes are parsed with the invariant culture too, so `1.5` is never read as `15`. The container runs with the
+  invariant culture, so deployed instances were not affected.
+
 ## [6.0.0] - 2026-11-10
 
 ### Upgrading from 5.x to 6.0

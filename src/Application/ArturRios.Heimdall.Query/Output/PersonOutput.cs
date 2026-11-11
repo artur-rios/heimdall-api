@@ -10,16 +10,16 @@ namespace ArturRios.Heimdall.Query.Output;
 public class PersonOutput : QueryOutput
 {
     /// <summary>Public identifier of the person.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Full name.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Email address.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>Assigned role value (see <c>Roles</c>).</summary>
-    public int Role { get; set; }
+    public int Role { get; init; }
 
     /// <summary>Whether the person's email has been verified.</summary>
     public bool EmailVerified { get; set; }
@@ -31,20 +31,20 @@ public class PersonOutput : QueryOutput
     ///     but not how, which would otherwise map out which accounts fall back to email.
     ///     <c>GET /api/auth/2fa</c> is where a person reads the detail, and only for themselves.
     /// </summary>
-    public bool TwoFactorEnabled { get; set; }
+    public bool TwoFactorEnabled { get; init; }
 
     /// <summary>Whether the person is logically deleted.</summary>
-    public bool IsDeleted { get; set; }
+    public bool IsDeleted { get; init; }
 
     /// <summary>Public identifier of the scope the person belongs to as a User; <c>null</c> otherwise.</summary>
-    public Guid? ScopeId { get; set; }
+    public Guid? ScopeId { get; init; }
 
     /// <summary>
     ///     Public identifiers of the scopes the person owns, as far as the reader may see them
     ///     (FR-PE-19): every one for a System Admin and for the person themselves, and for a Scope
     ///     Admin reading somebody else only those the Scope Admin owns too. Empty for non-owners.
     /// </summary>
-    public IEnumerable<Guid> OwnedScopeIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnedScopeIds { get; set; } = [];
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

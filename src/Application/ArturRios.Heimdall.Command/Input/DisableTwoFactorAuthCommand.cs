@@ -16,13 +16,13 @@ namespace ArturRios.Heimdall.Command.Input;
 public class DisableTwoFactorAuthCommand : BaseCommand, IActorScoped
 {
     /// <summary>The caller's current password (UC-11 step 3's check, reused here).</summary>
-    public string Password { get; set; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
 
     /// <summary>The caller's current app or email code, when proving a code rather than a recovery code.</summary>
-    public string? Code { get; set; }
+    public string? Code { get; init; }
 
     /// <summary>One of the caller's unused recovery codes, when no code is available.</summary>
-    public string? RecoveryCode { get; set; }
+    public string? RecoveryCode { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

@@ -33,10 +33,10 @@ public class ApplicationCredential : Entity<long>
     ///     token's <c>credentialId</c> claim and the audit trail. The internal
     ///     <see cref="Entity{TKey}.Id" /> is never exposed.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Foreign key to the owning <see cref="Application" /> (internal Id). Required.</summary>
-    public long ApplicationId { get; set; }
+    public long ApplicationId { get; init; }
 
     /// <summary>
     ///     SHA-256 of the secret, as lowercase hex (<c>ApplicationCredentialSecret.HashOf</c>). The
@@ -44,13 +44,13 @@ public class ApplicationCredential : Entity<long>
     ///     as every application (Threat Model TH-33).
     /// </summary>
     [MaxLength(64)]
-    public string SecretHash { get; set; } = string.Empty;
+    public string SecretHash { get; init; } = string.Empty;
 
     /// <summary>When the credential was issued (UC-53).</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>When the credential stops being accepted, or <c>null</c> for never.</summary>
-    public DateTime? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; init; }
 
     /// <summary>When the credential was revoked (UC-55), or <c>null</c> while it has not been.</summary>
     public DateTime? RevokedAt { get; set; }
@@ -61,7 +61,7 @@ public class ApplicationCredential : Entity<long>
     // Navigation properties
 
     /// <summary>The application this credential authenticates.</summary>
-    public Application Application { get; set; } = null!;
+    public Application Application { get; init; } = null!;
 
     /// <summary>
     ///     The one definition of a live credential — not revoked, and either without expiry or

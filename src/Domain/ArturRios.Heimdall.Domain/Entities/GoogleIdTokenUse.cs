@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class GoogleIdTokenUse : Entity<string>
 {
     /// <summary>The token's own expiry, its <c>exp</c> claim, which the purge counts from.</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>
     ///     The key a token is recorded under: a lower-case hex SHA-256 digest of its <c>jti</c> claim,

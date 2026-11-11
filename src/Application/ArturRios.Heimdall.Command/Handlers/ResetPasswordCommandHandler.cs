@@ -7,7 +7,6 @@ using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Mediator.Command.Interfaces;
 using ArturRios.Output;
-using ArturRios.Util.Hashing;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -72,7 +71,7 @@ public class ResetPasswordCommandHandler(
         var output = DataOutput<ResetPasswordCommandOutput?>.New;
 
         // AF-13d: validate input shape (NFR-10).
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -95,7 +94,7 @@ public class ResetPasswordCommandHandler(
             .Include(x => x.Person)
             .ThenInclude(person => person.ScopeOwnerships)
             .ThenInclude(ownership => ownership.Scope)
-            .FirstOrDefaultAsync(x => x.TokenHash == presented);
+            .FirstOrDefaultAsync(x => x.TokenHash == presented, cancellationToken);
 
         // AF-13c.
         if (token is null)

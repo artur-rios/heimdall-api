@@ -15,7 +15,7 @@ namespace ArturRios.Heimdall.Command.Input;
 public class EnableTwoFactorAuthCommand : BaseCommand, IActorScoped
 {
     /// <summary>The method(s) to configure: <c>"App"</c>, <c>"Email"</c>, or both. Required, non-empty.</summary>
-    public List<string> Methods { get; set; } = [];
+    public List<string> Methods { get; init; } = [];
 
     /// <summary>
     ///     The caller's current password (FR-2F-18). Required: adding a second factor requires proof of

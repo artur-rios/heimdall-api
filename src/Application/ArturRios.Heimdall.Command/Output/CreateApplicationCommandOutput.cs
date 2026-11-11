@@ -10,16 +10,16 @@ namespace ArturRios.Heimdall.Command.Output;
 public class CreateApplicationCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the created application.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Application display name.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Public identifier of the scope the application belongs to.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the person that owns the application.</summary>
-    public Guid OwnerId { get; set; }
+    public Guid OwnerId { get; init; }
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

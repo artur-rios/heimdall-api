@@ -17,10 +17,10 @@ public class UpdateScopeCommand : BaseCommand
     public Guid Id { get; set; }
 
     /// <summary>New scope display name. Required and must be unique across all scopes.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>New description of the scope's purpose. Null clears any existing description.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>
     ///     The lawful basis this tenant processes its users' data on (see <c>LegalBases</c>), or
@@ -31,11 +31,11 @@ public class UpdateScopeCommand : BaseCommand
     ///     easy as giving it, which needs a path that does not exist here — accepting the value
     ///     would let a tenant record a basis the system could not honour.
     /// </remarks>
-    public int? DefaultLegalBasis { get; set; }
+    public int? DefaultLegalBasis { get; init; }
 
     /// <summary>
     ///     Where this tenant publishes its own privacy notice, or <c>null</c> if it has none
     ///     distinct from Heimdall's.
     /// </summary>
-    public string? PrivacyNoticeUri { get; set; }
+    public string? PrivacyNoticeUri { get; init; }
 }

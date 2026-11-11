@@ -126,7 +126,7 @@ public class RegistrationProcessorTests
         await fixture.Processor().ProcessAsync(Request(scope));
 
         Assert.Empty(fixture.Persons.Query().ToList());
-        var pending = Assert.Single(fixture.Pending.Query().ToList());
+        var pending = Assert.Single([.. fixture.Pending.Query()]);
         Assert.Equal(scope.Id, pending.ScopeId);
         Assert.Equal("New Person", pending.Name);
         Assert.Equal("new@test.local", pending.Email);
@@ -182,7 +182,7 @@ public class RegistrationProcessorTests
 
         await fixture.Processor().ProcessAsync(Request(scope));
 
-        Assert.Single(fixture.Persons.Query().ToList());
+        Assert.Single([.. fixture.Persons.Query()]);
         Assert.Empty(fixture.Pending.Query().ToList());
         Assert.Empty(fixture.Links.Sent);
         // The notice goes to the address the holder registered with, not the one the stranger typed.
@@ -217,8 +217,8 @@ public class RegistrationProcessorTests
 
         await fixture.Processor().ProcessAsync(Request(scope));
 
-        Assert.Single(fixture.Persons.Query().ToList());
-        Assert.Single(fixture.Pending.Query().ToList());
+        Assert.Single([.. fixture.Persons.Query()]);
+        Assert.Single([.. fixture.Pending.Query()]);
         Assert.Single(fixture.Links.Sent);
     }
 
@@ -232,7 +232,7 @@ public class RegistrationProcessorTests
 
         await fixture.Processor().ProcessAsync(Request(scope));
 
-        Assert.Single(fixture.Persons.Query().ToList());
+        Assert.Single([.. fixture.Persons.Query()]);
         Assert.Empty(fixture.Pending.Query().ToList());
         Assert.Empty(fixture.Links.Sent);
         Assert.Empty(fixture.Attempts.Sent);
@@ -383,7 +383,7 @@ public class RegistrationProcessorTests
         await fixture.Processor().ProcessAsync(Request(scope));
 
         // Then
-        Assert.Single(fixture.Pending.Query().Where(x => x.ScopeId == scope.Id).ToList());
+        Assert.Single([.. fixture.Pending.Query().Where(x => x.ScopeId == scope.Id)]);
         Assert.Single(fixture.Links.Sent);
     }
 
@@ -460,7 +460,7 @@ public class RegistrationProcessorTests
         await fixture.Processor(maxPendingPerScope: 2).ProcessAsync(Request(scope));
 
         // Then
-        Assert.Single(fixture.Pending.Query().Where(x => x.ScopeId == scope.Id).ToList());
+        Assert.Single([.. fixture.Pending.Query().Where(x => x.ScopeId == scope.Id)]);
         Assert.Single(fixture.Links.Sent);
     }
 

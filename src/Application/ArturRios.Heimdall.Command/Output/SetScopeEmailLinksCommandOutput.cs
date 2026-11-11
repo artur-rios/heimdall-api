@@ -5,7 +5,7 @@ namespace ArturRios.Heimdall.Command.Output;
 /// <summary>The scope as updated by <see cref="Input.SetScopeEmailLinksCommand" />.</summary>
 public class SetScopeEmailLinksCommandOutput : CommandOutput
 {
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public string Name { get; set; } = string.Empty;
 
@@ -16,12 +16,12 @@ public class SetScopeEmailLinksCommandOutput : CommandOutput
     public bool SelfRegistrationEnabled { get; set; }
 
     /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
-    public string? EmailVerificationUrl { get; set; }
+    public string? EmailVerificationUrl { get; init; }
 
     /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
-    public string? PasswordResetUrl { get; set; }
+    public string? PasswordResetUrl { get; init; }
 
-    public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnerIds { get; set; } = [];
 
     public DateTime CreatedAt { get; set; }
 

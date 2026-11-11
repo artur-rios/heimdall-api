@@ -11,7 +11,6 @@ using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using Microsoft.EntityFrameworkCore;
-using static ArturRios.Heimdall.WebApi.Tests.Support.ApplicationSeeds;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 

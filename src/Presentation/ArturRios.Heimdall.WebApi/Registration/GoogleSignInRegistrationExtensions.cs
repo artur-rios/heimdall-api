@@ -1,8 +1,5 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.WebApi.Security;
-using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 using Serilog;
 
 namespace ArturRios.Heimdall.WebApi;

@@ -17,10 +17,10 @@ namespace ArturRios.Heimdall.Command.Output;
 public class GoogleSignInCommandOutput : CommandOutput
 {
     /// <summary>The signed authentication token, to be sent as a bearer token.</summary>
-    public string Token { get; set; } = string.Empty;
+    public string Token { get; init; } = string.Empty;
 
     /// <summary>When the token expires, in UTC.</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>
     ///     Whether the account's email address is verified (FR-EV-05): the Google User's stored
@@ -29,7 +29,7 @@ public class GoogleSignInCommandOutput : CommandOutput
     ///     when it speaks; when it is silent the stored value stands, so the field always has an
     ///     answer.
     /// </summary>
-    public bool EmailVerified { get; set; }
+    public bool EmailVerified { get; init; }
 
     /// <summary>
     ///     True when processing of the identity is restricted (NFR-24), so <see cref="Token" /> is a
@@ -38,5 +38,5 @@ public class GoogleSignInCommandOutput : CommandOutput
     ///     A client should offer those actions — lifting the restriction above all — and ask the
     ///     subject to sign in again once it is lifted, for a full token.
     /// </summary>
-    public bool ProcessingRestricted { get; set; }
+    public bool ProcessingRestricted { get; init; }
 }

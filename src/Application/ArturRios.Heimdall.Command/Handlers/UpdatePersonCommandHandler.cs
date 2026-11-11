@@ -65,7 +65,7 @@ public class UpdatePersonCommandHandler(
         var output = DataOutput<UpdatePersonCommandOutput?>.New;
 
         // Step 2: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -81,7 +81,7 @@ public class UpdatePersonCommandHandler(
             .ThenInclude(membership => membership!.Scope)
             .Include(x => x.ScopeOwnerships)
             .ThenInclude(ownership => ownership.Scope)
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted, cancellationToken);
 
         if (person is null)
         {
@@ -141,7 +141,7 @@ public class UpdatePersonCommandHandler(
         // code does, so a retry needs the next one. An administrator's change is their authority and
         // is not held back.
         if (emailChanged && command.ActingPersonId == person.PublicId &&
-            await twoFactorReader.Query().AnyAsync(x => x.PersonId == person.Id && x.EmailEnabled))
+            await twoFactorReader.Query().AnyAsync(x => x.PersonId == person.Id && x.EmailEnabled, cancellationToken))
         {
             return output.WithError(PersonMessages.EmailSignInMethodEnabled);
         }
@@ -246,7 +246,7 @@ public class UpdatePersonCommandHandler(
             var deleted = await personReader.Query()
                 .Where(x => x.Id == person.Id)
                 .Select(x => (bool?)x.IsDeleted)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(cancellationToken);
 
             return output.WithError(deleted == false
                 ? RelationalErrors.ConcurrencyMessage
@@ -288,7 +288,7 @@ public class UpdatePersonCommandHandler(
         // trim normally removes nothing; it keeps the output from saying more than a read would.
         var visibleScopeIds = command.ActingPersonId == person.PublicId
             ? null
-            : await OwnedScopeVisibility.ScopesVisibleToAsync(personReader, command.ActingRole, command.ActingPersonId);
+            : await OwnedScopeVisibility.ScopesVisibleToAsync(personReader, command.ActingRole, command.ActingPersonId, cancellationToken);
 
         return output
             .WithData(new UpdatePersonCommandOutput
@@ -299,10 +299,12 @@ public class UpdatePersonCommandHandler(
                 Role = (int)person.RoleId,
                 EmailVerified = person.EmailVerified,
                 ScopeId = person.ScopeMembership?.Scope.PublicId,
-                OwnedScopeIds = person.ScopeOwnerships
-                    .Where(ownership => visibleScopeIds is null || visibleScopeIds.Contains(ownership.ScopeId))
-                    .Select(ownership => ownership.Scope.PublicId)
-                    .ToList(),
+                OwnedScopeIds =
+                [
+                    .. person.ScopeOwnerships
+                        .Where(ownership => visibleScopeIds is null || visibleScopeIds.Contains(ownership.ScopeId))
+                        .Select(ownership => ownership.Scope.PublicId)
+                ],
                 CreatedAt = person.CreatedAt,
                 UpdatedAt = person.UpdatedAt
             })
@@ -496,7 +498,7 @@ public class UpdatePersonCommandHandler(
     /// </summary>
     private async Task<bool> EmailTakenAsync(UpdatePersonCommand command, Person person, long targetRoleId)
     {
-        var email = command.Email.Trim().ToLower();
+        var email = command.Email.Trim().ToLowerInvariant();
 
         if (targetRoleId == (long)Roles.User && person.ScopeMembership is not null)
         {

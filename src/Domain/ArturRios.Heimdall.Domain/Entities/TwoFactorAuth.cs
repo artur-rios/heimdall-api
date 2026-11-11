@@ -13,7 +13,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class TwoFactorAuth : Entity<long>
 {
     /// <summary>Foreign key to the owning <see cref="Person" /> (internal Id). Required, unique.</summary>
-    public long PersonId { get; set; }
+    public long PersonId { get; init; }
 
     /// <summary>Whether the authenticator-app method is configured (FR-2F-02).</summary>
     public bool AppEnabled { get; set; }
@@ -87,7 +87,7 @@ public class TwoFactorAuth : Entity<long>
     public int ChallengeAttempts { get; set; }
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>Last update timestamp.</summary>
     public DateTime UpdatedAt { get; set; }
@@ -95,11 +95,11 @@ public class TwoFactorAuth : Entity<long>
     // Navigation properties
 
     /// <summary>The person this configuration belongs to.</summary>
-    public Person Person { get; set; } = null!;
+    public Person Person { get; init; } = null!;
 
     /// <summary>Outstanding email codes issued for this configuration (UC-36 step 4, UC-37 step 2).</summary>
-    public ICollection<TwoFactorEmailCode> EmailCodes { get; set; } = new List<TwoFactorEmailCode>();
+    public ICollection<TwoFactorEmailCode> EmailCodes { get; init; } = [];
 
     /// <summary>Recovery codes issued for this configuration (UC-37 step 4, UC-38, UC-40).</summary>
-    public ICollection<TwoFactorRecoveryCode> RecoveryCodes { get; set; } = new List<TwoFactorRecoveryCode>();
+    public ICollection<TwoFactorRecoveryCode> RecoveryCodes { get; init; } = [];
 }

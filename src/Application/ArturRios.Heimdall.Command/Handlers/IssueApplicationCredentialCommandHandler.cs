@@ -44,7 +44,7 @@ public class IssueApplicationCredentialCommandHandler(
 
         // AF-53a, then AF-53b.
         var access = await ApplicationManagementAccess.ResolveAsync(
-            applicationReader.Query(), command.ScopeId, command.Id, command.ActingRole, command.ActingPersonId);
+            applicationReader.Query(), command.ScopeId, command.Id, command.ActingRole, command.ActingPersonId, cancellationToken);
 
         switch (access.Access)
         {

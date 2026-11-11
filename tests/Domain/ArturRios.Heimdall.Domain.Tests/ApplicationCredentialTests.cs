@@ -9,7 +9,7 @@ namespace ArturRios.Heimdall.Domain.Tests;
 // memory, so these cases pin both.
 public class ApplicationCredentialTests
 {
-    private static readonly DateTime Now = new(2026, 10, 14, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_now = new(2026, 10, 14, 12, 0, 0, DateTimeKind.Utc);
 
     [UnitFact]
     public void GivenNoExpiryAndNotRevoked_WhenAskedIfLive_ThenItIs()
@@ -18,7 +18,7 @@ public class ApplicationCredentialTests
         var credential = new ApplicationCredential();
 
         // When
-        var live = credential.IsLiveAt(Now);
+        var live = credential.IsLiveAt(s_now);
 
         // Then
         Assert.True(live);
@@ -28,10 +28,10 @@ public class ApplicationCredentialTests
     public void GivenAnExpiryAfterNow_WhenAskedIfLive_ThenItIs()
     {
         // Given
-        var credential = new ApplicationCredential { ExpiresAt = Now.AddSeconds(1) };
+        var credential = new ApplicationCredential { ExpiresAt = s_now.AddSeconds(1) };
 
         // When
-        var live = credential.IsLiveAt(Now);
+        var live = credential.IsLiveAt(s_now);
 
         // Then
         Assert.True(live);
@@ -41,10 +41,10 @@ public class ApplicationCredentialTests
     public void GivenAnExpiryAtExactlyNow_WhenAskedIfLive_ThenItIsNot()
     {
         // Given — the boundary belongs to "expired", as for every token in this API
-        var credential = new ApplicationCredential { ExpiresAt = Now };
+        var credential = new ApplicationCredential { ExpiresAt = s_now };
 
         // When
-        var live = credential.IsLiveAt(Now);
+        var live = credential.IsLiveAt(s_now);
 
         // Then
         Assert.False(live);
@@ -54,10 +54,10 @@ public class ApplicationCredentialTests
     public void GivenARevokedCredentialWithoutExpiry_WhenAskedIfLive_ThenItIsNot()
     {
         // Given
-        var credential = new ApplicationCredential { RevokedAt = Now.AddDays(-1) };
+        var credential = new ApplicationCredential { RevokedAt = s_now.AddDays(-1) };
 
         // When
-        var live = credential.IsLiveAt(Now);
+        var live = credential.IsLiveAt(s_now);
 
         // Then
         Assert.False(live);
@@ -67,13 +67,13 @@ public class ApplicationCredentialTests
     public void GivenSeveralCredentials_WhenFilteredByTheExpression_ThenOnlyLiveOnesRemain()
     {
         // Given
-        var live = new ApplicationCredential { ExpiresAt = Now.AddHours(1) };
-        var expired = new ApplicationCredential { ExpiresAt = Now.AddHours(-1) };
-        var revoked = new ApplicationCredential { RevokedAt = Now.AddHours(-1) };
+        var live = new ApplicationCredential { ExpiresAt = s_now.AddHours(1) };
+        var expired = new ApplicationCredential { ExpiresAt = s_now.AddHours(-1) };
+        var revoked = new ApplicationCredential { RevokedAt = s_now.AddHours(-1) };
 
         // When
         var remaining = new[] { live, expired, revoked }.AsQueryable()
-            .Where(ApplicationCredential.LiveAt(Now))
+            .Where(ApplicationCredential.LiveAt(s_now))
             .ToList();
 
         // Then

@@ -46,7 +46,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
 
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new[] { tenancy.Shared.PublicId }, response.Body!.Data!.OwnedScopeIds);
+        Assert.Equal([tenancy.Shared.PublicId], response.Body!.Data!.OwnedScopeIds);
     }
 
     [FunctionalFact]
@@ -95,7 +95,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
         // Then — both owners are listed, each with the shared scope alone
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(2, response.Body!.Data!.Count());
-        Assert.All(response.Body.Data!, owner => Assert.Equal(new[] { tenancy.Shared.PublicId }, owner.OwnedScopeIds));
+        Assert.All(response.Body.Data!, owner => Assert.Equal([tenancy.Shared.PublicId], owner.OwnedScopeIds));
     }
 
     [FunctionalFact]
@@ -149,7 +149,7 @@ public class OwnedScopeVisibilityTests(PostgresFixture db) : WebApiTest<Program>
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var listed = Assert.Single(response.Body!.Data!, person => person.Id == user.PublicId);
-        Assert.Equal(new[] { tenancy.Elsewhere.PublicId }, listed.OwnedScopeIds);
+        Assert.Equal([tenancy.Elsewhere.PublicId], listed.OwnedScopeIds);
     }
 
     [FunctionalFact]

@@ -1,7 +1,6 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Output;
-using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;

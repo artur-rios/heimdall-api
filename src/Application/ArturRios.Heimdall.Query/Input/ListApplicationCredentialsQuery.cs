@@ -8,7 +8,7 @@ public class ListApplicationCredentialsQuery : BaseQuery, IActorScoped
 {
     public Guid ScopeId { get; set; }
 
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

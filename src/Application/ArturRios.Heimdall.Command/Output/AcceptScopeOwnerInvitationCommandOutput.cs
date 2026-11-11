@@ -9,8 +9,8 @@ namespace ArturRios.Heimdall.Command.Output;
 public class AcceptScopeOwnerInvitationCommandOutput : CommandOutput
 {
     /// <summary>Public id of the accepted invitation.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Public id of the scope the caller now co-owns.</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 }

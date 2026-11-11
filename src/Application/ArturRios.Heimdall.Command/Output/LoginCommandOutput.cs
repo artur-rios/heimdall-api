@@ -14,10 +14,10 @@ namespace ArturRios.Heimdall.Command.Output;
 public class LoginCommandOutput : CommandOutput
 {
     /// <summary>The signed authentication token, to be sent as a bearer token. Null when <see cref="RequiresTwoFactor" /> is true.</summary>
-    public string? Token { get; set; }
+    public string? Token { get; init; }
 
     /// <summary>When the token expires, in UTC. Null when <see cref="RequiresTwoFactor" /> is true.</summary>
-    public DateTime? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; init; }
 
     /// <summary>
     ///     Whether the authenticated person's email address is verified (FR-EV-05), so a caller
@@ -26,26 +26,26 @@ public class LoginCommandOutput : CommandOutput
     ///     factor and is not authenticated yet, so this response tells them nothing about the
     ///     account. They receive it from <c>POST /api/auth/2fa/verify</c> instead (UC-38).
     /// </summary>
-    public bool? EmailVerified { get; set; }
+    public bool? EmailVerified { get; init; }
 
     /// <summary>
     ///     AF-11g (FR-2F-07): true when the person has active two-factor authentication, so this
     ///     response carries a challenge token instead of a full one — see UC-38.
     /// </summary>
-    public bool RequiresTwoFactor { get; set; }
+    public bool RequiresTwoFactor { get; init; }
 
     /// <summary>
     ///     The short-lived UC-38 challenge token (NFR-17), present only when
     ///     <see cref="RequiresTwoFactor" /> is true. Submitted to <c>POST /api/auth/2fa/verify</c> as
     ///     a request body field — never as a bearer credential (FR-2F-10).
     /// </summary>
-    public string? ChallengeToken { get; set; }
+    public string? ChallengeToken { get; init; }
 
     /// <summary>
     ///     The second-factor methods available to the person — <c>["App"]</c>, <c>["Email"]</c>, or
     ///     both — present only when <see cref="RequiresTwoFactor" /> is true.
     /// </summary>
-    public IReadOnlyCollection<string>? AvailableMethods { get; set; }
+    public IReadOnlyCollection<string>? AvailableMethods { get; init; }
 
     /// <summary>
     ///     True when processing of the identity is restricted (NFR-24), so <see cref="Token" /> is a
@@ -54,5 +54,5 @@ public class LoginCommandOutput : CommandOutput
     ///     A client should offer those actions — lifting the restriction above all — and ask the
     ///     subject to sign in again once it is lifted, for a full token.
     /// </summary>
-    public bool ProcessingRestricted { get; set; }
+    public bool ProcessingRestricted { get; init; }
 }

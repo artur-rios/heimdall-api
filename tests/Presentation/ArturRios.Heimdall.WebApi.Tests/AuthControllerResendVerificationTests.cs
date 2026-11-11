@@ -92,9 +92,10 @@ public class AuthControllerResendVerificationTests(PostgresFixture db)
     }
 
     private async Task<List<EmailVerificationToken>> LiveTokensAsync(Person person) =>
-        (await TokensForAsync(person))
+    [
+        .. (await TokensForAsync(person))
         .Where(token => !token.Used && token.ExpiresAt > DateTime.UtcNow)
-        .ToList();
+    ];
 
     private async Task<EmailVerificationToken> SingleLiveTokenAsync(Person person) =>
         Assert.Single(await LiveTokensAsync(person));

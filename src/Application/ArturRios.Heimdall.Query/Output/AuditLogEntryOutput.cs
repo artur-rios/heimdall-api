@@ -9,26 +9,26 @@ namespace ArturRios.Heimdall.Query.Output;
 public class AuditLogEntryOutput : QueryOutput
 {
     /// <summary>The entry's public id.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>When the entry was recorded (UTC).</summary>
-    public DateTime RecordedAt { get; set; }
+    public DateTime RecordedAt { get; init; }
 
     /// <summary>The acting person's public id; <c>null</c> for an anonymous write or a cleared attribution.</summary>
-    public Guid? ActorId { get; set; }
+    public Guid? ActorId { get; init; }
 
     /// <summary>The acting person's role value (see <c>Roles</c>); <c>null</c> whenever <see cref="ActorId" /> is.</summary>
-    public int? ActorRole { get; set; }
+    public int? ActorRole { get; init; }
 
     /// <summary>The command's type name, e.g. <c>CreateScopeCommand</c>.</summary>
-    public string Action { get; set; } = string.Empty;
+    public string Action { get; init; } = string.Empty;
 
     /// <summary>The affected entity's public id; <c>null</c> when none could be resolved, as for every refusal.</summary>
-    public Guid? TargetId { get; set; }
+    public Guid? TargetId { get; init; }
 
     /// <summary>Whether the write completed; <c>false</c> for a refusal.</summary>
-    public bool Succeeded { get; set; }
+    public bool Succeeded { get; init; }
 
     /// <summary>A refusal's canonical reason; <c>null</c> on success.</summary>
-    public string? FailureReason { get; set; }
+    public string? FailureReason { get; init; }
 }

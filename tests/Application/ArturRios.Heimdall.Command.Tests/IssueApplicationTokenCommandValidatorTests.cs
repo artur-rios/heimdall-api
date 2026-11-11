@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // single refusal, so a malformed request is the only thing a 400 can say.
 public class IssueApplicationTokenCommandValidatorTests
 {
-    private static readonly IssueApplicationTokenCommandValidator Validator = new();
+    private static readonly IssueApplicationTokenCommandValidator s_validator = new();
 
     private static IssueApplicationTokenCommand Valid() => new()
     {
@@ -21,7 +21,7 @@ public class IssueApplicationTokenCommandValidatorTests
     public async Task GivenAllFields_WhenValidating_ThenItIsValid()
     {
         // Given / When
-        var result = await Validator.ValidateAsync(Valid());
+        var result = await s_validator.ValidateAsync(Valid());
 
         // Then
         Assert.True(result.IsValid);
@@ -31,7 +31,7 @@ public class IssueApplicationTokenCommandValidatorTests
     public async Task GivenNothing_WhenValidating_ThenEachMissingFieldIsNamed()
     {
         // Given / When
-        var result = await Validator.ValidateAsync(new IssueApplicationTokenCommand());
+        var result = await s_validator.ValidateAsync(new IssueApplicationTokenCommand());
 
         // Then
         Assert.Equal(
@@ -47,7 +47,7 @@ public class IssueApplicationTokenCommandValidatorTests
         command.Secret = new string('a', 101);
 
         // When
-        var result = await Validator.ValidateAsync(command);
+        var result = await s_validator.ValidateAsync(command);
 
         // Then
         Assert.Equal([ApplicationTokenMessages.SecretTooLong], result.Errors.Select(e => e.ErrorMessage));

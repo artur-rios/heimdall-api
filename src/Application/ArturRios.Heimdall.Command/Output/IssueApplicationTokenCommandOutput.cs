@@ -8,10 +8,10 @@ namespace ArturRios.Heimdall.Command.Output;
 /// </summary>
 public class IssueApplicationTokenCommandOutput : CommandOutput
 {
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>The application token, valid until <see cref="ExpiresAt" />.</summary>
-    public string Token { get; set; } = string.Empty;
+    public string Token { get; init; } = string.Empty;
 
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 }

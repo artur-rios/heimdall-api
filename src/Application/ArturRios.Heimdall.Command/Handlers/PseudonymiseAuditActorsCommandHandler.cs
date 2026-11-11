@@ -136,7 +136,7 @@ public class PseudonymiseAuditActorsCommandHandler(
                 }
             }
 
-            var update = await auditWriter.UpdateRangeAsync(due.Select(row => row.Entry).ToList());
+            var update = await auditWriter.UpdateRangeAsync([.. due.Select(row => row.Entry)], cancellationToken);
 
             if (!update.Success)
             {
@@ -165,7 +165,7 @@ public class PseudonymiseAuditActorsCommandHandler(
                 .OrderBy(tombstone => tombstone.CreatedAt)
                 .Select(tombstone => tombstone.Id)
                 .Take(retention.PurgeBatchSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             if (settled.Count == 0)
             {
@@ -173,7 +173,7 @@ public class PseudonymiseAuditActorsCommandHandler(
                 break;
             }
 
-            var removal = await erasedSubjectWriter.DeleteRangeAsync(settled);
+            var removal = await erasedSubjectWriter.DeleteRangeAsync(settled, cancellationToken);
 
             if (!removal.Success)
             {
@@ -191,7 +191,7 @@ public class PseudonymiseAuditActorsCommandHandler(
 
         // Counted only where the run stopped on a full batch: one that was not full took all that was due.
         result.Backlog = (entriesFull ? await CountDueAsync(cutoff) : 0)
-                         + (tombstonesFull ? await Settled(settledBefore).CountAsync() : 0);
+                         + (tombstonesFull ? await Settled(settledBefore).CountAsync(cancellationToken) : 0);
 
         return output
             .WithData(result)
@@ -267,16 +267,16 @@ public class PseudonymiseAuditActorsCommandHandler(
             .Where(entry => ids.Contains(entry.Id))
             .ToListAsync();
 
-        return entries
-            .OrderBy(entry => entry.CreatedAt)
-            .ThenBy(entry => entry.Id)
-            .Select(entry => new DueEntry
-            {
-                Entry = entry,
-                ActorDue = actorDue.Contains(entry.Id),
-                TargetDue = targetDue.Contains(entry.Id)
-            })
-            .ToList();
+        return
+        [
+            .. entries
+                .OrderBy(entry => entry.CreatedAt)
+                .ThenBy(entry => entry.Id)
+                .Select(entry => new DueEntry
+                {
+                    Entry = entry, ActorDue = actorDue.Contains(entry.Id), TargetDue = targetDue.Contains(entry.Id)
+                })
+        ];
     }
 
     /// <summary>How many entries are still due: the backlog a run that stopped at its cap leaves.</summary>

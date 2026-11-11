@@ -32,7 +32,6 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
 {
     private const string Password = Seeds.Password;
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private async Task<TwoFactorAuth> SeedTwoFactorAsync(Person person, bool appEnabled = true)
     {

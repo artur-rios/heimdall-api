@@ -19,7 +19,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // rule. GoogleUserControllerHardDeleteTests proves the endpoint enforces it.
 public class HardDeleteGoogleUserCommandHandlerTests
 {
-    private static readonly Guid ScopePublicId = Guid.NewGuid();
+    private static readonly Guid s_scopePublicId = Guid.NewGuid();
 
     private static async Task<GoogleUser> SeedGoogleUserAsync(
         AsyncFakeRepository<GoogleUser, long> googleUsers,
@@ -29,7 +29,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
         var scope = new Scope
         {
             Id = 42,
-            PublicId = scopePublicId ?? ScopePublicId,
+            PublicId = scopePublicId ?? s_scopePublicId,
             Name = $"scope-{Guid.NewGuid():N}"
         };
 
@@ -47,7 +47,7 @@ public class HardDeleteGoogleUserCommandHandlerTests
     }
 
     private static HardDeleteGoogleUserCommand Command(Guid id) =>
-        new() { ScopeId = ScopePublicId, Id = id };
+        new() { ScopeId = s_scopePublicId, Id = id };
 
     [UnitFact]
     public async Task GivenGoogleUser_WhenHandlingHardDelete_ThenRemovesTheRecord()

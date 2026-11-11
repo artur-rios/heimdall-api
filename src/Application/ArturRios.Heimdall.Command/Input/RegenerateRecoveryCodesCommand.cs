@@ -19,10 +19,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class RegenerateRecoveryCodesCommand : BaseCommand, IActorScoped
 {
     /// <summary>The caller's current app or email code, when proving a code rather than a recovery code.</summary>
-    public string? Code { get; set; }
+    public string? Code { get; init; }
 
     /// <summary>One of the caller's unused recovery codes, when no code is available.</summary>
-    public string? RecoveryCode { get; set; }
+    public string? RecoveryCode { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

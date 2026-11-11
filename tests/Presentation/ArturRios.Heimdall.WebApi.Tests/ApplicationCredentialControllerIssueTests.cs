@@ -26,7 +26,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     private Task<HttpOutput<DataOutput<IssueApplicationCredentialCommandOutput?>?>> IssueAsync(
-        Scope scope, Domain.Entities.Application application, IssueApplicationCredentialCommand? body = null) =>
+        Scope scope, Application application, IssueApplicationCredentialCommand? body = null) =>
         Gateway.PostAsync<DataOutput<IssueApplicationCredentialCommandOutput?>>(
             Route(scope.PublicId, application.PublicId), body ?? new IssueApplicationCredentialCommand());
 
@@ -118,7 +118,7 @@ public class ApplicationCredentialControllerIssueTests(PostgresFixture db) : Web
 
     /// <summary>Posts <paramref name="json" /> as it is, and reads the answer's status and errors.</summary>
     private async Task<(HttpStatusCode Status, string[] Errors)> PostRawAsync(
-        Scope scope, Domain.Entities.Application application, string json)
+        Scope scope, Application application, string json)
     {
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         using var response = await Gateway.Client.PostAsync(Route(scope.PublicId, application.PublicId), content);

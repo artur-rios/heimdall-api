@@ -20,17 +20,17 @@ public class TokenOriginTests
     private const string Issuer = "heimdall-unit";
     private const string PersonAudience = "heimdall-unit";
 
-    private static readonly PersonTokenAudiences Audiences = new(PersonAudience);
+    private static readonly PersonTokenAudiences s_audiences = new(PersonAudience);
 
-    private static readonly IdentityUserMapper Mapper = new(Audiences);
+    private static readonly IdentityUserMapper s_mapper = new(s_audiences);
 
     // The ES256 key Heimdall signs with here; every token below that is meant to be signed correctly is
     // signed with it.
-    private static readonly TokenSigningKeys Keys = UnitTokenReaders.NewKeys();
+    private static readonly TokenSigningKeys s_keys = UnitTokenReaders.NewKeys();
 
     private static string Mint(IdentityUser user, string issuer, string audience) =>
         new JwtHandler().CreateToken(
-            Keys.ApplyTo(new JwtConfiguration(3600, issuer, audience, string.Empty, Mapper.ToClaims(user))));
+            s_keys.ApplyTo(new JwtConfiguration(3600, issuer, audience, string.Empty, s_mapper.ToClaims(user))));
 
     private static string MintWithAudiences(string issuer, params string[] audiences) =>
         new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
@@ -38,13 +38,13 @@ public class TokenOriginTests
             Issuer = issuer,
             Claims = new Dictionary<string, object> { [JwtRegisteredClaimNames.Aud] = audiences },
             Expires = DateTime.UtcNow.AddMinutes(10),
-            SigningCredentials = UnitSigningKeys.Es256(Keys.Current)
+            SigningCredentials = UnitSigningKeys.Es256(s_keys.Current)
         });
 
     private static IdentityUser FullIdentity() => new(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
     // The bearer reader over that key, as start-up wires it.
-    private static PersonTokenValidator Validator() => new UnitTokenReaders(Keys, Issuer, PersonAudience).Bearer;
+    private static PersonTokenValidator Validator() => new UnitTokenReaders(s_keys, Issuer, PersonAudience).Bearer;
 
     // TokenOrigin
 
@@ -52,10 +52,10 @@ public class TokenOriginTests
     public void GivenTheExpectedIssuerAndOneAcceptedAudience_WhenChecked_ThenItIsIssuedForIt()
     {
         // Given
-        var token = Mint(FullIdentity(), Issuer, Audiences.SubjectRights);
+        var token = Mint(FullIdentity(), Issuer, s_audiences.SubjectRights);
 
         // When / Then
-        Assert.True(TokenOrigin.IsIssuedFor(token, Issuer, Audiences.Person, Audiences.SubjectRights));
+        Assert.True(TokenOrigin.IsIssuedFor(token, Issuer, s_audiences.Person, s_audiences.SubjectRights));
     }
 
     [UnitTheory]
@@ -118,9 +118,9 @@ public class TokenOriginTests
         // Given — each person token with the marks its audience calls for
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)
         {
-            SubjectRightsOnly = audience == Audiences.SubjectRights,
-            MfaPending = audience == Audiences.TwoFactorChallenge,
-            ChallengeId = audience == Audiences.TwoFactorChallenge ? Guid.NewGuid() : null
+            SubjectRightsOnly = audience == s_audiences.SubjectRights,
+            MfaPending = audience == s_audiences.TwoFactorChallenge,
+            ChallengeId = audience == s_audiences.TwoFactorChallenge ? Guid.NewGuid() : null
         };
         var token = Mint(user, Issuer, audience);
 
@@ -155,7 +155,7 @@ public class TokenOriginTests
     {
         // Given
         var token = new JwtHandler().CreateToken(UnitTokenReaders.NewKeys().ApplyTo(
-            new JwtConfiguration(3600, Issuer, PersonAudience, string.Empty, Mapper.ToClaims(FullIdentity()))));
+            new JwtConfiguration(3600, Issuer, PersonAudience, string.Empty, s_mapper.ToClaims(FullIdentity()))));
 
         // When
         var result = await Validator().ValidateAsync(token, new DefaultHttpContext());
@@ -176,7 +176,7 @@ public class TokenOriginTests
         // none is accepted any more. One descriptor for every case, with a key long enough for HS512,
         // so only the algorithm differs.
         const string longSecret = "unit-tests-token-origin-signing-secret-long-enough-for-hs512-0123456789";
-        var readers = new UnitTokenReaders(Keys, Issuer, PersonAudience);
+        var readers = new UnitTokenReaders(s_keys, Issuer, PersonAudience);
         var token = readers.TokenFor(
             UnitTokenReaders.BearerReader,
             new SigningCredentials(new SymmetricSecurityKey(Encoding.ASCII.GetBytes(longSecret)), algorithm));
@@ -197,7 +197,7 @@ public class TokenOriginTests
     {
         // Given — HEIMDALL_AUTH_TOKEN_AUDIENCE left empty, its documented default: a full token then
         // carries no aud claim, and a challenge carries the bare suffix
-        var readers = new UnitTokenReaders(Keys, Issuer, string.Empty);
+        var readers = new UnitTokenReaders(s_keys, Issuer, string.Empty);
         var audiences = readers.Audiences;
         var challenge = audience == audiences.TwoFactorChallenge;
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin)

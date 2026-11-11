@@ -4,7 +4,6 @@ using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
-using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
@@ -25,7 +24,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ApplicationCredentialControllerRevokeTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     private Task<HttpOutput<DataOutput<RevokeApplicationCredentialCommandOutput?>?>> RevokeAsync(
-        Scope scope, Domain.Entities.Application application, Guid credentialId) =>
+        Scope scope, Application application, Guid credentialId) =>
         Gateway.DeleteAsync<DataOutput<RevokeApplicationCredentialCommandOutput?>>(
             $"{Route(scope.PublicId, application.PublicId)}/{credentialId}");
 

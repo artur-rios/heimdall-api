@@ -13,7 +13,7 @@ public class Role : Entity<long>
     ///     External identifier, generated on creation and used everywhere the role is addressed
     ///     from outside the database. The internal <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Role name. Required, unique — <c>User</c>, <c>ScopeAdmin</c>, or <c>SystemAdmin</c>.</summary>
     [MaxLength(200)]
@@ -26,5 +26,5 @@ public class Role : Entity<long>
     // Navigation properties
 
     /// <summary>Persons classified by this role.</summary>
-    public ICollection<Person> Persons { get; set; } = new List<Person>();
+    public ICollection<Person> Persons { get; init; } = [];
 }

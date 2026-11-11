@@ -64,11 +64,11 @@ public class ReapplyErasuresCommandHandler(
 
         var persons = await personReader.Query()
             .Where(person => requested.Contains(person.PublicId))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var googleUsers = await googleUserReader.Query()
             .Where(googleUser => requested.Contains(googleUser.PublicId))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var toWrite = new List<Person>();
 
@@ -89,7 +89,7 @@ public class ReapplyErasuresCommandHandler(
         // the identity is overwritten, as the scheduled pass does, so a failure here leaves the
         // record selectable for another attempt rather than anonymised with its secret kept.
         var (_, dependentErrors) = await PersonDependentsRemoval.RemoveAsync(
-            toWrite.Select(person => person.Id).ToList(),
+            [.. toWrite.Select(person => person.Id)],
             passwordResetTokenWriter,
             emailVerificationTokenWriter,
             twoFactorAuthWriter);
@@ -105,7 +105,7 @@ public class ReapplyErasuresCommandHandler(
         // person here ends anonymised, by this run or by one that got there first. Each void is audited
         // as it is made, so a later failure cannot lose its entry.
         var voided = await ErasedPersonInvitations.ForgetAsync(
-            invitations, auditLog, logger, toWrite.Select(person => person.Id).ToList(), now);
+            invitations, auditLog, logger, [.. toWrite.Select(person => person.Id)], now);
 
         // Then each person, by one targeted write (#237): marked as a subject-requested deletion, so
         // the record's own state says why it is gone and the audit trail reads correctly afterwards,
@@ -146,7 +146,7 @@ public class ReapplyErasuresCommandHandler(
             {
                 Anonymised = anonymised,
                 AlreadyAnonymised = alreadyAnonymised,
-                NotFound = requested.Where(id => !found.Contains(id)).ToList(),
+                NotFound = [.. requested.Where(id => !found.Contains(id))],
                 ScopeOwnerInvitationsVoided = voided.Count
             })
             .WithMessage(ErasureMessages.ErasuresReapplied);

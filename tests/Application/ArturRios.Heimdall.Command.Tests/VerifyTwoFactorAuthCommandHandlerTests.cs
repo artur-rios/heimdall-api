@@ -35,7 +35,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
     }
 
     /// <summary>The challenge every seeded configuration has outstanding, and every stub token names.</summary>
-    private static readonly Guid OutstandingChallenge = Guid.NewGuid();
+    private static readonly Guid s_outstandingChallenge = Guid.NewGuid();
 
     private sealed class RecordingIssuer : IAuthTokenIssuer
     {
@@ -85,7 +85,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()),
                 new StubChallengeTokenValidator(
                     challengePersonId ?? Person.PublicId,
-                    challengeId ?? OutstandingChallenge,
+                    challengeId ?? s_outstandingChallenge,
                     securityStamp ?? Person.SecurityStamp),
                 new PersonAuthTokenService(TokenIssuer));
 
@@ -95,7 +95,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
                 TwoFactorAuths,
                 InMemoryAtomicWrites.Instance,
                 new TwoFactorFactorVerifier(EmailCodes, InMemoryAtomicWrites.Instance, RecoveryCodes, TotpVerifier()),
-                new StubChallengeTokenValidator(null, OutstandingChallenge, null),
+                new StubChallengeTokenValidator(null, s_outstandingChallenge, null),
                 new PersonAuthTokenService(TokenIssuer));
 
         // The real TOTP verifier over the fixture's fake repository, not a stub: the single-use rule
@@ -146,7 +146,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
             AppEnabled = appEnabled,
             EmailEnabled = emailEnabled,
             TotpSecretEncrypted = appEnabled ? [1, 2, 3] : null,
-            ChallengeId = OutstandingChallenge
+            ChallengeId = s_outstandingChallenge
         };
         await fixture.TwoFactorAuths.CreateAsync(twoFactorAuth);
 
@@ -346,7 +346,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
             });
         var handler = new VerifyTwoFactorAuthCommandHandler(
             fixture.Persons, fixture.TwoFactorAuths, InMemoryAtomicWrites.Instance, verifier.Object,
-            new StubChallengeTokenValidator(fixture.Person.PublicId, OutstandingChallenge, fixture.Person.SecurityStamp),
+            new StubChallengeTokenValidator(fixture.Person.PublicId, s_outstandingChallenge, fixture.Person.SecurityStamp),
             new PersonAuthTokenService(fixture.TokenIssuer));
 
         // When
@@ -711,7 +711,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
             InMemoryAtomicWrites.Instance,
             new TwoFactorFactorVerifier(
                 fixture.EmailCodes, InMemoryAtomicWrites.Instance, fixture.RecoveryCodes, fixture.TotpVerifier()),
-            new StubChallengeTokenValidator(fixture.Person.PublicId, OutstandingChallenge, null),
+            new StubChallengeTokenValidator(fixture.Person.PublicId, s_outstandingChallenge, null),
             new PersonAuthTokenService(fixture.TokenIssuer));
 
         // When
@@ -871,7 +871,7 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         Assert.Equal([TwoFactorMessages.FactorInvalid], output.Errors);
         Assert.Null(fixture.TokenIssuer.Subject);
         Assert.False(emailCode.Used);
-        Assert.Equal(twoFactorAuth.ChallengeId, OutstandingChallenge);
+        Assert.Equal(twoFactorAuth.ChallengeId, s_outstandingChallenge);
     }
 
     [UnitFact]

@@ -29,7 +29,7 @@ public class ReapplyErasuresCommand : BaseCommand, IActorScoped
     ///     Public identifiers of the identities to erase, taken from the erasure ledger the restore
     ///     runbook keeps outside the database.
     /// </summary>
-    public IEnumerable<Guid> SubjectIds { get; set; } = [];
+    public IEnumerable<Guid> SubjectIds { get; init; } = [];
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

@@ -45,7 +45,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
     ///     it. Each must be refused for want of privilege, not stopped by a trigger: a trigger is
     ///     only worth its guarantee while the login cannot remove it.
     /// </summary>
-    private static readonly string[] Refused =
+    private static readonly string[] s_refused =
     [
         "ALTER TABLE heimdall.audit_log DISABLE TRIGGER USER",
         "ALTER TABLE heimdall.audit_log DISABLE TRIGGER audit_log_no_delete",
@@ -136,7 +136,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
     }
 
     /// <summary>
-    ///     Every <see cref="Refused" /> statement, and an <c>ALTER TABLE</c> on every table, run as
+    ///     Every <see cref="s_refused" /> statement, and an <c>ALTER TABLE</c> on every table, run as
     ///     the runtime login. Returns the ones not refused for want of privilege, with what happened
     ///     instead, so a failure names each hole rather than the first.
     /// </summary>
@@ -149,7 +149,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
 
         Assert.Contains("heimdall.audit_log", tables);
 
-        var statements = Refused.Concat(tables.Select(table => $"ALTER TABLE {table} ADD COLUMN planted integer"));
+        var statements = s_refused.Concat(tables.Select(table => $"ALTER TABLE {table} ADD COLUMN planted integer"));
         var holes = new List<string>();
 
         foreach (var statement in statements)
@@ -256,7 +256,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
         Assert.True(facts.DrawsFromSequences);
     }
 
-    private static readonly Dictionary<string, string> NoVariables = new();
+    private static readonly Dictionary<string, string> s_noVariables = [];
 
     private static Dictionary<string, string> Variables(string owner, string runtime, string database) => new()
     {
@@ -312,7 +312,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenANewDeployment_WhenTheCheckRunsAsTheRuntimeLogin_ThenItPasses()
     {
         var result = await db.RunScriptAsync(
-            "check-runtime-login.sql", NoVariables, PostgresFixture.RuntimeRole, PostgresFixture.Database);
+            "check-runtime-login.sql", s_noVariables, PostgresFixture.RuntimeRole, PostgresFixture.Database);
 
         Assert.True(result.ExitCode == 0, result.Stderr);
         Assert.Contains($"{PostgresFixture.RuntimeRole} was refused all", result.Stderr);
@@ -324,7 +324,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
         // The wrong session must be told apart from a restricted one, and the check must leave the
         // triggers it found it could remove exactly as they were.
         var result = await db.RunScriptAsync(
-            "check-runtime-login.sql", NoVariables, PostgresFixture.OwnerRole, PostgresFixture.Database);
+            "check-runtime-login.sql", s_noVariables, PostgresFixture.OwnerRole, PostgresFixture.Database);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("ALTER TABLE heimdall.audit_log DISABLE TRIGGER USER: not refused", result.Stderr);
@@ -471,7 +471,7 @@ public class DatabaseRoleTests(PostgresFixture db) : WebApiTest<Program>(Environ
 
         await AssertRuntimePrivilegesAsync(legacy.Superuser, legacy.Runtime, legacy.Owner);
 
-        var check = await db.RunScriptAsync("check-runtime-login.sql", NoVariables, legacy.Runtime, legacy.Database);
+        var check = await db.RunScriptAsync("check-runtime-login.sql", s_noVariables, legacy.Runtime, legacy.Database);
         Assert.True(check.ExitCode == 0, check.Stderr);
     }
 

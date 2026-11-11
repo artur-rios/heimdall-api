@@ -25,7 +25,7 @@ public sealed class ScopeOwnerInvitations(AppDbContext context) : IScopeOwnerInv
         await context.ScopeOwnerInvitations
             .Where(x => x.ScopeId == invitation.ScopeId && x.InviteePersonId == invitation.InviteePersonId &&
                         x.EndedAt == null && x.ExpiresAt <= now)
-            .ExecuteUpdateAsync(set => set.SetProperty(x => x.EndedAt, x => (DateTime?)x.ExpiresAt));
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.EndedAt, x => x.ExpiresAt));
 
         if (await FindOpenAsync(invitation, now) is { } open)
         {

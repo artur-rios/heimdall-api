@@ -11,7 +11,7 @@ namespace ArturRios.Heimdall.Query.Output;
 public class GoogleUserOutput : QueryOutput
 {
     /// <summary>Public identifier of the Google User.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     Google's stable <c>sub</c> claim. Exposed deliberately: it is the identifier FR-GO-08 makes
@@ -19,25 +19,25 @@ public class GoogleUserOutput : QueryOutput
     ///     has nothing else to correlate on. It is not secret — a caller who may read this record
     ///     already knows who it belongs to.
     /// </summary>
-    public string GoogleId { get; set; } = string.Empty;
+    public string GoogleId { get; init; } = string.Empty;
 
     /// <summary>Full name, as it stood on the Google ID token the account last signed up with.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Email address.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>Whether Google reported the address as verified.</summary>
-    public bool EmailVerified { get; set; }
+    public bool EmailVerified { get; init; }
 
     /// <summary>Profile picture URL, or <c>null</c> when the token carried no <c>picture</c> claim.</summary>
-    public string? ProfilePictureUrl { get; set; }
+    public string? ProfilePictureUrl { get; init; }
 
     /// <summary>Whether the Google User is logically deleted.</summary>
-    public bool IsDeleted { get; set; }
+    public bool IsDeleted { get; init; }
 
     /// <summary>Public identifier of the one scope the Google User belongs to (FR-GO-06).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

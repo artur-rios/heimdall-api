@@ -55,7 +55,7 @@ public class HardDeleteGoogleUserCommandHandler(
         // the addressed resource genuinely does not exist in any of the three cases. A repeated call
         // lands here too — the row is already gone, and UC-29 has no idempotent path as UC-28 does.
         var googleUser = await googleUserReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId, cancellationToken);
 
         if (googleUser is null)
         {
@@ -77,7 +77,7 @@ public class HardDeleteGoogleUserCommandHandler(
         // own no application (FR-AP-03) and holds no password reset or email verification tokens,
         // since authentication is delegated to Google — so no foreign key can be violated and there
         // is no total to report, unlike the scope and person hard deletes.
-        var delete = await googleUserWriter.DeleteAsync(googleUser);
+        var delete = await googleUserWriter.DeleteAsync(googleUser, cancellationToken);
 
         if (!delete.Success)
         {

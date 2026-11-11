@@ -10,22 +10,22 @@ namespace ArturRios.Heimdall.Command.Output;
 public class CreatePersonCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the created person.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Full name.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Email address.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>Assigned role value (see <c>Roles</c>).</summary>
-    public int Role { get; set; }
+    public int Role { get; init; }
 
     /// <summary>Whether the email is verified (always <c>false</c> at creation).</summary>
     public bool EmailVerified { get; set; }
 
     /// <summary>Public identifier of the associated scope (paths a and c); <c>null</c> for path b.</summary>
-    public Guid? ScopeId { get; set; }
+    public Guid? ScopeId { get; init; }
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

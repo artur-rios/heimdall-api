@@ -10,5 +10,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class HardDeleteScopePermissionCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the hard-deleted permission.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

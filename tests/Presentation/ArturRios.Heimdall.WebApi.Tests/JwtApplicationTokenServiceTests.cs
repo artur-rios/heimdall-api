@@ -25,32 +25,32 @@ public class JwtApplicationTokenServiceTests
     private const string HmacSecret =
         "unit-tests-current-signing-secret-0123456789-long-enough-to-sign-hs512-too";
 
-    private static readonly ApplicationTokenSubject Subject =
+    private static readonly ApplicationTokenSubject s_subject =
         new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Billing Service");
 
     // A rotation in progress: the current ES256 key, and the previous one, whose private half is kept
     // here only to mint the token it signed before the rotation.
-    private static readonly (JwtKey Key, string EnvValue) Previous = UnitSigningKeys.Create();
-    private static readonly TokenSigningKeys Keys =
-        TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, Previous.EnvValue);
+    private static readonly (JwtKey Key, string EnvValue) s_previous = UnitSigningKeys.Create();
+    private static readonly TokenSigningKeys s_keys =
+        TokenSigningKeys.Parse(UnitSigningKeys.Create().EnvValue, s_previous.EnvValue);
 
-    private static readonly ApplicationTokenOptions Options = new(ApplicationAudience, TimeSpan.FromMinutes(10));
+    private static readonly ApplicationTokenOptions s_options = new(ApplicationAudience, TimeSpan.FromMinutes(10));
 
     private static JwtConfiguration Configuration(string issuer = Issuer) =>
-        Keys.ApplyTo(new JwtConfiguration(3600, issuer, PersonAudience, string.Empty, []));
+        s_keys.ApplyTo(new JwtConfiguration(3600, issuer, PersonAudience, string.Empty, []));
 
     private static JwtApplicationTokenService Service(string issuer = Issuer)
     {
-        return new JwtApplicationTokenService(Configuration(issuer), new JwtHandler(), Options);
+        return new JwtApplicationTokenService(Configuration(issuer), new JwtHandler(), s_options);
     }
 
     private static Dictionary<string, object> ApplicationClaims() => new()
     {
         [ApplicationTokenClaims.TokenKind] = ApplicationTokenClaims.ApplicationKind,
-        [ApplicationTokenClaims.Id] = Subject.ApplicationId.ToString(),
-        [ApplicationTokenClaims.ScopeId] = Subject.ScopeId.ToString(),
-        [ApplicationTokenClaims.CredentialId] = Subject.CredentialId.ToString(),
-        [ApplicationTokenClaims.Name] = Subject.Name
+        [ApplicationTokenClaims.Id] = s_subject.ApplicationId.ToString(),
+        [ApplicationTokenClaims.ScopeId] = s_subject.ScopeId.ToString(),
+        [ApplicationTokenClaims.CredentialId] = s_subject.CredentialId.ToString(),
+        [ApplicationTokenClaims.Name] = s_subject.Name
     };
 
     private static string Mint(
@@ -73,7 +73,7 @@ public class JwtApplicationTokenServiceTests
                 NotBefore = withLifetime ? expiry.AddMinutes(-20) : null,
                 IssuedAt = withLifetime ? expiry.AddMinutes(-20) : null,
                 Expires = withLifetime ? expiry : null,
-                SigningCredentials = credentials ?? UnitSigningKeys.Es256(Keys.Current)
+                SigningCredentials = credentials ?? UnitSigningKeys.Es256(s_keys.Current)
             });
     }
 
@@ -84,15 +84,15 @@ public class JwtApplicationTokenServiceTests
         var service = Service();
 
         // When
-        var issued = await service.IssueAsync(Subject);
+        var issued = await service.IssueAsync(s_subject);
 
         // Then
         var token = new JsonWebToken(issued.Token);
         Assert.Equal(ApplicationTokenClaims.ApplicationKind, token.GetClaim(ApplicationTokenClaims.TokenKind).Value);
-        Assert.Equal(Subject.ApplicationId.ToString(), token.GetClaim(ApplicationTokenClaims.Id).Value);
-        Assert.Equal(Subject.ScopeId.ToString(), token.GetClaim(ApplicationTokenClaims.ScopeId).Value);
-        Assert.Equal(Subject.CredentialId.ToString(), token.GetClaim(ApplicationTokenClaims.CredentialId).Value);
-        Assert.Equal(Subject.Name, token.GetClaim(ApplicationTokenClaims.Name).Value);
+        Assert.Equal(s_subject.ApplicationId.ToString(), token.GetClaim(ApplicationTokenClaims.Id).Value);
+        Assert.Equal(s_subject.ScopeId.ToString(), token.GetClaim(ApplicationTokenClaims.ScopeId).Value);
+        Assert.Equal(s_subject.CredentialId.ToString(), token.GetClaim(ApplicationTokenClaims.CredentialId).Value);
+        Assert.Equal(s_subject.Name, token.GetClaim(ApplicationTokenClaims.Name).Value);
         Assert.Equal([ApplicationAudience], token.Audiences);
         Assert.False(token.TryGetClaim("roleId", out _));
         Assert.InRange(issued.ExpiresAt, DateTime.UtcNow.AddMinutes(9), DateTime.UtcNow.AddMinutes(11));
@@ -103,16 +103,16 @@ public class JwtApplicationTokenServiceTests
     {
         // Given
         var service = Service();
-        var issued = await service.IssueAsync(Subject);
+        var issued = await service.IssueAsync(s_subject);
 
         // When
         var principal = await service.ValidateAsync(issued.Token);
 
         // Then
         Assert.NotNull(principal);
-        Assert.Equal(Subject.ApplicationId, principal.ApplicationId);
-        Assert.Equal(Subject.ScopeId, principal.ScopeId);
-        Assert.Equal(Subject.CredentialId, principal.CredentialId);
+        Assert.Equal(s_subject.ApplicationId, principal.ApplicationId);
+        Assert.Equal(s_subject.ScopeId, principal.ScopeId);
+        Assert.Equal(s_subject.CredentialId, principal.CredentialId);
     }
 
     [UnitFact]
@@ -120,7 +120,7 @@ public class JwtApplicationTokenServiceTests
     {
         // Given — HEIMDALL_AUTH_TOKEN_ISSUER defaults to empty, and an empty ValidIssuer refuses all
         var service = Service(issuer: string.Empty);
-        var issued = await service.IssueAsync(Subject);
+        var issued = await service.IssueAsync(s_subject);
 
         // When
         var principal = await service.ValidateAsync(issued.Token);
@@ -133,7 +133,7 @@ public class JwtApplicationTokenServiceTests
     public async Task GivenATokenSignedWithThePreviousKey_WhenValidated_ThenItIsAccepted()
     {
         // Given — signed before a rotation (TH-22)
-        var token = Mint(ApplicationClaims(), credentials: UnitSigningKeys.Es256(Previous.Key));
+        var token = Mint(ApplicationClaims(), credentials: UnitSigningKeys.Es256(s_previous.Key));
 
         // When
         var principal = await Service().ValidateAsync(token);

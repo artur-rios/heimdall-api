@@ -62,7 +62,7 @@ public class ListScopesQueryHandler(
         // every name/email comparison in this codebase does.
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var name = query.Name.ToLower();
+            var name = query.Name.ToLowerInvariant();
             scopes = scopes.Where(x => x.Name.ToLower().Contains(name));
         }
 

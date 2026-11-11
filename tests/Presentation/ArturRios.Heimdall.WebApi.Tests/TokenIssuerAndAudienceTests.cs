@@ -30,11 +30,9 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private const string Password = Seeds.Password;
     private const string ForeignIssuer = "another-service";
     private const string ForeignAudience = "another-service";
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     /// <summary>
     ///     An active configuration with an outstanding challenge and one recovery code to redeem it with.
@@ -87,7 +85,7 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     ///     under an issuer and audience of the test's choosing.
     /// </summary>
     private static string ApplicationToken(
-        Scope scope, Domain.Entities.Application application, ApplicationCredential credential,
+        Scope scope, Application application, ApplicationCredential credential,
         string issuer, string audience) =>
         new JwtHandler().CreateToken(PostgresFixture.SigningKeys.ApplyTo(new JwtConfiguration(
             600,

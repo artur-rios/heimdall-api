@@ -12,8 +12,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 /// </summary>
 public class ScheduledPassServiceTests
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(20);
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan s_interval = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan s_patience = TimeSpan.FromSeconds(10);
 
     private sealed record LogLine(LogLevel Level, string Message, Exception? Exception);
 
@@ -27,7 +27,7 @@ public class ScheduledPassServiceTests
             {
                 lock (_lines)
                 {
-                    return _lines.ToList();
+                    return [.. _lines];
                 }
             }
         }
@@ -60,7 +60,7 @@ public class ScheduledPassServiceTests
     }
 
     private sealed class FakePass(Func<int, ScheduledPassResult> run, CapturingLogger logger, string name)
-        : ScheduledPassService(new FakeScopeFactory(), Interval, logger)
+        : ScheduledPassService(new FakeScopeFactory(), s_interval, logger)
     {
         private int _runs;
 
@@ -75,7 +75,7 @@ public class ScheduledPassServiceTests
     }
 
     private static Task WaitForAsync(Func<bool> condition) =>
-        Poll.UntilAsync(condition, "The pass did not reach the awaited state in time.", Patience);
+        Poll.UntilAsync(condition, "The pass did not reach the awaited state in time.", s_patience);
 
     [UnitFact]
     public async Task GivenAPass_WhenTheIntervalElapses_ThenItRunsRepeatedlyAndLogsASummary()
@@ -150,7 +150,7 @@ public class ScheduledPassServiceTests
         await pass.StopAsync(CancellationToken.None);
 
         var runsAtStop = pass.Runs;
-        await Task.Delay(Interval * 5);
+        await Task.Delay(s_interval * 5);
 
         Assert.Equal(runsAtStop, pass.Runs);
         Assert.DoesNotContain(logger.Lines, line => line.Level >= LogLevel.Warning);
@@ -180,7 +180,7 @@ public class ScheduledPassServiceTests
         listener.Start();
 
         var logger = new CapturingLogger();
-        var pass = new FakePass(run => new ScheduledPassResult("rows", false, 7), logger, "fake-rows");
+        var pass = new FakePass(_ => new ScheduledPassResult("rows", false, 7), logger, "fake-rows");
 
         await pass.StartAsync(CancellationToken.None);
         await WaitForAsync(() => pass.Runs >= 2);

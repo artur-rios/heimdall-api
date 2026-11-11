@@ -18,11 +18,11 @@ namespace ArturRios.Heimdall.Command.Tests.Support;
 /// </remarks>
 internal static class CommandTestGate
 {
-    private static readonly TimeSpan PatientWait = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan s_patientWait = TimeSpan.FromMinutes(2);
 
     /// <summary>The gate this initializer installed, which a test can compare <c>Shared</c> against.</summary>
     internal static PasswordHashGate Installed { get; } =
-        new(PasswordHashGate.DefaultMaxConcurrent, PatientWait);
+        new(PasswordHashGate.DefaultMaxConcurrent, s_patientWait);
 
     [ModuleInitializer]
     internal static void Install() => PasswordHashGate.Shared = Installed;

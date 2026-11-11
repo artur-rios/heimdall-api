@@ -21,7 +21,7 @@ public class TokenSigningKeysTests
 
     // The unusable values, by name, so that no test name carries key material. Each is built when
     // its case runs.
-    private static readonly Dictionary<string, Func<string?>> UnusableValues = new()
+    private static readonly Dictionary<string, Func<string?>> s_unusableValues = new()
     {
         ["null"] = () => null,
         ["empty"] = () => "",
@@ -131,7 +131,7 @@ public class TokenSigningKeysTests
         string unusable, string refusalPhrase)
     {
         // Given
-        var value = UnusableValues[unusable]();
+        var value = s_unusableValues[unusable]();
 
         // When
         var refusal = Assert.Throws<InvalidOperationException>(() => TokenSigningKeys.Parse(value, null));
@@ -158,7 +158,7 @@ public class TokenSigningKeysTests
     {
         // Given
         var (_, current) = UnitSigningKeys.Create();
-        var value = UnusableValues[unusable]()!;
+        var value = s_unusableValues[unusable]()!;
 
         // When
         var refusal = Assert.Throws<InvalidOperationException>(() => TokenSigningKeys.Parse(current, value));

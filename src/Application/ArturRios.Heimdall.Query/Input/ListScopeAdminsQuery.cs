@@ -34,7 +34,7 @@ public class ListScopeAdminsQuery : BaseQuery, IActorScoped
     ///     without this parameter and diffing the two results would enumerate the owners of any
     ///     scope, which is exactly what this endpoint's minimal projection exists to prevent.
     /// </summary>
-    public Guid? ExcludeOwnersOfScopeId { get; set; }
+    public Guid? ExcludeOwnersOfScopeId { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

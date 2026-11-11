@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -30,9 +29,9 @@ public class TokenAlgorithmConfusionTests
     {
         var data = new TheoryData<string, string>();
 
-        foreach (var reader in Readers)
+        foreach (var reader in s_readers)
         {
-            foreach (var forgery in Forgeries)
+            foreach (var forgery in s_forgeries)
             {
                 data.Add(reader, forgery);
             }
@@ -41,15 +40,15 @@ public class TokenAlgorithmConfusionTests
         return data;
     }
 
-    public static TheoryData<string> ReadersAlone() => new(Readers);
+    public static TheoryData<string> ReadersAlone() => [.. s_readers];
 
     public static TheoryData<string, string> ReadersAndAlgSpellings()
     {
         var data = new TheoryData<string, string>();
 
-        foreach (var reader in Readers)
+        foreach (var reader in s_readers)
         {
-            foreach (var alg in AlgSpellings)
+            foreach (var alg in s_algSpellings)
             {
                 data.Add(reader, alg);
             }
@@ -58,12 +57,12 @@ public class TokenAlgorithmConfusionTests
         return data;
     }
 
-    private static readonly string[] Readers =
+    private static readonly string[] s_readers =
     [
         UnitTokenReaders.BearerReader, UnitTokenReaders.ChallengeReader, UnitTokenReaders.ApplicationReader
     ];
 
-    private static readonly string[] Forgeries =
+    private static readonly string[] s_forgeries =
     [
         "1 hs256 keyed with the published key set",
         "2 hs256 signed with the retired secret, naming the current kid",
@@ -76,7 +75,7 @@ public class TokenAlgorithmConfusionTests
 
     // HS256 and ES256 written in another case or with a trailing space. Algorithm names are compared
     // ordinally, so none of them is the algorithm it resembles.
-    private static readonly string[] AlgSpellings = ["hs256", "HS256 ", "es256", "ES256 "];
+    private static readonly string[] s_algSpellings = ["hs256", "HS256 ", "es256", "ES256 "];
 
     private static UnitTokenReaders NewReaders() => new();
 

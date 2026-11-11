@@ -9,7 +9,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // future one is valid, and one at or before now is refused — read as UTC when it carries no offset.
 public class IssueApplicationCredentialCommandValidatorTests
 {
-    private static readonly IssueApplicationCredentialCommandValidator Validator = new();
+    private static readonly IssueApplicationCredentialCommandValidator s_validator = new();
 
     [UnitFact]
     public async Task GivenNoExpiry_WhenValidating_ThenItIsValid()
@@ -18,7 +18,7 @@ public class IssueApplicationCredentialCommandValidatorTests
         var command = new IssueApplicationCredentialCommand();
 
         // When
-        var result = await Validator.ValidateAsync(command);
+        var result = await s_validator.ValidateAsync(command);
 
         // Then
         Assert.True(result.IsValid);
@@ -31,7 +31,7 @@ public class IssueApplicationCredentialCommandValidatorTests
         var command = new IssueApplicationCredentialCommand { ExpiresAt = DateTime.UtcNow.AddDays(30) };
 
         // When
-        var result = await Validator.ValidateAsync(command);
+        var result = await s_validator.ValidateAsync(command);
 
         // Then
         Assert.True(result.IsValid);
@@ -44,7 +44,7 @@ public class IssueApplicationCredentialCommandValidatorTests
         var command = new IssueApplicationCredentialCommand { ExpiresAt = DateTime.UtcNow.AddMinutes(-1) };
 
         // When
-        var result = await Validator.ValidateAsync(command);
+        var result = await s_validator.ValidateAsync(command);
 
         // Then
         Assert.Equal([ApplicationCredentialMessages.ExpiryNotInFuture], result.Errors.Select(e => e.ErrorMessage));
@@ -59,7 +59,7 @@ public class IssueApplicationCredentialCommandValidatorTests
         var command = new IssueApplicationCredentialCommand { ExpiresAt = past };
 
         // When
-        var result = await Validator.ValidateAsync(command);
+        var result = await s_validator.ValidateAsync(command);
 
         // Then
         Assert.False(result.IsValid);

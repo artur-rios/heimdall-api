@@ -7,7 +7,6 @@ using ArturRios.Jwt;
 using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -87,8 +86,8 @@ public sealed class PostgresFixture : IAsyncLifetime
     public const string PreviousTokenSecret = "functional-tests-previous-signing-secret";
 
     // Generated once per test run, in memory, so no test depends on a key any environment signs with.
-    private static readonly (JwtKey Key, string EnvValue) Current = UnitSigningKeys.Create();
-    private static readonly (JwtKey Key, string EnvValue) Previous = UnitSigningKeys.Create();
+    private static readonly (JwtKey Key, string EnvValue) s_current = UnitSigningKeys.Create();
+    private static readonly (JwtKey Key, string EnvValue) s_previous = UnitSigningKeys.Create();
 
     /// <summary>
     ///     The ES256 key the host under test signs every token with, private half included, so
@@ -99,27 +98,27 @@ public sealed class PostgresFixture : IAsyncLifetime
     ///     start-up. A test that set this afterwards would be configuring a host that had already
     ///     decided which keys it accepts.
     /// </remarks>
-    public static JwtKey SigningKey => Current.Key;
+    public static JwtKey SigningKey => s_current.Key;
 
     /// <summary>
     ///     The ES256 key a rotation has moved off: the host under test publishes its public half and
     ///     still accepts what it signed. Its private half is kept here, so the suite can mint the token a
     ///     caller was holding before the rotation.
     /// </summary>
-    public static JwtKey PreviousSigningKey => Previous.Key;
+    public static JwtKey PreviousSigningKey => s_previous.Key;
 
     /// <summary>
     ///     The keys as the host under test reads them from the variables this fixture publishes, so
     ///     <see cref="TestTokens" /> configures a token through <see cref="TokenSigningKeys.ApplyTo" />, as
     ///     the host does.
     /// </summary>
-    public static TokenSigningKeys SigningKeys { get; } = TokenSigningKeys.Parse(Current.EnvValue, Previous.EnvValue);
+    public static TokenSigningKeys SigningKeys { get; } = TokenSigningKeys.Parse(s_current.EnvValue, s_previous.EnvValue);
 
     /// <summary>
     ///     The keys as a host read them before the rotation, when <see cref="PreviousSigningKey" /> was
     ///     the current one: what the token a caller held then was signed under.
     /// </summary>
-    public static TokenSigningKeys PreviousSigningKeys { get; } = TokenSigningKeys.Parse(Previous.EnvValue, null);
+    public static TokenSigningKeys PreviousSigningKeys { get; } = TokenSigningKeys.Parse(s_previous.EnvValue, null);
 
     /// <summary>
     ///     Secret the suite's stand-in Google ID tokens are signed with (UC-25). Long enough for
@@ -207,8 +206,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         // has set: configuring all four means every functional test runs against a host that accepts
         // two ES256 keys and ignores the secrets, so the ordinary suite doubles as proof that doing so
         // breaks nothing. These values are for tests only.
-        Environment.SetEnvironmentVariable(TokenSigningKeys.SigningKeyVariable, Current.EnvValue);
-        Environment.SetEnvironmentVariable(TokenSigningKeys.PreviousSigningKeyVariable, Previous.EnvValue);
+        Environment.SetEnvironmentVariable(TokenSigningKeys.SigningKeyVariable, s_current.EnvValue);
+        Environment.SetEnvironmentVariable(TokenSigningKeys.PreviousSigningKeyVariable, s_previous.EnvValue);
         Environment.SetEnvironmentVariable(RetiredSecretVariable, TokenSecret);
         Environment.SetEnvironmentVariable(RetiredPreviousSecretVariable, PreviousTokenSecret);
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");

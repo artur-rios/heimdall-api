@@ -68,7 +68,7 @@ public class DeleteScopeCommandHandler(
 
         // Step 2 (AF-04a): locate the scope in ANY deletion state, so an already-deleted scope is
         // handled idempotently (AF-04b) rather than reported as not found.
-        var scope = await scopeReader.Query().FirstOrDefaultAsync(x => x.PublicId == command.Id);
+        var scope = await scopeReader.Query().FirstOrDefaultAsync(x => x.PublicId == command.Id, cancellationToken);
 
         if (scope is null)
         {
@@ -87,7 +87,7 @@ public class DeleteScopeCommandHandler(
         var isDeleted = await scopeReader.Query()
             .Where(x => x.Id == scope.Id)
             .Select(x => (bool?)x.IsDeleted)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (isDeleted is null)
         {
@@ -109,9 +109,9 @@ public class DeleteScopeCommandHandler(
 
         // Step 5's totals, counted regardless of individual deletion state.
         var userCount = await personReader.Query()
-            .CountAsync(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id);
-        var googleUserCount = await googleUserReader.Query().CountAsync(g => g.ScopeId == scope.Id);
-        var applicationCount = await applicationReader.Query().CountAsync(a => a.ScopeId == scope.Id);
+            .CountAsync(p => p.ScopeMembership != null && p.ScopeMembership.ScopeId == scope.Id, cancellationToken);
+        var googleUserCount = await googleUserReader.Query().CountAsync(g => g.ScopeId == scope.Id, cancellationToken);
+        var applicationCount = await applicationReader.Query().CountAsync(a => a.ScopeId == scope.Id, cancellationToken);
 
         await transaction.CommitAsync();
 

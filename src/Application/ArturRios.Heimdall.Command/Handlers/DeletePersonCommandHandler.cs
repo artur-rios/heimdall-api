@@ -48,7 +48,7 @@ public class DeletePersonCommandHandler(
         // locks.
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id, cancellationToken);
 
         if (person is null)
         {

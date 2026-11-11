@@ -10,10 +10,10 @@ namespace ArturRios.Heimdall.Domain.Tests;
 // unanonymised administrator is an eligible invitee.
 public class ScopeOwnerInvitationTests
 {
-    private static readonly DateTime Now = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_now = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
 
     private static bool IsOpen(ScopeOwnerInvitation invitation) =>
-        ScopeOwnerInvitation.OpenAt(Now).Compile()(invitation);
+        ScopeOwnerInvitation.OpenAt(s_now).Compile()(invitation);
 
     private static bool IsEligible(Person person) => ScopeOwnerInvitation.EligibleInvitee.Compile()(person);
 
@@ -22,7 +22,7 @@ public class ScopeOwnerInvitationTests
     private static ScopeOwnerInvitation Invitation(DateTime expiresAt, DateTime? endedAt = null,
         ScopeOwnerInvitationOutcomes? outcome = null) => new()
     {
-        ScopeId = 1, InviteePersonId = 2, CreatedAt = Now.AddDays(-1), ExpiresAt = expiresAt,
+        ScopeId = 1, InviteePersonId = 2, CreatedAt = s_now.AddDays(-1), ExpiresAt = expiresAt,
         EndedAt = endedAt, Outcome = outcome
     };
 
@@ -30,7 +30,7 @@ public class ScopeOwnerInvitationTests
     public void GivenAnUnendedInvitationExpiringLater_WhenChecked_ThenItIsOpen()
     {
         // Given
-        var invitation = Invitation(Now.AddSeconds(1));
+        var invitation = Invitation(s_now.AddSeconds(1));
 
         // When
         var open = IsOpen(invitation);
@@ -43,7 +43,7 @@ public class ScopeOwnerInvitationTests
     public void GivenAnInvitationExpiringNow_WhenChecked_ThenItIsNotOpen()
     {
         // Given
-        var invitation = Invitation(Now);
+        var invitation = Invitation(s_now);
 
         // When
         var open = IsOpen(invitation);
@@ -56,7 +56,7 @@ public class ScopeOwnerInvitationTests
     public void GivenAnEndedInvitation_WhenChecked_ThenItIsNotOpen()
     {
         // Given
-        var invitation = Invitation(Now.AddDays(1), Now.AddMinutes(-1), ScopeOwnerInvitationOutcomes.Withdrawn);
+        var invitation = Invitation(s_now.AddDays(1), s_now.AddMinutes(-1), ScopeOwnerInvitationOutcomes.Withdrawn);
 
         // When
         var open = IsOpen(invitation);
@@ -144,7 +144,7 @@ public class ScopeOwnerInvitationTests
     {
         // Given
         var person = Invitee();
-        person.ProcessingRestrictedAt = Now;
+        person.ProcessingRestrictedAt = s_now;
 
         // When
         var eligible = IsEligible(person);
@@ -158,7 +158,7 @@ public class ScopeOwnerInvitationTests
     {
         // Given
         var person = Invitee();
-        person.AnonymisedAt = Now;
+        person.AnonymisedAt = s_now;
 
         // When
         var eligible = IsEligible(person);

@@ -112,7 +112,7 @@ public class LoginLockoutAtTheLimitTests
         }
 
         // Then the account is locked for a period, with the counter folded into the lock
-        var stored = Assert.Single(persons.Query().ToList());
+        var stored = Assert.Single([.. persons.Query()]);
         Assert.NotNull(stored.LockedOutUntil);
         Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
         Assert.Equal(0, stored.FailedLoginAttempts);
@@ -144,7 +144,7 @@ public class LoginLockoutAtTheLimitTests
         // Then
         Assert.True(output.Success);
 
-        var stored = Assert.Single(persons.Query().ToList());
+        var stored = Assert.Single([.. persons.Query()]);
         Assert.Equal(0, stored.FailedLoginAttempts);
         Assert.Null(stored.LockedOutUntil);
     }
@@ -163,7 +163,7 @@ public class LoginLockoutAtTheLimitTests
         Assert.False(output.Success);
         Assert.Contains(AuthMessages.InvalidCredentials, output.Errors);
 
-        var stored = Assert.Single(persons.Query().ToList());
+        var stored = Assert.Single([.. persons.Query()]);
         Assert.NotNull(stored.LockedOutUntil);
         Assert.True(stored.LockedOutUntil > DateTime.UtcNow);
         Assert.Equal(0, stored.FailedLoginAttempts);

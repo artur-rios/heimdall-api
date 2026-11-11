@@ -37,7 +37,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class IdentityAnonymisationTests(PostgresFixture fixture)
 {
-    private static readonly DataRetentionOptions Retention = new()
+    private static readonly DataRetentionOptions s_retention = new()
     {
         SubjectErasureDeadline = TimeSpan.FromDays(30),
         AdministrativeDeletionWindow = TimeSpan.FromDays(90),
@@ -58,7 +58,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
             passwordResetTokens,
             emailVerificationTokens,
             twoFactorAuths,
-            retention ?? Retention,
+            retention ?? s_retention,
             new AtomicWrites(context),
             new ScopeOwnerInvitations(context),
             new EfRepository<ScopeOwnerInvitation, long>(context),
@@ -135,7 +135,7 @@ public class IdentityAnonymisationTests(PostgresFixture fixture)
 
         // When — a batch of two, two batches
         await using var runContext = fixture.CreateContext();
-        var output = await Handler(runContext, Retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
+        var output = await Handler(runContext, s_retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
             .HandleAsync(new AnonymiseExpiredDeletionsCommand());
 
         // Then — four of each anonymised, and the database counted what is left of both: three persons and

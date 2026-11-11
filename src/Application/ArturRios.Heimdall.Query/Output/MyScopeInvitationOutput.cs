@@ -9,16 +9,16 @@ namespace ArturRios.Heimdall.Query.Output;
 public class MyScopeInvitationOutput : QueryOutput
 {
     /// <summary>The invitation's public id — what UC-60 and UC-61 answer it by.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
-    public string ScopeName { get; set; } = string.Empty;
+    public string ScopeName { get; init; } = string.Empty;
 
     /// <summary>Who invited them; <c>null</c> once that person was anonymised, removed or restricted.</summary>
-    public string? InvitedByName { get; set; }
+    public string? InvitedByName { get; init; }
 
     public DateTime CreatedAt { get; set; }
 
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 }

@@ -44,7 +44,7 @@ public class SetSelfRegistrationCommandHandler(
             return output.WithError(ScopeMessages.ScopeNotFound);
         }
 
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.NotScopeOwner);
         }

@@ -22,12 +22,12 @@ namespace ArturRios.Heimdall.Command.Tests;
 // never existed. Two of these tests exist to keep that from being optimised away.
 public class PurgeExpiredTokensCommandHandlerTests
 {
-    private static readonly TimeSpan Grace = TimeSpan.FromDays(7);
+    private static readonly TimeSpan s_grace = TimeSpan.FromDays(7);
 
     private static DataRetentionOptions Retention(
         int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
     {
-        SingleUseTokenGrace = Grace,
+        SingleUseTokenGrace = s_grace,
         PurgeBatchSize = batchSize,
         MaxBatchesPerTick = maxBatches
     };
@@ -160,7 +160,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     }
 
     private static async Task<int> CountAsync<T>(AsyncFakeRepository<T, long> repository)
-        where T : ArturRios.Data.Relational.Core.Entities.Entity<long> =>
+        where T : Data.Relational.Core.Entities.Entity<long> =>
         (await repository.GetAllAsync()).Data!.Count();
 
     [UnitFact]
@@ -170,7 +170,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         await SeedPasswordResetTokenAsync(passwordResetTokens, longExpired);
         await SeedEmailVerificationTokenAsync(emailVerificationTokens, longExpired);
@@ -265,7 +265,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 5; i++)
         {
@@ -302,7 +302,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
         var emailVerificationTokens = new AsyncFakeRepository<EmailVerificationToken, long>();
         var twoFactorEmailCodes = new AsyncFakeRepository<TwoFactorEmailCode, long>();
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 6; i++)
         {
@@ -330,7 +330,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     {
         // Given seven purgeable rows, a batch of two and at most two batches a run
         var passwordResetTokens = new AsyncFakeRepository<PasswordResetToken, long>();
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 7; i++)
         {
@@ -361,7 +361,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     {
         // Given four purgeable rows, a batch of two, and deletes that remove nothing — no progress
         var passwordResetTokens = new RacedTokenRepository();
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 4; i++)
         {
@@ -386,7 +386,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     {
         // Given six purgeable rows, a batch of two, and a store that fails from its second delete on
         var passwordResetTokens = new FailingAfterTokenRepository(succeeding: 1);
-        var longExpired = DateTime.UtcNow - Grace - TimeSpan.FromDays(1);
+        var longExpired = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1);
 
         for (var i = 0; i < 6; i++)
         {
@@ -431,7 +431,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         // Given one pending registration long expired, one expired inside the grace period (the
         // confirmer still answers Expired for it), and one a person may yet confirm
         var pending = new AsyncFakeRepository<PendingRegistration, long>();
-        var longExpired = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow - Grace - TimeSpan.FromDays(1));
+        var longExpired = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow - s_grace - TimeSpan.FromDays(1));
         var recentlyExpired = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow.AddHours(-1));
         var live = await SeedPendingRegistrationAsync(pending, DateTime.UtcNow.AddHours(1));
 
@@ -459,7 +459,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         // Given (FR-GO-21) a used token that expired before the grace period, one that expired inside
         // it, and one still live
         var uses = new AsyncFakeRepository<GoogleIdTokenUse, string>();
-        var stale = new GoogleIdTokenUse { Id = "a", ExpiresAt = DateTime.UtcNow - Grace - TimeSpan.FromDays(1) };
+        var stale = new GoogleIdTokenUse { Id = "a", ExpiresAt = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1) };
         var recent = new GoogleIdTokenUse { Id = "b", ExpiresAt = DateTime.UtcNow.AddHours(-1) };
         var live = new GoogleIdTokenUse { Id = "c", ExpiresAt = DateTime.UtcNow.AddMinutes(30) };
         await uses.CreateAsync(stale);
@@ -489,7 +489,7 @@ public class PurgeExpiredTokensCommandHandlerTests
         var budgets = new AsyncFakeRepository<AttemptNoticeBudget, long>();
         var stale = new AttemptNoticeBudget
         {
-            AddressHash = "a", NoticesSent = 3, WindowEndsAt = DateTime.UtcNow - Grace - TimeSpan.FromDays(1)
+            AddressHash = "a", NoticesSent = 3, WindowEndsAt = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1)
         };
         var recent = new AttemptNoticeBudget
         {
@@ -522,7 +522,7 @@ public class PurgeExpiredTokensCommandHandlerTests
     public async Task GivenSpentCredentialsPastTheGrace_WhenPurging_ThenOnlyThoseAreRemoved()
     {
         // Given — revoked past the grace, expired past the grace, revoked within it, and live
-        var cutoff = DateTime.UtcNow - Grace;
+        var cutoff = DateTime.UtcNow - s_grace;
         var credentials = new AsyncFakeRepository<ApplicationCredential, long>();
         await credentials.CreateAsync(new ApplicationCredential { Id = 1, SecretHash = "a", RevokedAt = cutoff.AddMinutes(-1) });
         await credentials.CreateAsync(new ApplicationCredential { Id = 2, SecretHash = "b", ExpiresAt = cutoff.AddMinutes(-1) });

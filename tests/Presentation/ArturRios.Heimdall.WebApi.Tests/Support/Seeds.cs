@@ -6,7 +6,7 @@ using ArturRios.Util.Hashing;
 
 namespace ArturRios.Heimdall.WebApi.Tests.Support;
 
-/// <summary>What <see cref="Seeds.ScopeAsync" /> writes beyond a unique name; every property left <c>null</c> keeps the column default.</summary>
+/// <summary>What <see cref="Seeds.ScopeAsync(AppDbContext, ScopeOptions?)" /> writes beyond a unique name; every property left <c>null</c> keeps the column default.</summary>
 public sealed record ScopeOptions
 {
     /// <summary>The scope's name; omitted, a unique <c>scope-…</c> one.</summary>
@@ -18,7 +18,7 @@ public sealed record ScopeOptions
     public bool? GoogleSignInEnabled { get; init; }
 }
 
-/// <summary>What <see cref="Seeds.PersonAsync" /> writes beyond the role; every property left unset keeps a live, verified person.</summary>
+/// <summary>What <see cref="Seeds.PersonAsync(AppDbContext, Roles, PersonOptions?)" /> writes beyond the role; every property left unset keeps a live, verified person.</summary>
 public sealed record PersonOptions
 {
     /// <summary>The full address; omitted, a unique one built from <see cref="EmailPrefix" />.</summary>
@@ -64,17 +64,17 @@ public static class Seeds
     /// <summary>The password every seeded person can sign in with.</summary>
     public const string Password = "Str0ng-Test-Pass!";
 
-    private static readonly Lazy<(byte[] Hash, byte[] Salt)> SharedCredentials = new(() =>
+    private static readonly Lazy<(byte[] Hash, byte[] Salt)> s_sharedCredentials = new(() =>
     {
-        var hash = ArturRios.Util.Hashing.Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
+        var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
         return (hash, salt);
     });
 
     /// <summary>The shared password's hash and salt, as fresh copies a row can own.</summary>
     public static (byte[] Hash, byte[] Salt) Credentials()
     {
-        var (hash, salt) = SharedCredentials.Value;
-        return (hash.ToArray(), salt.ToArray());
+        var (hash, salt) = s_sharedCredentials.Value;
+        return ([.. hash], [.. salt]);
     }
 
     public static Task<Scope> ScopeAsync(PostgresFixture db, ScopeOptions? options = null) =>

@@ -19,16 +19,16 @@ public class CreateScopePermissionCommand : BaseCommand, IActorScoped
     public Guid ScopeId { get; set; }
 
     /// <summary>Permission display name. Required, max 200 characters.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Optional description of the permission's purpose. Max 500 characters.</summary>
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     /// <summary>
     ///     When <c>true</c>, this permission's <see cref="Name" /> is added as a claim on the JWT
     ///     issued to identities acting within the owning scope. Defaults to <c>false</c>.
     /// </summary>
-    public bool IncludeAsJwtClaim { get; set; }
+    public bool IncludeAsJwtClaim { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

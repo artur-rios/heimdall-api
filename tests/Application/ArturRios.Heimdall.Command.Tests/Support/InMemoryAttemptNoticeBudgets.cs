@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Command.Tests.Support;
 /// </summary>
 public sealed class InMemoryAttemptNoticeBudgets : IAttemptNoticeBudgets
 {
-    private readonly Dictionary<string, (int Sent, DateTime WindowEndsAt)> _budgets = new();
+    private readonly Dictionary<string, (int Sent, DateTime WindowEndsAt)> _budgets = [];
 
     /// <summary>Notices admitted so far, per address digest.</summary>
     public int SentTo(string addressHash) => _budgets.TryGetValue(addressHash, out var budget) ? budget.Sent : 0;

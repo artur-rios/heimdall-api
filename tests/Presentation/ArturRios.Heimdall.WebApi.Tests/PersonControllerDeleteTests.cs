@@ -20,9 +20,8 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was not touched" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     private async Task<Person> StoredAsync(Person person)
     {
@@ -35,7 +34,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given
         var scope = await Seeds.ScopeAsync(db);
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -50,7 +49,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
         // Then — database state: flagged and stamped
         var stored = await StoredAsync(person);
         Assert.True(stored.IsDeleted);
-        Assert.NotEqual(Stamp, stored.UpdatedAt);
+        Assert.NotEqual(s_stamp, stored.UpdatedAt);
 
         // Then — the deletion cascaded to nothing: the membership row survives
         await using var context = db.CreateContext();
@@ -62,8 +61,8 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a ScopeAdmin who owns the User's scope
         var scope = await Seeds.ScopeAsync(db);
-        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.For(owner.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -81,7 +80,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given — AF-09b
         var scope = await Seeds.ScopeAsync(db);
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", IsDeleted = true, MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", IsDeleted = true, MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -94,7 +93,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
 
         var stored = await StoredAsync(person);
         Assert.True(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -116,8 +115,8 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a ScopeAdmin who does not own the User's scope (AF-09c)
         var scope = await Seeds.ScopeAsync(db);
-        var outsider = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var outsider = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.For(outsider.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -134,8 +133,8 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given two owners of the same scope: a Scope Admin may delete Users only (AF-09c)
         var scope = await Seeds.ScopeAsync(db);
-        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
-        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
+        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -152,7 +151,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given — AF-09d. The message is asserted because AF-09c returns the same status.
         var scope = await Seeds.ScopeAsync(db);
-        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var actor = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.For(actor.PublicId, (int)Roles.ScopeAdmin));
 
         // When
@@ -170,7 +169,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a scope whose only owner is the target (AF-09e, NFR-12)
         var scope = await Seeds.ScopeAsync(db);
-        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var owner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -182,7 +181,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
 
         var stored = await StoredAsync(owner);
         Assert.False(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
 
         await using var context = db.CreateContext();
         Assert.True(await context.ScopeOwners.AnyAsync(so => so.PersonId == owner.Id));
@@ -193,8 +192,8 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a scope with a second owner, so NFR-12 still holds after the deletion
         var scope = await Seeds.ScopeAsync(db);
-        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
-        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var target = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
+        var coOwner = await Seeds.PersonAsync(db, Roles.ScopeAdmin, new PersonOptions { EmailPrefix = "admin", Owns = [scope], Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         // When
@@ -212,7 +211,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a plain User, whom the [RoleRequirement] gate keeps out of the endpoint entirely
         var scope = await Seeds.ScopeAsync(db);
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
         Authorize(TestTokens.ForRole((int)Roles.User));
 
         // When
@@ -229,7 +228,7 @@ public class PersonControllerDeleteTests(PostgresFixture db) : WebApiTest<Progra
     {
         // Given a person but no bearer token on the gateway
         var scope = await Seeds.ScopeAsync(db);
-        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = Stamp; p.UpdatedAt = Stamp; } });
+        var person = await Seeds.PersonAsync(db, Roles.User, new PersonOptions { EmailPrefix = "user", MemberOf = scope, Configure = p => { p.CreatedAt = s_stamp; p.UpdatedAt = s_stamp; } });
 
         // When
         var response = await Gateway.DeleteAsync<DataOutput<DeletePersonCommandOutput?>>(

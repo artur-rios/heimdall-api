@@ -13,7 +13,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // production; FR-HE-06 refuses to start in production, where those senders would write tokens to the log.
 public class EmailSenderRegistrationTests
 {
-    private static readonly EmailDeliveryOptions Configured = new()
+    private static readonly EmailDeliveryOptions s_configured = new()
     {
         HermesBaseUrl = "http://hermes-api.test:8080",
         HermesApiKey = "key"
@@ -45,7 +45,7 @@ public class EmailSenderRegistrationTests
     [InlineData("Development")]
     public void GivenHermesSettings_WhenRegistering_ThenEmailGoesThroughHermes(string environment)
     {
-        using var provider = Build(Configured, environment);
+        using var provider = Build(s_configured, environment);
 
         Assert.IsType<HermesEmailService>(provider.GetRequiredService<IEmailService>());
     }
@@ -67,7 +67,7 @@ public class EmailSenderRegistrationTests
     public void GivenHermesSettings_WhenRegistering_ThenEverySenderDelivers(Type service, Type delivering, Type logging)
     {
         _ = logging;
-        var descriptor = Descriptors(Configured, "Production").Single(entry => entry.ServiceType == service);
+        var descriptor = Descriptors(s_configured, "Production").Single(entry => entry.ServiceType == service);
 
         Assert.Equal(delivering, descriptor.ImplementationType);
     }
@@ -85,7 +85,7 @@ public class EmailSenderRegistrationTests
     [UnitFact]
     public void GivenHermesSettings_WhenRegistering_ThenTheClientWaitsLongerThanHermesCanTake()
     {
-        using var provider = Build(Configured, "Production");
+        using var provider = Build(s_configured, "Production");
 
         var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(IEmailService));
 

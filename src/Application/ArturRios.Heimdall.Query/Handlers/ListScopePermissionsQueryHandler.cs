@@ -69,7 +69,7 @@ public class ListScopePermissionsQueryHandler(
         // Compared case-insensitively (LOWER() in SQL), as every name filter in this codebase is.
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var name = query.Name.ToLower();
+            var name = query.Name.ToLowerInvariant();
             permissions = permissions.Where(x => x.Name.ToLower().Contains(name));
         }
 

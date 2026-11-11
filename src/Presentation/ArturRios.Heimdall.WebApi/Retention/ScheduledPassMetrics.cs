@@ -17,18 +17,18 @@ public static class ScheduledPassMetrics
     /// <summary>The meter the exporter is told to collect.</summary>
     public const string MeterName = "ArturRios.Heimdall.ScheduledPasses";
 
-    private static readonly Meter Meter = new(MeterName);
+    private static readonly Meter s_meter = new(MeterName);
 
-    private static readonly Counter<long> Rows = Meter.CreateCounter<long>(
+    private static readonly Counter<long> s_rows = s_meter.CreateCounter<long>(
         "heimdall.scheduled_pass.rows_processed",
         description: "Rows a scheduled pass has changed, by pass.");
 
-    private static readonly ConcurrentDictionary<string, long> LastSuccess = new();
+    private static readonly ConcurrentDictionary<string, long> s_lastSuccess = new();
 
-    // Held only so the instrument is not collected; the callback reads LastSuccess.
-    private static readonly ObservableGauge<long> LastSuccessGauge = Meter.CreateObservableGauge(
+    // Held only so the instrument is not collected; the callback reads s_lastSuccess.
+    private static readonly ObservableGauge<long> s_lastSuccessGauge = s_meter.CreateObservableGauge(
         "heimdall.scheduled_pass.last_success_timestamp",
-        () => LastSuccess.Select(entry => new Measurement<long>(entry.Value, new KeyValuePair<string, object?>("pass", entry.Key))),
+        () => s_lastSuccess.Select(entry => new Measurement<long>(entry.Value, new KeyValuePair<string, object?>("pass", entry.Key))),
         description: "Unix time in seconds of the last run of a scheduled pass that completed without failure, by pass.");
 
     /// <summary>Adds the rows a run reported to the pass's counter.</summary>
@@ -36,13 +36,13 @@ public static class ScheduledPassMetrics
     {
         if (rows > 0)
         {
-            Rows.Add(rows, new KeyValuePair<string, object?>("pass", pass));
+            s_rows.Add(rows, new KeyValuePair<string, object?>("pass", pass));
         }
     }
 
     /// <summary>Records now as the pass's last successful run.</summary>
-    public static void Succeeded(string pass) => LastSuccess[pass] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    public static void Succeeded(string pass) => s_lastSuccess[pass] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     /// <summary>The pass's last successful run as unix seconds, or <c>null</c> if it has not succeeded.</summary>
-    public static long? LastSuccessOf(string pass) => LastSuccess.TryGetValue(pass, out var at) ? at : null;
+    public static long? LastSuccessOf(string pass) => s_lastSuccess.TryGetValue(pass, out var at) ? at : null;
 }

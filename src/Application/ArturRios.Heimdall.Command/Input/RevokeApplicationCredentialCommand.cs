@@ -16,11 +16,11 @@ public class RevokeApplicationCredentialCommand : BaseCommand, IActorScoped
 
     /// <summary>The application's <c>PublicId</c>, from the route.</summary>
     [JsonIgnore]
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>The credential's <c>PublicId</c>, from the route.</summary>
     [JsonIgnore]
-    public Guid CredentialId { get; set; }
+    public Guid CredentialId { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

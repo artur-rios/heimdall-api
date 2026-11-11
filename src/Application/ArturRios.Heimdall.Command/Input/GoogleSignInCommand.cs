@@ -17,10 +17,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class GoogleSignInCommand : BaseCommand
 {
     /// <summary>Public identifier of the scope the account is signing in to (FR-GO-06).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>The Google ID token the caller obtained from Google, verified before it is trusted.</summary>
-    public string IdToken { get; set; } = string.Empty;
+    public string IdToken { get; init; } = string.Empty;
 
     /// <summary>
     ///     Optional: the nonce the client sent Google when it asked for <see cref="IdToken" />. When
@@ -29,5 +29,5 @@ public class GoogleSignInCommand : BaseCommand
     ///     for its request. Absent or empty, nothing is compared. Whether a token is accepted rests on
     ///     its signature, issuer, audience and expiry.
     /// </summary>
-    public string? Nonce { get; set; }
+    public string? Nonce { get; init; }
 }

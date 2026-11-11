@@ -64,7 +64,7 @@ public class ResendVerificationEmailCommandHandler(
         // UC-15 step 1. The lookup omits an !IsDeleted filter deliberately: a logically deleted person
         // is found and served, per the remarks above.
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId, cancellationToken);
 
         // Authentication runs in ClaimsOnly mode — no database read per request — so a valid bearer
         // token outlives the person it names once they are hard deleted (UC-10). The token is fine;

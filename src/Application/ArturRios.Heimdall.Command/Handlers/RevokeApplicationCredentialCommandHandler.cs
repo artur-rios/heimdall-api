@@ -35,7 +35,7 @@ public class RevokeApplicationCredentialCommandHandler(
 
         // AF-55a, then AF-55b.
         var access = await ApplicationManagementAccess.ResolveAsync(
-            applicationReader.Query(), command.ScopeId, command.Id, command.ActingRole, command.ActingPersonId);
+            applicationReader.Query(), command.ScopeId, command.Id, command.ActingRole, command.ActingPersonId, cancellationToken);
 
         switch (access.Access)
         {

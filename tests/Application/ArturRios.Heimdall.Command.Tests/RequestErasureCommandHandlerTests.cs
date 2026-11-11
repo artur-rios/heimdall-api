@@ -26,9 +26,9 @@ public class RequestErasureCommandHandlerTests
     private const string WrongPassword = "not-the-password";
     private const string GoogleSubject = "108124442542040415000";
 
-    private static readonly TimeSpan ErasureDeadline = TimeSpan.FromDays(30);
+    private static readonly TimeSpan s_erasureDeadline = TimeSpan.FromDays(30);
 
-    private static DataRetentionOptions Retention() => new() { SubjectErasureDeadline = ErasureDeadline };
+    private static DataRetentionOptions Retention() => new() { SubjectErasureDeadline = s_erasureDeadline };
 
     private static IGoogleIdTokenVerifier Verifier(GoogleIdTokenPayload? payload)
     {
@@ -69,9 +69,11 @@ public class RequestErasureCommandHandlerTests
             Salt = salt,
             RoleId = (long)role,
             ErasureRequestedAt = erasureRequestedAt,
-            ScopeOwnerships = ownedScopeIds
-                .Select(scopeId => new ScopeOwner { ScopeId = scopeId })
-                .ToList()
+            ScopeOwnerships =
+            [
+                .. ownedScopeIds
+                    .Select(scopeId => new ScopeOwner { ScopeId = scopeId })
+            ]
         };
 
         await persons.CreateAsync(person);
@@ -111,7 +113,7 @@ public class RequestErasureCommandHandlerTests
             BeforeConditionalWrite = row =>
             {
                 row.ErasureRequestedAt = firstRequest;
-                row.ErasureDueAt = firstRequest + ErasureDeadline;
+                row.ErasureDueAt = firstRequest + s_erasureDeadline;
             }
         };
 
@@ -123,7 +125,7 @@ public class RequestErasureCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(ErasureMessages.ErasureAlreadyRequested, output.Errors);
         Assert.Equal(firstRequest, person.ErasureRequestedAt);
-        Assert.Equal(firstRequest + ErasureDeadline, person.ErasureDueAt);
+        Assert.Equal(firstRequest + s_erasureDeadline, person.ErasureDueAt);
     }
 
     [UnitFact]
@@ -141,7 +143,7 @@ public class RequestErasureCommandHandlerTests
         Assert.False(output.Data.Blocked);
 
         // The deadline is returned because Art. 12(3) is an obligation owed to the subject
-        Assert.Equal(output.Data.RequestedAt + ErasureDeadline, output.Data.DueAt);
+        Assert.Equal(output.Data.RequestedAt + s_erasureDeadline, output.Data.DueAt);
 
         // Suspended immediately: a subject who has asked to be erased has withdrawn the basis the
         // account operates on, so authenticating them while the deadline runs is processing they

@@ -260,7 +260,7 @@ public class ReapplyErasuresCommandHandlerTests
         Assert.Null(sent.InvitedByPersonId);
         Assert.Null(sent.EndedAt);
         Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], auditLog.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], auditLog.Entries);
     }
 
     [UnitFact]
@@ -321,8 +321,8 @@ public class ReapplyErasuresCommandHandlerTests
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
         Assert.Equal(
             [
-                (ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true),
-                (nameof(ReapplyErasuresCommand), (Guid?)null, false)
+                (ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true),
+                (nameof(ReapplyErasuresCommand), null, false)
             ],
             auditLog.Entries);
     }

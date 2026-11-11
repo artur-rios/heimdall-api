@@ -167,7 +167,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         // The first code is seeded rather than taken from a login, because a mailed code's plaintext
         // is never stored — seeding is the only way this test can hold one to present afterwards.
         // The challenge token is minted the same way UC-11 would.
-        const string FirstCode = "135790";
+        const string firstCode = "135790";
 
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("resend-retires") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: false, emailEnabled: true);
@@ -177,7 +177,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
             context.TwoFactorEmailCodes.Add(new TwoFactorEmailCode
             {
                 TwoFactorAuthId = twoFactorAuth.Id,
-                CodeHash = Hash.EncodeWithRandomSalt(FirstCode, out var salt, PasswordHashing.Configuration),
+                CodeHash = Hash.EncodeWithRandomSalt(firstCode, out var salt, PasswordHashing.Configuration),
                 Salt = salt,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                 Used = false
@@ -189,7 +189,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
 
         // Given the first code does complete the login before the resend, so what follows is the
         // resend's doing and not a code that never worked
-        var beforeResend = await VerifyAsync(challengeToken, FirstCode);
+        var beforeResend = await VerifyAsync(challengeToken, firstCode);
 
         Assert.Equal(HttpStatusCode.OK, beforeResend.StatusCode);
 
@@ -217,7 +217,7 @@ public class AuthControllerResendTwoFactorChallengeCodeTests(PostgresFixture db)
         Assert.Equal(HttpStatusCode.OK, resend.StatusCode);
 
         // Then — the code that worked a moment ago is refused, with UC-38's usual answer
-        var afterResend = await VerifyAsync(challengeToken, FirstCode);
+        var afterResend = await VerifyAsync(challengeToken, firstCode);
 
         Assert.Equal(HttpStatusCode.Unauthorized, afterResend.StatusCode);
         Assert.Contains(TwoFactorMessages.FactorInvalid, afterResend.Body!.Errors);

@@ -7,17 +7,17 @@ namespace ArturRios.Heimdall.Query.Output;
 public class ApplicationCredentialOutput
 {
     /// <summary>The credential's <c>PublicId</c> — UC-55's route value and the token's <c>credentialId</c>.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     public DateTime CreatedAt { get; set; }
 
-    public DateTime? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; init; }
 
-    public DateTime? RevokedAt { get; set; }
+    public DateTime? RevokedAt { get; init; }
 
     /// <summary>When a token was last issued from it (UC-56), or <c>null</c> if never.</summary>
-    public DateTime? LastUsedAt { get; set; }
+    public DateTime? LastUsedAt { get; init; }
 
     /// <summary>Whether UC-56 would accept it now: not revoked and not expired.</summary>
-    public bool Live { get; set; }
+    public bool Live { get; init; }
 }

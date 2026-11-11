@@ -12,26 +12,26 @@ namespace ArturRios.Heimdall.Command.Output;
 public class PromoteScopeUserCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the promoted person.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>Full name, unchanged by the promotion.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Email address, unchanged by the promotion.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>Role value after the promotion — always <c>ScopeAdmin</c> (see <c>Roles</c>).</summary>
-    public int Role { get; set; }
+    public int Role { get; init; }
 
     /// <summary>Whether the email is verified; carried over untouched, as UC-23 names no re-verification.</summary>
     public bool EmailVerified { get; set; }
 
     /// <summary>Public identifiers of the scopes the person owns, now including the promoting scope.</summary>
-    public IEnumerable<Guid> OwnedScopeIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnedScopeIds { get; init; } = [];
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>Update timestamp, stamped by this operation.</summary>
-    public DateTime UpdatedAt { get; set; }
+    public DateTime UpdatedAt { get; init; }
 }

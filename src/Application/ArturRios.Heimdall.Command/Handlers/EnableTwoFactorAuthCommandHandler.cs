@@ -76,7 +76,7 @@ public class EnableTwoFactorAuthCommandHandler(
         var output = DataOutput<EnableTwoFactorAuthCommandOutput?>.New;
 
         // AF-36c: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -86,7 +86,7 @@ public class EnableTwoFactorAuthCommandHandler(
         // AF-36b: the caller must be a live person. See the remarks above for why this alone also
         // covers "the caller is a Google User".
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted, cancellationToken);
 
         if (person is null)
         {
@@ -97,7 +97,7 @@ public class EnableTwoFactorAuthCommandHandler(
         var wantsEmail = command.Methods.Contains("Email", StringComparer.OrdinalIgnoreCase);
 
         var existing = await twoFactorReader.Query()
-            .FirstOrDefaultAsync(x => x.PersonId == person.Id);
+            .FirstOrDefaultAsync(x => x.PersonId == person.Id, cancellationToken);
 
         // AF-36a: an already-active configuration is not touched.
         if (existing is { IsActive: true })
@@ -148,7 +148,7 @@ public class EnableTwoFactorAuthCommandHandler(
         {
             twoFactorAuth = new TwoFactorAuth { PersonId = person.Id, IsActive = false };
 
-            var creation = await twoFactorWriter.CreateAsync(twoFactorAuth);
+            var creation = await twoFactorWriter.CreateAsync(twoFactorAuth, cancellationToken);
 
             if (!creation.Success)
             {
@@ -208,7 +208,7 @@ public class EnableTwoFactorAuthCommandHandler(
             responseData.EmailCodeSent = true;
         }
 
-        var update = await twoFactorWriter.UpdateAsync(twoFactorAuth);
+        var update = await twoFactorWriter.UpdateAsync(twoFactorAuth, cancellationToken);
 
         if (!update.Success)
         {

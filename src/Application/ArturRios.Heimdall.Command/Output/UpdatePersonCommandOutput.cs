@@ -12,26 +12,26 @@ public class UpdatePersonCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>Full name after the update.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Email address after the update.</summary>
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>Role value after the update (see <c>Roles</c>).</summary>
-    public int Role { get; set; }
+    public int Role { get; init; }
 
     /// <summary>Whether the email is verified; always <c>false</c> straight after an email change.</summary>
-    public bool EmailVerified { get; set; }
+    public bool EmailVerified { get; init; }
 
     /// <summary>Public identifier of the scope the person belongs to as a User; <c>null</c> otherwise.</summary>
-    public Guid? ScopeId { get; set; }
+    public Guid? ScopeId { get; init; }
 
     /// <summary>
     ///     Public identifiers of the scopes the person owns, as far as the reader may see them
     ///     (FR-PE-19): every one for a System Admin and for the person themselves, and for a Scope
     ///     Admin reading somebody else only those the Scope Admin owns too. Empty for non-owners.
     /// </summary>
-    public IEnumerable<Guid> OwnedScopeIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnedScopeIds { get; init; } = [];
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

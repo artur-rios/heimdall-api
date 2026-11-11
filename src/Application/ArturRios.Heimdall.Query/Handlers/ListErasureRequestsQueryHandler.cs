@@ -87,7 +87,7 @@ public class ListErasureRequestsQueryHandler(
 
         if (query.OverdueOnly)
         {
-            requests = requests.Where(request => request.Overdue).ToList();
+            requests = [.. requests.Where(request => request.Overdue)];
         }
 
         // Soonest deadline first, with the subject's identifier as a tiebreaker so two requests

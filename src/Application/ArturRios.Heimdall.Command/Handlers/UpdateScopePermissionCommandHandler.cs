@@ -32,7 +32,7 @@ public class UpdateScopePermissionCommandHandler(
 
         // UC-33 step 2: validate input shape. UC-33 defines no alternative flow for this, so the
         // validator's UC-31 messages carry their existing 400.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -46,7 +46,7 @@ public class UpdateScopePermissionCommandHandler(
         var permission = await permissionReader.Query()
             .Include(x => x.Scope)
             .FirstOrDefaultAsync(x =>
-                x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId && !x.IsDeleted);
+                x.PublicId == command.Id && x.Scope.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (permission is null)
         {
@@ -58,7 +58,7 @@ public class UpdateScopePermissionCommandHandler(
         // authorization. Runs before any mutation so AF-33e stays observable on otherwise-no-op
         // updates.
         if (!await scopeOwnership.ActorMayManageScopeAsync(
-                command.ActingRole, command.ActingPersonId, permission.ScopeId))
+                command.ActingRole, command.ActingPersonId, permission.ScopeId, cancellationToken))
         {
             return output.WithError(ScopePermissionMessages.NotScopeOwner);
         }
@@ -69,7 +69,7 @@ public class UpdateScopePermissionCommandHandler(
         permission.IncludeAsJwtClaim = command.IncludeAsJwtClaim;
         permission.UpdatedAt = DateTime.UtcNow;
 
-        var update = await permissionWriter.UpdateAsync(permission);
+        var update = await permissionWriter.UpdateAsync(permission, cancellationToken);
 
         if (!update.Success)
         {

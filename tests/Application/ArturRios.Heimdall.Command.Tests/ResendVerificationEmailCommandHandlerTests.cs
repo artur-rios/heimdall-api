@@ -22,12 +22,12 @@ namespace ArturRios.Heimdall.Command.Tests;
 // job is deciding whether and when to call it.
 public class ResendVerificationEmailCommandHandlerTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
-    private static readonly EmailVerificationOptions VerificationOptions =
+    private static readonly EmailVerificationOptions s_verificationOptions =
         new() { TokenLifetime = TimeSpan.FromHours(24) };
 
-    private static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan s_cooldown = TimeSpan.FromMinutes(5);
 
     private sealed record Fixture(
         AsyncFakeRepository<Person, long> Persons,
@@ -40,7 +40,7 @@ public class ResendVerificationEmailCommandHandlerTests
 
         public ResendVerificationEmailCommandHandler Handler(TimeSpan? cooldown = null) =>
             new(Persons, Tokens, Tokens, EmailVerification.Object,
-                new AdminEmailOptions { Cooldown = cooldown ?? Cooldown }, InMemoryAtomicWrites.Instance, RetryAfter);
+                new AdminEmailOptions { Cooldown = cooldown ?? s_cooldown }, InMemoryAtomicWrites.Instance, RetryAfter);
 
         /// <summary>The command the controller would build for this fixture's person.</summary>
         public ResendVerificationEmailCommand Command() => new()
@@ -92,7 +92,7 @@ public class ResendVerificationEmailCommandHandlerTests
             PersonId = person.Id,
             Person = person,
             TokenHash = SingleUseTokenHash.Of(value),
-            ExpiresAt = expiresAt ?? Now.AddHours(1),
+            ExpiresAt = expiresAt ?? s_now.AddHours(1),
             Used = used
         };
 
@@ -176,7 +176,7 @@ public class ResendVerificationEmailCommandHandlerTests
         // rewriting it would only make a dead token report a different reason for being dead.
         var fixture = await FixtureAsync();
         var expired = await TokenForAsync(
-            fixture.Tokens, fixture.Person, "stale-token", Now.AddHours(-1));
+            fixture.Tokens, fixture.Person, "stale-token", s_now.AddHours(-1));
 
         // When
         await fixture.Handler().HandleAsync(fixture.Command());
@@ -280,7 +280,7 @@ public class ResendVerificationEmailCommandHandlerTests
     {
         // Given the person's own requests had an account email sent a minute ago
         var fixture = await FixtureAsync();
-        fixture.Person.AccountEmailLastSentAt = Now.AddMinutes(-1);
+        fixture.Person.AccountEmailLastSentAt = s_now.AddMinutes(-1);
         var live = await TokenForAsync(fixture.Tokens, fixture.Person, "live-token");
 
         // When
@@ -300,8 +300,8 @@ public class ResendVerificationEmailCommandHandlerTests
         // Given five sends in a window that is still open, the last well outside the cooldown
         var fixture = await FixtureAsync();
         fixture.Person.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
-        fixture.Person.AccountEmailWindowEndsAt = Now.AddHours(10);
-        fixture.Person.AccountEmailLastSentAt = Now.AddHours(-2);
+        fixture.Person.AccountEmailWindowEndsAt = s_now.AddHours(10);
+        fixture.Person.AccountEmailLastSentAt = s_now.AddHours(-2);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
@@ -318,8 +318,8 @@ public class ResendVerificationEmailCommandHandlerTests
         // Given
         var fixture = await FixtureAsync();
         fixture.Person.AccountEmailsSent = AccountEmailBudget.MaxPerDay;
-        fixture.Person.AccountEmailWindowEndsAt = Now.AddMinutes(-1);
-        fixture.Person.AccountEmailLastSentAt = Now.AddDays(-1);
+        fixture.Person.AccountEmailWindowEndsAt = s_now.AddMinutes(-1);
+        fixture.Person.AccountEmailLastSentAt = s_now.AddDays(-1);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
@@ -327,7 +327,7 @@ public class ResendVerificationEmailCommandHandlerTests
         // Then
         Assert.True(output.Success);
         Assert.Equal(1, fixture.Person.AccountEmailsSent);
-        Assert.True(fixture.Person.AccountEmailWindowEndsAt > Now.AddHours(23));
+        Assert.True(fixture.Person.AccountEmailWindowEndsAt > s_now.AddHours(23));
     }
 
     [UnitFact]
@@ -350,7 +350,7 @@ public class ResendVerificationEmailCommandHandlerTests
         // Given a link issued a minute ago by UC-06 or UC-51 — administrator mail is not charged to the
         // person's own budget, and the person's first resend is
         var fixture = await FixtureAsync();
-        await TokenForAsync(fixture.Tokens, fixture.Person, "admin-token", Now + VerificationOptions.TokenLifetime - TimeSpan.FromMinutes(1));
+        await TokenForAsync(fixture.Tokens, fixture.Person, "admin-token", s_now + s_verificationOptions.TokenLifetime - TimeSpan.FromMinutes(1));
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());
@@ -364,7 +364,7 @@ public class ResendVerificationEmailCommandHandlerTests
     {
         // Given HEIMDALL_ADMIN_EMAIL_COOLDOWN_IN_SECONDS=0; the daily cap still applies
         var fixture = await FixtureAsync();
-        fixture.Person.AccountEmailLastSentAt = Now;
+        fixture.Person.AccountEmailLastSentAt = s_now;
 
         // When
         var output = await fixture.Handler(TimeSpan.Zero).HandleAsync(fixture.Command());
@@ -378,7 +378,7 @@ public class ResendVerificationEmailCommandHandlerTests
     {
         // Given — AF-15a is the more useful answer: waiting would not help
         var fixture = await FixtureAsync(emailVerified: true);
-        fixture.Person.AccountEmailLastSentAt = Now.AddMinutes(-1);
+        fixture.Person.AccountEmailLastSentAt = s_now.AddMinutes(-1);
 
         // When
         var output = await fixture.Handler().HandleAsync(fixture.Command());

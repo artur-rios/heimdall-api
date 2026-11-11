@@ -389,7 +389,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
 
         // The issued token is spendable, and spends as a User of this scope rather than as an admin:
         // an endpoint the seeded ScopeAdmin could reach is refused to its holder.
-        Authorize(response.Body!.Data!.Token!);
+        Authorize(response.Body!.Data!.Token);
 
         var asAdmin = await Gateway.GetAsync<DataOutput<object?>>("/api/scopes");
 
@@ -469,7 +469,7 @@ public class AuthControllerGoogleSignInTests(PostgresFixture db) : WebApiTest<Pr
         Assert.False(after.EmailVerified);
 
         // And the token reaches the subject's rights, and nothing else
-        Authorize(response.Body.Data.Token!);
+        Authorize(response.Body.Data.Token);
         var export = await Gateway.PostAsync<DataOutput<DataExportCommandOutput?>>("/api/auth/data-export", new { });
         Assert.Equal(HttpStatusCode.OK, export.StatusCode);
         var view = await Gateway.GetAsync<DataOutput<object>>(

@@ -31,7 +31,7 @@ public class CreateScopeCommandHandler(
         var output = DataOutput<CreateScopeCommandOutput?>.New;
 
         // Step 2 (AF-01b): validate input fields.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -42,7 +42,7 @@ public class CreateScopeCommandHandler(
 
         // Step 3 (AF-01a): the scope name must be unique, compared case-insensitively (LOWER() in SQL).
         var nameAlreadyExists = await scopeReader.Query()
-            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower());
+            .AnyAsync(x => x.Name.ToLower() == command.Name.ToLower(), cancellationToken);
 
         if (nameAlreadyExists)
         {
@@ -56,7 +56,7 @@ public class CreateScopeCommandHandler(
         var owners = await personReader.Query()
             .Where(x => ownerIds.Contains(x.PublicId) && !x.IsDeleted &&
                         (x.RoleId == (long)Roles.ScopeAdmin || x.RoleId == (long)Roles.SystemAdmin))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         if (owners.Count != ownerIds.Count)
         {
@@ -76,7 +76,7 @@ public class CreateScopeCommandHandler(
             Owners = [.. owners.Select(owner => new ScopeOwner { PersonId = owner.Id })]
         };
 
-        var creation = await scopeWriter.CreateAsync(scope);
+        var creation = await scopeWriter.CreateAsync(scope, cancellationToken);
 
         if (!creation.Success)
         {

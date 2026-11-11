@@ -9,11 +9,11 @@ public class LiftProcessingRestrictionCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>When it was lifted.</summary>
-    public DateTime LiftedAt { get; set; }
+    public DateTime LiftedAt { get; init; }
 
     /// <summary>
     ///     Whether the subject was notified first. False only where the subject lifted their own
     ///     restriction, in which case Art. 18(3) has nobody to inform.
     /// </summary>
-    public bool SubjectNotified { get; set; }
+    public bool SubjectNotified { get; init; }
 }

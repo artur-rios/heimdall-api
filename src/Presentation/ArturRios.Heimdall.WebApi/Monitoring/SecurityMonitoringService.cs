@@ -1,4 +1,3 @@
-using ArturRios.Heimdall.Query.Handlers;
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Retention;

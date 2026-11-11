@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeleteGoogleUserCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the deleted Google User.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     <c>true</c> when the Google User was already logically deleted and nothing was written
@@ -18,5 +18,5 @@ public class DeleteGoogleUserCommandOutput : CommandOutput
     ///     same status and message as the main flow — the specification requires it to — so this flag
     ///     is what tells them apart.
     /// </summary>
-    public bool AlreadyDeleted { get; set; }
+    public bool AlreadyDeleted { get; init; }
 }

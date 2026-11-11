@@ -170,7 +170,7 @@ public class PendingRegistrationConfirmer(
             }
 
             logger.LogError("A pending registration could not be claimed: {Errors}", string.Join(" | ", claim.Errors));
-            return new(PendingRegistrationOutcome.Failed, claim.Errors.ToList());
+            return new(PendingRegistrationOutcome.Failed, [.. claim.Errors]);
         }
 
         if ((claim.Data?.Count() ?? 0) == 0)
@@ -209,7 +209,7 @@ public class PendingRegistrationConfirmer(
             }
 
             logger.LogError("A confirmed registration could not be stored: {Errors}", string.Join(" | ", creation.Errors));
-            return new(PendingRegistrationOutcome.Failed, creation.Errors.ToList());
+            return new(PendingRegistrationOutcome.Failed, [.. creation.Errors]);
         }
 
         return PendingRegistrationConfirmation.Of(PendingRegistrationOutcome.Confirmed);
@@ -234,7 +234,7 @@ public class PendingRegistrationConfirmer(
 
     private async Task<bool> AddressTakenAsync(PendingRegistration pending)
     {
-        var email = pending.Email.ToLower();
+        var email = pending.Email.ToLowerInvariant();
 
         return await personReader.Query().AnyAsync(person =>
                    !person.IsDeleted && person.Email.ToLower() == email &&
@@ -253,7 +253,7 @@ public class PendingRegistrationConfirmer(
     {
         try
         {
-            var email = confirmed.Email.ToLower();
+            var email = confirmed.Email.ToLowerInvariant();
 
             var others = await pendingReader.Query()
                 .Where(x => x.ScopeId == confirmed.ScopeId && x.Email.ToLower() == email)

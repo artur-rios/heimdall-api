@@ -77,13 +77,13 @@ public class JwksEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
         }
     }
 
-    public static TheoryData<string> BearerKinds => new()
-    {
+    public static TheoryData<string> BearerKinds =>
+    [
         "garbage",
         "expired",
         "mfa-pending",
         "subject-rights"
-    };
+    ];
 
     [FunctionalTheory]
     [MemberData(nameof(BearerKinds))]

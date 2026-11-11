@@ -18,12 +18,12 @@ public class IdentityUserMapperTests
     private const string ChallengeAudience = PersonAudience + PersonTokenAudiences.TwoFactorChallengeSuffix;
     private const string SubjectRightsAudience = PersonAudience + PersonTokenAudiences.SubjectRightsSuffix;
 
-    private static readonly IdentityUserMapper Mapper = new(new PersonTokenAudiences(PersonAudience));
+    private static readonly IdentityUserMapper s_mapper = new(new PersonTokenAudiences(PersonAudience));
 
     /// <summary>The claims a token for <paramref name="user" /> carries once issued under <paramref name="audience" />.</summary>
     private static Dictionary<string, string> IssuedUnder(string audience, IdentityUser user)
     {
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
         claims[JwtRegisteredClaimNames.Aud] = audience;
 
         return claims;
@@ -39,11 +39,11 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = Mapper.FromClaims(Mapper.ToClaims(user));
+        var restored = s_mapper.FromClaims(s_mapper.ToClaims(user));
 
         // Then
         Assert.Equal(user, restored);
-        Assert.Equal("Ada Lovelace", Mapper.ToClaims(user)[IdentityUserMapper.DisplayNameClaim]);
+        Assert.Equal("Ada Lovelace", s_mapper.ToClaims(user)[IdentityUserMapper.DisplayNameClaim]);
     }
 
     [UnitFact]
@@ -54,7 +54,7 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.ScopeAdmin, null, owned);
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(Mapper.ToClaims(user))!;
+        var restored = (IdentityUser)s_mapper.FromClaims(s_mapper.ToClaims(user))!;
 
         // Then
         Assert.Null(restored.ScopeId);
@@ -68,13 +68,13 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
 
         // Then — the claims are absent, not empty: a token never suggests an association the person
         // does not have
         Assert.False(claims.ContainsKey(IdentityUserMapper.ScopeIdClaim));
         Assert.False(claims.ContainsKey(IdentityUserMapper.OwnedScopeIdsClaim));
-        Assert.Equal(user, Mapper.FromClaims(claims));
+        Assert.Equal(user, s_mapper.FromClaims(claims));
     }
 
     [UnitFact]
@@ -85,7 +85,7 @@ public class IdentityUserMapperTests
             Guid.NewGuid(), (int)Roles.ScopeAdmin, null, [Guid.NewGuid()]);
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
 
         // Then every claim but the role parses as a GUID, so none of them is a bigint id
         foreach (var (key, value) in claims.Where(claim => claim.Key != TokenClaimKeys.RoleId))
@@ -104,7 +104,7 @@ public class IdentityUserMapperTests
 
         // When
         var claims = IssuedUnder(SubjectRightsAudience, user);
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then
         Assert.True(restored.SubjectRightsOnly);
@@ -118,11 +118,11 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), []);
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
 
         // Then
         Assert.DoesNotContain(IdentityUserMapper.SubjectRightsOnlyClaim, claims.Keys);
-        Assert.False(((IdentityUser)Mapper.FromClaims(claims)!).SubjectRightsOnly);
+        Assert.False(((IdentityUser)s_mapper.FromClaims(claims)!).SubjectRightsOnly);
     }
 
     [UnitTheory]
@@ -132,11 +132,11 @@ public class IdentityUserMapperTests
     public void GivenUnreadableSubjectRightsOnlyClaim_WhenReadingClaims_ThenTheTokenIsNotMarked(string value)
     {
         // Given a claim that is not exactly a boolean true
-        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.User));
+        var claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.User));
         claims[IdentityUserMapper.SubjectRightsOnlyClaim] = value;
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then
         Assert.False(restored.SubjectRightsOnly);
@@ -146,7 +146,7 @@ public class IdentityUserMapperTests
     public void GivenNoClaims_WhenReadingClaims_ThenReturnsNull()
     {
         // Given / When
-        var restored = Mapper.FromClaims(new Dictionary<string, string>());
+        var restored = s_mapper.FromClaims(new Dictionary<string, string>());
 
         // Then
         Assert.Null(restored);
@@ -164,7 +164,7 @@ public class IdentityUserMapperTests
         };
 
         // When / Then
-        Assert.Null(Mapper.FromClaims(claims));
+        Assert.Null(s_mapper.FromClaims(claims));
     }
 
     [UnitTheory]
@@ -181,7 +181,7 @@ public class IdentityUserMapperTests
         };
 
         // When / Then
-        Assert.Null(Mapper.FromClaims(claims));
+        Assert.Null(s_mapper.FromClaims(claims));
     }
 
     [UnitFact]
@@ -197,7 +197,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then — the caller is still identified, but claims no scope, so scope-based authorization
         // denies rather than granting on a value nobody could read
@@ -218,7 +218,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then
         Assert.Equal([readable], restored.OwnedScopeIds);
@@ -234,7 +234,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(Mapper.ToClaims(user))!;
+        var restored = (IdentityUser)s_mapper.FromClaims(s_mapper.ToClaims(user))!;
 
         // Then — the permission names survive the round trip, in order
         Assert.Equal(user.ScopePermissionClaims, restored.ScopePermissionClaims);
@@ -247,7 +247,7 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin);
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
 
         // Then — the claim is absent, not empty, so a token never claims permissions the caller lacks
         Assert.False(claims.ContainsKey(IdentityUserMapper.ScopePermissionClaimsClaim));
@@ -266,7 +266,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then — the caller is still identified, but carries no permission claim, mirroring how a
         // malformed scope claim is dropped rather than rejecting the whole token
@@ -280,11 +280,11 @@ public class IdentityUserMapperTests
         // Given — a claim set that would otherwise be a valid SystemAdmin, but marked as an
         // application token (TH-35): Heimdall's middleware checks no audience, so this is what keeps
         // an application token off every person endpoint even if it ever carried a role
-        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
+        var claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
         claims[ApplicationTokenClaims.TokenKind] = ApplicationTokenClaims.ApplicationKind;
 
         // When
-        var user = Mapper.FromClaims(claims);
+        var user = s_mapper.FromClaims(claims);
 
         // Then
         Assert.Null(user);
@@ -308,7 +308,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = Mapper.FromClaims(IssuedUnder(audience, user));
+        var restored = s_mapper.FromClaims(IssuedUnder(audience, user));
 
         // Then
         Assert.Equal(user, restored);
@@ -338,7 +338,7 @@ public class IdentityUserMapperTests
         };
 
         // When
-        var restored = Mapper.FromClaims(IssuedUnder(audience, user));
+        var restored = s_mapper.FromClaims(IssuedUnder(audience, user));
 
         // Then
         Assert.Null(restored);
@@ -349,11 +349,11 @@ public class IdentityUserMapperTests
     {
         // Given — a pending mark on a token carrying no audience at all, which is not the
         // challenge's, so it is held to the same rule as the full audience
-        var claims = Mapper.ToClaims(
+        var claims = s_mapper.ToClaims(
             new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin) { MfaPending = true, ChallengeId = Guid.NewGuid() });
 
         // When
-        var restored = Mapper.FromClaims(claims);
+        var restored = s_mapper.FromClaims(claims);
 
         // Then
         Assert.Null(restored);
@@ -371,12 +371,12 @@ public class IdentityUserMapperTests
         var rightsOnly = full with { SubjectRightsOnly = true };
 
         // When
-        var restoredFull = (IdentityUser)Mapper.FromClaims(IssuedUnder(PersonAudience, full))!;
-        var restoredChallenge = (IdentityUser)Mapper.FromClaims(IssuedUnder(ChallengeAudience, challenge))!;
-        var restoredRightsOnly = (IdentityUser)Mapper.FromClaims(IssuedUnder(SubjectRightsAudience, rightsOnly))!;
+        var restoredFull = (IdentityUser)s_mapper.FromClaims(IssuedUnder(PersonAudience, full))!;
+        var restoredChallenge = (IdentityUser)s_mapper.FromClaims(IssuedUnder(ChallengeAudience, challenge))!;
+        var restoredRightsOnly = (IdentityUser)s_mapper.FromClaims(IssuedUnder(SubjectRightsAudience, rightsOnly))!;
 
         // Then
-        Assert.Equal(stamp.ToString(), Mapper.ToClaims(full)[IdentityUserMapper.SecurityStampClaim]);
+        Assert.Equal(stamp.ToString(), s_mapper.ToClaims(full)[IdentityUserMapper.SecurityStampClaim]);
         Assert.Equal(stamp, restoredFull.SecurityStamp);
         Assert.Equal(stamp, restoredChallenge.SecurityStamp);
         Assert.Equal(stamp, restoredRightsOnly.SecurityStamp);
@@ -389,22 +389,22 @@ public class IdentityUserMapperTests
         var user = new IdentityUser(Guid.NewGuid(), (int)Roles.User, Guid.NewGuid(), []);
 
         // When
-        var claims = Mapper.ToClaims(user);
+        var claims = s_mapper.ToClaims(user);
 
         // Then
         Assert.False(claims.ContainsKey(IdentityUserMapper.SecurityStampClaim));
-        Assert.Null(((IdentityUser)Mapper.FromClaims(claims)!).SecurityStamp);
+        Assert.Null(((IdentityUser)s_mapper.FromClaims(claims)!).SecurityStamp);
     }
 
     [UnitFact]
     public void GivenAnUnreadableStamp_WhenReadingClaims_ThenTheIdentityHasNoStamp()
     {
         // Given — read as none, which the liveness filter then refuses on a person token
-        var claims = Mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
+        var claims = s_mapper.ToClaims(new IdentityUser(Guid.NewGuid(), (int)Roles.SystemAdmin));
         claims[IdentityUserMapper.SecurityStampClaim] = "not-a-guid";
 
         // When
-        var restored = (IdentityUser)Mapper.FromClaims(claims)!;
+        var restored = (IdentityUser)s_mapper.FromClaims(claims)!;
 
         // Then
         Assert.Null(restored.SecurityStamp);

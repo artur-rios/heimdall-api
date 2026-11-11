@@ -12,7 +12,7 @@ public class CreateScopeCommandOutput : CommandOutput
     public Guid Id { get; set; }
 
     /// <summary>Scope display name.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>Scope description, if any.</summary>
     public string? Description { get; set; }
@@ -30,7 +30,7 @@ public class CreateScopeCommandOutput : CommandOutput
     public string? PasswordResetUrl { get; set; }
 
     /// <summary>Public identifiers of the persons designated as the scope's initial owners.</summary>
-    public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnerIds { get; init; } = [];
 
     /// <summary>Creation timestamp.</summary>
     public DateTime CreatedAt { get; set; }

@@ -10,8 +10,8 @@ namespace ArturRios.Heimdall.Command.Output;
 public class ConfirmTwoFactorAuthCommandOutput : CommandOutput
 {
     /// <summary>Always <c>true</c> when this output is returned — confirmation only ever succeeds fully.</summary>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; init; }
 
     /// <summary>The ten freshly generated recovery codes, in plaintext (FR-2F-05).</summary>
-    public List<string> RecoveryCodes { get; set; } = [];
+    public List<string> RecoveryCodes { get; init; } = [];
 }

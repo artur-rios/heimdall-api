@@ -65,7 +65,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
             "/api/auth/2fa/enable",
-            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
+            new EnableTwoFactorAuthCommand { Methods = [.. methods], CurrentPassword = Password });
 
     [FunctionalFact]
     public async Task GivenAppAndEmailSelected_WhenPostEnable2fa_ThenPendingConfigurationIsCreatedForBoth()
@@ -87,7 +87,7 @@ public class AuthControllerEnableTwoFactorAuthTests(PostgresFixture db)
         // Then — database state: a pending row, inactive, both methods on, the secret encrypted
         var stored = await ConfigurationForAsync(person);
         Assert.NotNull(stored);
-        Assert.False(stored!.IsActive);
+        Assert.False(stored.IsActive);
         Assert.True(stored.AppEnabled);
         Assert.True(stored.EmailEnabled);
         Assert.NotNull(stored.TotpSecretEncrypted);

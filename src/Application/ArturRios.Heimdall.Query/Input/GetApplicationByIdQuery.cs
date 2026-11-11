@@ -12,13 +12,13 @@ namespace ArturRios.Heimdall.Query.Input;
 public class GetApplicationByIdQuery : BaseQuery, IActorScoped
 {
     /// <summary>Public identifier of the scope the application must belong to (from the route).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the application to retrieve.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>When <c>true</c>, a logically deleted application is still returned (FR-AP-09).</summary>
-    public bool IncludeDeleted { get; set; }
+    public bool IncludeDeleted { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

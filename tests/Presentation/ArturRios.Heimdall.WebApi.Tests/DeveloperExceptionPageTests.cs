@@ -26,7 +26,7 @@ public class DeveloperExceptionPageTests
     private const string InternalServerError = "Internal server error, please try again later";
     private const string PublicHost = "heimdall-api-dev.example.com";
 
-    private static readonly string[] ReadVariables =
+    private static readonly string[] s_readVariables =
     [
         "ASPNETCORE_ENVIRONMENT",
         PublicHostSettings.PublicHostVariable,
@@ -57,7 +57,7 @@ public class DeveloperExceptionPageTests
     private static async Task<(HttpStatusCode Status, string? MediaType, string Body)> FailARequestAsync(
         string? publicHost, string? allow)
     {
-        var saved = ReadVariables.ToDictionary(name => name, Environment.GetEnvironmentVariable);
+        var saved = s_readVariables.ToDictionary(name => name, Environment.GetEnvironmentVariable);
 
         try
         {

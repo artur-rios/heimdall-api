@@ -19,7 +19,7 @@ public class PersonFieldRulesTests
         var validator = new InlineValidator<Target>();
         validator.RuleFor(target => target.Email).PersonEmail();
 
-        return validator.Validate(new Target { Email = email }).Errors.Select(error => error.ErrorMessage).ToList();
+        return [.. validator.Validate(new Target { Email = email }).Errors.Select(error => error.ErrorMessage)];
     }
 
     [UnitTheory]

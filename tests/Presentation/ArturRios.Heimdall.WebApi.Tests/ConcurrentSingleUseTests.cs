@@ -37,7 +37,6 @@ public class ConcurrentSingleUseTests(PostgresFixture db) : WebApiTest<Program>(
     private const string Password = Seeds.Password;
     private const string EmailCode = "123456";
 
-    private static string UniqueEmail(string prefix) => $"{prefix}-{Guid.NewGuid():N}@test.local";
 
     /// <summary>
     ///     Starts <paramref name="count" /> copies of a request at the same moment and waits for all

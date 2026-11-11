@@ -11,7 +11,6 @@ using ArturRios.Util.Http;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
 using ArturRios.Util.WebApi.Security.Authentication;
-using ArturRios.Util.WebApi.Security.Constants;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 

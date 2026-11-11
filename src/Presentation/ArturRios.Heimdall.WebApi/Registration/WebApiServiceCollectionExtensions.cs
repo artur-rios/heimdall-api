@@ -1,4 +1,3 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Query.HealthChecks;
 using ArturRios.Heimdall.Shared.Security;
@@ -6,8 +5,6 @@ using ArturRios.Heimdall.Shared.Services;
 using ArturRios.Heimdall.WebApi.Binding;
 using ArturRios.Heimdall.WebApi.Monitoring;
 using ArturRios.Heimdall.WebApi.Security;
-using ArturRios.Util.WebApi.Configuration;
-using ArturRios.Util.WebApi.Security.Extensions;
 
 namespace ArturRios.Heimdall.WebApi;
 

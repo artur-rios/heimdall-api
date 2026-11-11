@@ -10,7 +10,7 @@ namespace ArturRios.Heimdall.WebApi.Tests.Support;
 /// </summary>
 public sealed class PauseBeforeCommit : DbTransactionInterceptor
 {
-    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_bound = TimeSpan.FromSeconds(30);
 
     private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -28,7 +28,7 @@ public sealed class PauseBeforeCommit : DbTransactionInterceptor
         if (Interlocked.Exchange(ref _fired, 1) == 0)
         {
             _reached.TrySetResult();
-            await _resume.Task.WaitAsync(Bound, cancellationToken);
+            await _resume.Task.WaitAsync(s_bound, cancellationToken);
         }
 
         return result;

@@ -25,13 +25,13 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class SigningKeyRotationTests() : WebApiTest<Program>(EnvironmentType.Local)
 {
-    private static readonly Guid SystemAdmin = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+    private static readonly Guid s_systemAdmin = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
 
     private static IdentityUser SystemAdminIdentity() =>
-        new(SystemAdmin, (int)Roles.SystemAdmin) { SecurityStamp = TestTokens.StampOf(SystemAdmin) };
+        new(s_systemAdmin, (int)Roles.SystemAdmin) { SecurityStamp = TestTokens.StampOf(s_systemAdmin) };
 
     private Task<HttpOutput<DataOutput<PersonOutput?>?>> ReadSelfAsync() =>
-        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{SystemAdmin}");
+        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{s_systemAdmin}");
 
     [FunctionalFact]
     public async Task GivenATokenSignedWithThePreviousSigningKey_WhenCallingAnEndpoint_ThenItIsStillAccepted()

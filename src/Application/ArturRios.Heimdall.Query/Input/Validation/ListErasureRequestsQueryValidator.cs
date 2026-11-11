@@ -1,4 +1,3 @@
-using ArturRios.Heimdall.Query.Input;
 
 namespace ArturRios.Heimdall.Query.Input.Validation;
 

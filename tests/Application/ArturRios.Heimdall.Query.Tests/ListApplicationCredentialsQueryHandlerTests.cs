@@ -74,7 +74,7 @@ public class ListApplicationCredentialsQueryHandlerTests
     public void GivenTheOutputType_WhenInspected_ThenItCarriesNoSecretOrHash()
     {
         // Given / When
-        var properties = typeof(ArturRios.Heimdall.Query.Output.ApplicationCredentialOutput)
+        var properties = typeof(Output.ApplicationCredentialOutput)
             .GetProperties().Select(p => p.Name).ToList();
 
         // Then

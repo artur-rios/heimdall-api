@@ -12,7 +12,6 @@ using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,7 +34,7 @@ public class InternalHealthTests
     private const string HermesKey = "hermes-key-that-must-not-be-sent";
     private const string Secret = "secret-detail-that-must-not-leak";
 
-    private static readonly TimeSpan Soon = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_soon = TimeSpan.FromSeconds(30);
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -375,13 +374,13 @@ public class InternalHealthTests
         var client = app.GetTestClient();
 
         var first = client.GetAsync(Route, Token);
-        await check.Started.Task.WaitAsync(Soon, Token);
+        await check.Started.Task.WaitAsync(s_soon, Token);
 
         // When
         var second = client.GetAsync(Route, Token);
         await Task.Delay(100, Token);
         gate.SetResult();
-        var responses = await Task.WhenAll(first, second).WaitAsync(Soon, Token);
+        var responses = await Task.WhenAll(first, second).WaitAsync(s_soon, Token);
 
         // Then
         Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
@@ -399,16 +398,16 @@ public class InternalHealthTests
         using var leaving = new CancellationTokenSource();
 
         var abandoned = client.GetAsync(Route, leaving.Token);
-        await check.Started.Task.WaitAsync(Soon, Token);
+        await check.Started.Task.WaitAsync(s_soon, Token);
         await leaving.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned.WaitAsync(Soon, Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned.WaitAsync(s_soon, Token));
 
         // When another caller waits on it
         var staying = client.GetAsync(Route, Token);
         await Task.Delay(100, Token);
         Assert.False(check.CancellationSeen);
         gate.SetResult();
-        var response = await staying.WaitAsync(Soon, Token);
+        var response = await staying.WaitAsync(s_soon, Token);
 
         // Then the one run answered them, uncancelled
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -426,11 +425,11 @@ public class InternalHealthTests
         await using var app = await StartAsync(MetricsPort, Stubs(hung), clock: clock);
 
         var request = app.GetTestClient().GetAsync(Route, Token);
-        await hung.Started.Task.WaitAsync(Soon, Token);
+        await hung.Started.Task.WaitAsync(s_soon, Token);
 
         // When
         clock.Advance(InternalHealthEndpoint.CheckTimeout);
-        var response = await request.WaitAsync(Soon, Token);
+        var response = await request.WaitAsync(s_soon, Token);
         var body = await response.Content.ReadAsStringAsync(Token);
         never.SetResult();
 
@@ -451,7 +450,7 @@ public class InternalHealthTests
         await using var app = await StartAsync(MetricsPort, Stubs(database, hung));
 
         // When
-        var response = await app.GetTestClient().GetAsync(Route, Token).WaitAsync(Soon, Token);
+        var response = await app.GetTestClient().GetAsync(Route, Token).WaitAsync(s_soon, Token);
         var body = await response.Content.ReadAsStringAsync(Token);
         never.SetResult();
 
@@ -473,9 +472,9 @@ public class InternalHealthTests
         await using var app = await StartAsync(MetricsPort, Stubs(hung), clock: clock);
 
         var request = app.GetTestClient().GetAsync(Route, Token);
-        await hung.Started.Task.WaitAsync(Soon, Token);
+        await hung.Started.Task.WaitAsync(s_soon, Token);
         clock.Advance(InternalHealthEndpoint.CheckTimeout);
-        await request.WaitAsync(Soon, Token);
+        await request.WaitAsync(s_soon, Token);
 
         Assert.False(hung.Disposed.Task.IsCompleted);
 
@@ -483,7 +482,7 @@ public class InternalHealthTests
         release.SetResult();
 
         // Then
-        await hung.Disposed.Task.WaitAsync(Soon, Token);
+        await hung.Disposed.Task.WaitAsync(s_soon, Token);
     }
 
     [UnitFact]
@@ -512,7 +511,7 @@ public class InternalHealthTests
 
         // Then one instance per run, each disposed with its scope
         Assert.Equal(2, created.Count);
-        await Task.WhenAll(created.Select(check => check.Disposed.Task)).WaitAsync(Soon, Token);
+        await Task.WhenAll(created.Select(check => check.Disposed.Task)).WaitAsync(s_soon, Token);
     }
 
     [UnitFact]
@@ -534,10 +533,10 @@ public class InternalHealthTests
         var client = app.GetTestClient();
 
         // When
-        var first = await client.GetAsync(Route, Token).WaitAsync(Soon, Token);
+        var first = await client.GetAsync(Route, Token).WaitAsync(s_soon, Token);
         var body = await first.Content.ReadAsStringAsync(Token);
         clock.Advance(InternalHealthEndpoint.CacheFor);
-        var second = await client.GetAsync(Route, Token).WaitAsync(Soon, Token);
+        var second = await client.GetAsync(Route, Token).WaitAsync(s_soon, Token);
 
         // Then
         Assert.Equal(HttpStatusCode.ServiceUnavailable, first.StatusCode);
@@ -843,7 +842,7 @@ public class InternalHealthTests
     // A clock whose timers fire when a test moves it, so a three-second bound costs no three seconds.
     private sealed class ManualClock : TimeProvider
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
         private readonly List<ManualTimer> _timers = [];
         private DateTimeOffset _now = new(2026, 11, 10, 12, 0, 0, TimeSpan.Zero);
 
@@ -873,7 +872,7 @@ public class InternalHealthTests
             lock (_gate)
             {
                 _now += by;
-                due = _timers.Where(timer => timer.DueAt <= _now).ToList();
+                due = [.. _timers.Where(timer => timer.DueAt <= _now)];
                 _timers.RemoveAll(due.Contains);
             }
 

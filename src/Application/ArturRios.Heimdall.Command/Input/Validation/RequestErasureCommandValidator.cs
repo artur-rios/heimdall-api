@@ -1,4 +1,3 @@
-using ArturRios.Heimdall.Command.Input;
 using FluentValidation;
 
 namespace ArturRios.Heimdall.Command.Input.Validation;

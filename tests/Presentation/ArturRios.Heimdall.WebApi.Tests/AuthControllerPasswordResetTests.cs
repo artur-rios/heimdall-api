@@ -242,10 +242,10 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
         // the token is a random secret, and folding its case would throw away part of its alphabet.
         var email = UniqueEmail("admin");
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
-        var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpper());
+        var token = await SeedTokenAsync(person, $"MiXeD-{Guid.NewGuid():N}".ToUpperInvariant());
 
         // When
-        var response = await ResetAsync(token.ToLower());
+        var response = await ResetAsync(token.ToLowerInvariant());
 
         // Then
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -421,7 +421,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // When
         var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
-        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+        var written = await new Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
         // Then — the change wins (FR-PE-17), and the old password stands
@@ -442,7 +442,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // When
         var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
-        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+        var written = await new Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
         // Then
@@ -513,7 +513,7 @@ public class AuthControllerPasswordResetTests(PostgresFixture db) : WebApiTest<P
 
         // When
         var hash = Hash.EncodeWithRandomSalt(NewPassword, out var salt, PasswordHashing.Configuration);
-        var written = await new ArturRios.Heimdall.Data.Persistence.AtomicWrites(reading)
+        var written = await new Data.Persistence.AtomicWrites(reading)
             .TrySetPasswordAsync(read, hash, salt, DateTime.UtcNow);
 
         // Then — refused, and the record keeps its password and its stamp (NFR-24)

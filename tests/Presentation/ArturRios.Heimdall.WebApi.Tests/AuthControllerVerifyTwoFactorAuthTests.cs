@@ -94,7 +94,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         params string[] methods) =>
         Gateway.PostAsync<DataOutput<EnableTwoFactorAuthCommandOutput?>>(
             "/api/auth/2fa/enable",
-            new EnableTwoFactorAuthCommand { Methods = methods.ToList(), CurrentPassword = Password });
+            new EnableTwoFactorAuthCommand { Methods = [.. methods], CurrentPassword = Password });
 
     private Task<HttpOutput<DataOutput<ConfirmTwoFactorAuthCommandOutput?>?>> ConfirmAsync(
         string? appCode = null, string? emailCode = null) =>
@@ -193,7 +193,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("typed-recovery") });
         var twoFactorAuth = await SeedActiveAsync(person, appEnabled: true, emailEnabled: false,
             totpSecretEncrypted: [1, 2, 3, 4]);
-        var issued = ArturRios.Heimdall.Command.Services.RecoveryCodes.Issue()[0];
+        var issued = RecoveryCodes.Issue()[0];
 
         await using (var context = db.CreateContext())
         {
@@ -284,7 +284,7 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         Assert.True(verify.Body!.Data!.ProcessingRestricted);
         Assert.Contains(AuthMessages.SubjectRightsOnlySignIn, verify.Body.Messages);
 
-        Authorize(verify.Body.Data.Token!);
+        Authorize(verify.Body.Data.Token);
         var elsewhere = await Gateway.GetAsync<DataOutput<object>>($"/api/persons/{person.PublicId}");
         Assert.Equal(HttpStatusCode.Forbidden, elsewhere.StatusCode);
     }

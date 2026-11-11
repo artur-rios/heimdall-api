@@ -9,5 +9,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DiscardPendingRegistrationCommandOutput : CommandOutput
 {
     /// <summary>Public id of the discarded registration.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

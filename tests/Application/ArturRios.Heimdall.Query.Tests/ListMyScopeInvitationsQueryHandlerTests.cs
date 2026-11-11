@@ -16,7 +16,7 @@ namespace ArturRios.Heimdall.Query.Tests;
 // the page bound.
 public class ListMyScopeInvitationsQueryHandlerTests
 {
-    private static readonly DateTime Now = DateTime.UtcNow;
+    private static readonly DateTime s_now = DateTime.UtcNow;
 
     private static Scope Scope(long id, bool isDeleted = false) => new()
     {
@@ -27,7 +27,7 @@ public class ListMyScopeInvitationsQueryHandlerTests
     {
         Id = id, PublicId = Guid.NewGuid(), Name = name, Email = $"{name.ToLowerInvariant()}@test.local",
         RoleId = (long)Roles.ScopeAdmin, IsDeleted = isDeleted,
-        ProcessingRestrictedAt = isRestricted ? Now.AddDays(-1) : null
+        ProcessingRestrictedAt = isRestricted ? s_now.AddDays(-1) : null
     };
 
     private static ScopeOwnerInvitation Invitation(long id, Scope scope, Person invitee, Person? inviter,
@@ -37,7 +37,7 @@ public class ListMyScopeInvitationsQueryHandlerTests
         ScopeId = scope.Id, Scope = scope,
         InviteePersonId = invitee.Id, Invitee = invitee,
         InvitedByPersonId = inviter?.Id, InvitedBy = inviter,
-        CreatedAt = Now.AddDays(-1), ExpiresAt = expiresAt ?? Now.AddDays(6),
+        CreatedAt = s_now.AddDays(-1), ExpiresAt = expiresAt ?? s_now.AddDays(6),
         EndedAt = endedAt, Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
     };
 
@@ -68,15 +68,15 @@ public class ListMyScopeInvitationsQueryHandlerTests
         var ada = Person(1, "Ada");
         var grace = Person(2, "Grace");
         var alan = Person(3, "Alan");
-        var later = Invitation(1, acme, grace, ada, expiresAt: Now.AddDays(6));
-        var sooner = Invitation(2, globex, grace, ada, expiresAt: Now.AddDays(2));
+        var later = Invitation(1, acme, grace, ada, expiresAt: s_now.AddDays(6));
+        var sooner = Invitation(2, globex, grace, ada, expiresAt: s_now.AddDays(2));
         var handler = new ListMyScopeInvitationsQueryHandler(
             await RepositoryWith(ada, grace, alan),
             await RepositoryWith(later, sooner,
                 Invitation(3, acme, alan, ada),
                 Invitation(4, gone, grace, ada),
-                Invitation(5, globex, grace, ada, endedAt: Now.AddMinutes(-1)),
-                Invitation(6, acme, grace, ada, expiresAt: Now.AddMinutes(-1))),
+                Invitation(5, globex, grace, ada, endedAt: s_now.AddMinutes(-1)),
+                Invitation(6, acme, grace, ada, expiresAt: s_now.AddMinutes(-1))),
             new ListMyScopeInvitationsQueryValidator());
 
         // When

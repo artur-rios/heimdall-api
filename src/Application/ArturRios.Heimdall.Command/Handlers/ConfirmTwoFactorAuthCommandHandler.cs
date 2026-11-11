@@ -79,11 +79,11 @@ public class ConfirmTwoFactorAuthCommandHandler(
         // separately for enable — here it collapses into "no pending setup", since neither could ever
         // hold a row to confirm).
         var person = await personReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ActingPersonId && !x.IsDeleted, cancellationToken);
 
         var twoFactorAuth = person is null
             ? null
-            : await twoFactorReader.Query().FirstOrDefaultAsync(x => x.PersonId == person.Id);
+            : await twoFactorReader.Query().FirstOrDefaultAsync(x => x.PersonId == person.Id, cancellationToken);
 
         if (person is null || twoFactorAuth is null)
         {
@@ -166,7 +166,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
             // codes, so the configuration can be activated.
             twoFactorAuth.IsActive = true;
 
-            var activation = await twoFactorWriter.UpdateAsync(twoFactorAuth);
+            var activation = await twoFactorWriter.UpdateAsync(twoFactorAuth, cancellationToken);
 
             if (!activation.Success)
             {
@@ -179,7 +179,7 @@ public class ConfirmTwoFactorAuthCommandHandler(
         return output
             .WithData(new ConfirmTwoFactorAuthCommandOutput
             {
-                Enabled = true, RecoveryCodes = recoveryCodes.Select(issued => issued.Code).ToList()
+                Enabled = true, RecoveryCodes = [.. recoveryCodes.Select(issued => issued.Code)]
             })
             .WithMessage(TwoFactorMessages.SetupConfirmed);
     }

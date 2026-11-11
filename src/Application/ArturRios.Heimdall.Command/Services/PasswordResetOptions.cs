@@ -1,3 +1,4 @@
+using System.Globalization;
 namespace ArturRios.Heimdall.Command.Services;
 
 /// <summary>
@@ -15,7 +16,8 @@ public class PasswordResetOptions
 
     public static PasswordResetOptions FromEnvironment()
     {
-        var seconds = double.TryParse(Environment.GetEnvironmentVariable(LifetimeVariable), out var configured)
+        var configuredValue = Environment.GetEnvironmentVariable(LifetimeVariable);
+        var seconds = double.TryParse(configuredValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var configured)
             ? configured
             : DefaultLifetimeSeconds;
 

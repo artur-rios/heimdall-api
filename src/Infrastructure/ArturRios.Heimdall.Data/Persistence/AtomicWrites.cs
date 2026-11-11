@@ -170,7 +170,7 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
                     x => (x.ReauthenticationWindowStartedAt > windowStartedBy
                         ? x.FailedReauthenticationAttempts + 1
                         : 1) >= maxFailures
-                        ? (DateTime?)pausedUntil
+                        ? pausedUntil
                         : x.ReauthenticationPausedUntil)
                 .SetProperty(x => x.ReauthenticationWindowStartedAt,
                     x => (x.ReauthenticationWindowStartedAt > windowStartedBy
@@ -179,7 +179,7 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
                         ? null
                         : x.ReauthenticationWindowStartedAt > windowStartedBy
                             ? x.ReauthenticationWindowStartedAt
-                            : (DateTime?)now)
+                            : now)
                 .SetProperty(x => x.FailedReauthenticationAttempts,
                     x => (x.ReauthenticationWindowStartedAt > windowStartedBy
                         ? x.FailedReauthenticationAttempts + 1
@@ -231,9 +231,9 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
                         : x.AccountEmailsSent + 1)
                 .SetProperty(x => x.AccountEmailWindowEndsAt,
                     x => x.AccountEmailWindowEndsAt == null || x.AccountEmailWindowEndsAt <= now
-                        ? (DateTime?)windowEndsAt
+                        ? windowEndsAt
                         : x.AccountEmailWindowEndsAt)
-                .SetProperty(x => x.AccountEmailLastSentAt, (DateTime?)now)) == 1;
+                .SetProperty(x => x.AccountEmailLastSentAt, now)) == 1;
 
         if (reserved)
         {
@@ -547,7 +547,7 @@ public sealed class AtomicWrites(AppDbContext context) : IAtomicWrites
         // A change of case alone names the same mailbox — sign-in, recovery and uniqueness all match
         // addresses case-insensitively — so the verification it earned stands (#225).
         var mailboxChanged = emailChanged &&
-                             !string.Equals(email.ToLower(), readEmail.ToLower(), StringComparison.Ordinal);
+                             !string.Equals(email.ToLowerInvariant(), readEmail.ToLowerInvariant(), StringComparison.Ordinal);
 
         // The caller's save has to land with the change or not at all, so the two share a
         // transaction — one of their own, unless the caller already runs in one.

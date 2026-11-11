@@ -22,10 +22,10 @@ public class SetScopeEmailLinksCommand : BaseCommand, IActorScoped
     public Guid Id { get; set; }
 
     /// <summary>Base link for the scope's verification emails, or <c>null</c>/empty to clear it.</summary>
-    public string? EmailVerificationUrl { get; set; }
+    public string? EmailVerificationUrl { get; init; }
 
     /// <summary>Base link for the scope's password-reset emails, or <c>null</c>/empty to clear it.</summary>
-    public string? PasswordResetUrl { get; set; }
+    public string? PasswordResetUrl { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

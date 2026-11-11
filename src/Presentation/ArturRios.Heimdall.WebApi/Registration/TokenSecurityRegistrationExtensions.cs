@@ -1,14 +1,11 @@
-using ArturRios.Data.Relational.Core.DependencyInjection;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Shared.Security;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
-using ArturRios.Util.WebApi.Configuration;
 using ArturRios.Util.WebApi.Security.Authentication;
 using ArturRios.Util.WebApi.Security.Enums;
 using ArturRios.Util.WebApi.Security.Extensions;
 using ArturRios.Util.WebApi.Security.Interfaces;
-using FluentValidation;
 using Serilog;
 
 namespace ArturRios.Heimdall.WebApi;
@@ -20,7 +17,7 @@ public static class TokenSecurityRegistrationExtensions
     ///     tokens with and 4.0.0 retired (Threat Model TH-43). Their values are never read: start-up
     ///     only warns while either is set, so the operator removes it.
     /// </summary>
-    private static readonly string[] RetiredTokenSecretVariables =
+    private static readonly string[] s_retiredTokenSecretVariables =
         ["HEIMDALL_AUTH_TOKEN_SECRET", "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS"];
 
     /// <summary>
@@ -163,5 +160,5 @@ public static class TokenSecurityRegistrationExtensions
     ///     process as the empty string.
     /// </summary>
     public static IReadOnlyList<string> SetRetiredTokenSecretVariables(Func<string, string?> read) =>
-        [.. RetiredTokenSecretVariables.Where(variable => !string.IsNullOrWhiteSpace(read(variable)))];
+        [.. s_retiredTokenSecretVariables.Where(variable => !string.IsNullOrWhiteSpace(read(variable)))];
 }

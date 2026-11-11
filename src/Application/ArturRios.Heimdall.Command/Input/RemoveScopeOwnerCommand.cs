@@ -13,10 +13,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class RemoveScopeOwnerCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the scope losing an owner (bound from the route).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the person whose ownership is removed (bound from the route).</summary>
-    public Guid PersonId { get; set; }
+    public Guid PersonId { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

@@ -27,10 +27,10 @@ public class RetiredSecretTests() : WebApiTest<Program>(EnvironmentType.Local)
     private const string LogDirectoryVariable = "HEIMDALL_LOG_DIRECTORY";
     private const string RetiredTemplate = "{Variable} is set but no longer read; remove it";
 
-    private static readonly Guid SystemAdmin = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
+    private static readonly Guid s_systemAdmin = PostgresFixture.StandInPersonIds[Roles.SystemAdmin];
 
     private Task<HttpOutput<DataOutput<PersonOutput?>?>> ReadSelfAsync() =>
-        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{SystemAdmin}");
+        Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{s_systemAdmin}");
 
     [FunctionalTheory]
     [InlineData(PostgresFixture.TokenSecret)]
@@ -39,7 +39,7 @@ public class RetiredSecretTests() : WebApiTest<Program>(EnvironmentType.Local)
     {
         // Given — the token a caller held under 2.x, signed with the secret, or the previous one, the
         // host still has set: before the host started, no kid, the person's current stamp
-        Authorize(TestTokens.Legacy(SystemAdmin, (int)Roles.SystemAdmin, secret));
+        Authorize(TestTokens.Legacy(s_systemAdmin, (int)Roles.SystemAdmin, secret));
 
         // When
         var response = await ReadSelfAsync();

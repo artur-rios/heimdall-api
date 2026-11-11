@@ -13,10 +13,10 @@ namespace ArturRios.Heimdall.Command.Input;
 public class PromoteScopeUserCommand : BaseCommand, IActorScoped
 {
     /// <summary>Public identifier of the scope the person belongs to and will own (bound from the route).</summary>
-    public Guid ScopeId { get; set; }
+    public Guid ScopeId { get; init; }
 
     /// <summary>Public identifier of the person to promote (bound from the route).</summary>
-    public Guid PersonId { get; set; }
+    public Guid PersonId { get; init; }
 
     public Guid ActingPersonId { get; set; }
 

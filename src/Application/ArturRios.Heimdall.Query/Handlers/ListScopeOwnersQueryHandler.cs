@@ -67,13 +67,13 @@ public class ListScopeOwnersQueryHandler(
 
         if (!string.IsNullOrWhiteSpace(query.Name))
         {
-            var name = query.Name.ToLower();
+            var name = query.Name.ToLowerInvariant();
             owners = owners.Where(x => x.Name.ToLower().Contains(name));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Email))
         {
-            var email = query.Email.ToLower();
+            var email = query.Email.ToLowerInvariant();
             owners = owners.Where(x => x.Email.ToLower().Contains(email));
         }
 

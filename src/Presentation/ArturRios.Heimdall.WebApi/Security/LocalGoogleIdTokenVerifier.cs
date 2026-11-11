@@ -40,7 +40,7 @@ public class LocalGoogleIdTokenVerifier(
     /// <summary>Issuer and audience the locally minted tokens must carry. Shared with the test fixture.</summary>
     public const string TestIssuer = "heimdall-google-test";
 
-    private static readonly JsonWebTokenHandler Handler = new();
+    private static readonly JsonWebTokenHandler s_handler = new();
 
     public async Task<GoogleIdTokenPayload?> VerifyAsync(string idToken)
     {
@@ -49,7 +49,7 @@ public class LocalGoogleIdTokenVerifier(
             return null;
         }
 
-        var result = await Handler.ValidateTokenAsync(idToken, new TokenValidationParameters
+        var result = await s_handler.ValidateTokenAsync(idToken, new TokenValidationParameters
         {
             ValidIssuer = TestIssuer,
             ValidAudience = TestIssuer,

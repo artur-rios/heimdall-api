@@ -11,13 +11,13 @@ namespace ArturRios.Heimdall.Command.Input.Validation;
 /// </summary>
 public class EnableTwoFactorAuthCommandValidator : AbstractValidator<EnableTwoFactorAuthCommand>
 {
-    private static readonly string[] KnownMethods = ["App", "Email"];
+    private static readonly string[] s_knownMethods = ["App", "Email"];
 
     public EnableTwoFactorAuthCommandValidator()
     {
         RuleFor(command => command.Methods)
             .Must(methods => methods is { Count: > 0 } &&
-                              methods.All(method => KnownMethods.Contains(method, StringComparer.OrdinalIgnoreCase)))
+                              methods.All(method => s_knownMethods.Contains(method, StringComparer.OrdinalIgnoreCase)))
             .WithMessage(TwoFactorMessages.NoMethodSelected);
     }
 }

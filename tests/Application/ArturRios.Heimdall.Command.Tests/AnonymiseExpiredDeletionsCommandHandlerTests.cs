@@ -10,7 +10,6 @@ using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Heimdall.Shared.Retention;
-using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,14 +26,14 @@ namespace ArturRios.Heimdall.Command.Tests;
 // longer one — guessing that somebody had requested erasure would invent a request never made.
 public class AnonymiseExpiredDeletionsCommandHandlerTests
 {
-    private static readonly TimeSpan ErasureDeadline = TimeSpan.FromDays(30);
-    private static readonly TimeSpan AdministrativeWindow = TimeSpan.FromDays(90);
+    private static readonly TimeSpan s_erasureDeadline = TimeSpan.FromDays(30);
+    private static readonly TimeSpan s_administrativeWindow = TimeSpan.FromDays(90);
 
     private static DataRetentionOptions Retention(
         int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
     {
-        SubjectErasureDeadline = ErasureDeadline,
-        AdministrativeDeletionWindow = AdministrativeWindow,
+        SubjectErasureDeadline = s_erasureDeadline,
+        AdministrativeDeletionWindow = s_administrativeWindow,
         PurgeBatchSize = batchSize,
         MaxBatchesPerTick = maxBatches
     };
@@ -70,7 +69,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         /// <summary>The handler's own <c>ScopeOwnerInvitationVoided</c> entries.</summary>
         public List<(string Action, Guid? TargetId, bool Succeeded)> Voids() =>
-            AuditLog.Entries.Where(entry => entry.Action == ScopeOwnerInvitationAuditActions.Voided).ToList();
+            [.. AuditLog.Entries.Where(entry => entry.Action == ScopeOwnerInvitationAuditActions.Voided)];
     }
 
     private static async Task<ScopeOwnerInvitation> SeedInvitationAsync(
@@ -88,7 +87,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
     private static Task<Person> SeedDueScopeAdminAsync(Fakes fakes) =>
         SeedPersonAsync(
-            fakes, DateTime.UtcNow - ErasureDeadline - TimeSpan.FromDays(1), (int)DeletionKinds.SubjectRequested,
+            fakes, DateTime.UtcNow - s_erasureDeadline - TimeSpan.FromDays(1), (int)DeletionKinds.SubjectRequested,
             role: Roles.ScopeAdmin);
 
     private static async Task<Person> SeedPersonAsync(
@@ -118,7 +117,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
             ErasureDueAt = erasureDueAt,
             ErasureBlockedReason = erasureBlockedReason,
             RoleId = (long)role,
-            ScopeOwnerships = ownedScopeIds.Select(scopeId => new ScopeOwner { ScopeId = scopeId }).ToList()
+            ScopeOwnerships = [.. ownedScopeIds.Select(scopeId => new ScopeOwner { ScopeId = scopeId })]
         };
 
         await fakes.Persons.CreateAsync(person);
@@ -150,7 +149,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     {
         var fakes = Fakes.New();
         var person = await SeedPersonAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1),
             (int)DeletionKinds.Administrative);
 
         var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
@@ -170,11 +169,11 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         // administrative deletion of a person and of a Google User, each under a restriction.
         var fakes = Fakes.New();
         var person = await SeedPersonAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1),
             (int)DeletionKinds.Administrative);
         person.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-5);
         var googleUser = await SeedGoogleUserAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1),
             (int)DeletionKinds.Administrative);
         googleUser.ProcessingRestrictedAt = DateTime.UtcNow.AddDays(-5);
 
@@ -416,7 +415,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     {
         // Given six overdue persons and six overdue Google Users, and a batch of two
         var fakes = Fakes.New();
-        var due = DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1);
+        var due = DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1);
         var ids = new List<Guid>();
 
         for (var i = 0; i < 6; i++)
@@ -584,7 +583,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         }
 
         var googleUser = await SeedGoogleUserAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
         // When
         var output = await fakes.Handler(Retention(batchSize: 2), atomicWrites: FailingGoogleUserWrites())
             .HandleAsync(new AnonymiseExpiredDeletionsCommand());
@@ -835,7 +834,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         var fakes = Fakes.New();
         var person = await SeedDueScopeAdminAsync(fakes);
         var googleUser = await SeedGoogleUserAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
 
         var output = await fakes.Handler(atomicWrites: FailingGoogleUserWrites())
             .HandleAsync(new AnonymiseExpiredDeletionsCommand());
@@ -914,7 +913,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         // NFR-20: behavioural counters describe the person as surely as their name does
         var fakes = Fakes.New();
         var person = await SeedPersonAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1),
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1),
             (int)DeletionKinds.Administrative);
         person.FailedSecondFactorAttempts = 4;
         person.SecondFactorLockedOutUntil = DateTime.UtcNow.AddHours(1);
@@ -956,7 +955,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         Assert.Equal(ScopeOwnerInvitationOutcomes.Voided, invitation.Outcome);
         Assert.NotNull(invitation.EndedAt);
         Assert.Equal(1, output.Data!.ScopeOwnerInvitationsVoided);
-        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, (Guid?)invitation.PublicId, true)], fakes.AuditLog.Entries);
+        Assert.Equal([(ScopeOwnerInvitationAuditActions.Voided, invitation.PublicId, true)], fakes.AuditLog.Entries);
     }
 
     [UnitFact]
@@ -1070,7 +1069,7 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
         var person = await SeedDueScopeAdminAsync(fakes);
         var invitation = await SeedInvitationAsync(fakes, person.Id, null);
         await SeedGoogleUserAsync(
-            fakes, DateTime.UtcNow - AdministrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
+            fakes, DateTime.UtcNow - s_administrativeWindow - TimeSpan.FromDays(1), (int)DeletionKinds.Administrative);
         var auditLog = fakes.AuditLog;
         var handler = Audited(fakes.Handler(atomicWrites: FailingGoogleUserWrites()), auditLog);
 

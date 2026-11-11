@@ -10,5 +10,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class RegenerateRecoveryCodesCommandOutput : CommandOutput
 {
     /// <summary>The ten freshly generated recovery codes, in plaintext (FR-2F-12).</summary>
-    public List<string> RecoveryCodes { get; set; } = [];
+    public List<string> RecoveryCodes { get; init; } = [];
 }

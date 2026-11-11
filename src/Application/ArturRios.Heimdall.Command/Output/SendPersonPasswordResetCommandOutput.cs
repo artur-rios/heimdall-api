@@ -9,5 +9,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class SendPersonPasswordResetCommandOutput : CommandOutput
 {
     /// <summary>Public id of the person emailed.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

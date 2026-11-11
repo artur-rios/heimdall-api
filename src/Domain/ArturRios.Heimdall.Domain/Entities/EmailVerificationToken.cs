@@ -11,7 +11,7 @@ namespace ArturRios.Heimdall.Domain.Entities;
 public class EmailVerificationToken : Entity<long>, IPersonToken
 {
     /// <summary>Foreign key to the associated <see cref="Person" /> (internal Id). Required.</summary>
-    public long PersonId { get; set; }
+    public long PersonId { get; init; }
 
     /// <summary>
     ///     SHA-256 of the token that was emailed, as lowercase hex, for the same reason as on
@@ -20,10 +20,10 @@ public class EmailVerificationToken : Entity<long>, IPersonToken
     ///     through <c>SingleUseTokenHash</c>.
     /// </summary>
     [MaxLength(64)]
-    public string TokenHash { get; set; } = string.Empty;
+    public string TokenHash { get; init; } = string.Empty;
 
     /// <summary>Expiration timestamp, after which the token is rejected.</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>Whether the token has already been consumed.</summary>
     public bool Used { get; set; }
@@ -31,5 +31,5 @@ public class EmailVerificationToken : Entity<long>, IPersonToken
     // Navigation properties
 
     /// <summary>The person this token was issued for.</summary>
-    public Person Person { get; set; } = null!;
+    public Person Person { get; init; } = null!;
 }

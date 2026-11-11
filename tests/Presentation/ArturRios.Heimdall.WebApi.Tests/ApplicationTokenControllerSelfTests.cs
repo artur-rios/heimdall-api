@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
@@ -26,7 +25,7 @@ public class ApplicationTokenControllerSelfTests(PostgresFixture db) : WebApiTes
 {
     private const string SelfRoute = "/api/applications/self";
 
-    private async Task<string> TokenForAsync(Scope scope, Domain.Entities.Application application, string secret)
+    private async Task<string> TokenForAsync(Scope scope, Application application, string secret)
     {
         var response = await Gateway.PostAsync<DataOutput<IssueApplicationTokenCommandOutput?>>(
             "/api/applications/token",

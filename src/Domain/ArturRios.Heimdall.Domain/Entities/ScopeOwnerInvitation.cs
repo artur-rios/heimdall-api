@@ -21,13 +21,13 @@ public class ScopeOwnerInvitation : Entity<long>
     ///     How the scope's owners withdraw it (UC-58) and the invitee answers it (UC-60, UC-61). Random, so it
     ///     discloses nothing about the people involved.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Foreign key to the scope the invitee is asked to co-own (internal Id).</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
     /// <summary>Foreign key to the invited administrator (internal Id); only they may answer.</summary>
-    public long InviteePersonId { get; set; }
+    public long InviteePersonId { get; init; }
 
     /// <summary>
     ///     Foreign key to the administrator who invited (internal Id). Cleared when they are anonymised, and
@@ -35,10 +35,10 @@ public class ScopeOwnerInvitation : Entity<long>
     /// </summary>
     public long? InvitedByPersonId { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>When it stops being acceptable (<c>HEIMDALL_SCOPE_INVITATION_LIFETIME_IN_SECONDS</c> after creation).</summary>
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
     /// <summary>When it ended; <c>null</c> while it has not.</summary>
     public DateTime? EndedAt { get; set; }
@@ -46,11 +46,11 @@ public class ScopeOwnerInvitation : Entity<long>
     /// <summary>How it ended; <c>null</c> while open, and for one that ended by expiry.</summary>
     public ScopeOwnerInvitationOutcomes? Outcome { get; set; }
 
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 
-    public Person Invitee { get; set; } = null!;
+    public Person Invitee { get; init; } = null!;
 
-    public Person? InvitedBy { get; set; }
+    public Person? InvitedBy { get; init; }
 
     /// <summary>
     ///     Open at <paramref name="now" />: not ended, and its expiry still ahead. An expression, so a query

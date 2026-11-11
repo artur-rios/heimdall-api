@@ -21,7 +21,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was (not) stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/applications/{id}";
 
@@ -35,7 +35,7 @@ public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<P
             IsDeleted = isDeleted,
             ScopeId = scope.Id,
             OwnerId = owner.Id,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         context.Applications.Add(application);
         await context.SaveChangesAsync();
@@ -69,7 +69,7 @@ public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<P
         // Then — database state: flagged and UpdatedAt stamped
         var stored = await StoredAsync(application.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.NotEqual(Stamp, stored.UpdatedAt);
+        Assert.NotEqual(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -110,7 +110,7 @@ public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<P
 
         var stored = await StoredAsync(application.PublicId);
         Assert.True(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -155,7 +155,7 @@ public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<P
         // Then
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Body?.Data?.AlreadyDeleted);
-        Assert.Equal(Stamp, (await StoredAsync(application.PublicId)).UpdatedAt);
+        Assert.Equal(s_stamp, (await StoredAsync(application.PublicId)).UpdatedAt);
     }
 
     [FunctionalFact]
@@ -178,7 +178,7 @@ public class ApplicationControllerDeleteTests(PostgresFixture db) : WebApiTest<P
 
         var stored = await StoredAsync(application.PublicId);
         Assert.False(stored.IsDeleted);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]

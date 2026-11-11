@@ -10,11 +10,11 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeletePersonCommandOutput : CommandOutput
 {
     /// <summary>Public identifier of the deleted person.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 
     /// <summary>
     ///     <c>true</c> when the person was already logically deleted and nothing was written
     ///     (AF-09b); <c>false</c> when this request performed the deletion.
     /// </summary>
-    public bool AlreadyDeleted { get; set; }
+    public bool AlreadyDeleted { get; init; }
 }

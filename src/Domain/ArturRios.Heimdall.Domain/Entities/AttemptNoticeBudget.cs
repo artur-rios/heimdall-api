@@ -40,13 +40,13 @@ public class AttemptNoticeBudget : Entity<long>
     ///     SHA-256 of the trimmed, lower-cased address, as lowercase hex (<see cref="AddressHashOf" />).
     ///     Unique: one row per address.
     /// </summary>
-    public string AddressHash { get; set; } = string.Empty;
+    public string AddressHash { get; init; } = string.Empty;
 
     /// <summary>Notices sent to the address since its current window opened.</summary>
-    public int NoticesSent { get; set; }
+    public int NoticesSent { get; init; }
 
     /// <summary>When the current window ends; the next notice after it opens a new one.</summary>
-    public DateTime WindowEndsAt { get; set; }
+    public DateTime WindowEndsAt { get; init; }
 
     /// <summary>
     ///     The digest an address is counted under. Case and surrounding spaces do not make another

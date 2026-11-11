@@ -4,7 +4,6 @@ using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Data.Persistence;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.WebApi.Tests.Support;
-using ArturRios.Util.Hashing;
 using ArturRios.Util.Test.Attributes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;

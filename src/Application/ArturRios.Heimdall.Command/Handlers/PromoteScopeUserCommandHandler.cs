@@ -36,7 +36,7 @@ public class PromoteScopeUserCommandHandler(
         // AF-23a (UC-23 step 2): the target scope must exist and not be logically deleted — the
         // alternative flow names both conditions as one outcome, so the filter answers for both.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.ScopeId && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -46,7 +46,7 @@ public class PromoteScopeUserCommandHandler(
         // AF-23c: a Scope Admin actor may only act on a scope they own; a System Admin bypasses.
         // Checked before the person is looked up so a caller who fails here learns nothing about
         // which person ids exist, what roles they hold, or which scope they belong to.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(PersonMessages.NotScopeOwner);
         }
@@ -56,7 +56,7 @@ public class PromoteScopeUserCommandHandler(
         // because AF-23b reads it.
         var person = await personReader.Query()
             .Include(x => x.ScopeMembership)
-            .FirstOrDefaultAsync(x => x.PublicId == command.PersonId && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.PersonId && !x.IsDeleted, cancellationToken);
 
         if (person is null)
         {
@@ -84,11 +84,11 @@ public class PromoteScopeUserCommandHandler(
         // FR-PE-09: the promotion moves the address from the scope's User namespace into the
         // system-wide admin namespace, where it must be unique. Compared case-insensitively
         // (LOWER() in SQL) and ignoring logically deleted admins, as UC-06 path c does.
-        var email = person.Email.ToLower();
+        var email = person.Email.ToLowerInvariant();
 
         var emailTaken = await personReader.Query().AnyAsync(other =>
             other.Id != person.Id && !other.IsDeleted && other.Email.ToLower() == email &&
-            (other.RoleId == (long)Roles.SystemAdmin || other.RoleId == (long)Roles.ScopeAdmin));
+            (other.RoleId == (long)Roles.SystemAdmin || other.RoleId == (long)Roles.ScopeAdmin), cancellationToken);
 
         if (emailTaken)
         {

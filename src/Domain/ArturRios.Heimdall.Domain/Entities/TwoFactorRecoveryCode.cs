@@ -16,7 +16,7 @@ public class TwoFactorRecoveryCode : Entity<long>
     ///     Foreign key to the owning <see cref="TwoFactorAuth" /> configuration (internal Id).
     ///     Required.
     /// </summary>
-    public long TwoFactorAuthId { get; set; }
+    public long TwoFactorAuthId { get; init; }
 
     /// <summary>
     ///     Hash of the recovery code. §4.10 documents no per-code salt column — unlike
@@ -24,7 +24,7 @@ public class TwoFactorRecoveryCode : Entity<long>
     ///     user-chosen secrets, so a keyed/plain one-way hash is enough to keep the plaintext
     ///     unrecoverable at rest.
     /// </summary>
-    public byte[] CodeHash { get; set; } = [];
+    public byte[] CodeHash { get; init; } = [];
 
     /// <summary>Whether the code has already been consumed (UC-38).</summary>
     public bool Used { get; set; }
@@ -33,10 +33,10 @@ public class TwoFactorRecoveryCode : Entity<long>
     public DateTime? UsedAt { get; set; }
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     // Navigation properties
 
     /// <summary>The two-factor configuration this code was issued for.</summary>
-    public TwoFactorAuth TwoFactorAuth { get; set; } = null!;
+    public TwoFactorAuth TwoFactorAuth { get; init; } = null!;
 }

@@ -17,7 +17,7 @@ public class GoogleUser : Entity<long>
     ///     addressed from outside the database (API paths, response bodies, token claims). The
     ///     internal <see cref="Entity{TKey}.Id" /> is never exposed to callers.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Google's stable <c>sub</c> claim. Required, unique within the scope.</summary>
     [MaxLength(255)]
@@ -97,10 +97,10 @@ public class GoogleUser : Entity<long>
     ///     failing and leaving no trace.
     /// </remarks>
     [MaxLength(500)]
-    public string? ErasureBlockedReason { get; set; }
+    public string? ErasureBlockedReason { get; init; }
 
     /// <summary>Foreign key to the associated <see cref="Scope" /> (internal Id). Required.</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
 
     /// <summary>
@@ -154,7 +154,7 @@ public class GoogleUser : Entity<long>
 
 
     /// <summary>Creation timestamp.</summary>
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>Last update timestamp.</summary>
     public DateTime UpdatedAt { get; set; }
@@ -162,5 +162,5 @@ public class GoogleUser : Entity<long>
     // Navigation properties
 
     /// <summary>The scope this Google User belongs to.</summary>
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 }

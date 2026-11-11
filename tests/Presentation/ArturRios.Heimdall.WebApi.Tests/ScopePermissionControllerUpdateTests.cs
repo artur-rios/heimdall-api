@@ -21,7 +21,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTest<Program>(EnvironmentType.Local)
 {
     // A fixed, obviously-not-now timestamp, so "UpdatedAt was stamped" is a meaningful assertion.
-    private static readonly DateTime Stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_stamp = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static string Route(Guid scopeId, Guid id) => $"/api/scopes/{scopeId}/permissions/{id}";
 
@@ -44,7 +44,7 @@ public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTe
             IncludeAsJwtClaim = false,
             IsDeleted = isDeleted,
             ScopeId = scope.Id,
-            UpdatedAt = Stamp
+            UpdatedAt = s_stamp
         };
         context.ScopePermissions.Add(permission);
         await context.SaveChangesAsync();
@@ -83,7 +83,7 @@ public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTe
         Assert.Equal("documents.read", stored.Name);
         Assert.Equal("Read documents", stored.Description);
         Assert.True(stored.IncludeAsJwtClaim);
-        Assert.NotEqual(Stamp, stored.UpdatedAt);
+        Assert.NotEqual(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]
@@ -122,7 +122,7 @@ public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTe
 
         var stored = await StoredAsync(permission.PublicId);
         Assert.Equal(permission.Name, stored.Name);
-        Assert.Equal(Stamp, stored.UpdatedAt);
+        Assert.Equal(s_stamp, stored.UpdatedAt);
     }
 
     [FunctionalFact]

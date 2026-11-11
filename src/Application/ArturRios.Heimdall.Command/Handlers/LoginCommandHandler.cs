@@ -54,13 +54,13 @@ public class LoginCommandHandler(
 {
     private const int MaxFailedLoginAttempts = 10;
 
-    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan s_lockoutDuration = TimeSpan.FromMinutes(15);
 
     // A hash of a random secret nobody knows, used only to spend the same Argon2id work on AF-11a
     // that a real password check spends. Generated per process rather than hard-coded so it is never
     // a value an attacker could recognise, and computed once so the cost sits at start-up rather
     // than on the request that needs to look like every other request.
-    private static readonly (byte[] Hash, byte[] Salt) Decoy = CreateDecoy();
+    private static readonly (byte[] Hash, byte[] Salt) s_decoy = CreateDecoy();
 
     private static (byte[] Hash, byte[] Salt) CreateDecoy()
     {
@@ -75,7 +75,7 @@ public class LoginCommandHandler(
         var output = DataOutput<LoginCommandOutput?>.New;
 
         // AF-11f: validate input shape.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -103,7 +103,7 @@ public class LoginCommandHandler(
         // refused without considering it at all. The decoy keeps the cost of that refusal equal to a
         // real check's, so a lockout cannot be detected by how quickly it answers.
         if (!await atomicWrites.TryReserveLoginAttemptAsync(
-                person, MaxFailedLoginAttempts, now, now.Add(LockoutDuration)))
+                person, MaxFailedLoginAttempts, now, now.Add(s_lockoutDuration)))
         {
             await VerifyAgainstDecoy(command.Password);
 
@@ -162,7 +162,7 @@ public class LoginCommandHandler(
         // it guards anything else, and the email code goes out at the subject's own request, which
         // is the consent Art. 18(2) asks for (NFR-24).
         var twoFactorAuth = await twoFactorReader.Query()
-            .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive);
+            .FirstOrDefaultAsync(x => x.PersonId == person.Id && x.IsActive, cancellationToken);
 
         if (twoFactorAuth is not null)
         {
@@ -217,7 +217,7 @@ public class LoginCommandHandler(
     ///     the whole of the expense being matched.
     /// </summary>
     private static Task VerifyAgainstDecoy(string password) =>
-        PasswordHashGate.Shared.TextMatchesAsync(password, Decoy.Hash, Decoy.Salt);
+        PasswordHashGate.Shared.TextMatchesAsync(password, s_decoy.Hash, s_decoy.Salt);
 
     /// <summary>
     ///     AF-11g: issues the short-lived challenge token instead of a full one, and — per FR-2F-08 —
@@ -284,7 +284,7 @@ public class LoginCommandHandler(
     /// </summary>
     private async Task<Person?> FindPersonAsync(LoginCommand command)
     {
-        var email = command.Email.ToLower();
+        var email = command.Email.ToLowerInvariant();
 
         var query = personReader.Query()
             .Include(person => person.ScopeMembership)

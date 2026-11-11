@@ -6,5 +6,5 @@ namespace ArturRios.Heimdall.Command.Output;
 public class DeclineScopeOwnerInvitationCommandOutput : CommandOutput
 {
     /// <summary>Public id of the declined invitation, also the audit entry's target.</summary>
-    public Guid Id { get; set; }
+    public Guid Id { get; init; }
 }

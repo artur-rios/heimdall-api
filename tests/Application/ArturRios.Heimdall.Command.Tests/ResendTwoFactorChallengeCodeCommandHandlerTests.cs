@@ -56,12 +56,12 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         public ResendTwoFactorChallengeCodeCommandHandler Handler() =>
             new(Persons, TwoFactorAuths, InMemoryAtomicWrites.Instance, Validator.Object, EmailCodeIssuer);
 
-        public Task<ArturRios.Output.DataOutput<Command.Output.ResendTwoFactorChallengeCodeCommandOutput?>> ResendAsync() =>
+        public Task<ArturRios.Output.DataOutput<Output.ResendTwoFactorChallengeCodeCommandOutput?>> ResendAsync() =>
             Handler().HandleAsync(new ResendTwoFactorChallengeCodeCommand { ChallengeToken = ChallengeToken });
     }
 
     /// <summary>The challenge the seeded configuration has outstanding, and the stub token names.</summary>
-    private static readonly Guid OutstandingChallenge = Guid.NewGuid();
+    private static readonly Guid s_outstandingChallenge = Guid.NewGuid();
 
     /// <summary>
     ///     Seeds a person, optionally an active configuration, and a validator that resolves the
@@ -107,7 +107,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
                 AppEnabled = appEnabled,
                 EmailEnabled = emailEnabled,
                 EmailCodeReissueCount = reissuesAlreadyMade,
-                ChallengeId = challengeRedeemed ? null : OutstandingChallenge
+                ChallengeId = challengeRedeemed ? null : s_outstandingChallenge
             });
         }
 
@@ -115,7 +115,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         validator
             .Setup(v => v.ValidateAsync(It.IsAny<string>()))
             .ReturnsAsync(challengeValid ? new TwoFactorChallengePrincipal(
-                    person.PublicId, OutstandingChallenge, challengeStampStale ? Guid.NewGuid() : person.SecurityStamp) : null);
+                    person.PublicId, s_outstandingChallenge, challengeStampStale ? Guid.NewGuid() : person.SecurityStamp) : null);
 
         return new Fixture(persons, twoFactorAuths, new RecordingEmailCodeIssuer(), validator, person);
     }
@@ -127,7 +127,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
     ///     appearing.
     /// </summary>
     private static void AssertIndistinguishable(
-        ArturRios.Output.DataOutput<Command.Output.ResendTwoFactorChallengeCodeCommandOutput?> output)
+        ArturRios.Output.DataOutput<Output.ResendTwoFactorChallengeCodeCommandOutput?> output)
     {
         Assert.True(output.Success);
         Assert.Empty(output.Errors);
@@ -162,7 +162,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         var output = await fixture.ResendAsync();
 
         // Then
-        var configuration = Assert.Single(fixture.TwoFactorAuths.Query().ToList());
+        var configuration = Assert.Single([.. fixture.TwoFactorAuths.Query()]);
         Assert.Equal(1, configuration.EmailCodeReissueCount);
 
         AssertIndistinguishable(output);
@@ -310,7 +310,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
         var cap = ResendTwoFactorChallengeCodeCommandHandler.MaxReissuesPerChallenge;
 
         // When — one more request than the challenge may authorize
-        var outputs = new List<ArturRios.Output.DataOutput<Command.Output.ResendTwoFactorChallengeCodeCommandOutput?>>();
+        var outputs = new List<ArturRios.Output.DataOutput<Output.ResendTwoFactorChallengeCodeCommandOutput?>>();
 
         for (var attempt = 0; attempt <= cap; attempt++)
         {
@@ -319,7 +319,7 @@ public class ResendTwoFactorChallengeCodeCommandHandlerTests
 
         // Then — the cap held, and the count stops at it rather than running past
         Assert.Equal(cap, fixture.EmailCodeIssuer.Reissues.Count);
-        Assert.Equal(cap, Assert.Single(fixture.TwoFactorAuths.Query().ToList()).EmailCodeReissueCount);
+        Assert.Equal(cap, Assert.Single([.. fixture.TwoFactorAuths.Query()]).EmailCodeReissueCount);
 
         // Then — and the caller saw the same thing every time, including the one that did nothing
         Assert.Equal(cap + 1, outputs.Count);

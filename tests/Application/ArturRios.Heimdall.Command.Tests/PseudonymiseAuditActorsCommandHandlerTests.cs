@@ -22,7 +22,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // the two together.
 public class PseudonymiseAuditActorsCommandHandlerTests
 {
-    private static readonly TimeSpan AttributionPeriod = TimeSpan.FromDays(548);
+    private static readonly TimeSpan s_attributionPeriod = TimeSpan.FromDays(548);
 
     private sealed record Fakes(
         AsyncFakeRepository<AuditLog, long> Entries,
@@ -38,7 +38,7 @@ public class PseudonymiseAuditActorsCommandHandlerTests
             new(Entries, entryWriter ?? Entries, Persons, GoogleUsers, Tombstones, Tombstones,
                 new DataRetentionOptions
                 {
-                    AuditActorRetention = AttributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+                    AuditActorRetention = s_attributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
                 });
     }
 
@@ -111,14 +111,14 @@ public class PseudonymiseAuditActorsCommandHandlerTests
     private static async Task<bool> TombstonedAsync(Fakes fakes, Guid id) =>
         (await fakes.Tombstones.GetAllAsync()).Data!.Any(x => x.Id == id);
 
-    private static DateTime PastThePeriod => DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(1));
+    private static DateTime PastThePeriod => DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(1));
 
     [UnitFact]
     public async Task GivenAnEntryPastItsAttributionPeriod_WhenPseudonymising_ThenTheActorIsCleared()
     {
         var fakes = Fakes.New();
         var actor = await SeedPersonAsync(fakes, anonymisedAt: null);
-        var entry = await SeedEntryAsync(fakes, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(1)));
+        var entry = await SeedEntryAsync(fakes, actor.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(1)));
 
         var output = await fakes.Handler().HandleAsync(new PseudonymiseAuditActorsCommand());
 
@@ -370,7 +370,7 @@ public class PseudonymiseAuditActorsCommandHandlerTests
         for (var i = 0; i < 5; i++)
         {
             await SeedEntryAsync(
-                fakes, actor.PublicId, DateTime.UtcNow - AttributionPeriod.Add(TimeSpan.FromDays(10 + i)));
+                fakes, actor.PublicId, DateTime.UtcNow - s_attributionPeriod.Add(TimeSpan.FromDays(10 + i)));
         }
 
         var handler = fakes.Handler(batchSize: 2, maxBatches: 1);

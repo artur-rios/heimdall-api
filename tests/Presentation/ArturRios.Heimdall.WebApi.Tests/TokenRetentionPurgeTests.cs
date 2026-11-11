@@ -27,7 +27,7 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 [Collection(nameof(FunctionalCollection))]
 public class TokenRetentionPurgeTests(PostgresFixture fixture)
 {
-    private static readonly DataRetentionOptions Retention = new()
+    private static readonly DataRetentionOptions s_retention = new()
     {
         SingleUseTokenGrace = TimeSpan.FromDays(7),
         PurgeBatchSize = 500
@@ -53,7 +53,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
             attemptNoticeBudgets, attemptNoticeBudgets,
             googleIdTokenUses, googleIdTokenUses,
             scopeOwnerInvitations, scopeOwnerInvitations,
-            retention ?? Retention);
+            retention ?? s_retention);
     }
 
     [FunctionalFact]
@@ -85,7 +85,7 @@ public class TokenRetentionPurgeTests(PostgresFixture fixture)
         await context.SaveChangesAsync();
 
         // When — a batch of two, two batches
-        var output = await Handler(context, Retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
+        var output = await Handler(context, s_retention with { PurgeBatchSize = 2, MaxBatchesPerTick = 2 })
             .HandleAsync(new PurgeExpiredTokensCommand());
 
         // Then — four removed, and the database counted the three still due

@@ -51,7 +51,8 @@ public static class IdentityAnonymiser
 
     /// <summary>
     ///     Overwrites the identifying values on <paramref name="person" /> and stamps
-    ///     <paramref name="at" />, through <see cref="IAtomicWrites.TryAnonymiseAsync" />: the name and
+    ///     <paramref name="at" />, through
+    ///     <see cref="IAtomicWrites.TryAnonymiseAsync(Person, string, string, DateTime)" />: the name and
     ///     address are replaced by placeholders, and the password hash and salt, the login lockout, the
     ///     factor budgets, the account-email budget and the verification flag are cleared with them.
     ///     Does not touch <c>IsDeleted</c>, the role, the scope, or any foreign key.
@@ -80,9 +81,10 @@ public static class IdentityAnonymiser
         atomicWrites.TryAnonymiseAsync(person, AnonymisedName, PlaceholderEmail(person.PublicId), at);
 
     /// <summary>
-    ///     NFR-25: anonymises a person a restore brought back, as <see cref="AnonymiseAsync" /> does,
-    ///     through <see cref="IAtomicWrites.TryReapplyErasureAsync" />, which also marks them a
-    ///     subject-requested deletion whatever state the restore left them in.
+    ///     NFR-25: anonymises a person a restore brought back, as
+    ///     <see cref="AnonymiseAsync(IAtomicWrites, Person, DateTime)" /> does, through
+    ///     <see cref="IAtomicWrites.TryReapplyErasureAsync(Person, string, string, DateTime)" />, which also marks
+    ///     them a subject-requested deletion whatever state the restore left them in.
     /// </summary>
     /// <returns><c>false</c> when they were anonymised already, possibly since they were read.</returns>
     public static Task<bool> ReapplyAsync(IAtomicWrites atomicWrites, Person person, DateTime at) =>
@@ -116,8 +118,8 @@ public static class IdentityAnonymiser
             AnonymisedGoogleId(googleUser.PublicId), at);
 
     /// <summary>
-    ///     NFR-25: anonymises a Google User a restore brought back, as <see cref="AnonymiseAsync(IAtomicWrites,
-    ///     GoogleUser, DateTime)" /> does, and marks them a subject-requested deletion whatever state the
+    ///     NFR-25: anonymises a Google User a restore brought back, as
+    ///     <see cref="AnonymiseAsync(IAtomicWrites, GoogleUser, DateTime)" /> does, and marks them a subject-requested deletion whatever state the
     ///     restore left them in.
     /// </summary>
     /// <returns><c>false</c> when they were anonymised already, possibly since they were read.</returns>

@@ -13,7 +13,7 @@ public class SetSelfRegistrationCommandOutput : CommandOutput
 
     public bool GoogleSignInEnabled { get; set; }
 
-    public bool SelfRegistrationEnabled { get; set; }
+    public bool SelfRegistrationEnabled { get; init; }
 
     /// <summary>Base link for this scope's verification emails, or <c>null</c> to use the global one.</summary>
     public string? EmailVerificationUrl { get; set; }
@@ -21,7 +21,7 @@ public class SetSelfRegistrationCommandOutput : CommandOutput
     /// <summary>Base link for this scope's password-reset emails, or <c>null</c> to use the global one.</summary>
     public string? PasswordResetUrl { get; set; }
 
-    public IEnumerable<Guid> OwnerIds { get; set; } = new List<Guid>();
+    public IEnumerable<Guid> OwnerIds { get; set; } = [];
 
     public DateTime CreatedAt { get; set; }
 

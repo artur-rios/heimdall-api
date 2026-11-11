@@ -34,7 +34,7 @@ public class MailgunScopeInvitationNoticeSenderTests
         }
     }
 
-    private static readonly DateTime ExpiresAt = new(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_expiresAt = new(2026, 10, 23, 12, 0, 0, DateTimeKind.Utc);
 
     private static MailgunScopeInvitationNoticeSender Sender(IEmailService emailService) =>
         new(emailService, NullLogger<MailgunScopeInvitationNoticeSender>.Instance);
@@ -46,12 +46,12 @@ public class MailgunScopeInvitationNoticeSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await Sender(emailService).SendInvitationAsync("grace@test.local", "Ada", "Acme", ExpiresAt);
+        await Sender(emailService).SendInvitationAsync("grace@test.local", "Ada", "Acme", s_expiresAt);
 
         // Then
         Assert.Equal("grace@test.local", emailService.To);
         Assert.Equal(ScopeInvitationNoticeText.InvitationSubject, emailService.Subject);
-        Assert.Equal(ScopeInvitationNoticeText.Invitation("Ada", "Acme", ExpiresAt), emailService.Body);
+        Assert.Equal(ScopeInvitationNoticeText.Invitation("Ada", "Acme", s_expiresAt), emailService.Body);
     }
 
     [UnitFact]
@@ -61,7 +61,7 @@ public class MailgunScopeInvitationNoticeSenderTests
         var emailService = new StubEmailService();
 
         // When
-        await Sender(emailService).SendInvitationAsync("grace@test.local", "Ada\r\nBcc: x@evil.example", "Acme", ExpiresAt);
+        await Sender(emailService).SendInvitationAsync("grace@test.local", "Ada\r\nBcc: x@evil.example", "Acme", s_expiresAt);
 
         // Then
         Assert.Equal(ScopeInvitationNoticeText.InvitationSubject, emailService.Subject);
@@ -108,7 +108,7 @@ public class MailgunScopeInvitationNoticeSenderTests
 
         // When
         var failure = await Record.ExceptionAsync(() =>
-            Sender(emailService).SendInvitationAsync("grace@test.local", "Ada", "Acme", ExpiresAt));
+            Sender(emailService).SendInvitationAsync("grace@test.local", "Ada", "Acme", s_expiresAt));
 
         // Then
         Assert.Null(failure);

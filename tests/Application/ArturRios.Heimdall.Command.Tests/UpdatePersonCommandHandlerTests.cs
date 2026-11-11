@@ -38,7 +38,7 @@ public class UpdatePersonCommandHandlerTests
     ///     One Argon2id derivation for the whole class, shared by every person it builds: at 600 MB a
     ///     derivation, one per test would cost more than the tests themselves.
     /// </summary>
-    private static readonly Lazy<(byte[] Hash, byte[] Salt)> Credential = new(() =>
+    private static readonly Lazy<(byte[] Hash, byte[] Salt)> s_credential = new(() =>
     {
         var hash = Hash.EncodeWithRandomSalt(Password, out var salt, PasswordHashing.Configuration);
 
@@ -53,8 +53,8 @@ public class UpdatePersonCommandHandlerTests
         PublicId = Guid.NewGuid(),
         Name = $"user-{id}",
         Email = email,
-        PasswordHash = Credential.Value.Hash,
-        Salt = Credential.Value.Salt,
+        PasswordHash = s_credential.Value.Hash,
+        Salt = s_credential.Value.Salt,
         RoleId = (long)Roles.User,
         EmailVerified = true,
         ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
@@ -66,11 +66,11 @@ public class UpdatePersonCommandHandlerTests
         PublicId = Guid.NewGuid(),
         Name = $"admin-{id}",
         Email = email,
-        PasswordHash = Credential.Value.Hash,
-        Salt = Credential.Value.Salt,
+        PasswordHash = s_credential.Value.Hash,
+        Salt = s_credential.Value.Salt,
         RoleId = (long)Roles.ScopeAdmin,
         EmailVerified = true,
-        ScopeOwnerships = owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope }).ToList()
+        ScopeOwnerships = [.. owned.Select(scope => new ScopeOwner { ScopeId = scope.Id, Scope = scope })]
     };
 
     private static Person SystemAdmin(long id, string email) => new()
@@ -79,8 +79,8 @@ public class UpdatePersonCommandHandlerTests
         PublicId = Guid.NewGuid(),
         Name = $"system-admin-{id}",
         Email = email,
-        PasswordHash = Credential.Value.Hash,
-        Salt = Credential.Value.Salt,
+        PasswordHash = s_credential.Value.Hash,
+        Salt = s_credential.Value.Salt,
         RoleId = (long)Roles.SystemAdmin,
         EmailVerified = true
     };
@@ -386,7 +386,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then the token can no longer verify the new address on the old one's behalf
         Assert.True(output.Success);
-        Assert.All(tokens.Query().ToList(), token => Assert.True(token.Used));
+        Assert.All([.. tokens.Query()], token => Assert.True(token.Used));
     }
 
     [UnitFact]
@@ -410,7 +410,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.All(tokens.Query().ToList(), token => Assert.False(token.Used));
+        Assert.All([.. tokens.Query()], token => Assert.False(token.Used));
     }
 
     // FR-PE-17: a password-reset link was mailed to the address being replaced, and goes with it.
@@ -1294,7 +1294,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then — a recovery code is good once, here as everywhere
         Assert.True(output.Success);
-        Assert.True(Assert.Single(twoFactor.RecoveryCodes.Query().ToList()).Used);
+        Assert.True(Assert.Single([.. twoFactor.RecoveryCodes.Query()]).Used);
     }
 
     [UnitFact]
@@ -1698,7 +1698,7 @@ public class UpdatePersonCommandHandlerTests
 
         // Then
         Assert.Contains(AuthMessages.EmailSentRecently, output.Errors);
-        Assert.False(Assert.Single(twoFactor.RecoveryCodes.Query().ToList()).Used);
+        Assert.False(Assert.Single([.. twoFactor.RecoveryCodes.Query()]).Used);
     }
 
     [UnitFact]
@@ -1772,7 +1772,7 @@ public class UpdatePersonCommandHandlerTests
         Assert.False(output.Success);
         Assert.Contains(PersonMessages.EmailSignInMethodEnabled, output.Errors);
         Assert.Equal(original, target.Email);
-        Assert.False(Assert.Single(twoFactor.RecoveryCodes.Query().ToList()).Used);
+        Assert.False(Assert.Single([.. twoFactor.RecoveryCodes.Query()]).Used);
         Assert.Equal(0, target.AccountEmailsSent);
         Assert.Equal(0, target.FailedReauthenticationAttempts);
         Assert.Empty(twoFactor.NoticesSentTo);

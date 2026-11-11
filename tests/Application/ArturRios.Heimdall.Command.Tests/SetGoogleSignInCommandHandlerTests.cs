@@ -20,7 +20,7 @@ namespace ArturRios.Heimdall.Command.Tests;
 // the 401/403-by-attribute flows are covered by ScopeControllerSetGoogleSignInTests.
 public class SetGoogleSignInCommandHandlerTests
 {
-    private static readonly DateTime SeededUpdatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime s_seededUpdatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static Mock<IValidator<SetGoogleSignInCommand>> ValidValidator()
     {
@@ -58,8 +58,8 @@ public class SetGoogleSignInCommandHandlerTests
             Description = "A scope",
             GoogleSignInEnabled = googleSignInEnabled,
             IsDeleted = isDeleted,
-            CreatedAt = SeededUpdatedAt,
-            UpdatedAt = SeededUpdatedAt,
+            CreatedAt = s_seededUpdatedAt,
+            UpdatedAt = s_seededUpdatedAt,
             Owners = [new ScopeOwner { Person = owner }]
         };
 
@@ -155,9 +155,9 @@ public class SetGoogleSignInCommandHandlerTests
 
         // Then
         Assert.True(output.Success);
-        Assert.True(output.Data!.UpdatedAt > SeededUpdatedAt);
-        Assert.Equal(SeededUpdatedAt, output.Data.CreatedAt);
-        Assert.True((await StoredAsync(scopes, scope)).UpdatedAt > SeededUpdatedAt);
+        Assert.True(output.Data!.UpdatedAt > s_seededUpdatedAt);
+        Assert.Equal(s_seededUpdatedAt, output.Data.CreatedAt);
+        Assert.True((await StoredAsync(scopes, scope)).UpdatedAt > s_seededUpdatedAt);
     }
 
     [UnitFact]
@@ -232,7 +232,7 @@ public class SetGoogleSignInCommandHandlerTests
 
         var stored = await StoredAsync(scopes, scope);
         Assert.False(stored.GoogleSignInEnabled);
-        Assert.Equal(SeededUpdatedAt, stored.UpdatedAt);
+        Assert.Equal(s_seededUpdatedAt, stored.UpdatedAt);
     }
 
     [UnitFact]
@@ -253,7 +253,7 @@ public class SetGoogleSignInCommandHandlerTests
 
         var stored = await StoredAsync(scopes, scope);
         Assert.False(stored.GoogleSignInEnabled);
-        Assert.Equal(SeededUpdatedAt, stored.UpdatedAt);
+        Assert.Equal(s_seededUpdatedAt, stored.UpdatedAt);
     }
 
     [UnitFact]
@@ -278,6 +278,6 @@ public class SetGoogleSignInCommandHandlerTests
 
         var stored = await StoredAsync(scopes, scope);
         Assert.True(stored.GoogleSignInEnabled);
-        Assert.Equal(SeededUpdatedAt, stored.UpdatedAt);
+        Assert.Equal(s_seededUpdatedAt, stored.UpdatedAt);
     }
 }

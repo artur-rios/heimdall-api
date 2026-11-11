@@ -35,7 +35,7 @@ public class SetGoogleSignInCommandHandler(
         // AF-24c (UC-24 step 2, NFR-10): the request must state which value to set. Enabled is
         // nullable precisely so this check is possible — a plain bool would bind a body omitting the
         // field to false, turning a malformed request into the destructive half of the toggle.
-        var validation = await validator.ValidateAsync(command);
+        var validation = await validator.ValidateAsync(command, cancellationToken);
 
         if (!validation.IsValid)
         {
@@ -45,7 +45,7 @@ public class SetGoogleSignInCommandHandler(
         // AF-24a (UC-24 step 3): the target scope must exist and not be logically deleted — the
         // alternative flow names both conditions as one outcome, so the filter answers for both.
         var scope = await scopeReader.Query()
-            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted);
+            .FirstOrDefaultAsync(x => x.PublicId == command.Id && !x.IsDeleted, cancellationToken);
 
         if (scope is null)
         {
@@ -54,7 +54,7 @@ public class SetGoogleSignInCommandHandler(
 
         // AF-24b (UC-24 step 4): a Scope Admin actor may only act on a scope they own; a System Admin
         // bypasses. Checked before anything is written, so a refused caller leaves no trace.
-        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id))
+        if (!await scopeOwnership.ActorMayManageScopeAsync(command.ActingRole, command.ActingPersonId, scope.Id, cancellationToken))
         {
             return output.WithError(ScopeMessages.NotScopeOwner);
         }
@@ -64,7 +64,7 @@ public class SetGoogleSignInCommandHandler(
         var ownerIds = await scopeReader.Query()
             .Where(x => x.PublicId == command.Id)
             .SelectMany(x => x.Owners.Select(owner => owner.Person.PublicId))
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // UC-24 step 5: write the flag and stamp UpdatedAt (no DB trigger maintains it). Written
         // unconditionally: PUT is idempotent by contract and UC-24 defines no alternative flow for a

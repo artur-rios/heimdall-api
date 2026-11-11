@@ -19,7 +19,7 @@ public class RestrictProcessingCommand : BaseCommand, IActorScoped
     ///     Which of Art. 18(1)'s four grounds the restriction rests on (see
     ///     <c>RestrictionGrounds</c>).
     /// </summary>
-    public int Ground { get; set; }
+    public int Ground { get; init; }
 
     [JsonIgnore]
     public Guid ActingPersonId { get; set; }

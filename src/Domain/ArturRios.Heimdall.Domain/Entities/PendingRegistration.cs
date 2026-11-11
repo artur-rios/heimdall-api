@@ -30,28 +30,28 @@ public class PendingRegistration : Entity<long>
     ///     discard it. Random, so it discloses nothing about the registrant or how many registrations
     ///     exist. The registrant never sees it; their reference is still the mailed token.
     /// </summary>
-    public Guid PublicId { get; set; } = Guid.NewGuid();
+    public Guid PublicId { get; init; } = Guid.NewGuid();
 
     /// <summary>Foreign key to the scope registered into (internal Id).</summary>
-    public long ScopeId { get; set; }
+    public long ScopeId { get; init; }
 
     [MaxLength(200)]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
-    public string Email { get; set; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
     /// <summary>The password hash computed on the request path; the plaintext was never stored.</summary>
-    public byte[] PasswordHash { get; set; } = [];
+    public byte[] PasswordHash { get; init; } = [];
 
-    public byte[] Salt { get; set; } = [];
+    public byte[] Salt { get; init; } = [];
 
     /// <summary>SHA-256 of the mailed token, as lowercase hex, through <c>SingleUseTokenHash</c>.</summary>
     [MaxLength(64)]
-    public string TokenHash { get; set; } = string.Empty;
+    public string TokenHash { get; init; } = string.Empty;
 
-    public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; init; }
 
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; init; }
 
     /// <summary>
     ///     Wrong confirmation passwords presented with this registration's token. The row is discarded when
@@ -60,5 +60,5 @@ public class PendingRegistration : Entity<long>
     /// </summary>
     public int FailedAttempts { get; set; }
 
-    public Scope Scope { get; set; } = null!;
+    public Scope Scope { get; init; } = null!;
 }

@@ -106,8 +106,8 @@ public class PendingRegistrationConfirmerTests
             return token;
         }
 
-        public List<Person> People() => Persons.Query().ToList();
-        public List<PendingRegistration> Waiting() => Pending.Query().ToList();
+        public List<Person> People() => [.. Persons.Query()];
+        public List<PendingRegistration> Waiting() => [.. Pending.Query()];
     }
 
     private static Task<PendingRegistrationConfirmation> ConfirmAsync(
@@ -143,7 +143,7 @@ public class PendingRegistrationConfirmerTests
         var fixture = new Fixture();
         var scope = await fixture.ScopeAsync();
         var first = await fixture.PendingAsync(scope);
-        await fixture.PendingAsync(scope, email: Email.ToUpper());
+        await fixture.PendingAsync(scope, email: Email.ToUpperInvariant());
         var unrelated = await fixture.PendingAsync(scope, email: "someone@test.local");
 
         var result = await ConfirmAsync(fixture.Confirmer(), first);
@@ -273,7 +273,7 @@ public class PendingRegistrationConfirmerTests
         var token = await fixture.PendingAsync(scope);
         await fixture.Persons.CreateAsync(new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Holder", Email = Email.ToUpper(), RoleId = (long)Roles.User,
+            PublicId = Guid.NewGuid(), Name = "Holder", Email = Email.ToUpperInvariant(), RoleId = (long)Roles.User,
             ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
         });
 
@@ -338,7 +338,7 @@ public class PendingRegistrationConfirmerTests
         var token = await fixture.PendingAsync(scope);
         await fixture.PendingAsync(scope, into: stale, token: token);
         var original = Assert.Single(fixture.Waiting());
-        var copy = Assert.Single(stale.Query().ToList());
+        var copy = Assert.Single([.. stale.Query()]);
         Assert.Equal(original.Id, copy.Id);
         Assert.Equal(original.TokenHash, copy.TokenHash);
 
