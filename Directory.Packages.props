@@ -50,7 +50,7 @@
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
   </ItemGroup>
   <!--
     Metrics: OpenTelemetry collects them in-process and the Prometheus exporter serves them for a
