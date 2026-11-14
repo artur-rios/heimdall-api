@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The naming rules in `.editorconfig` now fail the build (IDE1006) instead of showing only as IDE suggestions:
   `s_camelCase` for non-public static fields, `_camelCase` for private and internal instance fields, PascalCase for
   constant fields, and a new rule for camelCase local constants. The existing code already follows them.
+- Every dependency is on its latest stable release again: `ArturRios.Data.PostgreSql` 3.0.2 → 4.0.0 (built on the
+  `ArturRios.Data.Relational.Core` 5.0.1 the API already used), EF Core, ASP.NET Core Data Protection and
+  `Microsoft.Extensions.*` 10.0.13 → 10.0.15 (and the `dotnet-ef` tool 10.0.15), `Google.Apis.Auth` 1.77.0 → 1.78.0,
+  OpenTelemetry 1.19 → 1.20 (`Extensions.Hosting` 1.20.1, both instrumentations 1.20.2, the Prometheus exporter
+  1.20.1-beta.1) and `Microsoft.NET.Test.Sdk` 18.11.0 → 18.12.0. OpenTelemetry stays below 1.21, which requires the
+  .NET 11 `System.Diagnostics.DiagnosticSource` 11.0.0, and `Swashbuckle.AspNetCore` stays on 10.3.1 until
+  `ArturRios.Util.WebApi` is built on `Microsoft.OpenApi` 3. The HTTP API and the OpenAPI document are unchanged.
 - A collection built some other way where a collection expression would do now fails the build (IDE0028 and
   IDE0300 to IDE0306): `[]` and `[.. source]` in place of `new List<T>()`, `new[] { ... }`, `Enumerable.Empty<T>()`,
   `.ToList()` chains and the like. The generated EF Core migrations are marked `generated_code` and left as written.
