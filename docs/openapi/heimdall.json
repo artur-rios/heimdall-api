@@ -5237,6 +5237,14 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -5385,6 +5393,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },
@@ -6746,6 +6762,14 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -6976,6 +7000,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },
@@ -7622,6 +7654,14 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -7756,6 +7796,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },
@@ -7892,6 +7940,14 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -7961,6 +8017,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },
@@ -8715,6 +8779,14 @@
             "type": "integer",
             "format": "int32",
             "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
           }
         },
         "additionalProperties": false
@@ -8800,6 +8872,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },
@@ -8919,6 +8999,14 @@
           "totalPages": {
             "type": "integer",
             "format": "int32",
+            "readOnly": true
+          },
+          "nextPageToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
             "readOnly": true
           }
         },

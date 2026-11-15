@@ -26,8 +26,10 @@
     <!--
       The Web API copies Environments\.env* to its output, and content items with
       CopyToOutputDirectory flow transitively into ours. ConfigurationLoader would then load a
-      developer's .env.local and overwrite the container connection string PostgresFixture
-      publishes, silently pointing the whole functional suite at a real local database. Functional
+      developer's .env.local. Since ArturRios.Configuration 2.0 it no longer overwrites the
+      container connection string PostgresFixture publishes, but it would still fill in every
+      variable the fixture leaves unset (CORS origins, the log directory, the email links) from the
+      developer's file, so the suite would run against a configuration CI never sees. Functional
       tests are configured only by the fixture, so drop the inherited files.
     -->
     <Target Name="RemoveInheritedEnvironmentFiles" AfterTargets="Build">

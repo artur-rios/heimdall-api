@@ -21,8 +21,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `Microsoft.Extensions.*` 10.0.13 → 10.0.15 (and the `dotnet-ef` tool 10.0.15), `Google.Apis.Auth` 1.77.0 → 1.78.0,
   OpenTelemetry 1.19 → 1.20 (`Extensions.Hosting` 1.20.1, both instrumentations 1.20.2, the Prometheus exporter
   1.20.1-beta.1) and `Microsoft.NET.Test.Sdk` 18.11.0 → 18.12.0. OpenTelemetry stays below 1.21, which requires the
-  .NET 11 `System.Diagnostics.DiagnosticSource` 11.0.0, and `Swashbuckle.AspNetCore` stays on 10.3.1 until
-  `ArturRios.Util.WebApi` is built on `Microsoft.OpenApi` 3. The HTTP API and the OpenAPI document are unchanged.
+  .NET 11 `System.Diagnostics.DiagnosticSource` 11.0.0. The HTTP API and the OpenAPI document are unchanged.
+- The `ArturRios.*` packages are on their newest releases: `ArturRios.Util.WebApi` 5.2.0 → 6.0.0, `ArturRios.Util.Test`
+  5.0.1 → 6.0.0 (test-only), `ArturRios.Data.PostgreSql` 4.0.0 → 4.0.1, `ArturRios.Data.Relational.Core` 5.0.1 →
+  5.0.2, `ArturRios.Jwt` 1.4.1 → 1.4.2, `ArturRios.Mediator` 2.0.1 → 2.0.2, `ArturRios.Messaging` 1.5.0 → 1.5.1 and
+  `ArturRios.Util` 2.2.0 → 2.2.1. With `ArturRios.Util.WebApi` on `Microsoft.OpenApi` 3, `Swashbuckle.AspNetCore` moves
+  from 10.3.1 to 11.0.1 (on `Microsoft.OpenApi` 3.11.0) for the Web API and `tools/ArturRios.Heimdall.OpenApiGen`; the
+  document is still OpenAPI 3.0.4 and the Swashbuckle move changes nothing in it.
+- **Behavior change:** `ArturRios.Util.WebApi` 6.0.0 brings `ArturRios.Configuration` 2.0.0 (it was 1.2.0), so the
+  `Environments/.env.<environment>` (or `.env.local`) file the API loads at startup no longer overrides an environment
+  variable the process already has: a value injected by the container, Compose or the shell now wins over the file's,
+  and a key repeated in the file keeps its first value. A deployment that set a variable in its environment and relied
+  on the bundled file to replace it now gets the environment's value.
+- `ArturRios.Output` comes in at 3.3.1 (it was 3.2.0) through the packages above, and its `PaginatedOutput` carries
+  `nextPageToken` and `hasNextPage`: every paginated response now also returns `"nextPageToken": null` and
+  `"hasNextPage": false`, and `docs/openapi/heimdall.json` lists both on each of the 11 `*PaginatedOutput` schemas.
+  The change is additive; no existing field changes.
 - A collection built some other way where a collection expression would do now fails the build (IDE0028 and
   IDE0300 to IDE0306): `[]` and `[.. source]` in place of `new List<T>()`, `new[] { ... }`, `Enumerable.Empty<T>()`,
   `.ToList()` chains and the like. The generated EF Core migrations are marked `generated_code` and left as written.
