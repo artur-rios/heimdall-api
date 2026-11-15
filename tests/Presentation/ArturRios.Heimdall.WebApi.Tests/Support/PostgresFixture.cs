@@ -2,6 +2,7 @@ using ArturRios.Heimdall.Data.Configuration;
 using ArturRios.Heimdall.Data.Seeding;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Metrics;
 using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Jwt;
 using DotNet.Testcontainers.Containers;
@@ -36,6 +37,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     private const string TokenAudienceVariable = "HEIMDALL_AUTH_TOKEN_AUDIENCE";
     private const string RetiredSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET";
     private const string RetiredPreviousSecretVariable = "HEIMDALL_AUTH_TOKEN_SECRET_PREVIOUS";
+
+    /// <summary>
+    ///     The <see cref="MetricsOptions.PortVariable" /> value the suite runs with: metrics off. See
+    ///     <see cref="InitializeAsync" />.
+    /// </summary>
+    public const string MetricsSwitchedOff = "0";
 
     /// <summary>Where <c>scripts/sql</c> is copied inside the container, for psql to read.</summary>
     private const string ScriptDirectory = "/heimdall-sql";
@@ -213,6 +220,14 @@ public sealed class PostgresFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(TokenIssuerVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(TokenAudienceVariable, "heimdall-tests");
         Environment.SetEnvironmentVariable(ApplicationTokenOptions.AudienceVariable, ApplicationTokenAudience);
+
+        // Every functional test starts a host of its own, and none of them is ever collected:
+        // ASP.NET Core's rate-limiting middleware runs a timer it never stops, started where the
+        // host was built, so each host stays reachable until the run ends. The OpenTelemetry
+        // pipeline is most of what a host weighs (each instrument preallocates its metric points),
+        // so with it on the suite outgrew 6 GB and kept climbing; with it off it peaks near 2.4 GB.
+        // MetricsEndpointTests switches it back on for the hosts that are about the metrics.
+        Environment.SetEnvironmentVariable(MetricsOptions.PortVariable, MetricsSwitchedOff);
 
         // A client system's key for naming its end users' addresses to the anonymous-auth rate
         // limiter. Without it configured, the header path would never run in a functional test.

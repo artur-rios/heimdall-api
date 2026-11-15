@@ -1,6 +1,7 @@
 using System.Net;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Heimdall.WebApi.Metrics;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Functional;
@@ -12,9 +13,27 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 // Traefik's traffic stands: on a port that is not the metrics one. What it proves is that /metrics is
 // not served there, however it is asked for. That the endpoint does answer on its own port is shown
 // by MetricsScrapeEndpointTests, over the same wiring.
+//
+// The suite runs with metrics off (PostgresFixture), so the variable is cleared before the base class
+// builds the host and put back when the test is done. The collection runs one test at a time, so no
+// other host sees the change.
 [Collection(nameof(FunctionalCollection))]
-public class MetricsEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
+public class MetricsEndpointTests() : WebApiTest<Program>(WithMetricsAtTheirDefault())
 {
+    private static EnvironmentType WithMetricsAtTheirDefault()
+    {
+        Environment.SetEnvironmentVariable(MetricsOptions.PortVariable, null);
+
+        return EnvironmentType.Local;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        Environment.SetEnvironmentVariable(MetricsOptions.PortVariable, PostgresFixture.MetricsSwitchedOff);
+    }
+
     [FunctionalFact]
     public async Task GivenPublicPortAndNoToken_WhenMetricsRequested_ThenUnauthorized()
     {
