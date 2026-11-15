@@ -13,8 +13,8 @@
   <ItemGroup>
     <!-- Swashbuckle arrives transitively via the Web API's ArturRios.Util.WebApi, and its version is
          pinned in Directory.Packages.props; it is declared here because this project uses SwaggerGen's
-         types directly. Microsoft.OpenApi needs no entry of its own — Util.WebApi and Swashbuckle both
-         ask for the same 2.x release, the one Swashbuckle was built against, which is what makes
+         types directly. Microsoft.OpenApi needs no entry of its own — Util.WebApi and Swashbuckle 11 both
+         ask for the same 3.11.0 release, the one Swashbuckle was built against, which is what makes
          generating a document possible at all. -->
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
