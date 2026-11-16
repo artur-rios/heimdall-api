@@ -1,5 +1,5 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -26,10 +26,7 @@ public partial class LogRedactionTests
 
     private static IEnumerable<string> SourceFiles()
     {
-        var root = Path.GetFullPath(
-            Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-                "..", "..", "..", "..", "..", "..", "src"));
+        var root = Repository.PathTo("src");
 
         return Directory.Exists(root)
             ? Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)

@@ -1,5 +1,6 @@
 using System.Reflection;
 using ArturRios.Heimdall.Domain.Entities;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -60,11 +61,7 @@ public class PersonalDataPurposeTests
 
     private static string ReadRecord()
     {
-        var root = Path.GetFullPath(
-            Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-                "..", "..", "..", "..", "..", "..", "docs", "requirements",
-                "Data Protection Document.md"));
+        var root = Repository.PathTo("docs", "requirements", "Data Protection Document.md");
 
         Assert.True(File.Exists(root), $"The record of processing was not found at {root}");
 

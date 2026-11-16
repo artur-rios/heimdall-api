@@ -1,5 +1,5 @@
-using System.Reflection;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -18,11 +18,7 @@ public class DataExportDisclosureTests
 {
     private static string ReadRecord()
     {
-        var path = Path.GetFullPath(
-            Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-                "..", "..", "..", "..", "..", "..", "docs", "requirements",
-                "Data Protection Document.md"));
+        var path = Repository.PathTo("docs", "requirements", "Data Protection Document.md");
 
         Assert.True(File.Exists(path), $"The record of processing was not found at {path}");
 

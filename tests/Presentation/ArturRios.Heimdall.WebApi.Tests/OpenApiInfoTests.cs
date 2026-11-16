@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -31,25 +32,10 @@ public class OpenApiInfoTests
     }
 
     private static string LicenseHeading() =>
-        File.ReadLines(Path.Combine(RepositoryRoot(), "LICENSE")).First().Trim();
+        File.ReadLines(Path.Combine(Repository.Root, "LICENSE")).First().Trim();
 
     private static JsonDocument LoadDocument() =>
         JsonDocument.Parse(File.ReadAllText(
             Environment.GetEnvironmentVariable("HEIMDALL_OPENAPI_DOCUMENT")
-            ?? Path.Combine(RepositoryRoot(), "docs", "openapi", "heimdall.json")));
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null
-               && !File.Exists(Path.Combine(directory.FullName, "src", "ArturRios.Heimdall.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName
-               ?? throw new InvalidOperationException(
-                   $"Could not locate the repository root from {AppContext.BaseDirectory}");
-    }
+            ?? Path.Combine(Repository.Root, "docs", "openapi", "heimdall.json")));
 }

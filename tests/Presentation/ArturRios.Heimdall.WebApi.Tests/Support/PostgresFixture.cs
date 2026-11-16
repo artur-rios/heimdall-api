@@ -387,26 +387,11 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     private async Task CopyScriptsAsync()
     {
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(RepositoryRoot(), "scripts", "sql"), "*.sql"))
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(Repository.Root, "scripts", "sql"), "*.sql"))
         {
             await _container.CopyAsync(
                 await File.ReadAllBytesAsync(file), $"{ScriptDirectory}/{Path.GetFileName(file)}");
         }
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null
-               && !File.Exists(Path.Combine(directory.FullName, "src", "ArturRios.Heimdall.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName
-               ?? throw new InvalidOperationException(
-                   $"Could not locate the repository root from {AppContext.BaseDirectory}");
     }
 
     public ValueTask DisposeAsync() => _container.DisposeAsync();
