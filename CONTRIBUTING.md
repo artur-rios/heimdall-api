@@ -68,8 +68,10 @@ dotnet test src/ArturRios.Heimdall.sln --filter "Category=Unit"
 dotnet test src/ArturRios.Heimdall.sln --filter "Category=Functional"
 ```
 
-CI runs the two filters as separate steps and fails first if any test carries neither category, since neither
-step would run it: use the `[UnitFact]` / `[FunctionalFact]` family of attributes on every test.
+CI (`ci/test.sh`) runs every test in one pass, each test project in a process of its own and all of them side by
+side, with `ArturRios.Heimdall.WebApi.Tests` split into three processes by class name. It fails first if any test
+carries neither category, since neither filter above would run it: use the `[UnitFact]` / `[FunctionalFact]` family
+of attributes on every test.
 
 Every run writes a `.trx` under each project's `TestResults/` (git-ignored), so a failure is always
 recorded by name rather than only as a console count. To chase a test that fails only occasionally,
