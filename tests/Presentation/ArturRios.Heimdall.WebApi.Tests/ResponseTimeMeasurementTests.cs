@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
+using ArturRios.Heimdall.WebApi.Security;
 using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
@@ -77,7 +79,9 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
 
     /// <summary>
     ///     Runs <paramref name="request" /> <see cref="WarmUp" /> + <see cref="Samples" /> times and
-    ///     records the median and the slowest sample of the counted runs.
+    ///     records the median and the slowest sample of the counted runs. Every run must answer
+    ///     <paramref name="expected" />: a sample of a refusal (a 429 from the rate limiter, a 401) would
+    ///     time the refusal rather than the endpoint.
     /// </summary>
     /// <remarks>
     ///     The median rather than the mean: one scheduling hiccup on a shared runner should not move
@@ -86,11 +90,11 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     ///     actually waits on when the machine is busy.
     /// </remarks>
     private static async Task<(double Median, double Slowest)> MeasureAsync(
-        string endpoint, string endpointClass, Func<Task<HttpStatusCode>> request)
+        string endpoint, string endpointClass, HttpStatusCode expected, Func<Task<HttpStatusCode>> request)
     {
         for (var i = 0; i < WarmUp; i++)
         {
-            Assert.True((int)await request() < 500, $"{endpoint} failed during warm-up");
+            Assert.Equal(expected, await request());
         }
 
         var timings = new List<double>(Samples);
@@ -101,7 +105,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
             var status = await request();
             stopwatch.Stop();
 
-            Assert.True((int)status < 500, $"{endpoint} answered {status} while being measured");
+            Assert.Equal(expected, status);
             timings.Add(stopwatch.Elapsed.TotalMilliseconds);
         }
 
@@ -150,11 +154,11 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     }
 
     [FunctionalFact]
-    public async Task MeasureLiveness()
+    public async Task GivenTheLivenessRoute_WhenMeasured_ThenWithinItsCeiling()
     {
         // The floor: no authentication, no database, no work. Whatever this costs is the pipeline
         // itself, and every other figure includes it.
-        var (median, slowest) = await MeasureAsync("GET /HealthCheck", "unauthenticated", async () =>
+        var (median, slowest) = await MeasureAsync("GET /HealthCheck", "unauthenticated", HttpStatusCode.OK, async () =>
             (await Gateway.GetAsync<DataOutput<string?>>("/HealthCheck")).StatusCode);
 
         Assert.True(median < 150, $"liveness median was {median:F1} ms");
@@ -162,13 +166,13 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     }
 
     [FunctionalFact]
-    public async Task MeasureAuthenticatedRead()
+    public async Task GivenAnAuthenticatedRead_WhenMeasured_ThenWithinItsCeiling()
     {
         // A token-authenticated read: claims parsing, the actor-liveness lookup, one indexed query.
         var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = UniqueEmail("read") });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
-        var (median, slowest) = await MeasureAsync("GET /api/persons/{id}", "authenticated read", async () =>
+        var (median, slowest) = await MeasureAsync("GET /api/persons/{id}", "authenticated read", HttpStatusCode.OK, async () =>
             (await Gateway.GetAsync<DataOutput<PersonOutput?>>($"/api/persons/{person.PublicId}")).StatusCode);
 
         Assert.True(median < 150, $"read median was {median:F1} ms");
@@ -176,7 +180,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     }
 
     [FunctionalFact]
-    public async Task MeasurePaginatedList()
+    public async Task GivenAPaginatedList_WhenMeasured_ThenWithinItsCeiling()
     {
         // A page out of a populated table, which is where an accidental N+1 would show up: the
         // projection reaches through ScopeMembership and ScopeOwnerships for every row.
@@ -186,7 +190,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var (median, slowest) = await MeasureAsync(
-            "GET /api/scopes/{id}/persons", "authenticated list (50 rows, page of 25)", async () =>
+            "GET /api/scopes/{id}/persons", "authenticated list (50 rows, page of 25)", HttpStatusCode.OK, async () =>
                 (await Gateway.GetAsync<PaginatedOutput<PersonOutput>>(
                     $"/api/scopes/{scope.PublicId}/persons?pageNumber=1&pageSize=25")).StatusCode);
 
@@ -195,14 +199,14 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     }
 
     [FunctionalFact]
-    public async Task MeasureWrite()
+    public async Task GivenAnAuthenticatedWrite_WhenMeasured_ThenWithinItsCeiling()
     {
         // A write with validation, two uniqueness reads, an insert and an audit entry.
         var scope = await Seeds.ScopeAsync(db, new ScopeOptions { Name = $"timing-{Guid.NewGuid():N}" });
         Authorize(TestTokens.ForRole((int)Roles.SystemAdmin));
 
         var (median, slowest) = await MeasureAsync(
-            "POST /api/scopes/{id}/permissions", "authenticated write", async () =>
+            "POST /api/scopes/{id}/permissions", "authenticated write", HttpStatusCode.Created, async () =>
                 (await Gateway.PostAsync<DataOutput<CreateScopePermissionCommandOutput?>>(
                     $"/api/scopes/{scope.PublicId}/permissions",
                     new CreateScopePermissionCommand { Name = $"perm-{Guid.NewGuid():N}" })).StatusCode);
@@ -212,7 +216,7 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
     }
 
     [FunctionalFact]
-    public async Task MeasureLogin()
+    public async Task GivenALogin_WhenMeasured_ThenWithinItsCeiling()
     {
         // The expensive one, and expensive on purpose. A login verifies the password with Argon2id,
         // whose cost is the point: it is what makes an offline attack on a stolen hash slow. Every
@@ -226,9 +230,25 @@ public class ResponseTimeMeasurementTests(PostgresFixture db) : WebApiTest<Progr
         var email = UniqueEmail("login");
         await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Email = email });
 
-        var (median, slowest) = await MeasureAsync("POST /api/auth/login", "password verification", async () =>
-            (await Gateway.PostAsync<DataOutput<LoginCommandOutput?>>(
-                "/api/auth/login", new LoginCommand { Email = email, Password = Password })).StatusCode);
+        // Fifteen logins from one address would meet the limiter's ten a minute, and the last five would time
+        // a 429. As a trusted caller naming a different end user's address each time, every login is counted
+        // in a bucket of its own and verifies the password.
+        var caller = 0;
+
+        var (median, slowest) = await MeasureAsync(
+            "POST /api/auth/login", "password verification", HttpStatusCode.OK, async () =>
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
+                {
+                    Content = JsonContent.Create(new LoginCommand { Email = email, Password = Password })
+                };
+                request.Headers.Add(AuthRateLimitPartition.CallerKeyHeader, PostgresFixture.TrustedCallerKey);
+                request.Headers.Add(AuthRateLimitPartition.ClientAddressHeader, $"198.51.100.{++caller}");
+
+                using var response = await Gateway.Client.SendAsync(request);
+
+                return response.StatusCode;
+            });
 
         Assert.True(median < 5000, $"login median was {median:F1} ms, far beyond the expected cost");
         Assert.True(slowest < 10000, $"login slowest was {slowest:F1} ms");
