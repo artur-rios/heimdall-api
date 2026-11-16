@@ -161,8 +161,12 @@ public sealed class PostgresFixture : IAsyncLifetime
     };
 
     // The major version the deployed environments run (PostgreSQL 18 on the VPS and the local
-    // Windows install); the tag floats to its latest minor release.
+    // Windows install); the tag floats to its latest minor release. Durability is off: nothing in it
+    // outlives the container, and without a flush to disk at every commit the suite's thousands of
+    // small transactions, and the CREATE DATABASE of every IsolatedDatabase, stop waiting on the disk.
+    // What the tests read back is unchanged, since a running server sees its own writes either way.
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:18-alpine")
+        .WithCommand("-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off")
         .Build();
 
     /// <summary>
