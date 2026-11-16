@@ -57,7 +57,7 @@ public class InternalHealthTests
     }
 
     [UnitFact]
-    public async Task GivenHermesDown_Then200DegradedWithReason()
+    public async Task GivenHermesDown_WhenRequestedOnMetricsPort_Then200DegradedWithReason()
     {
         // Given
         await using var app = await StartAsync(MetricsPort, RealChecks(new AsyncFakeRepository<Role, long>(), Hermes.Refusing()));
@@ -93,7 +93,7 @@ public class InternalHealthTests
     }
 
     [UnitFact]
-    public async Task GivenDatabaseDown_Then503Unhealthy()
+    public async Task GivenDatabaseDown_WhenRequestedOnMetricsPort_Then503Unhealthy()
     {
         // Given a read that fails with text the report must not repeat
         await using var app = await StartAsync(MetricsPort, RealChecks(new ThrowingRoleRepository(), Hermes.Answering()));
@@ -113,7 +113,7 @@ public class InternalHealthTests
     [InlineData("", HermesKey)]
     [InlineData(HermesAddress, "")]
     [InlineData("not an address", HermesKey)]
-    public async Task GivenHermesNotConfigured_ThenNotConfiguredAndNoCallMade(string address, string key)
+    public async Task GivenHermesNotConfigured_WhenRequested_ThenNotConfiguredAndNoCallMade(string address, string key)
     {
         // Given
         var hermes = Hermes.Answering();
@@ -201,7 +201,7 @@ public class InternalHealthTests
     [InlineData("/internal/health/")]
     [InlineData("/internal/health/extra")]
     [InlineData("/")]
-    public async Task GivenAnyOtherPathOnMetricsPort_Then404(string path)
+    public async Task GivenAnyOtherPathOnMetricsPort_WhenRequested_Then404(string path)
     {
         // Given
         await using var app = await StartAsync(MetricsPort, Stubs());

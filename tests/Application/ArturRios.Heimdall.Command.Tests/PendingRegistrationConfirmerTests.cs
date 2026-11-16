@@ -56,6 +56,27 @@ public class PendingRegistrationConfirmerTests
             Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError("The delete was refused."));
     }
 
+    // A pending-registration store whose first delete -- the claim -- succeeds and whose later ones fail, as the
+    // database does when it goes away between the confirmation and the clean-up; or throw, when told to.
+    private sealed class FailingCleanUpPendingRepository(bool throws = false)
+        : AsyncFakeRepository<PendingRegistration, long>, IAsyncRepository<PendingRegistration, long>
+    {
+        private int _deletes;
+
+        Task<DataOutput<IEnumerable<long>>> IAsyncRepository<PendingRegistration, long>.DeleteRangeAsync(
+            IEnumerable<long> ids, CancellationToken cancellationToken)
+        {
+            if (_deletes++ == 0)
+            {
+                return DeleteRangeAsync(ids, cancellationToken);
+            }
+
+            return throws
+                ? throw new InvalidOperationException("The connection was lost.")
+                : Task.FromResult(DataOutput<IEnumerable<long>>.New.WithError("The delete was refused."));
+        }
+    }
+
     private sealed class Fixture
     {
         public AsyncFakeRepository<Scope, long> Scopes { get; } = new();
@@ -535,6 +556,60 @@ public class PendingRegistrationConfirmerTests
         Assert.Equal(PendingRegistrationOutcome.PasswordIncorrect, result.Outcome);
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.DoesNotContain(Email, entry.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [UnitFact]
+    public async Task GivenTheClaimFailsForAnotherReason_WhenConfirming_ThenFailedWithItsErrorsAndNobodyCreated()
+    {
+        // Given a store refusing the claim outright, not because a concurrent request won it
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new FailingDeletePendingRepository();
+        var token = await fixture.PendingAsync(scope, into: pending);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        // When
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token);
+
+        // Then the caller is told it failed, with why, and the transaction is left to roll back
+        Assert.Equal(PendingRegistrationOutcome.Failed, result.Outcome);
+        Assert.Equal(["The delete was refused."], result.Errors);
+        Assert.Empty(fixture.People());
+        Assert.Equal(0, fixture.Transactions.Committed);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.DoesNotContain(Email, entry.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [UnitTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GivenTheSupersededRowsCannotBeRemoved_WhenConfirming_ThenStillConfirmedAndOneWarningLogged(
+        bool throws)
+    {
+        // Given two pending rows for the address, and a store that fails the clean-up after the claim: the rows
+        // expire and are purged anyway, and confirming one later is refused because the address is taken
+        var fixture = new Fixture();
+        var scope = await fixture.ScopeAsync();
+        var pending = new FailingCleanUpPendingRepository(throws);
+        var token = await fixture.PendingAsync(scope, into: pending);
+        await fixture.PendingAsync(scope, into: pending);
+        var logger = new RecordingLogger<PendingRegistrationConfirmer>();
+
+        // When
+        var result = await ConfirmAsync(
+            fixture.Confirmer(pendingReader: pending, pendingWriter: pending, logger: logger), token);
+
+        // Then the person exists, the clean-up's own transaction is not committed, and the failure is a warning
+        Assert.Equal(PendingRegistrationOutcome.Confirmed, result.Outcome);
+        Assert.Single(fixture.People());
+        Assert.Single(pending.Query());
+        Assert.Equal(1, fixture.Transactions.Committed);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains("Superseded pending registrations could not be removed", entry.Text);
         Assert.DoesNotContain(Email, entry.Text, StringComparison.OrdinalIgnoreCase);
     }
 }

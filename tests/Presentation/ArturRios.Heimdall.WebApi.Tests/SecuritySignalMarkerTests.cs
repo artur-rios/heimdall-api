@@ -1,6 +1,6 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
 using ArturRios.Heimdall.WebApi.Monitoring;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -22,10 +22,7 @@ public partial class SecuritySignalMarkerTests
     [GeneratedRegex(@"^MARKER\s*=\s*""([^""]+)""", RegexOptions.Multiline)]
     private static partial Regex CollectorMarker();
 
-    private static string CollectorPath() => Path.GetFullPath(
-        Path.Combine(
-            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-            "..", "..", "..", "..", "..", "..", "scripts", "security_signals.py"));
+    private static string CollectorPath() => Repository.PathTo("scripts", "security_signals.py");
 
     [UnitFact]
     public void GivenTheCollector_WhenItsMarkerIsRead_ThenItMatchesTheOneTheServiceWrites()

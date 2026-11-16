@@ -1,5 +1,5 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -29,10 +29,7 @@ public partial class PasswordHashGateCoverageTests
     [UnitFact]
     public void GivenTheSource_WhenArgon2DerivationsAreRead_ThenEachGoesThroughTheGate()
     {
-        var root = Path.GetFullPath(
-            Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-                "..", "..", "..", "..", "..", "..", "src"));
+        var root = Repository.PathTo("src");
 
         var files = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")

@@ -1,6 +1,8 @@
+using ArturRios.Data.Relational.Core.Interfaces;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Shared.Security;
+using ArturRios.Output;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
 using Moq;
@@ -31,11 +33,28 @@ public class TwoFactorEmailCodeIssuerTests
         public List<string> Sent { get; } = [];
     }
 
-    private static Fixture NewFixture()
+    /// <summary>The store, refusing the writes it is told to refuse, as a failed save would.</summary>
+    private sealed class RefusingCodes(bool refuseCreate = false, bool refuseUpdate = false)
+        : AsyncFakeRepository<TwoFactorEmailCode, long>, IAsyncRepository<TwoFactorEmailCode, long>
+    {
+        Task<DataOutput<long>> IAsyncRepository<TwoFactorEmailCode, long>.CreateAsync(
+            TwoFactorEmailCode entity, CancellationToken cancellationToken) =>
+            refuseCreate
+                ? Task.FromResult(DataOutput<long>.New.WithError("The insert was refused."))
+                : CreateAsync(entity, cancellationToken);
+
+        Task<DataOutput<TwoFactorEmailCode>> IAsyncRepository<TwoFactorEmailCode, long>.UpdateAsync(
+            TwoFactorEmailCode entity, CancellationToken cancellationToken) =>
+            refuseUpdate
+                ? Task.FromResult(DataOutput<TwoFactorEmailCode>.New.WithError("The update was refused."))
+                : UpdateAsync(entity, cancellationToken);
+    }
+
+    private static Fixture NewFixture(AsyncFakeRepository<TwoFactorEmailCode, long>? emailCodes = null)
     {
         var sender = new Mock<ITwoFactorEmailSender>();
         var fixture = new Fixture(
-            new AsyncFakeRepository<TwoFactorEmailCode, long>(),
+            emailCodes ?? new AsyncFakeRepository<TwoFactorEmailCode, long>(),
             sender,
             new TwoFactorAuth { Id = 7, PersonId = 10, IsActive = true, EmailEnabled = true });
 
@@ -224,5 +243,52 @@ public class TwoFactorEmailCodeIssuerTests
         // Then
         fixture.Sender.Verify(
             sender => sender.SendAsync(Email, It.IsAny<string>()), Times.Once);
+    }
+
+    [UnitFact]
+    public async Task GivenTheNewCodeCannotBeStored_WhenReissuing_ThenTheErrorIsReturnedAndNothingIsSent()
+    {
+        // Given — a code that was never saved could not be redeemed, so it must not be mailed either
+        var fixture = NewFixture(new RefusingCodes(refuseCreate: true));
+
+        // When
+        var errors = await fixture.Issuer().ReissueAsync(fixture.TwoFactorAuth, Email);
+
+        // Then
+        Assert.Equal(["The insert was refused."], errors);
+        Assert.Empty(fixture.Codes());
+        Assert.Empty(fixture.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingCodeCannotBeRetired_WhenReissuing_ThenTheErrorIsReturnedAndNoCodeIsIssued()
+    {
+        // Given — a live code the store will not mark used. Issuing beside it would leave two redeemable codes,
+        // which is what the retirement exists to prevent.
+        var fixture = NewFixture(new RefusingCodes(refuseUpdate: true));
+        await SeedCodeAsync(fixture);
+
+        // When
+        var errors = await fixture.Issuer().ReissueAsync(fixture.TwoFactorAuth, Email);
+
+        // Then
+        Assert.Equal(["The update was refused."], errors);
+        Assert.Single(fixture.Codes());
+        Assert.Empty(fixture.Sent);
+    }
+
+    [UnitFact]
+    public async Task GivenAnOutstandingCodeCannotBeRetired_WhenRetiring_ThenTheErrorIsReturned()
+    {
+        // Given
+        var fixture = NewFixture(new RefusingCodes(refuseUpdate: true));
+        await SeedCodeAsync(fixture);
+
+        // When
+        var errors = await fixture.Issuer().RetireOutstandingAsync(fixture.TwoFactorAuth.Id);
+
+        // Then
+        Assert.Equal(["The update was refused."], errors);
+        Assert.Empty(fixture.Sent);
     }
 }

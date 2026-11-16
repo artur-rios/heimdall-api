@@ -31,8 +31,11 @@ public class MigrationsRoundTripTests
     [FunctionalFact]
     public async Task GivenAnEmptyDatabase_WhenEveryMigrationIsRevertedAndAppliedAgain_ThenEachStepRuns()
     {
-        // Given a PostgreSQL container nothing else uses
-        await using var container = new PostgreSqlBuilder(Image).Build();
+        // Given a PostgreSQL container nothing else uses, durability off as in the WebApi.Tests fixture: nothing
+        // in it outlives the run
+        await using var container = new PostgreSqlBuilder(Image)
+            .WithCommand("-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off")
+            .Build();
         await container.StartAsync(TestContext.Current.CancellationToken);
 
         await using var context = CreateContext(container.GetConnectionString());

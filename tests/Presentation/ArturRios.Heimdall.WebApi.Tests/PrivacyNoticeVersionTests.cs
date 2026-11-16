@@ -1,6 +1,6 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
 using ArturRios.Heimdall.Command.Services;
+using ArturRios.Heimdall.WebApi.Tests.Support;
 using ArturRios.Util.Test.Attributes;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
@@ -24,10 +24,7 @@ public partial class PrivacyNoticeVersionTests
     [UnitFact]
     public void GivenThePrivacyNotice_WhenItsVersionIsRead_ThenTheRecordedVersionMatches()
     {
-        var path = Path.GetFullPath(
-            Path.Combine(
-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
-                "..", "..", "..", "..", "..", "..", "docs", "requirements", "Privacy Notice.md"));
+        var path = Repository.PathTo("docs", "requirements", "Privacy Notice.md");
 
         Assert.True(File.Exists(path), $"The privacy notice was not found at {path}");
 
