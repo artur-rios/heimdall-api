@@ -62,4 +62,42 @@ public class RateLimitRejectionTests() : WebApiTest<Program>(EnvironmentType.Loc
 
         Assert.Contains(RateLimitMessages.TooManyRequests, errors);
     }
+
+    // The published document's 429 is what a client generated from it is told to expect: the media
+    // type the rejection is written with, and the envelope's members, nothing more and nothing less.
+    [FunctionalFact]
+    public async Task GivenTheBudgetIsSpent_WhenRejected_ThenTheBodyIsTheDocumented429()
+    {
+        // Given
+        const string address = "203.0.113.51";
+
+        for (var attempt = 1; attempt <= PermitLimit; attempt++)
+        {
+            using var allowed = await PostAsync(address);
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, allowed.StatusCode);
+        }
+
+        using var openApi = LoadDocument();
+        var documented = openApi.RootElement.GetProperty("paths").GetProperty(Route).GetProperty("post")
+            .GetProperty("responses").GetProperty("429").GetProperty("content");
+        var mediaType = Assert.Single(documented.EnumerateObject());
+        var schemaName = mediaType.Value.GetProperty("schema").GetProperty("$ref").GetString()!.Split('/')[^1];
+        var properties = openApi.RootElement.GetProperty("components").GetProperty("schemas").GetProperty(schemaName)
+            .GetProperty("properties").EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal);
+
+        // When
+        using var response = await PostAsync(address);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        // Then
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Equal(mediaType.Name, response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(properties, body.RootElement.EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("data").ValueKind);
+    }
+
+    private static JsonDocument LoadDocument() =>
+        JsonDocument.Parse(File.ReadAllText(
+            Environment.GetEnvironmentVariable("HEIMDALL_OPENAPI_DOCUMENT")
+            ?? Path.Combine(Repository.Root, "docs", "openapi", "heimdall.json")));
 }

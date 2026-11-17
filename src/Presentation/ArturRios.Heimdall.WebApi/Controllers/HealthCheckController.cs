@@ -53,6 +53,8 @@ public class HealthCheckController(DatabaseHealthCheck databaseHealthCheck, Read
     [Route("ready")]
     [AllowAnonymous]
     [SuppressServerErrorLog]
+    [ProducesResponseType<DataOutput<string>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DataOutput<string>>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<DataOutput<string?>>> Ready()
     {
         var healthy = await readinessCache.IsReadyAsync(databaseHealthCheck.IsHealthyAsync);

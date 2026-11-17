@@ -1,11 +1,16 @@
+using System.Globalization;
+using System.Net.Mime;
 using System.Reflection;
 using ArturRios.Heimdall.Domain.Enums;
+using ArturRios.Output;
 using ArturRios.Util.WebApi.Security.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.Swagger;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -108,6 +113,8 @@ public static class SwaggerConfiguration
         options.IncludeXmlComments(xmlPath);
 
         options.RequestBodyFilter<RequiredRequestBodyFilter>();
+        options.OperationFilter<ResponseMediaTypeFilter>();
+        options.OperationFilter<RateLimitRejectionResponseFilter>();
         options.SchemaFilter<NullableReferencePropertySchemaFilter>();
         // After IncludeXmlComments, whose filter writes the descriptions this one takes back off.
         options.SchemaFilter<ReferenceDescriptionSchemaFilter>();
@@ -305,6 +312,93 @@ public sealed class RequiredRequestBodyFilter(IOptions<MvcOptions> mvcOptions) :
         }
 
         return mvcOptions.Value.AllowEmptyInputInBodyModelBinding;
+    }
+}
+
+/// <summary>
+///     Takes <c>text/plain</c> off every response whose body is not a string.
+/// </summary>
+/// <remarks>
+///     ApiExplorer offers each output formatter's media types for every response, and MVC's
+///     <c>StringOutputFormatter</c> claims <c>text/plain</c> for any type, so every envelope was
+///     documented as <c>text/plain</c> beside <c>application/json</c> and <c>text/json</c>. At run
+///     time that formatter writes only a <c>string</c>: an envelope asked for as <c>text/plain</c> is
+///     written by the JSON formatter as <c>application/json</c>, so the document named a media type
+///     the API never sends. Nothing changes on the wire; the two JSON media types stay.
+/// </remarks>
+public sealed class ResponseMediaTypeFilter : IOperationFilter
+{
+    private const string TextPlain = "text/plain";
+
+    public void Apply(OpenApiOperation operation, OperationFilterContext context)
+    {
+        foreach (var responseType in context.ApiDescription.SupportedResponseTypes)
+        {
+            if (responseType.Type == typeof(string)
+                || operation.Responses?.TryGetValue(
+                    responseType.StatusCode.ToString(CultureInfo.InvariantCulture),
+                    out var response) != true
+                || response?.Content is not { } content)
+            {
+                continue;
+            }
+
+            content.Remove(TextPlain);
+        }
+    }
+}
+
+/// <summary>
+///     Documents the <c>429 Too Many Requests</c> the rate limiter answers on every operation that
+///     carries <c>[EnableRateLimiting]</c>.
+/// </summary>
+/// <remarks>
+///     The rejection is written by <c>RateLimitingConfiguration</c>'s <c>OnRejected</c>, ahead of the
+///     action, with <c>WriteAsJsonAsync</c>: always <c>application/json</c>, whatever the request
+///     accepts, a <c>DataOutput&lt;object?&gt;</c> envelope whose <c>data</c> is null and whose
+///     error is "Too many requests.", and a <c>Retry-After</c> header in seconds. ApiExplorer knows
+///     nothing of it, since no action returns it. The attribute is what puts an operation under a
+///     limit — the endpoint policy, and for the account-creation policy the global limiter too — so
+///     it is what this reads. A 429 an action answers itself (an email budget) is a handler failure
+///     and not this one; it carries the same envelope with a null <c>data</c>.
+/// </remarks>
+public sealed class RateLimitRejectionResponseFilter : IOperationFilter
+{
+    private const string TooManyRequests = "429";
+
+    public void Apply(OpenApiOperation operation, OperationFilterContext context)
+    {
+        var method = context.MethodInfo;
+
+        if (method is null
+            || method.GetCustomAttribute<DisableRateLimitingAttribute>() is not null
+            || (method.GetCustomAttribute<EnableRateLimitingAttribute>()
+                ?? method.DeclaringType?.GetCustomAttribute<EnableRateLimitingAttribute>()) is null)
+        {
+            return;
+        }
+
+        operation.Responses ??= [];
+
+        operation.Responses.TryAdd(TooManyRequests, new OpenApiResponse
+        {
+            Description = "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            Headers = new Dictionary<string, IOpenApiHeader>
+            {
+                [HeaderNames.RetryAfter] = new OpenApiHeader
+                {
+                    Description = "Seconds to wait before trying again.",
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.Integer }
+                }
+            },
+            Content = new Dictionary<string, IOpenApiMediaType>
+            {
+                [MediaTypeNames.Application.Json] = new OpenApiMediaType
+                {
+                    Schema = context.SchemaGenerator.GenerateSchema(typeof(DataOutput<object>), context.SchemaRepository)
+                }
+            }
+        });
     }
 }
 

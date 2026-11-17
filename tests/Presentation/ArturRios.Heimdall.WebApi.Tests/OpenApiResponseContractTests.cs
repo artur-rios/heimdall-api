@@ -9,6 +9,7 @@ using ArturRios.Util.Test.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ArturRios.Heimdall.WebApi.Tests;
 
@@ -91,6 +92,9 @@ public partial class OpenApiResponseContractTests
 
     [GeneratedRegex(@"(\w+)\(")]
     private static partial Regex MethodName();
+
+    [GeneratedRegex(@"\bHttpStatusCodes\.ServiceUnavailable\b|\bStatus503ServiceUnavailable\b|\b503\b")]
+    private static partial Regex ServiceUnavailable();
 
     [UnitFact]
     public void GivenPublishedDocument_WhenSuccessStatusesRead_ThenEachOperationDeclaresWhatItAnswers()
@@ -317,6 +321,123 @@ public partial class OpenApiResponseContractTests
     }
 
     [UnitFact]
+    public void GivenActionsThatAnswer503_WhenDocumentRead_ThenEachDocuments503WithItsOwnEnvelope()
+    {
+        using var document = LoadDocument();
+        var operations = Operations(document).ToDictionary(operation => operation.OperationId);
+
+        // An action answers 503 itself when its body names the status: the readiness probe's
+        // ToActionResult(healthy ? Ok : ServiceUnavailable). Read from the source, like the success
+        // statuses, because the status is an argument, not metadata.
+        var answering = Actions()
+            .Where(action => ServiceUnavailable().IsMatch(ActionSource(
+                action.OperationId[..action.OperationId.IndexOf('_')],
+                action.OperationId[(action.OperationId.IndexOf('_') + 1)..])))
+            .Select(action => action.OperationId)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var documenting = operations.Values
+            .Where(operation => operation.Operation.GetProperty("responses").TryGetProperty("503", out _))
+            .Select(operation => operation.OperationId)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(["HealthCheck_Ready"], answering);
+        Assert.Equal(answering, documenting);
+
+        foreach (var operationId in answering)
+        {
+            var responses = operations[operationId].Operation.GetProperty("responses");
+
+            // The same ObjectResult as the 200, so the same envelope under the same media types.
+            Assert.Equal(MediaTypes(responses.GetProperty("200")), MediaTypes(responses.GetProperty("503")));
+            Assert.Equal(SchemaReference(responses.GetProperty("200")), SchemaReference(responses.GetProperty("503")));
+        }
+    }
+
+    [UnitFact]
+    public void GivenHealthRoutes_WhenTheirResponsesRead_ThenLivenessDocuments200AndReadiness200Or503()
+    {
+        using var document = LoadDocument();
+        var operations = Operations(document).ToDictionary(operation => operation.OperationId);
+
+        Assert.Equal(["200"], Statuses(operations["HealthCheck_HelloWorld"].Operation));
+        Assert.Equal(["200", "503"], Statuses(operations["HealthCheck_Ready"].Operation));
+
+        var unavailable = operations["HealthCheck_Ready"].Operation.GetProperty("responses").GetProperty("503");
+
+        Assert.Equal(["application/json", "text/json"], MediaTypes(unavailable));
+        Assert.Equal("#/components/schemas/StringDataOutput", SchemaReference(unavailable));
+    }
+
+    [UnitFact]
+    public void GivenRateLimitedActions_WhenDocumentRead_ThenEachDocuments429WithTheRejectionEnvelope()
+    {
+        using var document = LoadDocument();
+        var operations = Operations(document).ToDictionary(operation => operation.OperationId);
+
+        var limited = Actions()
+            .Where(action => action.Action.GetCustomAttribute<DisableRateLimitingAttribute>() is null
+                             && (action.Action.GetCustomAttribute<EnableRateLimitingAttribute>()
+                                 ?? action.Action.DeclaringType!.GetCustomAttribute<EnableRateLimitingAttribute>())
+                             is not null)
+            .Select(action => action.OperationId)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var documenting = operations.Values
+            .Where(operation => operation.Operation.GetProperty("responses").TryGetProperty("429", out _))
+            .Select(operation => operation.OperationId)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.NotEmpty(limited);
+        Assert.Contains("SigningKeys_KeySet", limited);
+        Assert.Equal(limited, documenting);
+
+        foreach (var operationId in limited)
+        {
+            var rejection = operations[operationId].Operation.GetProperty("responses").GetProperty("429");
+
+            // WriteAsJsonAsync, whatever the request accepts.
+            Assert.Equal(["application/json"], MediaTypes(rejection));
+            Assert.Equal("#/components/schemas/ObjectDataOutput", SchemaReference(rejection));
+            Assert.Equal(
+                "integer",
+                rejection.GetProperty("headers").GetProperty("Retry-After").GetProperty("schema").GetProperty("type")
+                    .GetString());
+        }
+
+        var envelope = Schemas(document).Single(schema => schema.Name == "ObjectDataOutput").Value;
+
+        Assert.Equal(
+            ["data", "errors", "messages", "success", "timestamp"],
+            Properties(envelope).Select(property => property.Name).Order(StringComparer.Ordinal));
+        // `data` is an object?, which has no schema of its own: the empty schema, which every JSON value
+        // validates against, the null the rejection writes included.
+        Assert.Empty(KeywordNames(envelope.GetProperty("properties").GetProperty("data")));
+    }
+
+    [UnitFact]
+    public void GivenPublishedDocument_WhenResponseMediaTypesRead_ThenNoneIsTextPlain()
+    {
+        using var document = LoadDocument();
+
+        // No action answers a bare string through MVC's formatters, and only a string is written as
+        // text/plain: every envelope asked for as text/plain is written as application/json.
+        var textPlain = Operations(document)
+            .SelectMany(operation => operation.Operation.GetProperty("responses").EnumerateObject()
+                .Where(response => MediaTypes(response.Value).Contains("text/plain"))
+                .Select(response => $"{operation.Method} {operation.Route} {response.Name}"))
+            .ToList();
+
+        Assert.True(
+            textPlain.Count == 0,
+            $"{textPlain.Count} response(s) document text/plain, which the API never sends for an envelope:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, textPlain));
+    }
+
+    [UnitFact]
     public void GivenNeverNullReferences_WhenTheirMembersRead_ThenEachIsRequiredAndNonNullable()
     {
         var nullability = new NullabilityInfoContext();
@@ -505,6 +626,21 @@ public partial class OpenApiResponseContractTests
                  || new NullabilityInfoContext().Create(parameter).WriteState == NullabilityState.Nullable
         };
 
+    private static List<string> Statuses(JsonElement operation) =>
+        [.. operation.GetProperty("responses").EnumerateObject().Select(response => response.Name).Order(StringComparer.Ordinal)];
+
+    private static List<string> MediaTypes(JsonElement response) =>
+        response.TryGetProperty("content", out var content)
+            ? [.. content.EnumerateObject().Select(media => media.Name).Order(StringComparer.Ordinal)]
+            : [];
+
+    /// <summary>The one schema reference a response's media types share.</summary>
+    private static string SchemaReference(JsonElement response) =>
+        response.GetProperty("content").EnumerateObject()
+            .Select(media => media.Value.GetProperty("schema").GetProperty("$ref").GetString()!)
+            .Distinct()
+            .Single();
+
     private static HashSet<int> SuccessStatuses(JsonElement operation) =>
     [
         .. operation.GetProperty("responses").EnumerateObject()
@@ -514,10 +650,12 @@ public partial class OpenApiResponseContractTests
 
     /// <summary>
     ///     Whether a schema admits null in OpenAPI 3.1: a <c>"null"</c> in its <c>type</c> array, or a
-    ///     <c>{ type: "null" }</c> branch of its <c>anyOf</c>.
+    ///     <c>{ type: "null" }</c> branch of its <c>anyOf</c>, or no keyword at all: the empty schema an
+    ///     <c>object</c> gets admits every value.
     /// </summary>
     private static bool IsNullable(JsonElement schema) =>
-        (schema.TryGetProperty("type", out var type)
+        !KeywordNames(schema).Any()
+        || (schema.TryGetProperty("type", out var type)
          && type.ValueKind == JsonValueKind.Array
          && type.EnumerateArray().Any(entry => entry.GetString() == "null"))
         || (schema.TryGetProperty("anyOf", out var anyOf)
