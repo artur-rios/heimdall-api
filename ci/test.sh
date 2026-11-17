@@ -41,6 +41,12 @@ dotnet restore "$SOLUTION"
 # not only when a package file changes, since an advisory arrives on its own schedule.
 python3 scripts/vulnerabilities.py
 
+# Check formatting. Fails when `dotnet format` (whitespace, code style and analyzers, at the severities .editorconfig
+# sets) would change a file; `dotnet format src/ArturRios.Heimdall.sln --exclude-diagnostics CS8618` applies the same
+# fixes. CS8618 is left out: dotnet format does not run EF Core's suppressor for uninitialized DbSet properties, so it
+# reports AppDbContext's, which the build does not, and its fixes (`required`, nullable) would change the code.
+dotnet format "$SOLUTION" --verify-no-changes --no-restore --exclude-diagnostics CS8618
+
 # Built once so both test runs can use --no-build.
 dotnet build "$SOLUTION" --configuration Release --no-restore
 
