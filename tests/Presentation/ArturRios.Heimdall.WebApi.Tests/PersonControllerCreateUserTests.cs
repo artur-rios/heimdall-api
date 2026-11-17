@@ -17,7 +17,9 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
 {
     private static CreateUserCommand Command() => new()
     {
-        Name = "User", Email = $"user-{Guid.NewGuid():N}@test.local", Password = "Str0ngPass!"
+        Name = "User",
+        Email = $"user-{Guid.NewGuid():N}@test.local",
+        Password = "Str0ngPass!"
     };
 
     [FunctionalFact]
@@ -176,7 +178,9 @@ public class PersonControllerCreateUserTests(PostgresFixture db) : WebApiTest<Pr
         // When posting the same email in a different case
         var duplicate = new CreateUserCommand
         {
-            Name = "User", Email = command.Email.ToUpperInvariant(), Password = "Str0ngPass!"
+            Name = "User",
+            Email = command.Email.ToUpperInvariant(),
+            Password = "Str0ngPass!"
         };
         var response = await Gateway.PostAsync<DataOutput<CreatePersonCommandOutput?>>(
             $"/api/scopes/{scope.PublicId}/persons", duplicate);

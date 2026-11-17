@@ -185,7 +185,9 @@ public sealed class PostgresFixture : IAsyncLifetime
     public string ConnectionStringFor(string username, string password, string database) =>
         new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
         {
-            Username = username, Password = password, Database = database
+            Username = username,
+            Password = password,
+            Database = database
         }.ConnectionString;
 
     public async ValueTask InitializeAsync()
@@ -375,7 +377,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     private static IReadOnlyDictionary<string, string> NewDeploymentVariables() => new Dictionary<string, string>
     {
-        ["owner"] = OwnerRole, ["runtime"] = RuntimeRole, ["database"] = Database
+        ["owner"] = OwnerRole,
+        ["runtime"] = RuntimeRole,
+        ["database"] = Database
     };
 
     /// <summary>Sets a login's password as a superuser, the step the scripts leave to the operator.</summary>

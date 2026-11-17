@@ -27,13 +27,21 @@ public class CheckApplicationTokenQueryHandlerTests
         var scope = new Scope { Id = 1, PublicId = Guid.NewGuid(), Name = "Acme", IsDeleted = scopeDeleted };
         var application = new Application
         {
-            Id = 1, PublicId = Guid.NewGuid(), Name = "Billing Service", IsDeleted = applicationDeleted,
-            ScopeId = scope.Id, Scope = scope
+            Id = 1,
+            PublicId = Guid.NewGuid(),
+            Name = "Billing Service",
+            IsDeleted = applicationDeleted,
+            ScopeId = scope.Id,
+            Scope = scope
         };
         var credential = new ApplicationCredential
         {
-            Id = 1, ApplicationId = application.Id, Application = application, SecretHash = "h",
-            ExpiresAt = expiresAt, RevokedAt = revokedAt
+            Id = 1,
+            ApplicationId = application.Id,
+            Application = application,
+            SecretHash = "h",
+            ExpiresAt = expiresAt,
+            RevokedAt = revokedAt
         };
         await _credentials.CreateAsync(credential);
         return credential;

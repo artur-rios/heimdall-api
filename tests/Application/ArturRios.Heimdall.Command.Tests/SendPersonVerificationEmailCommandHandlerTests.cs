@@ -69,17 +69,17 @@ public class SendPersonVerificationEmailCommandHandlerTests
 
     private static Person User(
         long id, long scopeId = OwnedScopeId, bool emailVerified = false, bool isDeleted = false, bool restricted = false) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        Name = $"user-{id}",
-        Email = $"user-{id}@test.local",
-        RoleId = (long)Roles.User,
-        ScopeId = scopeId,
-        EmailVerified = emailVerified,
-        IsDeleted = isDeleted,
-        ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = $"user-{id}",
+            Email = $"user-{id}@test.local",
+            RoleId = (long)Roles.User,
+            ScopeId = scopeId,
+            EmailVerified = emailVerified,
+            IsDeleted = isDeleted,
+            ProcessingRestrictedAt = restricted ? DateTime.UtcNow : null
+        };
 
     private static Person Administrator(long id, Roles role) => new()
     {

@@ -70,7 +70,9 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
         {
             seed.EmailVerificationTokens.Add(new EmailVerificationToken
             {
-                PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(token), ExpiresAt = DateTime.UtcNow.AddHours(1)
+                PersonId = person.Id,
+                TokenHash = SingleUseTokenHash.Of(token),
+                ExpiresAt = DateTime.UtcNow.AddHours(1)
             });
             await seed.SaveChangesAsync();
         }
@@ -107,7 +109,10 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
         {
             var twoFactorAuth = new TwoFactorAuth
             {
-                PersonId = person.Id, IsActive = false, AppEnabled = false, EmailEnabled = true
+                PersonId = person.Id,
+                IsActive = false,
+                AppEnabled = false,
+                EmailEnabled = true
             };
             seed.TwoFactorAuths.Add(twoFactorAuth);
             await seed.SaveChangesAsync();
@@ -246,7 +251,9 @@ public class SingleUseWriteFailureTests(PostgresFixture db)
         await using var context = db.CreateContext();
         context.PasswordResetTokens.Add(new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(token), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(token),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await context.SaveChangesAsync();
     }

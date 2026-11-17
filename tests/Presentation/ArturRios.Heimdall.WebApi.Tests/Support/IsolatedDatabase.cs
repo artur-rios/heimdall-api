@@ -44,7 +44,9 @@ public sealed class IsolatedDatabase : IAsyncDisposable
         var isolated = new IsolatedDatabase(db, $"heimdall_isolated_{Guid.NewGuid():N}");
         var variables = new Dictionary<string, string>
         {
-            ["owner"] = PostgresFixture.OwnerRole, ["runtime"] = PostgresFixture.RuntimeRole, ["database"] = isolated.Name
+            ["owner"] = PostgresFixture.OwnerRole,
+            ["runtime"] = PostgresFixture.RuntimeRole,
+            ["database"] = isolated.Name
         };
 
         try

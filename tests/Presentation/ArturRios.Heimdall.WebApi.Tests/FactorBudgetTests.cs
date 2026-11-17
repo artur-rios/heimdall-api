@@ -203,11 +203,16 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenTwoEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheWriteLocksForAnHour()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-escalate", EmailPrefix = "budget-escalate", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "budget-escalate",
+            EmailPrefix = "budget-escalate",
+            Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
             p.SecondFactorLockouts = 2;
-        } });
+        }
+        });
         var now = DateTime.UtcNow;
 
         // When
@@ -229,11 +234,16 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenManyEarlierLockouts_WhenTheLimitIsReachedAgain_ThenTheWriteLocksForADay()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-cap", EmailPrefix = "budget-cap", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "budget-cap",
+            EmailPrefix = "budget-cap",
+            Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts - 1;
             p.SecondFactorLockouts = 40;
-        } });
+        }
+        });
         var now = DateTime.UtcNow;
 
         // When
@@ -250,12 +260,17 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenALockThatHasRunOut_WhenTheRightCodeIsPresented_ThenTheBudgetIsCleared()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-clear", EmailPrefix = "budget-clear", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "budget-clear",
+            EmailPrefix = "budget-clear",
+            Configure = p =>
         {
             p.FailedSecondFactorAttempts = 4;
             p.SecondFactorLockouts = 3;
             p.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
-        } });
+        }
+        });
         var twoFactorAuth = await SeedTwoFactorAsync(person);
         var recoveryCode = await SeedRecoveryCodeAsync(twoFactorAuth.Id);
 
@@ -347,11 +362,16 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenFourFailuresInAWindowThatHasRunOut_WhenAnotherIsCharged_ThenTheWriteStartsANewWindow()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-window-out", EmailPrefix = "reauth-window-out", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "reauth-window-out",
+            EmailPrefix = "reauth-window-out",
+            Configure = p =>
         {
             p.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-16);
-        } });
+        }
+        });
         var now = DateTime.UtcNow;
 
         // When
@@ -374,11 +394,16 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenFourFailuresInAnOpenWindow_WhenAnotherIsCharged_ThenTheWritePausesAndClosesTheWindow()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-window-open", EmailPrefix = "reauth-window-open", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "reauth-window-open",
+            EmailPrefix = "reauth-window-open",
+            Configure = p =>
         {
             p.FailedReauthenticationAttempts = ReauthenticationBudget.MaxFailures - 1;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-14);
-        } });
+        }
+        });
         var now = DateTime.UtcNow;
 
         // When
@@ -399,11 +424,16 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenEarlierFailures_WhenTheRightPasswordEnablesTwoFactor_ThenTheyAreCleared()
     {
         // Given
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "reauth-clear", EmailPrefix = "reauth-clear", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "reauth-clear",
+            EmailPrefix = "reauth-clear",
+            Configure = p =>
         {
             p.FailedReauthenticationAttempts = 3;
             p.ReauthenticationWindowStartedAt = DateTime.UtcNow.AddMinutes(-1);
-        } });
+        }
+        });
         Authorize(TestTokens.For(person.PublicId, (int)Roles.SystemAdmin));
 
         // When
@@ -520,12 +550,17 @@ public class FactorBudgetTests(PostgresFixture db) : WebApiTest<Program>(Environ
     public async Task GivenACountPastTheLimitWithAnExpiredLock_WhenAReservationIsMade_ThenItIsAdmittedAndLocks()
     {
         // Given a row left past the limit — by a lowered limit, say — whose lock has run out
-        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions { Name = "budget-heal-expired", EmailPrefix = "budget-heal-expired", Configure = p =>
+        var person = await Seeds.PersonAsync(db, Roles.SystemAdmin, new PersonOptions
+        {
+            Name = "budget-heal-expired",
+            EmailPrefix = "budget-heal-expired",
+            Configure = p =>
         {
             p.FailedSecondFactorAttempts = SecondFactorLockout.MaxFailedAttempts + 2;
             p.SecondFactorLockedOutUntil = DateTime.UtcNow.AddMinutes(-1);
             p.SecondFactorLockouts = 1;
-        } });
+        }
+        });
         var now = DateTime.UtcNow;
 
         // When

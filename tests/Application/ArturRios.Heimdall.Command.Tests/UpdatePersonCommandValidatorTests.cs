@@ -12,7 +12,9 @@ public class UpdatePersonCommandValidatorTests
 {
     private static UpdatePersonCommand Valid() => new()
     {
-        Id = Guid.NewGuid(), Name = "Ana", Email = "ana@test.local"
+        Id = Guid.NewGuid(),
+        Name = "Ana",
+        Email = "ana@test.local"
     };
 
     [UnitFact]

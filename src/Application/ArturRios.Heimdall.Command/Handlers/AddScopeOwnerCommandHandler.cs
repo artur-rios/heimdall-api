@@ -115,7 +115,9 @@ public class AddScopeOwnerCommandHandler(
         return output
             .WithData(new AddScopeOwnerCommandOutput
             {
-                ScopeId = scope.PublicId, PersonId = person.PublicId, AlreadyOwner = false
+                ScopeId = scope.PublicId,
+                PersonId = person.PublicId,
+                AlreadyOwner = false
             })
             .WithMessage(PersonMessages.ScopeOwnerAddedSuccessfully);
     }
@@ -216,7 +218,9 @@ public class AddScopeOwnerCommandHandler(
         output
             .WithData(new AddScopeOwnerCommandOutput
             {
-                ScopeId = scope.PublicId, PersonId = person.PublicId, AlreadyOwner = true
+                ScopeId = scope.PublicId,
+                PersonId = person.PublicId,
+                AlreadyOwner = true
             })
             .WithMessage(PersonMessages.AlreadyScopeOwner);
 }

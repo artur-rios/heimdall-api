@@ -48,7 +48,10 @@ public class RegenerateRecoveryCodesCommandHandlerTests
 
         public RegenerateRecoveryCodesCommand Command(string? code = null, string? recoveryCode = null) => new()
         {
-            Code = code, RecoveryCode = recoveryCode, ActingPersonId = Person.PublicId, ActingRole = (int)Roles.User
+            Code = code,
+            RecoveryCode = recoveryCode,
+            ActingPersonId = Person.PublicId,
+            ActingRole = (int)Roles.User
         };
     }
 
@@ -61,7 +64,10 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         var persons = new AsyncFakeRepository<Person, long>();
         var person = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "person", Email = "person@test.local", RoleId = (long)Roles.User
+            PublicId = Guid.NewGuid(),
+            Name = "person",
+            Email = "person@test.local",
+            RoleId = (long)Roles.User
         };
         await persons.CreateAsync(person);
 
@@ -266,7 +272,10 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         var fixture = await FixtureAsync();
         await fixture.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = fixture.Person.Id, IsActive = false, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+            PersonId = fixture.Person.Id,
+            IsActive = false,
+            AppEnabled = true,
+            TotpSecretEncrypted = [1, 2, 3]
         });
 
         // When
@@ -287,7 +296,9 @@ public class RegenerateRecoveryCodesCommandHandlerTests
         // When
         var output = await fixture.Handler().HandleAsync(new RegenerateRecoveryCodesCommand
         {
-            Code = CurrentTotpCode(), ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.User
+            Code = CurrentTotpCode(),
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.User
         });
 
         // Then

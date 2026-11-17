@@ -21,10 +21,14 @@ public class ScopeOwnerInvitationTests
 
     private static ScopeOwnerInvitation Invitation(DateTime expiresAt, DateTime? endedAt = null,
         ScopeOwnerInvitationOutcomes? outcome = null) => new()
-    {
-        ScopeId = 1, InviteePersonId = 2, CreatedAt = s_now.AddDays(-1), ExpiresAt = expiresAt,
-        EndedAt = endedAt, Outcome = outcome
-    };
+        {
+            ScopeId = 1,
+            InviteePersonId = 2,
+            CreatedAt = s_now.AddDays(-1),
+            ExpiresAt = expiresAt,
+            EndedAt = endedAt,
+            Outcome = outcome
+        };
 
     [UnitFact]
     public void GivenAnUnendedInvitationExpiringLater_WhenChecked_ThenItIsOpen()

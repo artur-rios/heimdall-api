@@ -37,7 +37,8 @@ public class ListScopeOwnersQueryHandlerTests
         Name = $"user-{id}",
         Email = $"user-{id}@test.local",
         RoleId = (long)Roles.User,
-        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id,
+        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static IScopeOwnershipChecker Ownership(bool allowed)
@@ -185,8 +186,11 @@ public class ListScopeOwnersQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new ListScopeOwnersQuery
         {
-            ScopeId = Guid.NewGuid(), PageNumber = 1, PageSize = 10,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            ScopeId = Guid.NewGuid(),
+            PageNumber = 1,
+            PageSize = 10,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then

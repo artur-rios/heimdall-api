@@ -43,7 +43,10 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true,
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = false,
+            EmailEnabled = true,
             ChallengeId = TestTokens.SeededChallengeId
         };
 
@@ -69,7 +72,8 @@ public class TokenIssuerAndAudienceTests(PostgresFixture db) : WebApiTest<Progra
     private static IdentityUser SubjectRightsIdentity(Person person) =>
         new(person.PublicId, (int)Roles.SystemAdmin)
         {
-            SubjectRightsOnly = true, SecurityStamp = TestTokens.StampOf(person.PublicId)
+            SubjectRightsOnly = true,
+            SecurityStamp = TestTokens.StampOf(person.PublicId)
         };
 
     private static IdentityUser ChallengeIdentity(Person person) =>

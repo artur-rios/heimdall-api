@@ -32,20 +32,20 @@ public class ListPendingRegistrationsQueryHandlerTests
 
     private static PendingRegistration Pending(
         long id, Scope scope, DateTime? createdAt = null, DateTime? expiresAt = null, int failedAttempts = 0) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        ScopeId = scope.Id,
-        Scope = scope,
-        Name = $"Registrant {id}",
-        Email = $"registrant-{id}@test.local",
-        PasswordHash = [1],
-        Salt = [2],
-        TokenHash = $"hash-{id}",
-        CreatedAt = createdAt ?? s_now.AddMinutes(-id),
-        ExpiresAt = expiresAt ?? s_now.AddHours(1),
-        FailedAttempts = failedAttempts
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            Scope = scope,
+            Name = $"Registrant {id}",
+            Email = $"registrant-{id}@test.local",
+            PasswordHash = [1],
+            Salt = [2],
+            TokenHash = $"hash-{id}",
+            CreatedAt = createdAt ?? s_now.AddMinutes(-id),
+            ExpiresAt = expiresAt ?? s_now.AddHours(1),
+            FailedAttempts = failedAttempts
+        };
 
     private static async Task<AsyncFakeRepository<T, long>> RepositoryWith<T>(params T[] items) where T : Entity<long>
     {

@@ -49,6 +49,24 @@ LICENSE
 dotnet build src/ArturRios.Heimdall.sln
 ```
 
+## Format
+
+CI (`ci/test.sh`) fails when the code does not match `.editorconfig`. Check it before you push, and drop
+`--verify-no-changes` to apply the fixes:
+
+```bash
+dotnet format src/ArturRios.Heimdall.sln --verify-no-changes --exclude-diagnostics CS8618
+```
+
+CS8618 is left out because `dotnet format` does not run EF Core's suppressor for uninitialized `DbSet` properties, so
+it reports `AppDbContext`'s, which the build does not.
+
+Commits that only reformat are listed in `.git-blame-ignore-revs`. Run this once so `git blame` skips them:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Test
 
 Run the whole suite:

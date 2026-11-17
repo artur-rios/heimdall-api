@@ -64,7 +64,9 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
             tombstones, tombstones,
             new DataRetentionOptions
             {
-                AuditActorRetention = s_attributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+                AuditActorRetention = s_attributionPeriod,
+                PurgeBatchSize = batchSize,
+                MaxBatchesPerTick = maxBatches
             });
     }
 
@@ -166,7 +168,9 @@ public class AuditRetentionTests(PostgresFixture fixture) : WebApiTest<Program>(
         var removed = await Seeds.PersonAsync(context, Roles.User, new PersonOptions { Name = "Ada Lovelace", EmailPrefix = "audit" });
         context.ErasedSubjects.Add(new ErasedSubject
         {
-            Id = removed.PublicId, Kind = (int)ErasedSubjectKinds.Person, CreatedAt = DateTime.UtcNow
+            Id = removed.PublicId,
+            Kind = (int)ErasedSubjectKinds.Person,
+            CreatedAt = DateTime.UtcNow
         });
         await context.SaveChangesAsync();
         await context.Persons.Where(x => x.Id == removed.Id).ExecuteDeleteAsync();

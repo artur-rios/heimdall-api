@@ -20,8 +20,10 @@ public static class ApplicationSeeds
         await using var context = db.CreateContext();
         var application = new Application
         {
-            PublicId = Guid.NewGuid(), Name = $"app-{Guid.NewGuid():N}",
-            ScopeId = scope.Id, OwnerId = owner.Id
+            PublicId = Guid.NewGuid(),
+            Name = $"app-{Guid.NewGuid():N}",
+            ScopeId = scope.Id,
+            OwnerId = owner.Id
         };
         context.Applications.Add(application);
         await context.SaveChangesAsync();

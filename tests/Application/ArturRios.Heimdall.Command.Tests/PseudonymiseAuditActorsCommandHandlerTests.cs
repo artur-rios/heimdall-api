@@ -38,7 +38,9 @@ public class PseudonymiseAuditActorsCommandHandlerTests
             new(Entries, entryWriter ?? Entries, Persons, GoogleUsers, Tombstones, Tombstones,
                 new DataRetentionOptions
                 {
-                    AuditActorRetention = s_attributionPeriod, PurgeBatchSize = batchSize, MaxBatchesPerTick = maxBatches
+                    AuditActorRetention = s_attributionPeriod,
+                    PurgeBatchSize = batchSize,
+                    MaxBatchesPerTick = maxBatches
                 });
     }
 

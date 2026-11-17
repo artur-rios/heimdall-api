@@ -27,7 +27,8 @@ public class ListScopePersonsQueryHandlerTests
         Email = email,
         RoleId = (long)Roles.User,
         IsDeleted = isDeleted,
-        ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
+        ScopeId = scope.Id,
+        ScopeMembership = new ScopeUser { ScopeId = scope.Id, Scope = scope }
     };
 
     private static Person Owner(long id, Scope scope) => new()
@@ -163,8 +164,11 @@ public class ListScopePersonsQueryHandlerTests
         // When
         var output = await handler.HandleAsync(new ListScopePersonsQuery
         {
-            ScopeId = Guid.NewGuid(), PageNumber = 1, PageSize = 10,
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            ScopeId = Guid.NewGuid(),
+            PageNumber = 1,
+            PageSize = 10,
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then

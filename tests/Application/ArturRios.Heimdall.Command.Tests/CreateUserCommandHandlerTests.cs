@@ -227,7 +227,8 @@ public class CreateUserCommandHandlerTests
             Email = command.Email,
             RoleId = (long)Roles.User,
             IsDeleted = false,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();
@@ -256,7 +257,8 @@ public class CreateUserCommandHandlerTests
             Email = command.Email.ToUpperInvariant(),
             RoleId = (long)Roles.User,
             IsDeleted = false,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         });
         var email = new Mock<IEmailVerificationService>();
         var googleUsers = new AsyncFakeRepository<GoogleUser, long>();

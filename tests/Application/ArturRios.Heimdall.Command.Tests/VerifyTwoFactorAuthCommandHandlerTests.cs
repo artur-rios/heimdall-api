@@ -104,7 +104,9 @@ public class VerifyTwoFactorAuthCommandHandlerTests
 
         public VerifyTwoFactorAuthCommand Command(string? code = null, string? recoveryCode = null) => new()
         {
-            ChallengeToken = "irrelevant-here", Code = code, RecoveryCode = recoveryCode
+            ChallengeToken = "irrelevant-here",
+            Code = code,
+            RecoveryCode = recoveryCode
         };
     }
 
@@ -420,7 +422,9 @@ public class VerifyTwoFactorAuthCommandHandlerTests
         var issued = RecoveryCodes.Issue()[0];
         var recoveryCode = new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactorAuth.Id, CodeHash = issued.CodeHash, Used = false
+            TwoFactorAuthId = twoFactorAuth.Id,
+            CodeHash = issued.CodeHash,
+            Used = false
         };
         await fixture.RecoveryCodes.CreateAsync(recoveryCode);
 

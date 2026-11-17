@@ -64,7 +64,8 @@ public class HardDeleteScopeCommandHandlerTests
         {
             PublicId = Guid.NewGuid(),
             IsDeleted = isDeleted,
-            ScopeId = scopeId, ScopeMembership = new ScopeUser { ScopeId = scopeId }
+            ScopeId = scopeId,
+            ScopeMembership = new ScopeUser { ScopeId = scopeId }
         };
         await fakes.Persons.CreateAsync(person);
 

@@ -58,7 +58,8 @@ public class CreateApplicationCommandHandlerTests
             Email = $"user-{Guid.NewGuid():N}@test.local",
             RoleId = (long)Roles.User,
             IsDeleted = isDeleted,
-            ScopeId = scope.Id, ScopeMembership = new ScopeUser { ScopeId = scope.Id }
+            ScopeId = scope.Id,
+            ScopeMembership = new ScopeUser { ScopeId = scope.Id }
         };
         await persons.CreateAsync(person);
         return person;
@@ -87,13 +88,13 @@ public class CreateApplicationCommandHandlerTests
 
     private static CreateApplicationCommand Command(
         Guid scopeId, Guid ownerId, int actingRole, Guid actingPersonId) => new()
-    {
-        ScopeId = scopeId,
-        Name = "Billing Service",
-        OwnerId = ownerId,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scopeId,
+            Name = "Billing Service",
+            OwnerId = ownerId,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     private static CreateApplicationCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes,

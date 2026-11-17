@@ -1,10 +1,10 @@
-using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -40,7 +40,10 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = !emailMethod, EmailEnabled = emailMethod,
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = !emailMethod,
+            EmailEnabled = emailMethod,
             TotpSecretEncrypted = emailMethod ? null : [1, 2, 3]
         };
         context.TwoFactorAuths.Add(twoFactorAuth);
@@ -49,7 +52,8 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
         var recoveryCode = $"TEST-{Guid.NewGuid():N}"[..9].ToUpperInvariant();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactorAuth.Id, CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode))
+            TwoFactorAuthId = twoFactorAuth.Id,
+            CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode))
         });
         await context.SaveChangesAsync();
 
@@ -72,7 +76,10 @@ public class PersonControllerUpdateEmailTests(PostgresFixture db) : WebApiTest<P
             $"/api/persons/{person.PublicId}",
             new UpdatePersonCommand
             {
-                Name = name, Email = email, CurrentPassword = currentPassword, TwoFactorCode = twoFactorCode
+                Name = name,
+                Email = email,
+                CurrentPassword = currentPassword,
+                TwoFactorCode = twoFactorCode
             });
 
     private async Task AssertUnchangedAsync(Person person)

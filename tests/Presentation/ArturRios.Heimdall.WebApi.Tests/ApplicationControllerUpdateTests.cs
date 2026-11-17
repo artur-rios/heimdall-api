@@ -28,7 +28,8 @@ public class ApplicationControllerUpdateTests(PostgresFixture db) : WebApiTest<P
 
     private static UpdateApplicationCommand Body(Guid ownerId, string? name = null) => new()
     {
-        Name = name ?? $"app-{Guid.NewGuid():N}", OwnerId = ownerId
+        Name = name ?? $"app-{Guid.NewGuid():N}",
+        OwnerId = ownerId
     };
 
     private async Task<Application> SeedApplicationAsync(Scope scope, Person owner, bool isDeleted = false)

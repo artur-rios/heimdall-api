@@ -27,11 +27,11 @@ public class ScopePermissionControllerUpdateTests(PostgresFixture db) : WebApiTe
 
     private static UpdateScopePermissionCommand Body(
         string? name = null, string? description = null, bool includeAsJwtClaim = false) => new()
-    {
-        Name = name ?? $"perm-{Guid.NewGuid():N}",
-        Description = description,
-        IncludeAsJwtClaim = includeAsJwtClaim
-    };
+        {
+            Name = name ?? $"perm-{Guid.NewGuid():N}",
+            Description = description,
+            IncludeAsJwtClaim = includeAsJwtClaim
+        };
 
     private async Task<ScopePermission> SeedScopePermissionAsync(Scope scope, bool isDeleted = false)
     {

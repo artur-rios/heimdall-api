@@ -63,12 +63,12 @@ public class AddScopeOwnerCommandHandlerTests
 
     private static AddScopeOwnerCommand Command(
         Guid scopeId, Guid personId, Roles actingRole = Roles.SystemAdmin, Guid? actingPersonId = null) => new()
-    {
-        ScopeId = scopeId,
-        PersonId = personId,
-        ActingRole = (int)actingRole,
-        ActingPersonId = actingPersonId ?? Guid.NewGuid()
-    };
+        {
+            ScopeId = scopeId,
+            PersonId = personId,
+            ActingRole = (int)actingRole,
+            ActingPersonId = actingPersonId ?? Guid.NewGuid()
+        };
 
     private static AddScopeOwnerCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes,
@@ -98,8 +98,13 @@ public class AddScopeOwnerCommandHandlerTests
     {
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = scope.Id, InviteePersonId = invitee.Id,
-            CreatedAt = createdAt, ExpiresAt = expiresAt, EndedAt = endedAt, Outcome = outcome
+            PublicId = Guid.NewGuid(),
+            ScopeId = scope.Id,
+            InviteePersonId = invitee.Id,
+            CreatedAt = createdAt,
+            ExpiresAt = expiresAt,
+            EndedAt = endedAt,
+            Outcome = outcome
         };
         await invitations.CreateAsync(invitation);
         return invitation;

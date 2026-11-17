@@ -33,18 +33,18 @@ public class ListScopeApplicationsQueryHandlerTests
 
     private static Application App(
         long id, Scope scope, Person owner, string? name = null, bool isDeleted = false) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        Name = name ?? $"app-{id}",
-        IsDeleted = isDeleted,
-        ScopeId = scope.Id,
-        Scope = scope,
-        OwnerId = owner.Id,
-        Owner = owner,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = name ?? $"app-{id}",
+            IsDeleted = isDeleted,
+            ScopeId = scope.Id,
+            Scope = scope,
+            OwnerId = owner.Id,
+            Owner = owner,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
     private static IScopeOwnershipChecker Ownership(bool allowed)
     {
@@ -82,13 +82,13 @@ public class ListScopeApplicationsQueryHandlerTests
 
     private static ListScopeApplicationsQuery QueryFor(
         Scope scope, int actingRole, Guid actingPersonId, int pageSize = 10) => new()
-    {
-        ScopeId = scope.PublicId,
-        PageNumber = 1,
-        PageSize = pageSize,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scope.PublicId,
+            PageNumber = 1,
+            PageSize = pageSize,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingListScopeApplications_ThenEveryApplicationInTheScopeIsReturned()

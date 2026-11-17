@@ -80,7 +80,9 @@ public class ScopeOwnerRaceTests(PostgresFixture db)
         // about to write
         var deletion = DeletePerson(held).HandleAsync(new DeletePersonCommand
         {
-            Id = second.PublicId, ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+            Id = second.PublicId,
+            ActingRole = (int)Roles.SystemAdmin,
+            ActingPersonId = Guid.NewGuid()
         });
         await hold.Reached.WaitAsync(TimeSpan.FromSeconds(30));
         var removal = RemoveOwner(other).HandleAsync(Removal(scope, first));
@@ -99,8 +101,10 @@ public class ScopeOwnerRaceTests(PostgresFixture db)
 
     private static RemoveScopeOwnerCommand Removal(Scope scope, Person owner) => new()
     {
-        ScopeId = scope.PublicId, PersonId = owner.PublicId,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        ScopeId = scope.PublicId,
+        PersonId = owner.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static RemoveScopeOwnerCommandHandler RemoveOwner(AppDbContext context)

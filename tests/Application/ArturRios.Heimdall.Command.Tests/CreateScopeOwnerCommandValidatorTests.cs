@@ -10,7 +10,9 @@ public class CreateScopeOwnerCommandValidatorTests
 {
     private static CreateScopeOwnerCommand Valid() => new()
     {
-        Name = "Owner", Email = "owner@test.local", Password = "Str0ngPass!"
+        Name = "Owner",
+        Email = "owner@test.local",
+        Password = "Str0ngPass!"
     };
 
     [UnitFact]

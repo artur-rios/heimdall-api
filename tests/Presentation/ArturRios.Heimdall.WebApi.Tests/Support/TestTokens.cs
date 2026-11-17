@@ -136,7 +136,9 @@ public static class TestTokens
         var claims = new IdentityUserMapper(Audiences)
             .ToClaims(new IdentityUser(personId, role)
             {
-                MfaPending = true, ChallengeId = SeededChallengeId, SecurityStamp = StampOf(personId)
+                MfaPending = true,
+                ChallengeId = SeededChallengeId,
+                SecurityStamp = StampOf(personId)
             })
             .ToDictionary(claim => claim.Key, object (claim) => claim.Value);
 

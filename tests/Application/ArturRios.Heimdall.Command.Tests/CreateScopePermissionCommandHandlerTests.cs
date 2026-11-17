@@ -50,14 +50,14 @@ public class CreateScopePermissionCommandHandlerTests
     private static CreateScopePermissionCommand Command(
         Guid scopeId, int actingRole, Guid actingPersonId, string name = "billing:read",
         string? description = "Read billing records.", bool includeAsJwtClaim = true) => new()
-    {
-        ScopeId = scopeId,
-        Name = name,
-        Description = description,
-        IncludeAsJwtClaim = includeAsJwtClaim,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scopeId,
+            Name = name,
+            Description = description,
+            IncludeAsJwtClaim = includeAsJwtClaim,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     private static CreateScopePermissionCommandHandler Handler(
         AsyncFakeRepository<Scope, long> scopes,

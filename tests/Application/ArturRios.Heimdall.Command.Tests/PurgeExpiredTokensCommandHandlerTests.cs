@@ -26,11 +26,11 @@ public class PurgeExpiredTokensCommandHandlerTests
 
     private static DataRetentionOptions Retention(
         int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
-    {
-        SingleUseTokenGrace = s_grace,
-        PurgeBatchSize = batchSize,
-        MaxBatchesPerTick = maxBatches
-    };
+        {
+            SingleUseTokenGrace = s_grace,
+            PurgeBatchSize = batchSize,
+            MaxBatchesPerTick = maxBatches
+        };
 
     // A token store whose deletes start failing after the first few, as when the database goes away
     // part-way through a run.
@@ -489,11 +489,15 @@ public class PurgeExpiredTokensCommandHandlerTests
         var budgets = new AsyncFakeRepository<AttemptNoticeBudget, long>();
         var stale = new AttemptNoticeBudget
         {
-            AddressHash = "a", NoticesSent = 3, WindowEndsAt = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1)
+            AddressHash = "a",
+            NoticesSent = 3,
+            WindowEndsAt = DateTime.UtcNow - s_grace - TimeSpan.FromDays(1)
         };
         var recent = new AttemptNoticeBudget
         {
-            AddressHash = "b", NoticesSent = 1, WindowEndsAt = DateTime.UtcNow.AddHours(-1)
+            AddressHash = "b",
+            NoticesSent = 1,
+            WindowEndsAt = DateTime.UtcNow.AddHours(-1)
         };
         var open = new AttemptNoticeBudget { AddressHash = "c", NoticesSent = 2, WindowEndsAt = DateTime.UtcNow.AddHours(1) };
         await budgets.CreateAsync(stale);
@@ -553,8 +557,12 @@ public class PurgeExpiredTokensCommandHandlerTests
         {
             var invitation = new ScopeOwnerInvitation
             {
-                PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 1, CreatedAt = expiresAt.AddDays(-7),
-                ExpiresAt = expiresAt, EndedAt = endedAt,
+                PublicId = Guid.NewGuid(),
+                ScopeId = 1,
+                InviteePersonId = 1,
+                CreatedAt = expiresAt.AddDays(-7),
+                ExpiresAt = expiresAt,
+                EndedAt = endedAt,
                 Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
             };
             await invitations.CreateAsync(invitation);
@@ -590,8 +598,13 @@ public class PurgeExpiredTokensCommandHandlerTests
         var invitations = new AsyncFakeRepository<ScopeOwnerInvitation, long>();
         await invitations.CreateAsync(new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 1, CreatedAt = now.AddDays(-120),
-            ExpiresAt = now.AddDays(-113), EndedAt = now.AddDays(-10), Outcome = ScopeOwnerInvitationOutcomes.Voided
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = 1,
+            CreatedAt = now.AddDays(-120),
+            ExpiresAt = now.AddDays(-113),
+            EndedAt = now.AddDays(-10),
+            Outcome = ScopeOwnerInvitationOutcomes.Voided
         });
         var handler = Handler(new(), new(), new(), invitations: invitations);
 

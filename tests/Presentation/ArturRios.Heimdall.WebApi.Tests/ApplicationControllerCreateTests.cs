@@ -19,7 +19,8 @@ public class ApplicationControllerCreateTests(PostgresFixture db) : WebApiTest<P
 {
     private static CreateApplicationCommand Command(Guid ownerId, string? name = null) => new()
     {
-        Name = name ?? $"app-{Guid.NewGuid():N}", OwnerId = ownerId
+        Name = name ?? $"app-{Guid.NewGuid():N}",
+        OwnerId = ownerId
     };
 
     private static string Route(Guid scopeId) => $"/api/scopes/{scopeId}/applications";

@@ -1,10 +1,10 @@
-using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Query.Output;
@@ -79,7 +79,10 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactorAuthId, CodeHash = hash, Used = used, UsedAt = used ? DateTime.UtcNow : null
+            TwoFactorAuthId = twoFactorAuthId,
+            CodeHash = hash,
+            Used = used,
+            UsedAt = used ? DateTime.UtcNow : null
         });
         await context.SaveChangesAsync();
 
@@ -107,7 +110,9 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
             "/api/auth/2fa/verify",
             new VerifyTwoFactorAuthCommand
             {
-                ChallengeToken = challengeToken, Code = code, RecoveryCode = recoveryCode
+                ChallengeToken = challengeToken,
+                Code = code,
+                RecoveryCode = recoveryCode
             });
 
     /// <summary>Same helper <c>AuthControllerConfirmTwoFactorAuthTests</c> uses: initiates App setup
@@ -199,7 +204,9 @@ public class AuthControllerVerifyTwoFactorAuthTests(PostgresFixture db) : WebApi
         {
             context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
             {
-                TwoFactorAuthId = twoFactorAuth.Id, CodeHash = issued.CodeHash, Used = false
+                TwoFactorAuthId = twoFactorAuth.Id,
+                CodeHash = issued.CodeHash,
+                Used = false
             });
             await context.SaveChangesAsync();
         }

@@ -67,7 +67,9 @@ public class JwtTwoFactorChallengeTokenIssuer(
     {
         var identity = new IdentityUser(personId, roleId)
         {
-            MfaPending = true, ChallengeId = challengeId, SecurityStamp = securityStamp
+            MfaPending = true,
+            ChallengeId = challengeId,
+            SecurityStamp = securityStamp
         };
 
         // TH-06: under its own audience, so a consumer pinning the person audience refuses it.

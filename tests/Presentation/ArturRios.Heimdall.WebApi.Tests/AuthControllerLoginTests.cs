@@ -437,7 +437,8 @@ public class AuthControllerLoginTests(PostgresFixture db) : WebApiTest<Program>(
             new EfRepository<Person, long>(context),
             new DataRetentionOptions
             {
-                MonitoringWindow = TimeSpan.FromMinutes(5), RefusalThreshold = sheds
+                MonitoringWindow = TimeSpan.FromMinutes(5),
+                RefusalThreshold = sheds
             });
 
         var signals = await handler.HandleAsync(new DetectSecuritySignalsQuery());

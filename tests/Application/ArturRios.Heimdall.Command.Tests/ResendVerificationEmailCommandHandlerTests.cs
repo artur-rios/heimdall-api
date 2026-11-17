@@ -45,7 +45,8 @@ public class ResendVerificationEmailCommandHandlerTests
         /// <summary>The command the controller would build for this fixture's person.</summary>
         public ResendVerificationEmailCommand Command() => new()
         {
-            ActingPersonId = Person.PublicId, ActingRole = (int)Roles.SystemAdmin
+            ActingPersonId = Person.PublicId,
+            ActingRole = (int)Roles.SystemAdmin
         };
     }
 
@@ -245,7 +246,8 @@ public class ResendVerificationEmailCommandHandlerTests
         // When
         var output = await fixture.Handler().HandleAsync(new ResendVerificationEmailCommand
         {
-            ActingPersonId = Guid.NewGuid(), ActingRole = (int)Roles.SystemAdmin
+            ActingPersonId = Guid.NewGuid(),
+            ActingRole = (int)Roles.SystemAdmin
         });
 
         // Then

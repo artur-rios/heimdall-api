@@ -318,7 +318,10 @@ public class AuthControllerVerifyEmailTests(PostgresFixture db) : WebApiTest<Pro
             "/api/persons",
             new CreateAdminCommand
             {
-                Name = "Created", Email = email, Password = Password, Role = (int)Roles.ScopeAdmin
+                Name = "Created",
+                Email = email,
+                Password = Password,
+                Role = (int)Roles.ScopeAdmin
             });
 
         Assert.Equal(HttpStatusCode.Created, creation.StatusCode);

@@ -571,9 +571,14 @@ public class InterleavedWriteTests(PostgresFixture db)
         await using var context = db.CreateContext();
         var person = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Interleaved User", Email = $"interleaved-{Guid.NewGuid():N}@test.local",
-            PasswordHash = [1, 2, 3], Salt = [4, 5, 6], RoleId = (long)Roles.User,
-            EmailVerified = emailVerified, ScopeId = scope.Id
+            PublicId = Guid.NewGuid(),
+            Name = "Interleaved User",
+            Email = $"interleaved-{Guid.NewGuid():N}@test.local",
+            PasswordHash = [1, 2, 3],
+            Salt = [4, 5, 6],
+            RoleId = (long)Roles.User,
+            EmailVerified = emailVerified,
+            ScopeId = scope.Id
         };
         context.Persons.Add(person);
         await context.SaveChangesAsync();
@@ -591,7 +596,9 @@ public class InterleavedWriteTests(PostgresFixture db)
         await using var context = db.CreateContext();
         context.PasswordResetTokens.Add(new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(token), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(token),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await context.SaveChangesAsync();
 
@@ -605,7 +612,9 @@ public class InterleavedWriteTests(PostgresFixture db)
         await using var context = db.CreateContext();
         context.EmailVerificationTokens.Add(new EmailVerificationToken
         {
-            PersonId = person.Id, TokenHash = SingleUseTokenHash.Of(token), ExpiresAt = DateTime.UtcNow.AddHours(1)
+            PersonId = person.Id,
+            TokenHash = SingleUseTokenHash.Of(token),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await context.SaveChangesAsync();
 
@@ -633,30 +642,41 @@ public class InterleavedWriteTests(PostgresFixture db)
 
     private static UpdatePersonCommand Rename(Person person) => new()
     {
-        Id = person.PublicId, Name = Renamed, Email = person.Email,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        Id = person.PublicId,
+        Name = Renamed,
+        Email = person.Email,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static DeletePersonCommand Deletion(Person person) => new()
     {
-        Id = person.PublicId, ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        Id = person.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static AddScopeOwnerCommand Ownership(Scope scope, Person person) => new()
     {
-        ScopeId = scope.PublicId, PersonId = person.PublicId,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        ScopeId = scope.PublicId,
+        PersonId = person.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static PromoteScopeUserCommand Promotion(Scope scope, Person person) => new()
     {
-        ScopeId = scope.PublicId, PersonId = person.PublicId,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        ScopeId = scope.PublicId,
+        PersonId = person.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static UpdateScopeCommand ScopeUpdate(Scope scope) => new()
     {
-        Id = scope.PublicId, Name = $"{scope.Name}-renamed", Description = "Described"
+        Id = scope.PublicId,
+        Name = $"{scope.Name}-renamed",
+        Description = "Described"
     };
 
     /// <summary>Sets one scope setting through its own handler, as a System Admin; returns the errors.</summary>
@@ -674,20 +694,29 @@ public class InterleavedWriteTests(PostgresFixture db)
                     new SetGoogleSignInCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetGoogleSignInCommand
                 {
-                    Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
+                    Id = scope.PublicId,
+                    Enabled = true,
+                    ActingRole = systemAdmin,
+                    ActingPersonId = actor
                 })).Errors,
             SelfRegistration => (await new SetSelfRegistrationCommandHandler(
                     new SetSelfRegistrationCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetSelfRegistrationCommand
                 {
-                    Id = scope.PublicId, Enabled = true, ActingRole = systemAdmin, ActingPersonId = actor
+                    Id = scope.PublicId,
+                    Enabled = true,
+                    ActingRole = systemAdmin,
+                    ActingPersonId = actor
                 })).Errors,
             _ => (await new SetScopeEmailLinksCommandHandler(
                     new SetScopeEmailLinksCommandValidator(), scopes, writes, owners)
                 .HandleAsync(new SetScopeEmailLinksCommand
                 {
-                    Id = scope.PublicId, EmailVerificationUrl = VerificationUrl, PasswordResetUrl = ResetUrl,
-                    ActingRole = systemAdmin, ActingPersonId = actor
+                    Id = scope.PublicId,
+                    EmailVerificationUrl = VerificationUrl,
+                    PasswordResetUrl = ResetUrl,
+                    ActingRole = systemAdmin,
+                    ActingPersonId = actor
                 })).Errors
         };
 

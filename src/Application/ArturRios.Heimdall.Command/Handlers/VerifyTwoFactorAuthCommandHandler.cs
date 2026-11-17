@@ -213,7 +213,9 @@ public class VerifyTwoFactorAuthCommandHandler(
         return output
             .WithData(new VerifyTwoFactorAuthCommandOutput
             {
-                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = person.EmailVerified
+                Token = token.Token,
+                ExpiresAt = token.ExpiresAt,
+                EmailVerified = person.EmailVerified
             })
             .WithMessage(TwoFactorMessages.VerificationSuccessful);
     }

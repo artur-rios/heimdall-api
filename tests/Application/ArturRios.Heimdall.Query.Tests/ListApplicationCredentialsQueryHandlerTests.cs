@@ -24,13 +24,22 @@ public class ListApplicationCredentialsQueryHandlerTests
         var scope = new Scope { Id = id, PublicId = Guid.NewGuid(), Name = "Acme" };
         var owner = new Person
         {
-            Id = id, PublicId = Guid.NewGuid(), Name = "Owner", Email = $"owner-{id}@test.local",
-            RoleId = (long)Roles.ScopeAdmin, ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id, Scope = scope }]
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = "Owner",
+            Email = $"owner-{id}@test.local",
+            RoleId = (long)Roles.ScopeAdmin,
+            ScopeOwnerships = [new ScopeOwner { ScopeId = scope.Id, Scope = scope }]
         };
         var application = new Application
         {
-            Id = id, PublicId = Guid.NewGuid(), Name = "Billing", ScopeId = scope.Id, Scope = scope,
-            OwnerId = owner.Id, Owner = owner
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = "Billing",
+            ScopeId = scope.Id,
+            Scope = scope,
+            OwnerId = owner.Id,
+            Owner = owner
         };
         await _applications.CreateAsync(application);
         return application;
@@ -38,8 +47,10 @@ public class ListApplicationCredentialsQueryHandlerTests
 
     private static ListApplicationCredentialsQuery Query(Application application, int role = (int)Roles.SystemAdmin, Guid? actor = null) => new()
     {
-        ScopeId = application.Scope.PublicId, Id = application.PublicId,
-        ActingRole = role, ActingPersonId = actor ?? Guid.NewGuid()
+        ScopeId = application.Scope.PublicId,
+        Id = application.PublicId,
+        ActingRole = role,
+        ActingPersonId = actor ?? Guid.NewGuid()
     };
 
     [UnitFact]

@@ -1,12 +1,12 @@
 using ArturRios.Heimdall.Command.Auditing;
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
+using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Domain.Persistence;
-using ArturRios.Heimdall.Command.Output;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using ArturRios.Util.Test.Mock;
@@ -80,7 +80,10 @@ public class ReapplyErasuresCommandHandlerTests
         await verificationTokens.CreateAsync(new EmailVerificationToken { PersonId = person.Id, TokenHash = "v" });
         await twoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = true,
+            TotpSecretEncrypted = [1, 2, 3]
         });
 
         var output = await Handler(persons, googleUsers, resetTokens, verificationTokens, twoFactorAuths)
@@ -186,7 +189,10 @@ public class ReapplyErasuresCommandHandlerTests
 
         var googleUser = new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "1", Name = "Ada", Email = "ada@test.local"
+            PublicId = Guid.NewGuid(),
+            GoogleId = "1",
+            Name = "Ada",
+            Email = "ada@test.local"
         };
         await googleUsers.CreateAsync(googleUser);
 
@@ -238,13 +244,20 @@ public class ReapplyErasuresCommandHandlerTests
         var person = await SeedPersonAsync(persons);
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6)
         };
         var sent = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = 999, InvitedByPersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = 999,
+            InvitedByPersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6)
         };
         await invitations.CreateAsync(invitation);
         await invitations.CreateAsync(sent);
@@ -272,8 +285,11 @@ public class ReapplyErasuresCommandHandlerTests
         var person = await SeedPersonAsync(persons, anonymisedAt: DateTime.UtcNow.AddDays(-3));
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6)
         };
         await invitations.CreateAsync(invitation);
 
@@ -299,8 +315,11 @@ public class ReapplyErasuresCommandHandlerTests
         var person = await SeedPersonAsync(persons);
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = person.Id,
-            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6)
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = person.Id,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6)
         };
         await invitations.CreateAsync(invitation);
         var atomicWrites = new InMemoryAtomicWrites

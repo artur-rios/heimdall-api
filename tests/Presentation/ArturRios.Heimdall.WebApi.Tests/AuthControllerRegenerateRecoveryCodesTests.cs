@@ -1,10 +1,10 @@
-using ArturRios.Heimdall.Command.Services;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using ArturRios.Configuration.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -74,7 +74,10 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactorAuthId, CodeHash = hash, Used = used, UsedAt = used ? DateTime.UtcNow : null
+            TwoFactorAuthId = twoFactorAuthId,
+            CodeHash = hash,
+            Used = used,
+            UsedAt = used ? DateTime.UtcNow : null
         });
         await context.SaveChangesAsync();
 
@@ -240,7 +243,10 @@ public class AuthControllerRegenerateRecoveryCodesTests(PostgresFixture db) : We
         {
             context.TwoFactorAuths.Add(new TwoFactorAuth
             {
-                PersonId = person.Id, IsActive = false, AppEnabled = true, TotpSecretEncrypted = [1, 2, 3]
+                PersonId = person.Id,
+                IsActive = false,
+                AppEnabled = true,
+                TotpSecretEncrypted = [1, 2, 3]
             });
             await context.SaveChangesAsync();
         }

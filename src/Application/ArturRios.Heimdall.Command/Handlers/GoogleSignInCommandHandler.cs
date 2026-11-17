@@ -167,7 +167,9 @@ public class GoogleSignInCommandHandler(
                 // token whenever the token had something to say. Reporting the row rather than the
                 // claim keeps the response answerable when the claim is absent, without the
                 // published field having to become nullable.
-                Token = token.Token, ExpiresAt = token.ExpiresAt, EmailVerified = googleUser.EmailVerified
+                Token = token.Token,
+                ExpiresAt = token.ExpiresAt,
+                EmailVerified = googleUser.EmailVerified
             })
             .WithMessage(AuthMessages.GoogleSignInSuccessful);
     }

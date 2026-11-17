@@ -69,15 +69,15 @@ public class UpdateScopePermissionCommandHandlerTests
         Guid scopeId, Guid id, int actingRole, Guid actingPersonId,
         string name = NewName, string? description = NewDescription,
         bool includeAsJwtClaim = NewIncludeAsJwtClaim) => new()
-    {
-        ScopeId = scopeId,
-        Id = id,
-        Name = name,
-        Description = description,
-        IncludeAsJwtClaim = includeAsJwtClaim,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scopeId,
+            Id = id,
+            Name = name,
+            Description = description,
+            IncludeAsJwtClaim = includeAsJwtClaim,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     private static UpdateScopePermissionCommandHandler Handler(
         AsyncFakeRepository<ScopePermission, long> permissions,

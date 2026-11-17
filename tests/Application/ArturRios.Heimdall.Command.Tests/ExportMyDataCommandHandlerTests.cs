@@ -1,7 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
-using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Command.Output;
+using ArturRios.Heimdall.Command.Services;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -124,21 +124,32 @@ public class ExportMyDataCommandHandlerTests
 
         var twoFactor = new TwoFactorAuth
         {
-            PersonId = person.Id, AppEnabled = true, IsActive = true, TotpSecretEncrypted = [9]
+            PersonId = person.Id,
+            AppEnabled = true,
+            IsActive = true,
+            TotpSecretEncrypted = [9]
         };
         await fakes.TwoFactors.CreateAsync(twoFactor);
         await fakes.RecoveryCodes.CreateAsync(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactor.Id, CodeHash = [1], Used = false
+            TwoFactorAuthId = twoFactor.Id,
+            CodeHash = [1],
+            Used = false
         });
         await fakes.RecoveryCodes.CreateAsync(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactor.Id, CodeHash = [2], Used = true
+            TwoFactorAuthId = twoFactor.Id,
+            CodeHash = [2],
+            Used = true
         });
 
         await fakes.Applications.CreateAsync(new Application
         {
-            PublicId = Guid.NewGuid(), Name = "Billing", OwnerId = person.Id, ScopeId = scope.Id, Scope = scope
+            PublicId = Guid.NewGuid(),
+            Name = "Billing",
+            OwnerId = person.Id,
+            ScopeId = scope.Id,
+            Scope = scope
         });
 
         var document = (await fakes.Handler().HandleAsync(Command(person.PublicId))).Data!;
@@ -158,19 +169,28 @@ public class ExportMyDataCommandHandlerTests
 
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = person.PublicId, Action = "Mine",
-            Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = person.PublicId,
+            Action = "Mine",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = somebodyElse, Action = "Theirs",
-            Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = somebodyElse,
+            Action = "Theirs",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
         // Attribution cleared under NFR-21: nothing connects it to anyone any more
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = null, Action = "Cleared",
-            Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = null,
+            Action = "Cleared",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
 
         var document = (await fakes.Handler().HandleAsync(Command(person.PublicId))).Data!;
@@ -190,18 +210,30 @@ public class ExportMyDataCommandHandlerTests
 
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = administrator, TargetId = person.PublicId,
-            Action = "UpdatePersonCommand", Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = administrator,
+            TargetId = person.PublicId,
+            Action = "UpdatePersonCommand",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = person.PublicId, TargetId = person.PublicId,
-            Action = "Own", Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = person.PublicId,
+            TargetId = person.PublicId,
+            Action = "Own",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
         await fakes.AuditEntries.CreateAsync(new AuditLog
         {
-            PublicId = Guid.NewGuid(), ActorPersonId = administrator, TargetId = Guid.NewGuid(),
-            Action = "Unrelated", Succeeded = true, CreatedAt = DateTime.UtcNow
+            PublicId = Guid.NewGuid(),
+            ActorPersonId = administrator,
+            TargetId = Guid.NewGuid(),
+            Action = "Unrelated",
+            Succeeded = true,
+            CreatedAt = DateTime.UtcNow
         });
 
         // When
@@ -226,8 +258,11 @@ public class ExportMyDataCommandHandlerTests
         {
             await fakes.AuditEntries.CreateAsync(new AuditLog
             {
-                PublicId = Guid.NewGuid(), ActorPersonId = person.PublicId, Action = "A",
-                Succeeded = true, CreatedAt = DateTime.UtcNow.AddSeconds(-i)
+                PublicId = Guid.NewGuid(),
+                ActorPersonId = person.PublicId,
+                Action = "A",
+                Succeeded = true,
+                CreatedAt = DateTime.UtcNow.AddSeconds(-i)
             });
         }
 
@@ -300,8 +335,12 @@ public class ExportMyDataCommandHandlerTests
         var person = await SeedPersonAsync(fakes);
         var other = new Person
         {
-            PublicId = Guid.NewGuid(), Name = "Grace Hopper", Email = "grace@navy.mil",
-            PasswordHash = [1], Salt = [2], RoleId = (long)Roles.User
+            PublicId = Guid.NewGuid(),
+            Name = "Grace Hopper",
+            Email = "grace@navy.mil",
+            PasswordHash = [1],
+            Salt = [2],
+            RoleId = (long)Roles.User
         };
         await fakes.Persons.CreateAsync(other);
 

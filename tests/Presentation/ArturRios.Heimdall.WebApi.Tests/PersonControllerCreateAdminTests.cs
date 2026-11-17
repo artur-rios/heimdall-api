@@ -18,7 +18,10 @@ public class PersonControllerCreateAdminTests(PostgresFixture db) : WebApiTest<P
 
     private static CreateAdminCommand Command(string email, int role) => new()
     {
-        Name = "Admin", Email = email, Password = "Str0ngPass!", Role = role
+        Name = "Admin",
+        Email = email,
+        Password = "Str0ngPass!",
+        Role = role
     };
 
     [FunctionalFact]

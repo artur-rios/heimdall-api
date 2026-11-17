@@ -253,7 +253,10 @@ public class ScopeDeleteCascadeTests(PostgresFixture db)
         await using var context = db.CreateContext();
         context.Applications.Add(new Application
         {
-            PublicId = Guid.NewGuid(), Name = $"app-{Guid.NewGuid():N}", ScopeId = scope.Id, OwnerId = owner.Id
+            PublicId = Guid.NewGuid(),
+            Name = $"app-{Guid.NewGuid():N}",
+            ScopeId = scope.Id,
+            OwnerId = owner.Id
         });
         await context.SaveChangesAsync();
     }

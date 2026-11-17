@@ -1,8 +1,8 @@
 using ArturRios.Heimdall.Query.Input;
 using ArturRios.Heimdall.Query.Output;
 using ArturRios.Heimdall.Shared.Retention;
-using ArturRios.Mediator.Query;
 using ArturRios.Heimdall.WebApi.Retention;
+using ArturRios.Mediator.Query;
 
 namespace ArturRios.Heimdall.WebApi.Monitoring;
 

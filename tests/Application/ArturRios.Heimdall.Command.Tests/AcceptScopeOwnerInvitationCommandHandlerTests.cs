@@ -23,7 +23,9 @@ public class AcceptScopeOwnerInvitationCommandHandlerTests
 
     private static AcceptScopeOwnerInvitationCommand Command(Person actor, ScopeOwnerInvitation invitation) => new()
     {
-        InvitationId = invitation.PublicId, ActingPersonId = actor.PublicId, ActingRole = (int)Roles.ScopeAdmin
+        InvitationId = invitation.PublicId,
+        ActingPersonId = actor.PublicId,
+        ActingRole = (int)Roles.ScopeAdmin
     };
 
     private static async Task<(InvitationWorld World, Scope Scope, Person Inviter, Person Invitee, ScopeOwnerInvitation Invitation)>

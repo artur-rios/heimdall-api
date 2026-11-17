@@ -31,7 +31,9 @@ public class CreateScopeCommandHandlerTests
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person
         {
-            PublicId = ownerId, RoleId = (long)Roles.ScopeAdmin, IsDeleted = false
+            PublicId = ownerId,
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = false
         });
         return (persons, ownerId);
     }
@@ -148,7 +150,9 @@ public class CreateScopeCommandHandlerTests
         var ownerId = Guid.NewGuid();
         await persons.CreateAsync(new Person
         {
-            PublicId = ownerId, RoleId = (long)Roles.ScopeAdmin, IsDeleted = true
+            PublicId = ownerId,
+            RoleId = (long)Roles.ScopeAdmin,
+            IsDeleted = true
         });
         var scopes = new AsyncFakeRepository<Scope, long>();
         var handler = new CreateScopeCommandHandler(ValidValidator().Object, scopes, persons, scopes);

@@ -75,7 +75,10 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
 
         var twoFactorAuth = new TwoFactorAuth
         {
-            PersonId = person.Id, IsActive = true, AppEnabled = false, EmailEnabled = true,
+            PersonId = person.Id,
+            IsActive = true,
+            AppEnabled = false,
+            EmailEnabled = true,
             ChallengeId = TestTokens.SeededChallengeId
         };
 
@@ -92,7 +95,8 @@ public class SecurityStampTests(PostgresFixture db) : WebApiTest<Program>(Enviro
         await using var context = db.CreateContext();
         context.TwoFactorRecoveryCodes.Add(new TwoFactorRecoveryCode
         {
-            TwoFactorAuthId = twoFactorAuth.Id, CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext))
+            TwoFactorAuthId = twoFactorAuth.Id,
+            CodeHash = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext))
         });
         await context.SaveChangesAsync();
 

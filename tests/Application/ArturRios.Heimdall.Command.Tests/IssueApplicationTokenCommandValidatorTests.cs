@@ -14,7 +14,9 @@ public class IssueApplicationTokenCommandValidatorTests
 
     private static IssueApplicationTokenCommand Valid() => new()
     {
-        ApplicationId = Guid.NewGuid(), ScopeId = Guid.NewGuid(), Secret = "hds_" + new string('a', 43)
+        ApplicationId = Guid.NewGuid(),
+        ScopeId = Guid.NewGuid(),
+        Secret = "hds_" + new string('a', 43)
     };
 
     [UnitFact]

@@ -24,18 +24,18 @@ public class GetScopePermissionByIdQueryHandlerTests
     private static ScopePermission Permission(
         long id, Scope scope, bool isDeleted = false, bool includeAsJwtClaim = false,
         string? name = null, string? description = null) => new()
-    {
-        Id = id,
-        PublicId = Guid.NewGuid(),
-        Name = name ?? $"permission-{id}",
-        Description = description ?? $"desc-{id}",
-        IncludeAsJwtClaim = includeAsJwtClaim,
-        IsDeleted = isDeleted,
-        ScopeId = scope.Id,
-        Scope = scope,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
+        {
+            Id = id,
+            PublicId = Guid.NewGuid(),
+            Name = name ?? $"permission-{id}",
+            Description = description ?? $"desc-{id}",
+            IncludeAsJwtClaim = includeAsJwtClaim,
+            IsDeleted = isDeleted,
+            ScopeId = scope.Id,
+            Scope = scope,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
     private static IScopeOwnershipChecker Ownership(bool allowed = true)
     {
@@ -62,13 +62,13 @@ public class GetScopePermissionByIdQueryHandlerTests
     private static GetScopePermissionByIdQuery QueryFor(
         Scope scope, ScopePermission permission, int actingRole, Guid actingPersonId,
         bool includeDeleted = false) => new()
-    {
-        ScopeId = scope.PublicId,
-        Id = permission.PublicId,
-        IncludeDeleted = includeDeleted,
-        ActingRole = actingRole,
-        ActingPersonId = actingPersonId
-    };
+        {
+            ScopeId = scope.PublicId,
+            Id = permission.PublicId,
+            IncludeDeleted = includeDeleted,
+            ActingRole = actingRole,
+            ActingPersonId = actingPersonId
+        };
 
     [UnitFact]
     public async Task GivenSystemAdmin_WhenHandlingGetScopePermissionById_ThenPermissionIsReturned()

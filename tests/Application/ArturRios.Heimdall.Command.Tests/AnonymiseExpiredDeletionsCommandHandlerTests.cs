@@ -31,12 +31,12 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
     private static DataRetentionOptions Retention(
         int batchSize = 500, int maxBatches = DataRetentionOptions.DefaultMaxBatchesPerTick) => new()
-    {
-        SubjectErasureDeadline = s_erasureDeadline,
-        AdministrativeDeletionWindow = s_administrativeWindow,
-        PurgeBatchSize = batchSize,
-        MaxBatchesPerTick = maxBatches
-    };
+        {
+            SubjectErasureDeadline = s_erasureDeadline,
+            AdministrativeDeletionWindow = s_administrativeWindow,
+            PurgeBatchSize = batchSize,
+            MaxBatchesPerTick = maxBatches
+        };
 
     private sealed record Fakes(
         AsyncFakeRepository<Person, long> Persons,
@@ -77,8 +77,13 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
     {
         var invitation = new ScopeOwnerInvitation
         {
-            PublicId = Guid.NewGuid(), ScopeId = 1, InviteePersonId = inviteeId, InvitedByPersonId = inviterId,
-            CreatedAt = DateTime.UtcNow.AddDays(-1), ExpiresAt = DateTime.UtcNow.AddDays(6), EndedAt = endedAt,
+            PublicId = Guid.NewGuid(),
+            ScopeId = 1,
+            InviteePersonId = inviteeId,
+            InvitedByPersonId = inviterId,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            ExpiresAt = DateTime.UtcNow.AddDays(6),
+            EndedAt = endedAt,
             Outcome = endedAt is null ? null : ScopeOwnerInvitationOutcomes.Declined
         };
         await fakes.Invitations.CreateAsync(invitation);
@@ -321,15 +326,22 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         await fakes.PasswordResetTokens.CreateAsync(new PasswordResetToken
         {
-            PersonId = person.Id, TokenHash = "a", ExpiresAt = DateTime.UtcNow.AddDays(1)
+            PersonId = person.Id,
+            TokenHash = "a",
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
         });
         await fakes.EmailVerificationTokens.CreateAsync(new EmailVerificationToken
         {
-            PersonId = person.Id, TokenHash = "b", ExpiresAt = DateTime.UtcNow.AddDays(1)
+            PersonId = person.Id,
+            TokenHash = "b",
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
         });
         await fakes.TwoFactorAuths.CreateAsync(new TwoFactorAuth
         {
-            PersonId = person.Id, AppEnabled = true, IsActive = true, TotpSecretEncrypted = [9, 9, 9]
+            PersonId = person.Id,
+            AppEnabled = true,
+            IsActive = true,
+            TotpSecretEncrypted = [9, 9, 9]
         });
 
         var output = await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());
@@ -350,11 +362,15 @@ public class AnonymiseExpiredDeletionsCommandHandlerTests
 
         await fakes.PasswordResetTokens.CreateAsync(new PasswordResetToken
         {
-            PersonId = due.Id, TokenHash = "a", ExpiresAt = DateTime.UtcNow.AddDays(1)
+            PersonId = due.Id,
+            TokenHash = "a",
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
         });
         await fakes.PasswordResetTokens.CreateAsync(new PasswordResetToken
         {
-            PersonId = live.Id, TokenHash = "b", ExpiresAt = DateTime.UtcNow.AddDays(1)
+            PersonId = live.Id,
+            TokenHash = "b",
+            ExpiresAt = DateTime.UtcNow.AddDays(1)
         });
 
         await fakes.Handler().HandleAsync(new AnonymiseExpiredDeletionsCommand());

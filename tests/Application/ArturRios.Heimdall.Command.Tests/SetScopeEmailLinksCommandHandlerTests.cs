@@ -1,7 +1,7 @@
 using ArturRios.Heimdall.Command.Handlers;
 using ArturRios.Heimdall.Command.Input;
-using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Command.Tests.Support;
 using ArturRios.Heimdall.Domain.Entities;
 using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
@@ -35,10 +35,16 @@ public class SetScopeEmailLinksCommandHandlerTests
         var scopes = new AsyncFakeRepository<Scope, long>();
         var scope = new Scope
         {
-            PublicId = Guid.NewGuid(), Name = "Acme", Description = "Acme tenant", IsDeleted = isDeleted,
-            GoogleSignInEnabled = true, SelfRegistrationEnabled = true, DefaultLegalBasis = 2,
+            PublicId = Guid.NewGuid(),
+            Name = "Acme",
+            Description = "Acme tenant",
+            IsDeleted = isDeleted,
+            GoogleSignInEnabled = true,
+            SelfRegistrationEnabled = true,
+            DefaultLegalBasis = 2,
             PrivacyNoticeUri = "https://acme.test/privacy",
-            EmailVerificationUrl = verifyUrl, PasswordResetUrl = resetUrl
+            EmailVerificationUrl = verifyUrl,
+            PasswordResetUrl = resetUrl
         };
         await scopes.CreateAsync(scope);
         return (scopes, scope);
@@ -51,8 +57,11 @@ public class SetScopeEmailLinksCommandHandlerTests
 
     private static SetScopeEmailLinksCommand Command(Guid scopeId, string? verifyUrl, string? resetUrl) => new()
     {
-        Id = scopeId, EmailVerificationUrl = verifyUrl, PasswordResetUrl = resetUrl,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        Id = scopeId,
+        EmailVerificationUrl = verifyUrl,
+        PasswordResetUrl = resetUrl,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     [UnitFact]

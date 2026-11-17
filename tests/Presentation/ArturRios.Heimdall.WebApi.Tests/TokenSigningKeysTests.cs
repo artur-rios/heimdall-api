@@ -141,7 +141,8 @@ public class TokenSigningKeysTests
         Assert.Contains($"'HEIMDALL_AUTH_SIGNING_KEY' {refusalPhrase}", refusal.Message);
         Assert.Contains("Refusing to start", refusal.Message);
         Assert.DoesNotContain("-----BEGIN", refusal.Message);
-        if (!string.IsNullOrWhiteSpace(value) && value.Trim() != "\"\"") Assert.DoesNotContain(value.Trim(), refusal.Message);
+        if (!string.IsNullOrWhiteSpace(value) && value.Trim() != "\"\"")
+            Assert.DoesNotContain(value.Trim(), refusal.Message);
     }
 
     [UnitTheory]

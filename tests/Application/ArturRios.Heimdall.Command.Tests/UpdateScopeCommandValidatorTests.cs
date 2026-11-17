@@ -1,6 +1,6 @@
-using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Command.Input;
 using ArturRios.Heimdall.Command.Input.Validation;
+using ArturRios.Heimdall.Domain.Enums;
 using ArturRios.Heimdall.Shared.Messages;
 using ArturRios.Util.Test.Attributes;
 using FluentValidation.TestHelper;
@@ -65,7 +65,9 @@ public class UpdateScopeCommandValidatorTests
     {
         var command = new UpdateScopeCommand
         {
-            Id = Guid.NewGuid(), Name = "Acme", Description = new string('a', 501)
+            Id = Guid.NewGuid(),
+            Name = "Acme",
+            Description = new string('a', 501)
         };
 
         var result = _validator.TestValidate(command);

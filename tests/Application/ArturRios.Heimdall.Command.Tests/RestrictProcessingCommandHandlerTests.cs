@@ -155,7 +155,10 @@ public class RestrictProcessingCommandHandlerTests
         var (persons, googleUsers) = Fakes();
         var googleUser = new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = "1", Name = "Ada", Email = "ada@test.local"
+            PublicId = Guid.NewGuid(),
+            GoogleId = "1",
+            Name = "Ada",
+            Email = "ada@test.local"
         };
         await googleUsers.CreateAsync(googleUser);
 

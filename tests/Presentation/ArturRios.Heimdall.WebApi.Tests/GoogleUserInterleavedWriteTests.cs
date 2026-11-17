@@ -117,7 +117,8 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
         // When the subject lifts their own
         var output = await Lift(writer).HandleAsync(new LiftProcessingRestrictionCommand
         {
-            ActingPersonId = googleUser.PublicId, ActingRole = (int)Roles.User
+            ActingPersonId = googleUser.PublicId,
+            ActingRole = (int)Roles.User
         });
 
         // Then there is no restriction left to lift (AF-45a), and the request stands
@@ -141,7 +142,8 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
         // When
         var output = await SignIn(writer, payload).HandleAsync(new GoogleSignInCommand
         {
-            ScopeId = scope.PublicId, IdToken = "stand-in"
+            ScopeId = scope.PublicId,
+            IdToken = "stand-in"
         });
 
         // Then the deleted account is refused as AF-25d refuses it, and stays deleted
@@ -233,8 +235,12 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
 
         var googleUser = new GoogleUser
         {
-            PublicId = Guid.NewGuid(), GoogleId = $"google-{Guid.NewGuid():N}", Name = "Interleaved Google User",
-            Email = $"interleaved-{Guid.NewGuid():N}@gmail.test", ScopeId = scope.Id, EmailVerified = emailVerified,
+            PublicId = Guid.NewGuid(),
+            GoogleId = $"google-{Guid.NewGuid():N}",
+            Name = "Interleaved Google User",
+            Email = $"interleaved-{Guid.NewGuid():N}@gmail.test",
+            ScopeId = scope.Id,
+            EmailVerified = emailVerified,
             ProcessingRestrictedAt = restricted ? DateTime.UtcNow.AddDays(-1) : null,
             RestrictionGround = restricted ? FirstGround : null,
             IsDeleted = deletedDaysAgo is not null,
@@ -258,13 +264,17 @@ public class GoogleUserInterleavedWriteTests(PostgresFixture db)
 
     private static DeleteGoogleUserCommand Deletion(Scope scope, GoogleUser googleUser) => new()
     {
-        ScopeId = scope.PublicId, Id = googleUser.PublicId,
-        ActingRole = (int)Roles.SystemAdmin, ActingPersonId = Guid.NewGuid()
+        ScopeId = scope.PublicId,
+        Id = googleUser.PublicId,
+        ActingRole = (int)Roles.SystemAdmin,
+        ActingPersonId = Guid.NewGuid()
     };
 
     private static RestrictProcessingCommand Restriction(GoogleUser googleUser, int ground) => new()
     {
-        Ground = ground, ActingPersonId = googleUser.PublicId, ActingRole = (int)Roles.User
+        Ground = ground,
+        ActingPersonId = googleUser.PublicId,
+        ActingRole = (int)Roles.User
     };
 
     // Handlers, over EF repositories on the writer's context
