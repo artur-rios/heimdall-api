@@ -64,6 +64,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Nullable fields: the `data` of all 59 `*DataOutput` envelopes (null whenever a response carries no payload)
     and `DataExportCommandOutput.erasure` are now marked nullable. A `$ref` cannot be marked nullable by itself, so
     these are written as `anyOf: [{ $ref }, { type: "null" }]` (OpenAPI 3.1, under Changed).
+- The OpenAPI document now also lists the responses that do not come from a handler, and no longer offers a media
+  type the API never sends. Nothing changes on the wire, and a client generated from the document decodes its
+  success responses exactly as before.
+  - `GET /api/healthcheck/ready` documents its `503 Service Unavailable`: the same `StringDataOutput` envelope as
+    its 200, with `"data": "Unhealthy"`. `GET /api/healthcheck` (liveness) answers only 200, as documented.
+  - Every rate-limited operation (`[EnableRateLimiting]`, including `GET /.well-known/jwks.json`) documents the
+    rate limiter's `429 Too Many Requests`: an `application/json` `ObjectDataOutput` envelope with a null `data`
+    and a `Retry-After` header in seconds.
+  - Responses no longer list `text/plain` beside `application/json` and `text/json`. Only a bare string is written
+    as `text/plain`, and no action returns one: an envelope asked for as `text/plain` is answered as
+    `application/json`.
 
 ## [6.0.0] - 2026-11-10
 

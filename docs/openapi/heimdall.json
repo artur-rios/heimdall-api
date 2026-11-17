@@ -57,11 +57,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateApplicationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateApplicationCommandOutputDataOutput"
@@ -147,11 +142,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationOutputPaginatedOutput"
@@ -218,11 +208,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationOutputDataOutput"
@@ -299,11 +284,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdateApplicationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateApplicationCommandOutputDataOutput"
@@ -360,11 +340,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteApplicationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteApplicationCommandOutputDataOutput"
@@ -423,11 +398,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HardDeleteApplicationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteApplicationCommandOutputDataOutput"
@@ -505,11 +475,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IssueApplicationCredentialCommandOutputDataOutput"
@@ -566,11 +531,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationCredentialListOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationCredentialListOutputDataOutput"
@@ -638,11 +598,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RevokeApplicationCredentialCommandOutputDataOutput"
@@ -701,11 +656,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
@@ -714,6 +664,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IssueApplicationTokenCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -734,11 +702,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationTokenCheckOutputDataOutput"
@@ -831,11 +794,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuditLogEntryOutputPaginatedOutput"
@@ -894,11 +852,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginCommandOutputDataOutput"
@@ -907,6 +860,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -947,11 +918,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PasswordRecoveryCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PasswordRecoveryCommandOutputDataOutput"
@@ -960,6 +926,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PasswordRecoveryCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1000,11 +984,6 @@
           "202": {
             "description": "Accepted",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegisterCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegisterCommandOutputDataOutput"
@@ -1013,6 +992,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegisterCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1053,11 +1050,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResetPasswordCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResetPasswordCommandOutputDataOutput"
@@ -1066,6 +1058,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResetPasswordCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1106,11 +1116,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
@@ -1119,6 +1124,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyEmailCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1139,11 +1162,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResendVerificationEmailCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResendVerificationEmailCommandOutputDataOutput"
@@ -1152,6 +1170,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResendVerificationEmailCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1199,11 +1235,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleSignInCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleSignInCommandOutputDataOutput"
@@ -1212,6 +1243,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleSignInCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1232,11 +1281,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleSignOutCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleSignOutCommandOutputDataOutput"
@@ -1292,11 +1336,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
@@ -1305,6 +1344,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EnableTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1352,11 +1409,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutputDataOutput"
@@ -1365,6 +1417,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfirmTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1412,11 +1482,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyTwoFactorAuthCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyTwoFactorAuthCommandOutputDataOutput"
@@ -1425,6 +1490,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1465,11 +1548,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
@@ -1478,6 +1556,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResendTwoFactorChallengeCodeCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1518,11 +1614,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutputDataOutput"
@@ -1531,6 +1622,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DisableTwoFactorAuthCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1578,11 +1687,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutputDataOutput"
@@ -1591,6 +1695,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegenerateRecoveryCodesCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1618,11 +1740,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DataExportCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DataExportCommandOutputDataOutput"
@@ -1678,11 +1795,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
@@ -1691,6 +1803,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RequestErasureCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -1738,11 +1868,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RestrictProcessingCommandOutputDataOutput"
@@ -1798,11 +1923,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReapplyErasuresCommandOutputDataOutput"
@@ -1861,11 +1981,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LiftProcessingRestrictionCommandOutputDataOutput"
@@ -1926,11 +2041,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErasureRequestOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErasureRequestOutputPaginatedOutput"
@@ -1969,11 +2079,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/TwoFactorStatusOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TwoFactorStatusOutputDataOutput"
@@ -2057,11 +2162,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleUserOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleUserOutputPaginatedOutput"
@@ -2128,11 +2228,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleUserOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GoogleUserOutputDataOutput"
@@ -2186,11 +2281,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteGoogleUserCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteGoogleUserCommandOutputDataOutput"
@@ -2249,11 +2339,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HardDeleteGoogleUserCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteGoogleUserCommandOutputDataOutput"
@@ -2292,11 +2377,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/StringDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
@@ -2325,11 +2405,21 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
                 }
               },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringDataOutput"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StringDataOutput"
@@ -2378,11 +2468,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
@@ -2391,6 +2476,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2452,11 +2555,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
@@ -2465,6 +2563,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2541,11 +2657,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonOutputPaginatedOutput"
@@ -2615,11 +2726,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
@@ -2628,6 +2734,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2704,11 +2828,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonOutputPaginatedOutput"
@@ -2767,11 +2886,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
@@ -2787,11 +2901,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
@@ -2807,11 +2916,6 @@
           "202": {
             "description": "Accepted",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
@@ -2820,6 +2924,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AddScopeOwnerCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -2868,11 +2990,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/RemoveScopeOwnerCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RemoveScopeOwnerCommandOutputDataOutput"
@@ -2931,11 +3048,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
@@ -2951,11 +3063,6 @@
           "409": {
             "description": "Conflict",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PromoteScopeUserCommandOutputDataOutput"
@@ -3025,11 +3132,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
@@ -3045,11 +3147,6 @@
           "409": {
             "description": "Conflict",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
@@ -3058,6 +3155,24 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdatePersonCommandOutputDataOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -3094,11 +3209,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeletePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeletePersonCommandOutputDataOutput"
@@ -3154,11 +3264,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonOutputDataOutput"
@@ -3205,11 +3310,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HardDeletePersonCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeletePersonCommandOutputDataOutput"
@@ -3288,11 +3388,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
@@ -3363,11 +3458,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PersonSummaryOutputPaginatedOutput"
@@ -3417,11 +3507,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SendPersonVerificationEmailCommandOutputDataOutput"
@@ -3471,11 +3556,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SendPersonPasswordResetCommandOutputDataOutput"
@@ -3534,11 +3614,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateScopeCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateScopeCommandOutputDataOutput"
@@ -3607,11 +3682,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScopeOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScopeOutputPaginatedOutput"
@@ -3681,11 +3751,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdateScopeCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateScopeCommandOutputDataOutput"
@@ -3733,11 +3798,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteScopeCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteScopeCommandOutputDataOutput"
@@ -3793,11 +3853,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScopeOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScopeOutputDataOutput"
@@ -3844,11 +3899,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HardDeleteScopeCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteScopeCommandOutputDataOutput"
@@ -3918,11 +3968,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetGoogleSignInCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SetGoogleSignInCommandOutputDataOutput"
@@ -3992,11 +4037,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetSelfRegistrationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SetSelfRegistrationCommandOutputDataOutput"
@@ -4066,11 +4106,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SetScopeEmailLinksCommandOutputDataOutput"
@@ -4136,11 +4171,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PendingRegistrationOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PendingRegistrationOutputPaginatedOutput"
@@ -4199,11 +4229,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiscardPendingRegistrationCommandOutputDataOutput"
@@ -4269,11 +4294,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScopeOwnerInvitationOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScopeOwnerInvitationOutputPaginatedOutput"
@@ -4376,11 +4396,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/MyScopeInvitationOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MyScopeInvitationOutputPaginatedOutput"
@@ -4430,11 +4445,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AcceptScopeOwnerInvitationCommandOutputDataOutput"
@@ -4484,11 +4494,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeclineScopeOwnerInvitationCommandOutputDataOutput"
@@ -4558,11 +4563,6 @@
           "201": {
             "description": "Created",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateScopePermissionCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateScopePermissionCommandOutputDataOutput"
@@ -4640,11 +4640,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScopePermissionOutputPaginatedOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScopePermissionOutputPaginatedOutput"
@@ -4711,11 +4706,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScopePermissionOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ScopePermissionOutputDataOutput"
@@ -4792,11 +4782,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdateScopePermissionCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UpdateScopePermissionCommandOutputDataOutput"
@@ -4853,11 +4838,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteScopePermissionCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteScopePermissionCommandOutputDataOutput"
@@ -4916,11 +4896,6 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/HardDeleteScopePermissionCommandOutputDataOutput"
-                }
-              },
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HardDeleteScopePermissionCommandOutputDataOutput"
@@ -4962,6 +4937,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JsonWebKeySetDocument"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests: the caller's budget for this operation is spent until the window ends.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before trying again.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectDataOutput"
                 }
               }
             }
@@ -8342,6 +8335,39 @@
             "type": "boolean",
             "readOnly": true
           }
+        },
+        "additionalProperties": false
+      },
+      "ObjectDataOutput": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "errors": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "data": { }
         },
         "additionalProperties": false
       },
