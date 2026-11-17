@@ -26,6 +26,12 @@ namespace ArturRios.Heimdall.WebApi.Tests;
 ///         wrong in the document until 2026-11-17.
 ///     </para>
 ///     <para>
+///         The document is OpenAPI 3.1, which says "can be null" the way JSON Schema does: a
+///         <c>"null"</c> in a scalar's or an array's <c>type</c>, and
+///         <c>anyOf: [{ $ref }, { type: "null" }]</c> for a reference. 3.1 has no <c>nullable</c>
+///         keyword, and a client generator reading 3.1 ignores it, so none may be left.
+///     </para>
+///     <para>
 ///         The success status is worked out the way the server works it out. An action passes its
 ///         handler's output to <c>ToActionResult(statusMap:)</c>, which answers the status its map gives
 ///         the output's first message, and 200 for a message the map does not hold. So the statuses an
@@ -43,6 +49,8 @@ public partial class OpenApiResponseContractTests
 {
     private static readonly string[] s_httpMethods =
         ["get", "put", "post", "delete", "patch", "options", "head"];
+
+    private static readonly string[] s_compositions = ["allOf", "anyOf", "oneOf"];
 
     // The operations whose success status is not their handler's message looked up in a status map,
     // with the statuses they answer on success. Each name must be an operation, so the list cannot
@@ -219,6 +227,93 @@ public partial class OpenApiResponseContractTests
             .ToList();
 
         Assert.Equal(s_neverNullReferences, plainReferences);
+    }
+
+    [UnitFact]
+    public void GivenPublishedDocument_WhenVersionRead_ThenItIsOpenApi31()
+    {
+        using var document = LoadDocument();
+
+        Assert.StartsWith("3.1.", document.RootElement.GetProperty("openapi").GetString());
+    }
+
+    [UnitFact]
+    public void GivenPublishedDocument_WhenWalked_ThenNoNullableKeywordIsLeft()
+    {
+        using var document = LoadDocument();
+
+        var found = Keywords(document.RootElement, "#")
+            .Where(keyword => keyword.Name == "nullable")
+            .Select(keyword => keyword.Path)
+            .ToList();
+
+        Assert.True(
+            found.Count == 0,
+            $"OpenAPI 3.1 has no `nullable` keyword, but the document still uses it at {found.Count} place(s):"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, found));
+    }
+
+    [UnitFact]
+    public void GivenPublishedDocument_WhenComposedReferencePropertiesRead_ThenEachIsTheReferenceOrNull()
+    {
+        using var document = LoadDocument();
+        var violations = new List<string>();
+        var composed = 0;
+
+        foreach (var schema in Schemas(document))
+        {
+            foreach (var property in Properties(schema.Value).Where(property => ComposesReference(property.Value)))
+            {
+                composed++;
+
+                if (!IsReferenceOrNull(property.Value))
+                {
+                    violations.Add($"{schema.Name}.{property.Name}: {property.Value.GetRawText()}");
+                }
+            }
+        }
+
+        Assert.NotEqual(0, composed);
+        Assert.True(
+            violations.Count == 0,
+            $"{violations.Count} propert(ies) compose a reference other than as anyOf [reference, null]:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, violations));
+    }
+
+    [UnitFact]
+    public void GivenPublishedDocument_WhenTypeArraysRead_ThenEachIsOneTypeOrNull()
+    {
+        using var document = LoadDocument();
+        var violations = new List<string>();
+        var typeArrays = 0;
+
+        foreach (var (_, path) in Keywords(document.RootElement, "#").Where(keyword => keyword.Name == "type"))
+        {
+            var type = Resolve(document.RootElement, path);
+
+            if (type.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            typeArrays++;
+
+            var types = type.EnumerateArray().Select(entry => entry.GetString()).ToList();
+
+            if (types.Count != 2 || types.Count(entry => entry == "null") != 1)
+            {
+                violations.Add($"{path}: [{string.Join(", ", types)}]");
+            }
+        }
+
+        Assert.NotEqual(0, typeArrays);
+        Assert.True(
+            violations.Count == 0,
+            $"{violations.Count} type array(s) are not one type or null:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, violations));
     }
 
     [UnitFact]
@@ -417,8 +512,89 @@ public partial class OpenApiResponseContractTests
             .Where(status => status is >= 200 and < 300)
     ];
 
+    /// <summary>
+    ///     Whether a schema admits null in OpenAPI 3.1: a <c>"null"</c> in its <c>type</c> array, or a
+    ///     <c>{ type: "null" }</c> branch of its <c>anyOf</c>.
+    /// </summary>
     private static bool IsNullable(JsonElement schema) =>
-        schema.TryGetProperty("nullable", out var nullable) && nullable.GetBoolean();
+        (schema.TryGetProperty("type", out var type)
+         && type.ValueKind == JsonValueKind.Array
+         && type.EnumerateArray().Any(entry => entry.GetString() == "null"))
+        || (schema.TryGetProperty("anyOf", out var anyOf)
+            && anyOf.EnumerateArray().Any(IsNullType));
+
+    /// <summary>Exactly <c>anyOf: [{ $ref }, { type: "null" }]</c>, with nothing beside it.</summary>
+    private static bool IsReferenceOrNull(JsonElement schema) =>
+        KeywordNames(schema).SequenceEqual(["anyOf"])
+        && schema.GetProperty("anyOf") is { } anyOf
+        && anyOf.GetArrayLength() == 2
+        && KeywordNames(anyOf[0]).SequenceEqual(["$ref"])
+        && IsNullType(anyOf[1]);
+
+    private static bool IsNullType(JsonElement schema) =>
+        KeywordNames(schema).SequenceEqual(["type"])
+        && schema.GetProperty("type") is { ValueKind: JsonValueKind.String } type
+        && type.GetString() == "null";
+
+    /// <summary>Whether a schema reaches a reference through <c>allOf</c>, <c>anyOf</c> or <c>oneOf</c>.</summary>
+    private static bool ComposesReference(JsonElement schema) =>
+        s_compositions.Any(keyword => schema.TryGetProperty(keyword, out var branches)
+                                      && branches.EnumerateArray().Any(branch => branch.TryGetProperty("$ref", out _)));
+
+    private static IEnumerable<string> KeywordNames(JsonElement schema) =>
+        schema.EnumerateObject().Select(keyword => keyword.Name);
+
+    /// <summary>
+    ///     Every keyword in the document, with its JSON Pointer. The names in a <c>properties</c> map
+    ///     are a schema's property names, not keywords, so they are walked into but not listed: a
+    ///     property called <c>nullable</c> would not be a use of the keyword.
+    /// </summary>
+    private static IEnumerable<(string Name, string Path)> Keywords(JsonElement element, string path, bool names = false)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+
+            foreach (var item in element.EnumerateArray())
+            {
+                foreach (var keyword in Keywords(item, $"{path}/{index++}"))
+                {
+                    yield return keyword;
+                }
+            }
+
+            yield break;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            yield break;
+        }
+
+        foreach (var member in element.EnumerateObject())
+        {
+            var child = $"{path}/{member.Name.Replace("~", "~0").Replace("/", "~1")}";
+
+            if (!names)
+            {
+                yield return (member.Name, child);
+            }
+
+            foreach (var keyword in Keywords(member.Value, child, !names && member.Name == "properties"))
+            {
+                yield return keyword;
+            }
+        }
+    }
+
+    /// <summary>The element a JSON Pointer from <see cref="Keywords" /> names.</summary>
+    private static JsonElement Resolve(JsonElement root, string path) =>
+        path.Split('/')
+            .Skip(1)
+            .Select(token => token.Replace("~1", "/").Replace("~0", "~"))
+            .Aggregate(root, (element, token) => element.ValueKind == JsonValueKind.Array
+                ? element[int.Parse(token)]
+                : element.GetProperty(token));
 
     private static JsonElement Property(JsonDocument document, string name)
     {
