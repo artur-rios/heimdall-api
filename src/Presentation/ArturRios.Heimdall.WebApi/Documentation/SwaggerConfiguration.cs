@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+using Swashbuckle.AspNetCore.Swagger;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ArturRios.Heimdall.WebApi.Documentation;
@@ -26,7 +27,27 @@ public static class SwaggerConfiguration
     /// <summary>The document name Swagger UI looks for by default, and the one served at /swagger/v1/…</summary>
     public const string DocumentName = "v1";
 
+    /// <summary>
+    ///     The OpenAPI version the document is written in, by the running API at /swagger/… and by
+    ///     tools/ArturRios.Heimdall.OpenApiGen alike.
+    /// </summary>
+    /// <remarks>
+    ///     3.1, not Swashbuckle's default of 3.0, because 3.1 spells null as JSON Schema does, with a
+    ///     <c>"null"</c> type, and that combines with a reference as readily as with a scalar. 3.0's
+    ///     <c>nullable</c> only counts beside a <c>type</c>, so a nullable reference has no 3.0
+    ///     spelling that a client generator reads as nullable without also inventing a wrapper model
+    ///     for it.
+    /// </remarks>
+    public const OpenApiSpecVersion SpecVersion = OpenApiSpecVersion.OpenApi3_1;
+
     private const string BearerScheme = "Bearer";
+
+    /// <summary>
+    ///     Serves the running API's document in <see cref="SpecVersion" />. Swashbuckle's middleware
+    ///     reads its options from the container, so this is registered with <c>ConfigureSwagger</c>
+    ///     rather than passed to <c>UseSwagger</c>, which Util.WebApi calls without arguments.
+    /// </summary>
+    public static void ConfigureEndpoint(SwaggerOptions options) => options.OpenApiVersion = SpecVersion;
 
     public static void Configure(SwaggerGenOptions options)
     {
@@ -88,6 +109,8 @@ public static class SwaggerConfiguration
 
         options.RequestBodyFilter<RequiredRequestBodyFilter>();
         options.SchemaFilter<NullableReferencePropertySchemaFilter>();
+        // After IncludeXmlComments, whose filter writes the descriptions this one takes back off.
+        options.SchemaFilter<ReferenceDescriptionSchemaFilter>();
 
         options.DocumentFilter<SecurityDocumentFilter>();
 
@@ -292,10 +315,11 @@ public sealed class RequiredRequestBodyFilter(IOptions<MvcOptions> mvcOptions) :
 ///     The API writes nulls, so <c>"data": null</c> is on the wire whenever an envelope carries no
 ///     payload (<c>DataOutput&lt;T&gt;.Data</c> is <c>T?</c>), and so is an optional section such as
 ///     <c>DataExportCommandOutput.Erasure</c>. Swashbuckle already marks every other reference-typed
-///     property nullable, but OpenAPI 3.0 ignores anything written beside a <c>$ref</c>, so a
-///     property that refers to another schema is left looking as if it can never be null, and a
-///     client generated from the document fails on the first null it reads. The fix 3.0 allows is to
-///     wrap the reference: <c>allOf: [{ $ref }]</c> with <c>nullable: true</c>.
+///     property nullable — in OpenAPI 3.1, a <c>"null"</c> in its <c>type</c> — but a reference has
+///     no <c>type</c> of its own to add it to, so a property that refers to another schema is left
+///     looking as if it can never be null, and a client generated from the document fails on the
+///     first null it reads. The 3.1 spelling is the reference or null:
+///     <c>anyOf: [{ $ref }, { type: "null" }]</c>.
 ///
 ///     Only a member the nullable annotations declare nullable is wrapped: a <c>required</c> or
 ///     otherwise non-nullable one keeps its plain reference, because that is a promise the code
@@ -322,7 +346,10 @@ public sealed class NullableReferencePropertySchemaFilter(ISerializerDataContrac
                 && property is OpenApiSchemaReference reference
                 && IsNullable(nullability, member.MemberInfo))
             {
-                properties[member.Name] = new OpenApiSchema { AllOf = [reference], Type = JsonSchemaType.Null };
+                properties[member.Name] = new OpenApiSchema
+                {
+                    AnyOf = [reference, new OpenApiSchema { Type = JsonSchemaType.Null }]
+                };
             }
         }
     }
@@ -334,6 +361,30 @@ public sealed class NullableReferencePropertySchemaFilter(ISerializerDataContrac
             FieldInfo field => nullability.Create(field).ReadState != NullabilityState.NotNull,
             _ => false
         };
+}
+
+/// <summary>
+///     Leaves a bare reference to a type's schema without a description of its own.
+///
+///     Swashbuckle's XML comments filter gives a type's summary to every schema it builds for the
+///     type, a bare reference to it included: an array's items, a response body. OpenAPI 3.0 ignores
+///     anything beside a <c>$ref</c>, so the copy never reached the document; 3.1 keeps it, and it only
+///     repeats the description the referenced schema already carries, with the XML file's line
+///     endings at that. Taking it off keeps the 3.1 document the 3.0 one in everything but its
+///     nullability. A reference built for a member or a parameter is left alone: its description is
+///     the member's own documentation, not a copy.
+/// </summary>
+public sealed class ReferenceDescriptionSchemaFilter : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        if (schema is OpenApiSchemaReference reference
+            && context.MemberInfo is null
+            && context.ParameterInfo is null)
+        {
+            reference.Description = null;
+        }
+    }
 }
 
 /// <summary>

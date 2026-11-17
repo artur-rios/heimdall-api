@@ -43,4 +43,26 @@ public class SwaggerEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
 
         Assert.Equal("bearer", bearer.GetProperty("scheme").GetString());
     }
+
+    // The version is the Swagger middleware's option, not the generator's, so the published document
+    // being 3.1 says nothing about this one: Startup registers it separately. The envelope's `data`
+    // shows the nullable-reference filter ran under it, in 3.1's form.
+    [FunctionalFact]
+    public async Task GivenSwaggerDocument_WhenRead_ThenItIsOpenApi31WithNullableReferences()
+    {
+        var response = await Gateway.Client.GetAsync(DocumentRoute);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+
+        Assert.StartsWith("3.1.", root.GetProperty("openapi").GetString());
+
+        var data = root.GetProperty("components").GetProperty("schemas")
+            .GetProperty("ScopeOutputDataOutput").GetProperty("properties").GetProperty("data");
+        var anyOf = data.GetProperty("anyOf");
+
+        Assert.Equal(2, anyOf.GetArrayLength());
+        Assert.Equal("#/components/schemas/ScopeOutput", anyOf[0].GetProperty("$ref").GetString());
+        Assert.Equal("null", anyOf[1].GetProperty("type").GetString());
+    }
 }
