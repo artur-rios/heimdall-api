@@ -1,0 +1,5 @@
+# Commits `git blame` skips: mechanical changes that touch many lines and change no behaviour.
+# Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once to have your local blame use it.
+
+# style: apply dotnet format to the solution
+96f884364675f42015b7b272c18648f69d0ffd79
