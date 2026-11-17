@@ -65,4 +65,22 @@ public class SwaggerEndpointTests() : WebApiTest<Program>(EnvironmentType.Local)
         Assert.Equal("#/components/schemas/ScopeOutput", anyOf[0].GetProperty("$ref").GetString());
         Assert.Equal("null", anyOf[1].GetProperty("type").GetString());
     }
+
+    // The response filters run under Startup too: the readiness probe's 503 and the rate limiter's 429
+    // are documented, and no envelope is offered as text/plain.
+    [FunctionalFact]
+    public async Task GivenSwaggerDocument_WhenRead_ThenItDocumentsTheProbeAndRateLimitResponses()
+    {
+        var response = await Gateway.Client.GetAsync(DocumentRoute);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var paths = document.RootElement.GetProperty("paths");
+
+        var ready = paths.GetProperty("/api/healthcheck/ready").GetProperty("get").GetProperty("responses");
+        var login = paths.GetProperty("/api/auth/login").GetProperty("post").GetProperty("responses");
+
+        Assert.True(ready.GetProperty("503").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.False(ready.GetProperty("200").GetProperty("content").TryGetProperty("text/plain", out _));
+        Assert.True(login.GetProperty("429").GetProperty("content").TryGetProperty("application/json", out _));
+    }
 }
