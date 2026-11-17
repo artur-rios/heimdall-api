@@ -76,6 +76,7 @@ public class AuthController(CommandMediator commandMediator, QueryMediator query
     [HttpPost("register")]
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitingConfiguration.AuthEndpointRateLimitPolicy)]
+    [ProducesResponseType<DataOutput<RegisterCommandOutput>>(StatusCodes.Status202Accepted)]
     public async Task<ActionResult<DataOutput<RegisterCommandOutput?>>> Register(
         [FromBody] RegisterCommand command)
     {

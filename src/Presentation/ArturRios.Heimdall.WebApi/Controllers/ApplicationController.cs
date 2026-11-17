@@ -27,6 +27,7 @@ public class ApplicationController(CommandMediator commandMediator, QueryMediato
     /// </summary>
     [HttpPost]
     [RoleRequirement((int)Roles.SystemAdmin, (int)Roles.ScopeAdmin)]
+    [ProducesResponseType<DataOutput<CreateApplicationCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreateApplicationCommandOutput?>>> Create(
         Guid scopeId, [FromBody] CreateApplicationCommand command)
     {

@@ -22,6 +22,7 @@ public class ScopeController(CommandMediator commandMediator, QueryMediator quer
     /// </summary>
     [HttpPost]
     [RoleRequirement((int)Roles.SystemAdmin)]
+    [ProducesResponseType<DataOutput<CreateScopeCommandOutput>>(StatusCodes.Status201Created)]
     public async Task<ActionResult<DataOutput<CreateScopeCommandOutput?>>> Create([FromBody] CreateScopeCommand command)
     {
         var result = await commandMediator
